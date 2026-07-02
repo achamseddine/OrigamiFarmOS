@@ -1,0 +1,6 @@
+/mobile/build/
+/mobile/.dart_tool/
+/mobile/.pub-cache/
+/mobile/.pub/
+/mobile/android/.gradle/
+/mobile/android/app/build/
