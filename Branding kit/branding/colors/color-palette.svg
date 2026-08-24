@@ -1,0 +1,54 @@
+<svg width="688" height="598" viewBox="0 0 688 598" xmlns="http://www.w3.org/2000/svg">
+<rect width="100%" height="100%" fill="#F7F3EA"/>
+<rect x="24" y="24" width="132" height="56" rx="14" fill="#0B3D2E" stroke="#D8CDB7"/>
+<text x="24" y="102" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">cedar</text>
+<text x="24" y="122" font-family="Inter,Arial" font-size="12" fill="#65756D">#0B3D2E</text>
+<rect x="184" y="24" width="132" height="56" rx="14" fill="#145C3D" stroke="#D8CDB7"/>
+<text x="184" y="102" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">cedar_2</text>
+<text x="184" y="122" font-family="Inter,Arial" font-size="12" fill="#65756D">#145C3D</text>
+<rect x="344" y="24" width="132" height="56" rx="14" fill="#1F7A4D" stroke="#D8CDB7"/>
+<text x="344" y="102" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">olive</text>
+<text x="344" y="122" font-family="Inter,Arial" font-size="12" fill="#65756D">#1F7A4D</text>
+<rect x="504" y="24" width="132" height="56" rx="14" fill="#D6A84F" stroke="#D8CDB7"/>
+<text x="504" y="102" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">gold</text>
+<text x="504" y="122" font-family="Inter,Arial" font-size="12" fill="#65756D">#D6A84F</text>
+<rect x="24" y="134" width="132" height="56" rx="14" fill="#F0D79A" stroke="#D8CDB7"/>
+<text x="24" y="212" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">wheat</text>
+<text x="24" y="232" font-family="Inter,Arial" font-size="12" fill="#65756D">#F0D79A</text>
+<rect x="184" y="134" width="132" height="56" rx="14" fill="#F7F3EA" stroke="#D8CDB7"/>
+<text x="184" y="212" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">stone</text>
+<text x="184" y="232" font-family="Inter,Arial" font-size="12" fill="#65756D">#F7F3EA</text>
+<rect x="344" y="134" width="132" height="56" rx="14" fill="#E8DEC9" stroke="#D8CDB7"/>
+<text x="344" y="212" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">sand</text>
+<text x="344" y="232" font-family="Inter,Arial" font-size="12" fill="#65756D">#E8DEC9</text>
+<rect x="504" y="134" width="132" height="56" rx="14" fill="#B76E47" stroke="#D8CDB7"/>
+<text x="504" y="212" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">clay</text>
+<text x="504" y="232" font-family="Inter,Arial" font-size="12" fill="#65756D">#B76E47</text>
+<rect x="24" y="244" width="132" height="56" rx="14" fill="#071814" stroke="#D8CDB7"/>
+<text x="24" y="322" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">ink</text>
+<text x="24" y="342" font-family="Inter,Arial" font-size="12" fill="#65756D">#071814</text>
+<rect x="184" y="244" width="132" height="56" rx="14" fill="#65756D" stroke="#D8CDB7"/>
+<text x="184" y="322" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">muted</text>
+<text x="184" y="342" font-family="Inter,Arial" font-size="12" fill="#65756D">#65756D</text>
+<rect x="344" y="244" width="132" height="56" rx="14" fill="#EAF1EC" stroke="#D8CDB7"/>
+<text x="344" y="322" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">mist</text>
+<text x="344" y="342" font-family="Inter,Arial" font-size="12" fill="#65756D">#EAF1EC</text>
+<rect x="504" y="244" width="132" height="56" rx="14" fill="#A63C35" stroke="#D8CDB7"/>
+<text x="504" y="322" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">danger</text>
+<text x="504" y="342" font-family="Inter,Arial" font-size="12" fill="#65756D">#A63C35</text>
+<rect x="24" y="354" width="132" height="56" rx="14" fill="#D9822B" stroke="#D8CDB7"/>
+<text x="24" y="432" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">warning</text>
+<text x="24" y="452" font-family="Inter,Arial" font-size="12" fill="#65756D">#D9822B</text>
+<rect x="184" y="354" width="132" height="56" rx="14" fill="#1F7A4D" stroke="#D8CDB7"/>
+<text x="184" y="432" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">success</text>
+<text x="184" y="452" font-family="Inter,Arial" font-size="12" fill="#65756D">#1F7A4D</text>
+<rect x="344" y="354" width="132" height="56" rx="14" fill="#FFFFFF" stroke="#D8CDB7"/>
+<text x="344" y="432" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">white</text>
+<text x="344" y="452" font-family="Inter,Arial" font-size="12" fill="#65756D">#FFFFFF</text>
+<rect x="504" y="354" width="132" height="56" rx="14" fill="#FFFDF7" stroke="#D8CDB7"/>
+<text x="504" y="432" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">card</text>
+<text x="504" y="452" font-family="Inter,Arial" font-size="12" fill="#65756D">#FFFDF7</text>
+<rect x="24" y="464" width="132" height="56" rx="14" fill="#E7DEC9" stroke="#D8CDB7"/>
+<text x="24" y="542" font-family="Inter,Arial" font-size="14" font-weight="700" fill="#071814">border</text>
+<text x="24" y="562" font-family="Inter,Arial" font-size="12" fill="#65756D">#E7DEC9</text>
+</svg>
