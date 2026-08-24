@@ -1,0 +1,16 @@
+{
+  "en": {
+    "startMyDay": "Start My Day",
+    "morningBriefing": "Morning Briefing",
+    "animalStatus": "Animal Status",
+    "feedInventory": "Feed & Inventory",
+    "healthIntelligence": "Health Intelligence"
+  },
+  "ar": {
+    "startMyDay": "ابدأ يومي",
+    "morningBriefing": "موجز الصباح",
+    "animalStatus": "حالة الحيوانات",
+    "feedInventory": "الأعلاف والمخزون",
+    "healthIntelligence": "الذكاء الصحي"
+  }
+}
