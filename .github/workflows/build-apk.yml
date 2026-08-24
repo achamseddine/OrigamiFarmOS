@@ -29,6 +29,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: mobile/flutter_app
@@ -59,3 +61,21 @@ jobs:
           name: origami-farmos-${{ inputs.build-mode || 'release' }}-apk
           path: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk
           if-no-files-found: error
+
+      # Actions artifacts are served from a rotating Azure Blob Storage
+      # host that some network policies (including the one this repo was
+      # developed under) block. A GitHub Release asset is served from
+      # api.github.com / objects.githubusercontent.com instead, which is
+      # reachable in more environments, so publish the APK there too.
+      - name: Publish APK to a rolling GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tablet-apk-latest
+          name: "Tablet APK (latest automated build)"
+          body: |
+            Automated build from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            Signed with the Flutter debug keystore — fine for sideloading onto a test
+            tablet, not for Play Store distribution. This release is overwritten by
+            every run of the "Build tablet APK" workflow.
+          prerelease: true
+          files: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk
