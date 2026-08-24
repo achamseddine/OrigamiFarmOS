@@ -16,6 +16,15 @@ on:
         options:
           - release
           - debug
+  # workflow_dispatch only becomes available from the GitHub UI/API once
+  # this file exists on the repo's default branch, so this push trigger
+  # scoped to the MVP branch lets the first build run without needing that.
+  push:
+    branches:
+      - claude/origami-farmos-tablet-mvp-u88i3e
+    paths:
+      - ".github/workflows/build-apk.yml"
+      - "mobile/flutter_app/**"
 
 jobs:
   build:
