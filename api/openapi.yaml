@@ -1,0 +1,1941 @@
+openapi: 3.1.0
+info:
+  title: Origami FarmOS API
+  description: Offline-first, tablet-first farm operating system API for Origami Farms.
+    See CONSTITUTION.md and product/MVP_SCOPE.md in the repository root for the product
+    principles this API enforces (evidence-based recommendations, worker-observes/manager-decides
+    separation, event-sourced history).
+  version: 0.1.0
+paths:
+  /:
+    get:
+      tags:
+      - meta
+      summary: Root
+      operationId: root__get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Root  Get
+  /health:
+    get:
+      tags:
+      - meta
+      summary: Health Check
+      operationId: health_check_health_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Health Check Health Get
+  /api/v1/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Login
+      operationId: login_api_v1_auth_login_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/farms/{farm_id}/bootstrap:
+    get:
+      tags:
+      - farms
+      summary: Bootstrap
+      description: 'GET /farms/{farm_id}/bootstrap — initial local cache data (tech
+        spec
+
+        §12). The tablet writes this straight into SQLite on first login /
+
+        when activating demo mode, per the offline-first flow in §10.'
+      operationId: bootstrap_api_v1_farms__farm_id__bootstrap_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sync/push:
+    post:
+      tags:
+      - sync
+      summary: Push
+      description: 'POST /sync/push — upload a batch of queued tablet writes.
+
+
+        Tech spec §14: "Duplicate idempotency key must not create duplicate
+
+        server record." Each item''s `idempotency_key` is unique-constrained on
+
+        `sync_queue`, so replaying a batch after a dropped connection is safe.
+
+
+        Because every domain-row ID is generated client-side (a UUID, written
+
+        once by `FarmWriteService` and never reused), the server can accept
+
+        entity IDs as-is with no remapping step — a deliberate simplification
+
+        that keeps this push endpoint correct without needing a second
+
+        ID-translation pass.
+
+
+        This build durably records every item (event + sync_queue row,
+
+        idempotent) and materializes the common write types the tablet already
+
+        produces (observations, milk, tasks, feed transactions) back into
+
+        their domain tables. Less common event types are still accepted and
+
+        queued/event-logged, ready for a same-shaped repository call to be
+
+        added — see README "What remains".'
+      operationId: push_api_v1_sync_push_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncPushRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPushResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/sync/pull:
+    get:
+      tags:
+      - sync
+      summary: Pull
+      description: GET /sync/pull — changes since `cursor` (tech spec §12).
+      operationId: pull_api_v1_sync_pull_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: ISO-8601 timestamp; events after this are returned
+          title: Cursor
+        description: ISO-8601 timestamp; events after this are returned
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncPullResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals:
+    get:
+      tags:
+      - animals
+      summary: List Animals
+      operationId: list_animals_api_v1_animals_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: species
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Species
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: search
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Search
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnimalOut'
+                title: Response List Animals Api V1 Animals Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}:
+    get:
+      tags:
+      - animals
+      summary: Get Animal
+      operationId: get_animal_api_v1_animals__animal_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalDigitalTwinOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/observations:
+    post:
+      tags:
+      - observations
+      summary: Create Observation
+      description: 'Constitution: "Workers record observations. Workers do not
+
+        diagnose." [ObservationCreate] structurally has no diagnosis field, so
+
+        this endpoint cannot be used to smuggle one in regardless of caller
+
+        role.'
+      operationId: create_observation_api_v1_observations_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObservationCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/tasks:
+    get:
+      tags:
+      - tasks
+      summary: List Tasks
+      operationId: list_tasks_api_v1_tasks_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: status_filter
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status Filter
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaskOut'
+                title: Response List Tasks Api V1 Tasks Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - tasks
+      summary: Create Task
+      operationId: create_task_api_v1_tasks_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/tasks/{task_id}:
+    patch:
+      tags:
+      - tasks
+      summary: Update Task
+      operationId: update_task_api_v1_tasks__task_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed/transactions:
+    post:
+      tags:
+      - feed
+      summary: Create Feed Transaction
+      description: 'Validation rule (tech spec §14): "Inventory should not go negative
+
+        without explicit override."'
+      operationId: create_feed_transaction_api_v1_feed_transactions_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedTransactionCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryItemOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/production/milk:
+    post:
+      tags:
+      - production
+      summary: Record Milk
+      description: 'Validation rule (tech spec §14): "Milk from an animal under
+
+        withdrawal must show a hard warning or be blocked from sale
+
+        destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
+
+        in the recommendation engine.'
+      operationId: record_milk_api_v1_production_milk_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkRecordCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Record Milk Api V1 Production Milk Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/production/eggs:
+    post:
+      tags:
+      - production
+      summary: Record Eggs
+      description: 'Validation rule (tech spec §14): "Sellable + broken + consumed
+        +
+
+        hatched + wasted cannot exceed total eggs."'
+      operationId: record_eggs_api_v1_production_eggs_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EggRecordCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Record Eggs Api V1 Production Eggs Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/production/harvest:
+    post:
+      tags:
+      - production
+      summary: Record Harvest
+      operationId: record_harvest_api_v1_production_harvest_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HarvestRecordCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Record Harvest Api V1 Production Harvest Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/health/treatments:
+    post:
+      tags:
+      - health
+      summary: Record Treatment
+      description: 'Manager/veterinarian-gated (Constitution: "Veterinarians diagnose
+
+        and prescribe"). `require_diagnostic_role` returns HTTP 403 for
+
+        worker/accountant/read-only accounts before this body ever runs.'
+      operationId: record_treatment_api_v1_health_treatments_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TreatmentCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Record Treatment Api V1 Health Treatments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/recommendations:
+    get:
+      tags:
+      - recommendations
+      summary: List Recommendations
+      description: 'GET /recommendations. By default re-evaluates every rule against
+
+        current farm state first (`refresh=true`) so the list is always
+
+        evidence-fresh, then returns what''s stored — never generated without
+
+        persisted evidence (CONSTITUTION.md).'
+      operationId: list_recommendations_api_v1_recommendations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: category
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+      - name: status_filter
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status Filter
+      - name: refresh
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Refresh
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecommendationOut'
+                title: Response List Recommendations Api V1 Recommendations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/recommendations/{recommendation_id}/decision:
+    patch:
+      tags:
+      - recommendations
+      summary: Decide Recommendation
+      description: 'PATCH /recommendations/{id}/decision — accept/reject/postpone.
+
+        Tech spec §15 lifecycle: "Generated -> Reviewed -> Accepted/Rejected/
+
+        Postponed -> Task Created -> Action Taken -> Outcome Recorded ->
+
+        Closed." Every decision is itself an event, so the trail is never lost.'
+      operationId: decide_recommendation_api_v1_recommendations__recommendation_id__decision_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: recommendation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Recommendation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecommendationDecision'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/morning-briefing:
+    get:
+      tags:
+      - reports
+      summary: Morning Briefing
+      description: 'Tech spec §16: "Morning Briefing ... Local cache refresh on app
+        open
+
+        and after sync." Refreshing recommendations here (not just from
+
+        GET /recommendations) means the briefing''s priorities are current even
+
+        if nothing else has called the recommendations endpoint yet today.'
+      operationId: morning_briefing_api_v1_morning_briefing_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Morning Briefing Api V1 Morning Briefing Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/daily-summary:
+    get:
+      tags:
+      - reports
+      summary: Daily Summary
+      operationId: daily_summary_api_v1_reports_daily_summary_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Daily Summary Api V1 Reports Daily Summary Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    AnimalDigitalTwinOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        tag:
+          type: string
+          title: Tag
+        name:
+          type: string
+          title: Name
+        species:
+          type: string
+          title: Species
+        breed:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Breed
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        birth_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Birth Date
+        status:
+          type: string
+          title: Status
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        health_score:
+          type: integer
+          title: Health Score
+        pregnant:
+          type: boolean
+          title: Pregnant
+        pregnancy_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pregnancy Days
+        lactating:
+          type: boolean
+          title: Lactating
+        lactation_cycle:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lactation Cycle
+        withdrawal_until:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Withdrawal Until
+        withdrawal_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Withdrawal Reason
+        weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Weight Kg
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        recent_observations:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Recent Observations
+          default: []
+        recent_events:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Recent Events
+          default: []
+        open_recommendations:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Open Recommendations
+          default: []
+      type: object
+      required:
+      - id
+      - farm_id
+      - tag
+      - name
+      - species
+      - status
+      - health_score
+      - pregnant
+      - lactating
+      title: AnimalDigitalTwinOut
+    AnimalOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        tag:
+          type: string
+          title: Tag
+        name:
+          type: string
+          title: Name
+        species:
+          type: string
+          title: Species
+        breed:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Breed
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        birth_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Birth Date
+        status:
+          type: string
+          title: Status
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        health_score:
+          type: integer
+          title: Health Score
+        pregnant:
+          type: boolean
+          title: Pregnant
+        pregnancy_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pregnancy Days
+        lactating:
+          type: boolean
+          title: Lactating
+        lactation_cycle:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lactation Cycle
+        withdrawal_until:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Withdrawal Until
+        withdrawal_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Withdrawal Reason
+        weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Weight Kg
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+      type: object
+      required:
+      - id
+      - farm_id
+      - tag
+      - name
+      - species
+      - status
+      - health_score
+      - pregnant
+      - lactating
+      title: AnimalOut
+    BootstrapResponse:
+      properties:
+        farm:
+          additionalProperties: true
+          type: object
+          title: Farm
+        users:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Users
+        locations:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Locations
+        animals:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Animals
+        flocks:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Flocks
+        fields:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Fields
+        inventory_items:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Inventory Items
+        tasks:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Tasks
+        recommendations:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Recommendations
+        server_time:
+          type: string
+          title: Server Time
+        sync_cursor:
+          type: string
+          title: Sync Cursor
+          description: Opaque cursor for the first GET /sync/pull call
+      type: object
+      required:
+      - farm
+      - users
+      - locations
+      - animals
+      - flocks
+      - fields
+      - inventory_items
+      - tasks
+      - recommendations
+      - server_time
+      - sync_cursor
+      title: BootstrapResponse
+      description: 'GET /farms/{farm_id}/bootstrap — initial local-cache payload
+
+        (tech spec §12). The tablet stores this verbatim into SQLite on first
+
+        login / demo activation.'
+    EggRecordCreate:
+      properties:
+        flock_id:
+          type: string
+          title: Flock Id
+        total_eggs:
+          type: integer
+          title: Total Eggs
+        sellable_eggs:
+          type: integer
+          title: Sellable Eggs
+          default: 0
+        broken_eggs:
+          type: integer
+          title: Broken Eggs
+          default: 0
+        consumed:
+          type: integer
+          title: Consumed
+          default: 0
+        hatched:
+          type: integer
+          title: Hatched
+          default: 0
+        wasted:
+          type: integer
+          title: Wasted
+          default: 0
+        recorded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Recorded At
+      type: object
+      required:
+      - flock_id
+      - total_eggs
+      title: EggRecordCreate
+      description: 'POST /production/eggs.
+
+
+        Validation rule (tech spec §14): "Sellable + broken + consumed +
+
+        hatched + wasted cannot exceed total eggs."'
+    Evidence:
+      properties:
+        label:
+          type: string
+          title: Label
+        value:
+          type: string
+          title: Value
+      type: object
+      required:
+      - label
+      - value
+      title: Evidence
+    FeedTransactionCreate:
+      properties:
+        item_id:
+          type: string
+          title: Item Id
+        direction:
+          type: string
+          title: Direction
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        linked_entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Linked Entity Type
+        linked_entity_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Linked Entity Id
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+      type: object
+      required:
+      - item_id
+      - direction
+      - quantity
+      title: FeedTransactionCreate
+      description: 'POST /feed/transactions.
+
+
+        Validation rule (tech spec §14): "Inventory should not go negative
+
+        without explicit override."'
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HarvestRecordCreate:
+      properties:
+        field_id:
+          type: string
+          title: Field Id
+        product_name:
+          type: string
+          title: Product Name
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          type: string
+          title: Unit
+          default: kg
+        waste_qty:
+          type: number
+          title: Waste Qty
+          default: 0
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        recorded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Recorded At
+      type: object
+      required:
+      - field_id
+      - product_name
+      - quantity
+      title: HarvestRecordCreate
+      description: POST /production/harvest.
+    InventoryItemOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        unit:
+          type: string
+          title: Unit
+        current_qty:
+          type: number
+          title: Current Qty
+        reorder_level:
+          type: number
+          title: Reorder Level
+        supplier_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Label
+        unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Cost
+        last_purchase:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Last Purchase
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - unit
+      - current_qty
+      - reorder_level
+      title: InventoryItemOut
+    LoginRequest:
+      properties:
+        email:
+          type: string
+          title: Email
+        password:
+          type: string
+          title: Password
+        device_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Id
+      type: object
+      required:
+      - email
+      - password
+      title: LoginRequest
+    LoginResponse:
+      properties:
+        access_token:
+          type: string
+          title: Access Token
+        token_type:
+          type: string
+          title: Token Type
+          default: bearer
+        expires_in_minutes:
+          type: integer
+          title: Expires In Minutes
+        user:
+          $ref: '#/components/schemas/UserOut'
+      type: object
+      required:
+      - access_token
+      - expires_in_minutes
+      - user
+      title: LoginResponse
+    MilkRecordCreate:
+      properties:
+        animal_id:
+          type: string
+          title: Animal Id
+        session:
+          type: string
+          title: Session
+        liters:
+          type: number
+          title: Liters
+        destination:
+          type: string
+          title: Destination
+          default: stored
+        quality_status:
+          type: string
+          title: Quality Status
+          default: normal
+        recorded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Recorded At
+        recorded_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recorded By
+      type: object
+      required:
+      - animal_id
+      - session
+      - liters
+      title: MilkRecordCreate
+      description: 'POST /production/milk.
+
+
+        Validation rule (tech spec §14): "Liters >= 0; destination sale blocked
+
+        or hard-warned if withdrawal active." The hard block (not just a
+
+        warning) happens in services/production.py, which has access to the
+
+        animal''s current withdrawal_until date.'
+    ObservationCreate:
+      properties:
+        farm_id:
+          type: string
+          title: Farm Id
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        observation_type:
+          type: string
+          title: Observation Type
+        quality:
+          type: string
+          title: Quality
+          default: human_observed
+        value_numeric:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Value Numeric
+        value_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Value Text
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        observed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Observed At
+        observer_id:
+          type: string
+          title: Observer Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - farm_id
+      - entity_type
+      - entity_id
+      - observation_type
+      - observer_id
+      title: ObservationCreate
+      description: 'POST /observations.
+
+
+        Constitution: "Workers record observations. Workers do not diagnose."
+
+        There is deliberately no `diagnosis` field here — see
+
+        schemas/health.TreatmentCreate for the manager/vet-gated path.'
+    ObservationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        observation_type:
+          type: string
+          title: Observation Type
+        quality:
+          type: string
+          title: Quality
+        confidence:
+          type: number
+          title: Confidence
+        value_numeric:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Value Numeric
+        value_text:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Value Text
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        severity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Severity
+        observed_at:
+          type: string
+          format: date-time
+          title: Observed At
+        observer_id:
+          type: string
+          title: Observer Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - farm_id
+      - entity_type
+      - entity_id
+      - observation_type
+      - quality
+      - confidence
+      - value_numeric
+      - value_text
+      - unit
+      - severity
+      - observed_at
+      - observer_id
+      - notes
+      title: ObservationOut
+    RecommendationDecision:
+      properties:
+        decision:
+          type: string
+          title: Decision
+        decided_by:
+          type: string
+          title: Decided By
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+      type: object
+      required:
+      - decision
+      - decided_by
+      title: RecommendationDecision
+    RecommendationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        category:
+          type: string
+          title: Category
+        priority:
+          type: string
+          title: Priority
+        title:
+          type: string
+          title: Title
+        entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Type
+        entity_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Id
+        entity_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Label
+        confidence:
+          type: number
+          title: Confidence
+        rationale:
+          type: string
+          title: Rationale
+        suggested_action:
+          type: string
+          title: Suggested Action
+        status:
+          type: string
+          title: Status
+        rule_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rule Id
+        generated_at:
+          type: string
+          format: date-time
+          title: Generated At
+        evidence:
+          items:
+            $ref: '#/components/schemas/Evidence'
+          type: array
+          title: Evidence
+          default: []
+      type: object
+      required:
+      - id
+      - farm_id
+      - category
+      - priority
+      - title
+      - confidence
+      - rationale
+      - suggested_action
+      - status
+      - generated_at
+      title: RecommendationOut
+    SyncItemResult:
+      properties:
+        idempotency_key:
+          type: string
+          title: Idempotency Key
+        status:
+          type: string
+          title: Status
+        server_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Server Id
+        error:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Error
+      type: object
+      required:
+      - idempotency_key
+      - status
+      title: SyncItemResult
+    SyncPullResponse:
+      properties:
+        cursor:
+          type: string
+          title: Cursor
+        events:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Events
+        has_more:
+          type: boolean
+          title: Has More
+        server_time:
+          type: string
+          format: date-time
+          title: Server Time
+      type: object
+      required:
+      - cursor
+      - events
+      - has_more
+      - server_time
+      title: SyncPullResponse
+    SyncPushItem:
+      properties:
+        idempotency_key:
+          type: string
+          title: Idempotency Key
+        operation:
+          type: string
+          title: Operation
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+        client_created_at:
+          type: string
+          format: date-time
+          title: Client Created At
+        device_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device Id
+      type: object
+      required:
+      - idempotency_key
+      - operation
+      - entity_type
+      - entity_id
+      - payload
+      - client_created_at
+      title: SyncPushItem
+      description: 'One queued item from the tablet''s local `sync_queue` table
+
+        (tech spec §9/§10). `idempotency_key` prevents duplicate server
+
+        records when the same batch is retried after a dropped connection
+
+        (tech spec §14: "Duplicate idempotency key must not create duplicate
+
+        server record.").'
+    SyncPushRequest:
+      properties:
+        farm_id:
+          type: string
+          title: Farm Id
+        device_id:
+          type: string
+          title: Device Id
+        items:
+          items:
+            $ref: '#/components/schemas/SyncPushItem'
+          type: array
+          title: Items
+      type: object
+      required:
+      - farm_id
+      - device_id
+      - items
+      title: SyncPushRequest
+    SyncPushResponse:
+      properties:
+        results:
+          items:
+            $ref: '#/components/schemas/SyncItemResult'
+          type: array
+          title: Results
+        server_time:
+          type: string
+          format: date-time
+          title: Server Time
+      type: object
+      required:
+      - results
+      - server_time
+      title: SyncPushResponse
+    TaskCreate:
+      properties:
+        farm_id:
+          type: string
+          title: Farm Id
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
+        due_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due At
+        priority:
+          type: string
+          title: Priority
+          default: medium
+        source_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Type
+        source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Id
+      type: object
+      required:
+      - farm_id
+      - title
+      title: TaskCreate
+    TaskOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
+        due_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due At
+        priority:
+          type: string
+          title: Priority
+        status:
+          type: string
+          title: Status
+        source_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Type
+        source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Id
+      type: object
+      required:
+      - id
+      - farm_id
+      - title
+      - priority
+      - status
+      title: TaskOut
+    TaskUpdate:
+      properties:
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
+        priority:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Priority
+      type: object
+      title: TaskUpdate
+    TreatmentCreate:
+      properties:
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        medication:
+          type: string
+          title: Medication
+        dose:
+          type: string
+          title: Dose
+        route:
+          type: string
+          title: Route
+        responsible_user_id:
+          type: string
+          title: Responsible User Id
+        diagnosis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Diagnosis
+        start_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Start At
+        end_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: End At
+        withdrawal_until:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Withdrawal Until
+        vet_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vet Id
+        cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cost
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - entity_type
+      - entity_id
+      - medication
+      - dose
+      - route
+      - responsible_user_id
+      title: TreatmentCreate
+      description: 'POST /health/treatments.
+
+
+        Manager/veterinarian-gated (Constitution: "Veterinarians diagnose and
+
+        prescribe" — enforced by the `require_diagnostic_role` dependency in
+
+        api/deps.py). Validation rule (tech spec §14): "Medication, dose,
+
+        route, start date, responsible user, and withdrawal period are
+
+        required where applicable."'
+    UserOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        role:
+          type: string
+          title: Role
+        language:
+          type: string
+          title: Language
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - role
+      - language
+      title: UserOut
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer
