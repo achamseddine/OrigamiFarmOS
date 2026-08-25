@@ -6,7 +6,9 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/section_card.dart';
+import '../../core/widgets/status_pill.dart';
 import '../../data/demo/demo_data.dart';
+import '../../providers/mouneh_provider.dart';
 import '../../sync/sync_queue_controller.dart';
 
 /// Farm configuration (tech spec §6 nav table: "Users, roles, languages,
@@ -18,6 +20,7 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final locale = context.watch<LocaleController>();
     final sync = context.watch<SyncQueueController>();
+    final mouneh = context.watch<MounehProvider>();
 
     return SingleChildScrollView(
       child: Column(
@@ -62,6 +65,39 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (v) => sync.setOnline(!v),
               ),
             ]),
+          ),
+          const SizedBox(height: FarmSpacing.md),
+          SectionCard(
+            title: 'Modules',
+            subtitle: 'License-controlled add-ons — activated per farm by a super user',
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Text('Mouneh & Farm Product Processing', style: FarmTypography.textTheme.titleSmall),
+                            const SizedBox(width: 8),
+                            StatusPill(label: mouneh.isActive ? 'Active' : 'Inactive', level: mouneh.isActive ? FarmStatusLevel.good : FarmStatusLevel.neutral, dense: true),
+                          ]),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Makdous, Labneh, Kishk, Jam or any custom product — recipes, batches, finished-goods stock and profitability.',
+                            style: FarmTypography.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(value: mouneh.isActive, onChanged: (v) => mouneh.setModuleActive(v)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('Toggle acts as the super-user activation control (REQ-MOU-001) — a real deployment gates this behind a super-user login.', style: FarmTypography.textTheme.bodySmall),
+              ],
+            ),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(

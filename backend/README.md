@@ -31,6 +31,7 @@ Demo login (from the seed data):
 | `layla.vet@origami.farm` | `farmos123` | veterinarian |
 | `karim.worker@origami.farm` | `farmos123` | worker |
 | `nadine.acct@origami.farm` | `farmos123` | accountant |
+| `super@origamifarms.com` | `farmos123` | super_user (Mouneh module license admin) |
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
@@ -44,6 +45,28 @@ and returns real, evidence-backed priorities (Bella's mastitis risk, the
 duck flock's egg drop, low Corn Silage/Layer Feed stock, Willow's
 withdrawal period, and the Field 2 harvest reminder — see
 `app/seed.py` for how each scenario's history was built).
+
+The Mouneh & Farm Product Processing module (tech spec v0.5) is seeded
+already active with a Makdous example product, one completed batch and
+one in-progress batch. Try:
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"rami@origami.farm","password":"farmos123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -s http://127.0.0.1:8000/api/v1/mouneh/dashboard -H "Authorization: Bearer $TOKEN"
+```
+
+A super user (`super@origamifarms.com`) can deactivate/reactivate the
+module (every other Mouneh endpoint 403s while inactive):
+
+```bash
+SUPER_TOKEN=$(curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"email":"super@origamifarms.com","password":"farmos123"}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+curl -s -X POST http://127.0.0.1:8000/api/v1/modules/mouneh/deactivate -H "Authorization: Bearer $SUPER_TOKEN"
+```
 
 ## Running against PostgreSQL
 
@@ -86,11 +109,16 @@ DATABASE_URL=sqlite:///./ci.db pytest -q   # DATABASE_URL only affects the FastA
                                             # (see tests/conftest.py) regardless.
 ```
 
-66 tests, all passing as of this build: 16 pure unit tests for the
+91 tests, all passing as of this build: 16 pure unit tests for the
 recommendation engine (`tests/test_recommendations.py`, no DB/HTTP
-involved) and 50 API tests (`tests/test_api.py`) covering auth, RBAC,
+involved) and 34 API tests (`tests/test_api.py`) covering auth, RBAC,
 every validation rule, the recommendation lifecycle (generate → decide →
-survives refresh), sync push idempotency, and both report endpoints.
+survives refresh), sync push idempotency, and both report endpoints —
+plus 41 tests for the Mouneh & Farm Product Processing module: 21 pure
+costing-engine unit tests (`tests/test_mouneh_costing.py`) and 20 API
+tests (`tests/test_mouneh_api.py`) covering license gating, dynamic
+product creation, recipe versioning, the full batch lifecycle, and
+sales/profitability.
 
 ## Architecture
 
@@ -104,12 +132,20 @@ app/
   schemas/                   Pydantic request/response models + field validators
   repositories/base.py       Shared helpers: new_id(), write_event(), write_audit_log(), ensure_utc()
   recommendations/engine.py  Pure, unit-tested rule functions (no DB access)
+  mouneh/
+    costing.py               Pure, unit-tested cost/pricing/margin functions (tech spec v0.5 §7)
+    seed.py                  Makdous demo data — built the same way a manager would through the API
   services/
     recommendation_service.py  Reads DB state, calls engine.py, persists RecommendationDraft rows
+    mouneh_service.py          Reads DB state (recipes, cost components), calls mouneh/costing.py
     reports_service.py         Morning-briefing + daily-summary aggregation
   api/
-    deps.py                  get_current_user, require_roles(...) RBAC dependencies
+    deps.py                  get_current_user, require_roles(...), require_module_license(...) RBAC/license dependencies
     v1/*.py                  One router per resource, matching tech spec §12's endpoint table
+    v1/modules.py             Super-user module license activate/deactivate (tech spec v0.5 REQ-MOU-001)
+    v1/mouneh.py               Products, recipes, raw materials, batches, finished goods, sales, dashboard
+  domain/mouneh_models.py    SQLAlchemy models for the Mouneh module (separate bounded context)
+  schemas/mouneh.py          Pydantic request/response models for the Mouneh module
   seed.py                    Idempotent demo-data seeder (also the tests' fixture data source)
 ```
 
@@ -135,12 +171,13 @@ caught and fixed by the test suite during development — see git history.
 ## What's complete
 
 - All 15 endpoints from tech spec §12, matching the OpenAPI export in `api/openapi.yaml`.
-- Full SQLAlchemy schema (23 tables) + matching hand-authored PostgreSQL DDL, both verified.
-- Alembic migrations, verified upgrade/downgrade against real PostgreSQL.
+- Full SQLAlchemy schema (23 core tables + 11 Mouneh module tables) + matching hand-authored PostgreSQL DDL, both verified.
+- Alembic migrations, verified upgrade/downgrade against real PostgreSQL — including the Mouneh module's migration.
 - Rule-based recommendation engine: all 6 rules from tech spec §15/§16, pure-function unit tested, and wired end-to-end against real seeded database history (not hardcoded output).
 - Validation rules from tech spec §14 (milk, eggs, feed, treatment, observation, sync idempotency) enforced at the API layer with tests for both the accept and reject paths.
 - RBAC: JWT auth + role dependency, tested for manager/vet allow and worker/accountant deny on the diagnosis-gated treatment endpoint.
 - Event log + audit-log tables written by every mutating endpoint (Constitution: "every important change is an event").
+- **Mouneh & Farm Product Processing module (tech spec v0.5):** license-gated per farm by a super user (`api/v1/modules.py`); a manager can define any product type through the Product Builder (no code changes — `POST /mouneh/products`); recipes (raw materials + packaging + labor + optional overhead costs) are versioned, never mutated in place; `POST /mouneh/cost-preview` and batch creation compute planned unit cost via the pure `app/mouneh/costing.py` engine; completing a batch consumes remaining raw-material stock and creates finished-goods stock at a frozen unit cost; sales deduct from that stock and compute profit against the batch's actual (not recomputed) cost; the dashboard aggregates cost, sales, remaining stock and a continue/slow-mover/review-pricing recommendation per product. Makdous is seeded purely as example data (`app/mouneh/seed.py`) — the module has no hard-coded product types anywhere.
 
 ## What's mocked / simplified
 

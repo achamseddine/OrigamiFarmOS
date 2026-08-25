@@ -67,12 +67,9 @@ paths:
       tags:
       - farms
       summary: Bootstrap
-      description: 'GET /farms/{farm_id}/bootstrap — initial local cache data (tech
-        spec
-
-        §12). The tablet writes this straight into SQLite on first login /
-
-        when activating demo mode, per the offline-first flow in §10.'
+      description: "GET /farms/{farm_id}/bootstrap \u2014 initial local cache data\
+        \ (tech spec\n\xA712). The tablet writes this straight into SQLite on first\
+        \ login /\nwhen activating demo mode, per the offline-first flow in \xA710."
       operationId: bootstrap_api_v1_farms__farm_id__bootstrap_get
       security:
       - HTTPBearer: []
@@ -101,38 +98,19 @@ paths:
       tags:
       - sync
       summary: Push
-      description: 'POST /sync/push — upload a batch of queued tablet writes.
-
-
-        Tech spec §14: "Duplicate idempotency key must not create duplicate
-
-        server record." Each item''s `idempotency_key` is unique-constrained on
-
-        `sync_queue`, so replaying a batch after a dropped connection is safe.
-
-
-        Because every domain-row ID is generated client-side (a UUID, written
-
-        once by `FarmWriteService` and never reused), the server can accept
-
-        entity IDs as-is with no remapping step — a deliberate simplification
-
-        that keeps this push endpoint correct without needing a second
-
-        ID-translation pass.
-
-
-        This build durably records every item (event + sync_queue row,
-
-        idempotent) and materializes the common write types the tablet already
-
-        produces (observations, milk, tasks, feed transactions) back into
-
-        their domain tables. Less common event types are still accepted and
-
-        queued/event-logged, ready for a same-shaped repository call to be
-
-        added — see README "What remains".'
+      description: "POST /sync/push \u2014 upload a batch of queued tablet writes.\n\
+        \nTech spec \xA714: \"Duplicate idempotency key must not create duplicate\n\
+        server record.\" Each item's `idempotency_key` is unique-constrained on\n\
+        `sync_queue`, so replaying a batch after a dropped connection is safe.\n\n\
+        Because every domain-row ID is generated client-side (a UUID, written\nonce\
+        \ by `FarmWriteService` and never reused), the server can accept\nentity IDs\
+        \ as-is with no remapping step \u2014 a deliberate simplification\nthat keeps\
+        \ this push endpoint correct without needing a second\nID-translation pass.\n\
+        \nThis build durably records every item (event + sync_queue row,\nidempotent)\
+        \ and materializes the common write types the tablet already\nproduces (observations,\
+        \ milk, tasks, feed transactions) back into\ntheir domain tables. Less common\
+        \ event types are still accepted and\nqueued/event-logged, ready for a same-shaped\
+        \ repository call to be\nadded \u2014 see README \"What remains\"."
       operationId: push_api_v1_sync_push_post
       requestBody:
         content:
@@ -160,7 +138,7 @@ paths:
       tags:
       - sync
       summary: Pull
-      description: GET /sync/pull — changes since `cursor` (tech spec §12).
+      description: "GET /sync/pull \u2014 changes since `cursor` (tech spec \xA712)."
       operationId: pull_api_v1_sync_pull_get
       security:
       - HTTPBearer: []
@@ -423,9 +401,8 @@ paths:
       tags:
       - feed
       summary: Create Feed Transaction
-      description: 'Validation rule (tech spec §14): "Inventory should not go negative
-
-        without explicit override."'
+      description: "Validation rule (tech spec \xA714): \"Inventory should not go\
+        \ negative\nwithout explicit override.\""
       operationId: create_feed_transaction_api_v1_feed_transactions_post
       requestBody:
         content:
@@ -453,13 +430,10 @@ paths:
       tags:
       - production
       summary: Record Milk
-      description: 'Validation rule (tech spec §14): "Milk from an animal under
-
-        withdrawal must show a hard warning or be blocked from sale
-
-        destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
-
-        in the recommendation engine.'
+      description: "Validation rule (tech spec \xA714): \"Milk from an animal under\n\
+        withdrawal must show a hard warning or be blocked from sale\ndestination.\"\
+        \ This endpoint hard-blocks it, matching RULE-WITHDRAWAL\nin the recommendation\
+        \ engine."
       operationId: record_milk_api_v1_production_milk_post
       requestBody:
         content:
@@ -489,10 +463,8 @@ paths:
       tags:
       - production
       summary: Record Eggs
-      description: 'Validation rule (tech spec §14): "Sellable + broken + consumed
-        +
-
-        hatched + wasted cannot exceed total eggs."'
+      description: "Validation rule (tech spec \xA714): \"Sellable + broken + consumed\
+        \ +\nhatched + wasted cannot exceed total eggs.\""
       operationId: record_eggs_api_v1_production_eggs_post
       requestBody:
         content:
@@ -585,13 +557,10 @@ paths:
       tags:
       - recommendations
       summary: List Recommendations
-      description: 'GET /recommendations. By default re-evaluates every rule against
-
-        current farm state first (`refresh=true`) so the list is always
-
-        evidence-fresh, then returns what''s stored — never generated without
-
-        persisted evidence (CONSTITUTION.md).'
+      description: "GET /recommendations. By default re-evaluates every rule against\n\
+        current farm state first (`refresh=true`) so the list is always\nevidence-fresh,\
+        \ then returns what's stored \u2014 never generated without\npersisted evidence\
+        \ (CONSTITUTION.md)."
       operationId: list_recommendations_api_v1_recommendations_get
       security:
       - HTTPBearer: []
@@ -646,13 +615,10 @@ paths:
       tags:
       - recommendations
       summary: Decide Recommendation
-      description: 'PATCH /recommendations/{id}/decision — accept/reject/postpone.
-
-        Tech spec §15 lifecycle: "Generated -> Reviewed -> Accepted/Rejected/
-
-        Postponed -> Task Created -> Action Taken -> Outcome Recorded ->
-
-        Closed." Every decision is itself an event, so the trail is never lost.'
+      description: "PATCH /recommendations/{id}/decision \u2014 accept/reject/postpone.\n\
+        Tech spec \xA715 lifecycle: \"Generated -> Reviewed -> Accepted/Rejected/\n\
+        Postponed -> Task Created -> Action Taken -> Outcome Recorded ->\nClosed.\"\
+        \ Every decision is itself an event, so the trail is never lost."
       operationId: decide_recommendation_api_v1_recommendations__recommendation_id__decision_patch
       security:
       - HTTPBearer: []
@@ -687,14 +653,10 @@ paths:
       tags:
       - reports
       summary: Morning Briefing
-      description: 'Tech spec §16: "Morning Briefing ... Local cache refresh on app
-        open
-
-        and after sync." Refreshing recommendations here (not just from
-
-        GET /recommendations) means the briefing''s priorities are current even
-
-        if nothing else has called the recommendations endpoint yet today.'
+      description: "Tech spec \xA716: \"Morning Briefing ... Local cache refresh on\
+        \ app open\nand after sync.\" Refreshing recommendations here (not just from\n\
+        GET /recommendations) means the briefing's priorities are current even\nif\
+        \ nothing else has called the recommendations endpoint yet today."
       operationId: morning_briefing_api_v1_morning_briefing_get
       security:
       - HTTPBearer: []
@@ -750,6 +712,684 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/modules:
+    get:
+      tags:
+      - modules
+      summary: List Modules
+      operationId: list_modules_api_v1_modules_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ModuleLicenseOut'
+                type: array
+                title: Response List Modules Api V1 Modules Get
+      security:
+      - HTTPBearer: []
+  /api/v1/modules/{module_code}/activate:
+    post:
+      tags:
+      - modules
+      summary: Activate Module
+      description: 'A super user is not necessarily scoped to one farm, so the target
+
+        farm is explicit (defaults to the super user''s own farm record for
+
+        convenience in the single-farm MVP deployment).'
+      operationId: activate_module_api_v1_modules__module_code__activate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Module Code
+      - name: farm_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Farm Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleLicenseUpdate'
+              default:
+                status: active
+                plan: mouneh_addon
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleLicenseOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/modules/{module_code}/deactivate:
+    post:
+      tags:
+      - modules
+      summary: Deactivate Module
+      operationId: deactivate_module_api_v1_modules__module_code__deactivate_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Module Code
+      - name: farm_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleLicenseOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/modules/{module_code}:
+    get:
+      tags:
+      - modules
+      summary: Get Module
+      operationId: get_module_api_v1_modules__module_code__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module_code
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Module Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleLicenseOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/raw-materials:
+    get:
+      tags:
+      - mouneh
+      summary: List Raw Materials
+      operationId: list_raw_materials_api_v1_mouneh_raw_materials_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RawMaterialOut'
+                type: array
+                title: Response List Raw Materials Api V1 Mouneh Raw Materials Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - mouneh
+      summary: Create Raw Material
+      operationId: create_raw_material_api_v1_mouneh_raw_materials_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RawMaterialCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RawMaterialOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/mouneh/products:
+    get:
+      tags:
+      - mouneh
+      summary: List Products
+      operationId: list_products_api_v1_mouneh_products_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/MounehProductOut'
+                type: array
+                title: Response List Products Api V1 Mouneh Products Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - mouneh
+      summary: Create Product
+      operationId: create_product_api_v1_mouneh_products_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MounehProductCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehProductOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/mouneh/products/{product_id}:
+    get:
+      tags:
+      - mouneh
+      summary: Get Product
+      operationId: get_product_api_v1_mouneh_products__product_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehProductDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    put:
+      tags:
+      - mouneh
+      summary: Update Product
+      operationId: update_product_api_v1_mouneh_products__product_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MounehProductUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehProductOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/products/{product_id}/recipes:
+    post:
+      tags:
+      - mouneh
+      summary: Create Recipe
+      operationId: create_recipe_api_v1_mouneh_products__product_id__recipes_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipeOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - mouneh
+      summary: List Recipes
+      operationId: list_recipes_api_v1_mouneh_products__product_id__recipes_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecipeOut'
+                title: Response List Recipes Api V1 Mouneh Products  Product Id  Recipes
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/cost-preview:
+    post:
+      tags:
+      - mouneh
+      summary: Cost Preview
+      operationId: cost_preview_api_v1_mouneh_cost_preview_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CostPreviewRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CostBreakdownOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/mouneh/batches:
+    post:
+      tags:
+      - mouneh
+      summary: Create Batch
+      operationId: create_batch_api_v1_mouneh_batches_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductionBatchCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionBatchOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - mouneh
+      summary: List Batches
+      operationId: list_batches_api_v1_mouneh_batches_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+      - name: status_filter
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status Filter
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductionBatchOut'
+                title: Response List Batches Api V1 Mouneh Batches Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/batches/{batch_id}:
+    get:
+      tags:
+      - mouneh
+      summary: Get Batch
+      operationId: get_batch_api_v1_mouneh_batches__batch_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: batch_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionBatchOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/batches/{batch_id}/consume:
+    post:
+      tags:
+      - mouneh
+      summary: Consume Batch Inputs
+      operationId: consume_batch_inputs_api_v1_mouneh_batches__batch_id__consume_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: batch_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchConsumeRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionBatchOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/batches/{batch_id}/complete:
+    post:
+      tags:
+      - mouneh
+      summary: Complete Batch
+      description: 'REQ-MOU-005: "Batch completion consumes stock and creates finished
+
+        goods." Any material never explicitly /consume''d is deducted here
+
+        at its planned (recipe) quantity, so a manager who skips the granular
+
+        step still gets correct stock and cost.'
+      operationId: complete_batch_api_v1_mouneh_batches__batch_id__complete_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: batch_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCompleteRequest'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductionBatchOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/finished-goods:
+    get:
+      tags:
+      - mouneh
+      summary: List Finished Goods
+      operationId: list_finished_goods_api_v1_mouneh_finished_goods_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Finished Goods Api V1 Mouneh Finished Goods Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/sales:
+    post:
+      tags:
+      - mouneh
+      summary: Record Sale
+      operationId: record_sale_api_v1_mouneh_sales_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MounehSaleCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehSaleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - mouneh
+      summary: List Sales
+      operationId: list_sales_api_v1_mouneh_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MounehSaleOut'
+                title: Response List Sales Api V1 Mouneh Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/products/{product_id}/profitability:
+    get:
+      tags:
+      - mouneh
+      summary: Product Profitability
+      operationId: product_profitability_api_v1_mouneh_products__product_id__profitability_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: product_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductProfitabilityOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/dashboard:
+    get:
+      tags:
+      - mouneh
+      summary: Dashboard
+      operationId: dashboard_api_v1_mouneh_dashboard_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehDashboardOut'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AnimalDigitalTwinOut:
@@ -969,6 +1609,112 @@ components:
       - pregnant
       - lactating
       title: AnimalOut
+    BatchCompleteRequest:
+      properties:
+        actual_output_qty:
+          type: number
+          title: Actual Output Qty
+        waste_qty:
+          type: number
+          title: Waste Qty
+          default: 0
+        damaged_qty:
+          type: number
+          title: Damaged Qty
+          default: 0
+        quality_status:
+          type: string
+          title: Quality Status
+          default: good
+        expiry_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expiry Date
+        warehouse_location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Location
+        labor_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Labor Hours
+        extra_cost_components:
+          items:
+            $ref: '#/components/schemas/CostComponentCreate'
+          type: array
+          title: Extra Cost Components
+          default: []
+      type: object
+      required:
+      - actual_output_qty
+      title: BatchCompleteRequest
+    BatchConsumeRequest:
+      properties:
+        lines:
+          items:
+            $ref: '#/components/schemas/BatchConsumptionLine'
+          type: array
+          title: Lines
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+      type: object
+      required:
+      - lines
+      title: BatchConsumeRequest
+      description: "POST /mouneh/batches/{id}/consume \u2014 records actual raw-material\n\
+        usage and deducts it from raw-material stock. Can be called\nincrementally;\
+        \ completion (below) does not require this to have run\nfirst (it falls back\
+        \ to planned quantities)."
+    BatchConsumptionLine:
+      properties:
+        material_id:
+          type: string
+          title: Material Id
+        actual_qty:
+          type: number
+          title: Actual Qty
+      type: object
+      required:
+      - material_id
+      - actual_qty
+      title: BatchConsumptionLine
+    BatchInputConsumptionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        material_id:
+          type: string
+          title: Material Id
+        planned_qty:
+          type: number
+          title: Planned Qty
+        actual_qty:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Actual Qty
+        unit_cost:
+          type: number
+          title: Unit Cost
+        total_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total Cost
+      type: object
+      required:
+      - id
+      - material_id
+      - planned_qty
+      - unit_cost
+      title: BatchInputConsumptionOut
     BootstrapResponse:
       properties:
         farm:
@@ -1044,11 +1790,190 @@ components:
       - server_time
       - sync_cursor
       title: BootstrapResponse
-      description: 'GET /farms/{farm_id}/bootstrap — initial local-cache payload
+      description: "GET /farms/{farm_id}/bootstrap \u2014 initial local-cache payload\n\
+        (tech spec \xA712). The tablet stores this verbatim into SQLite on first\n\
+        login / demo activation."
+    CostBreakdownOut:
+      properties:
+        material_cost:
+          type: number
+          title: Material Cost
+        packaging_cost:
+          type: number
+          title: Packaging Cost
+        labor_cost:
+          type: number
+          title: Labor Cost
+        overhead_cost:
+          type: number
+          title: Overhead Cost
+        byproduct_credit:
+          type: number
+          title: Byproduct Credit
+        output_qty:
+          type: number
+          title: Output Qty
+        total_cost:
+          type: number
+          title: Total Cost
+        unit_cost:
+          type: number
+          title: Unit Cost
+        component_breakdown:
+          additionalProperties:
+            type: number
+          type: object
+          title: Component Breakdown
+        suggested_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Suggested Price
+        minimum_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Minimum Price
+      type: object
+      required:
+      - material_cost
+      - packaging_cost
+      - labor_cost
+      - overhead_cost
+      - byproduct_credit
+      - output_qty
+      - total_cost
+      - unit_cost
+      - component_breakdown
+      title: CostBreakdownOut
+    CostComponentCreate:
+      properties:
+        cost_type:
+          type: string
+          title: Cost Type
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        calculation_method:
+          type: string
+          title: Calculation Method
+          default: fixed
+        amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amount
+        quantity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Quantity
+        unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Cost
+        allocation_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Allocation Basis
+      type: object
+      required:
+      - cost_type
+      title: CostComponentCreate
+    CostComponentOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+        batch_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Batch Id
+        cost_type:
+          type: string
+          title: Cost Type
+        label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Label
+        calculation_method:
+          type: string
+          title: Calculation Method
+        amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amount
+        quantity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Quantity
+        unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Cost
+        allocation_basis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Allocation Basis
+      type: object
+      required:
+      - id
+      - cost_type
+      - calculation_method
+      title: CostComponentOut
+    CostPreviewRequest:
+      properties:
+        product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Id
+        recipe_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recipe Id
+        output_qty:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Output Qty
+        materials:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/RecipeItemCreate'
+            type: array
+          - type: 'null'
+          title: Materials
+        cost_components:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/CostComponentCreate'
+            type: array
+          - type: 'null'
+          title: Cost Components
+      type: object
+      title: CostPreviewRequest
+      description: 'Either reference an existing product/recipe, or preview an
 
-        (tech spec §12). The tablet stores this verbatim into SQLite on first
+        entirely ad-hoc set of materials/components (used by the Product
 
-        login / demo activation.'
+        Builder wizard before the product is even saved).'
     EggRecordCreate:
       properties:
         flock_id:
@@ -1088,12 +2013,8 @@ components:
       - flock_id
       - total_eggs
       title: EggRecordCreate
-      description: 'POST /production/eggs.
-
-
-        Validation rule (tech spec §14): "Sellable + broken + consumed +
-
-        hatched + wasted cannot exceed total eggs."'
+      description: "POST /production/eggs.\n\nValidation rule (tech spec \xA714):\
+        \ \"Sellable + broken + consumed +\nhatched + wasted cannot exceed total eggs.\""
     Evidence:
       properties:
         label:
@@ -1148,12 +2069,8 @@ components:
       - direction
       - quantity
       title: FeedTransactionCreate
-      description: 'POST /feed/transactions.
-
-
-        Validation rule (tech spec §14): "Inventory should not go negative
-
-        without explicit override."'
+      description: "POST /feed/transactions.\n\nValidation rule (tech spec \xA714):\
+        \ \"Inventory should not go negative\nwithout explicit override.\""
     HTTPValidationError:
       properties:
         detail:
@@ -1324,16 +2241,508 @@ components:
       - session
       - liters
       title: MilkRecordCreate
-      description: 'POST /production/milk.
-
-
-        Validation rule (tech spec §14): "Liters >= 0; destination sale blocked
-
-        or hard-warned if withdrawal active." The hard block (not just a
-
-        warning) happens in services/production.py, which has access to the
-
-        animal''s current withdrawal_until date.'
+      description: "POST /production/milk.\n\nValidation rule (tech spec \xA714):\
+        \ \"Liters >= 0; destination sale blocked\nor hard-warned if withdrawal active.\"\
+        \ The hard block (not just a\nwarning) happens in services/production.py,\
+        \ which has access to the\nanimal's current withdrawal_until date."
+    ModuleLicenseOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        module_code:
+          type: string
+          title: Module Code
+        status:
+          type: string
+          title: Status
+        plan:
+          type: string
+          title: Plan
+        starts_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Starts At
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        max_users:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Users
+        max_products:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Products
+      type: object
+      required:
+      - id
+      - farm_id
+      - module_code
+      - status
+      - plan
+      title: ModuleLicenseOut
+    ModuleLicenseUpdate:
+      properties:
+        status:
+          type: string
+          title: Status
+          default: active
+        plan:
+          type: string
+          title: Plan
+          default: mouneh_addon
+        expires_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expires At
+        max_users:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Users
+        max_products:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Max Products
+      type: object
+      title: ModuleLicenseUpdate
+    MounehDashboardOut:
+      properties:
+        module_status:
+          type: string
+          title: Module Status
+        total_products:
+          type: integer
+          title: Total Products
+        active_batches:
+          type: integer
+          title: Active Batches
+        total_finished_units:
+          type: number
+          title: Total Finished Units
+        total_stock_value:
+          type: number
+          title: Total Stock Value
+        total_revenue_30d:
+          type: number
+          title: Total Revenue 30D
+        total_profit_30d:
+          type: number
+          title: Total Profit 30D
+        best_sellers:
+          items:
+            $ref: '#/components/schemas/ProductProfitabilityOut'
+          type: array
+          title: Best Sellers
+        slow_movers:
+          items:
+            $ref: '#/components/schemas/ProductProfitabilityOut'
+          type: array
+          title: Slow Movers
+      type: object
+      required:
+      - module_status
+      - total_products
+      - active_batches
+      - total_finished_units
+      - total_stock_value
+      - total_revenue_30d
+      - total_profit_30d
+      - best_sellers
+      - slow_movers
+      title: MounehDashboardOut
+    MounehProductCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+          default: general
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        output_unit:
+          type: string
+          title: Output Unit
+        custom_output_unit_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Custom Output Unit Label
+        default_batch_size:
+          type: number
+          title: Default Batch Size
+          default: 1
+        shelf_life_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shelf Life Days
+        warehouse_rules:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Rules
+        low_stock_threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Low Stock Threshold
+        target_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Price
+        wholesale_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Wholesale Price
+        target_margin_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Margin Pct
+      type: object
+      required:
+      - name
+      - output_unit
+      title: MounehProductCreate
+    MounehProductDetailOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        output_unit:
+          type: string
+          title: Output Unit
+        custom_output_unit_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Custom Output Unit Label
+        default_batch_size:
+          type: number
+          title: Default Batch Size
+        shelf_life_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shelf Life Days
+        warehouse_rules:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Rules
+        low_stock_threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Low Stock Threshold
+        target_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Price
+        wholesale_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Wholesale Price
+        target_margin_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Margin Pct
+        status:
+          type: string
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        active_recipe:
+          anyOf:
+          - $ref: '#/components/schemas/RecipeOut'
+          - type: 'null'
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - category
+      - output_unit
+      - default_batch_size
+      - status
+      - created_at
+      title: MounehProductDetailOut
+    MounehProductOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        output_unit:
+          type: string
+          title: Output Unit
+        custom_output_unit_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Custom Output Unit Label
+        default_batch_size:
+          type: number
+          title: Default Batch Size
+        shelf_life_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shelf Life Days
+        warehouse_rules:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Rules
+        low_stock_threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Low Stock Threshold
+        target_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Price
+        wholesale_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Wholesale Price
+        target_margin_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Margin Pct
+        status:
+          type: string
+          title: Status
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - category
+      - output_unit
+      - default_batch_size
+      - status
+      - created_at
+      title: MounehProductOut
+    MounehProductUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        default_batch_size:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Default Batch Size
+        shelf_life_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Shelf Life Days
+        warehouse_rules:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Rules
+        low_stock_threshold:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Low Stock Threshold
+        target_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Price
+        wholesale_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Wholesale Price
+        target_margin_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Target Margin Pct
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      type: object
+      title: MounehProductUpdate
+    MounehSaleCreate:
+      properties:
+        product_id:
+          type: string
+          title: Product Id
+        finished_goods_stock_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished Goods Stock Id
+        quantity:
+          type: number
+          title: Quantity
+        unit_price:
+          type: number
+          title: Unit Price
+        discount:
+          type: number
+          title: Discount
+          default: 0
+        customer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Customer Id
+        channel:
+          type: string
+          title: Channel
+          default: retail
+      type: object
+      required:
+      - product_id
+      - quantity
+      - unit_price
+      title: MounehSaleCreate
+    MounehSaleOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        product_id:
+          type: string
+          title: Product Id
+        batch_id:
+          type: string
+          title: Batch Id
+        finished_goods_stock_id:
+          type: string
+          title: Finished Goods Stock Id
+        quantity:
+          type: number
+          title: Quantity
+        unit_price:
+          type: number
+          title: Unit Price
+        discount:
+          type: number
+          title: Discount
+        customer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Customer Id
+        channel:
+          type: string
+          title: Channel
+        cost_per_unit:
+          type: number
+          title: Cost Per Unit
+        revenue:
+          type: number
+          title: Revenue
+        margin:
+          type: number
+          title: Margin
+        sold_at:
+          type: string
+          format: date-time
+          title: Sold At
+      type: object
+      required:
+      - id
+      - farm_id
+      - product_id
+      - batch_id
+      - finished_goods_stock_id
+      - quantity
+      - unit_price
+      - discount
+      - channel
+      - cost_per_unit
+      - revenue
+      - margin
+      - sold_at
+      title: MounehSaleOut
     ObservationCreate:
       properties:
         farm_id:
@@ -1394,14 +2803,9 @@ components:
       - observation_type
       - observer_id
       title: ObservationCreate
-      description: 'POST /observations.
-
-
-        Constitution: "Workers record observations. Workers do not diagnose."
-
-        There is deliberately no `diagnosis` field here — see
-
-        schemas/health.TreatmentCreate for the manager/vet-gated path.'
+      description: "POST /observations.\n\nConstitution: \"Workers record observations.\
+        \ Workers do not diagnose.\"\nThere is deliberately no `diagnosis` field here\
+        \ \u2014 see\nschemas/health.TreatmentCreate for the manager/vet-gated path."
     ObservationOut:
       properties:
         id:
@@ -1474,6 +2878,446 @@ components:
       - observer_id
       - notes
       title: ObservationOut
+    ProductProfitabilityOut:
+      properties:
+        product_id:
+          type: string
+          title: Product Id
+        product_name:
+          type: string
+          title: Product Name
+        units_produced:
+          type: number
+          title: Units Produced
+        units_sold:
+          type: number
+          title: Units Sold
+        units_remaining:
+          type: number
+          title: Units Remaining
+        units_expired:
+          type: number
+          title: Units Expired
+        units_damaged:
+          type: number
+          title: Units Damaged
+        avg_unit_cost:
+          type: number
+          title: Avg Unit Cost
+        avg_sale_price:
+          type: number
+          title: Avg Sale Price
+        total_revenue:
+          type: number
+          title: Total Revenue
+        total_cost:
+          type: number
+          title: Total Cost
+        total_profit:
+          type: number
+          title: Total Profit
+        gross_margin_pct:
+          type: number
+          title: Gross Margin Pct
+        sales_velocity_per_day:
+          type: number
+          title: Sales Velocity Per Day
+        recommendation:
+          type: string
+          title: Recommendation
+      type: object
+      required:
+      - product_id
+      - product_name
+      - units_produced
+      - units_sold
+      - units_remaining
+      - units_expired
+      - units_damaged
+      - avg_unit_cost
+      - avg_sale_price
+      - total_revenue
+      - total_cost
+      - total_profit
+      - gross_margin_pct
+      - sales_velocity_per_day
+      - recommendation
+      title: ProductProfitabilityOut
+    ProductionBatchCreate:
+      properties:
+        product_id:
+          type: string
+          title: Product Id
+        batch_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Batch Code
+        planned_qty:
+          type: number
+          title: Planned Qty
+        warehouse_location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Location
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - product_id
+      - planned_qty
+      title: ProductionBatchCreate
+    ProductionBatchOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        product_id:
+          type: string
+          title: Product Id
+        recipe_version_id:
+          type: string
+          title: Recipe Version Id
+        batch_code:
+          type: string
+          title: Batch Code
+        planned_qty:
+          type: number
+          title: Planned Qty
+        actual_output_qty:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Actual Output Qty
+        waste_qty:
+          type: number
+          title: Waste Qty
+        damaged_qty:
+          type: number
+          title: Damaged Qty
+        quality_status:
+          type: string
+          title: Quality Status
+        expiry_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expiry Date
+        warehouse_location:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Warehouse Location
+        status:
+          type: string
+          title: Status
+        planned_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Planned Unit Cost
+        planned_total_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Planned Total Cost
+        actual_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Actual Unit Cost
+        actual_total_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Actual Total Cost
+        labor_hours:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Labor Hours
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        consumptions:
+          items:
+            $ref: '#/components/schemas/BatchInputConsumptionOut'
+          type: array
+          title: Consumptions
+          default: []
+      type: object
+      required:
+      - id
+      - farm_id
+      - product_id
+      - recipe_version_id
+      - batch_code
+      - planned_qty
+      - waste_qty
+      - damaged_qty
+      - quality_status
+      - status
+      - started_at
+      title: ProductionBatchOut
+    RawMaterialCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+          default: raw_material
+        source_type:
+          type: string
+          title: Source Type
+          default: purchased
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        unit:
+          type: string
+          title: Unit
+        default_unit_cost:
+          type: number
+          title: Default Unit Cost
+          default: 0
+        stock_tracking_enabled:
+          type: boolean
+          title: Stock Tracking Enabled
+          default: true
+        current_stock:
+          type: number
+          title: Current Stock
+          default: 0
+        loss_percent_default:
+          type: number
+          title: Loss Percent Default
+          default: 0
+      type: object
+      required:
+      - name
+      - unit
+      title: RawMaterialCreate
+    RawMaterialOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        category:
+          type: string
+          title: Category
+        source_type:
+          type: string
+          title: Source Type
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        unit:
+          type: string
+          title: Unit
+        default_unit_cost:
+          type: number
+          title: Default Unit Cost
+        stock_tracking_enabled:
+          type: boolean
+          title: Stock Tracking Enabled
+        current_stock:
+          type: number
+          title: Current Stock
+        loss_percent_default:
+          type: number
+          title: Loss Percent Default
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - category
+      - source_type
+      - unit
+      - default_unit_cost
+      - stock_tracking_enabled
+      - current_stock
+      - loss_percent_default
+      - active
+      title: RawMaterialOut
+    RecipeCreate:
+      properties:
+        basis_quantity:
+          type: number
+          title: Basis Quantity
+        basis_unit:
+          type: string
+          title: Basis Unit
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        items:
+          items:
+            $ref: '#/components/schemas/RecipeItemCreate'
+          type: array
+          title: Items
+        cost_components:
+          items:
+            $ref: '#/components/schemas/CostComponentCreate'
+          type: array
+          title: Cost Components
+          default: []
+      type: object
+      required:
+      - basis_quantity
+      - basis_unit
+      - items
+      title: RecipeCreate
+      description: "POST /mouneh/products/{id}/recipes. A new recipe call always creates\n\
+        a new *version* (never mutates a prior one \u2014 see tech spec's \"never\n\
+        overwrite historical batch records\" requirement, which extends to the\nBOM\
+        \ feeding those batches)."
+    RecipeItemCreate:
+      properties:
+        material_id:
+          type: string
+          title: Material Id
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          type: string
+          title: Unit
+        loss_percent:
+          type: number
+          title: Loss Percent
+          default: 0
+        is_optional:
+          type: boolean
+          title: Is Optional
+          default: false
+      type: object
+      required:
+      - material_id
+      - quantity
+      - unit
+      title: RecipeItemCreate
+    RecipeItemOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        material_id:
+          type: string
+          title: Material Id
+        material_type:
+          type: string
+          title: Material Type
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          type: string
+          title: Unit
+        loss_percent:
+          type: number
+          title: Loss Percent
+        is_optional:
+          type: boolean
+          title: Is Optional
+      type: object
+      required:
+      - id
+      - material_id
+      - material_type
+      - quantity
+      - unit
+      - loss_percent
+      - is_optional
+      title: RecipeItemOut
+    RecipeOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        product_id:
+          type: string
+          title: Product Id
+        version:
+          type: integer
+          title: Version
+        effective_from:
+          type: string
+          format: date-time
+          title: Effective From
+        basis_quantity:
+          type: number
+          title: Basis Quantity
+        basis_unit:
+          type: string
+          title: Basis Unit
+        active:
+          type: boolean
+          title: Active
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        items:
+          items:
+            $ref: '#/components/schemas/RecipeItemOut'
+          type: array
+          title: Items
+          default: []
+        cost_components:
+          items:
+            $ref: '#/components/schemas/CostComponentOut'
+          type: array
+          title: Cost Components
+          default: []
+      type: object
+      required:
+      - id
+      - product_id
+      - version
+      - effective_from
+      - basis_quantity
+      - basis_unit
+      - active
+      title: RecipeOut
     RecommendationDecision:
       properties:
         decision:
@@ -1648,15 +3492,11 @@ components:
       - payload
       - client_created_at
       title: SyncPushItem
-      description: 'One queued item from the tablet''s local `sync_queue` table
-
-        (tech spec §9/§10). `idempotency_key` prevents duplicate server
-
-        records when the same batch is retried after a dropped connection
-
-        (tech spec §14: "Duplicate idempotency key must not create duplicate
-
-        server record.").'
+      description: "One queued item from the tablet's local `sync_queue` table\n(tech\
+        \ spec \xA79/\xA710). `idempotency_key` prevents duplicate server\nrecords\
+        \ when the same batch is retried after a dropped connection\n(tech spec \xA7\
+        14: \"Duplicate idempotency key must not create duplicate\nserver record.\"\
+        )."
     SyncPushRequest:
       properties:
         farm_id:
@@ -1872,18 +3712,11 @@ components:
       - route
       - responsible_user_id
       title: TreatmentCreate
-      description: 'POST /health/treatments.
-
-
-        Manager/veterinarian-gated (Constitution: "Veterinarians diagnose and
-
-        prescribe" — enforced by the `require_diagnostic_role` dependency in
-
-        api/deps.py). Validation rule (tech spec §14): "Medication, dose,
-
-        route, start date, responsible user, and withdrawal period are
-
-        required where applicable."'
+      description: "POST /health/treatments.\n\nManager/veterinarian-gated (Constitution:\
+        \ \"Veterinarians diagnose and\nprescribe\" \u2014 enforced by the `require_diagnostic_role`\
+        \ dependency in\napi/deps.py). Validation rule (tech spec \xA714): \"Medication,\
+        \ dose,\nroute, start date, responsible user, and withdrawal period are\n\
+        required where applicable.\""
     UserOut:
       properties:
         id:

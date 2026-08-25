@@ -11,14 +11,17 @@ import '../features/feed/feed_inventory_screen.dart';
 import '../features/finance/sales_finance_screen.dart';
 import '../features/health/health_intelligence_screen.dart';
 import '../features/morning/morning_briefing_screen.dart';
+import '../features/mouneh/mouneh_module_screen.dart';
 import '../features/production/egg_production_screen.dart';
 import '../features/production/milk_production_screen.dart';
 import '../features/produce/produce_harvest_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/welcome/welcome_screen.dart';
+import '../mouneh/mouneh_write_service.dart';
 import '../providers/animals_provider.dart';
 import '../providers/feed_provider.dart';
+import '../providers/mouneh_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../sync/sync_queue_controller.dart';
 
@@ -51,6 +54,13 @@ class FarmOSApp extends StatelessWidget {
         ChangeNotifierProxyProvider<SyncQueueController, FeedProvider>(
           create: (context) => FeedProvider(
             writeService: writeService,
+            syncQueue: context.read<SyncQueueController>(),
+          ),
+          update: (context, sync, previous) => previous!,
+        ),
+        ChangeNotifierProxyProvider<SyncQueueController, MounehProvider>(
+          create: (context) => MounehProvider(
+            writeService: MounehWriteService(),
             syncQueue: context.read<SyncQueueController>(),
           ),
           update: (context, sync, previous) => previous!,
@@ -117,6 +127,7 @@ class _RootRouterState extends State<_RootRouter> {
           EggProductionScreen(),
           HealthIntelligenceScreen(),
           ProduceHarvestScreen(),
+          MounehModuleScreen(),
           SalesFinanceScreen(),
           TasksScreen(),
           SettingsScreen(),

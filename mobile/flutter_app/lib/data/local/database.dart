@@ -305,6 +305,164 @@ class FarmDatabase {
       timestamp TEXT NOT NULL
     );
     ''',
+    // ------------------------------------------------------------------
+    // Mouneh & Farm Product Processing module (tech spec v0.5 §3). Mirrors
+    // the entity names in database/schema.sql's Mouneh section exactly.
+    // ------------------------------------------------------------------
+    '''
+    CREATE TABLE module_licenses (
+      module_code TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'inactive',
+      plan TEXT,
+      activated_by TEXT
+    );
+    ''',
+    '''
+    CREATE TABLE raw_materials (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'raw_material',
+      source_type TEXT NOT NULL DEFAULT 'purchased',
+      unit TEXT NOT NULL,
+      default_unit_cost REAL NOT NULL DEFAULT 0,
+      current_stock REAL NOT NULL DEFAULT 0,
+      loss_percent_default REAL NOT NULL DEFAULT 0
+    );
+    ''',
+    '''
+    CREATE TABLE mouneh_products (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'general',
+      output_unit TEXT NOT NULL,
+      custom_output_unit_label TEXT,
+      default_batch_size REAL NOT NULL DEFAULT 1,
+      shelf_life_days INTEGER,
+      warehouse_rules TEXT,
+      low_stock_threshold REAL,
+      target_price REAL,
+      wholesale_price REAL,
+      target_margin_pct REAL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      created_at TEXT NOT NULL
+    );
+    ''',
+    '''
+    CREATE TABLE mouneh_recipes (
+      id TEXT PRIMARY KEY,
+      product_id TEXT NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1,
+      basis_quantity REAL NOT NULL,
+      basis_unit TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(product_id) REFERENCES mouneh_products(id)
+    );
+    ''',
+    '''
+    CREATE TABLE mouneh_recipe_items (
+      id TEXT PRIMARY KEY,
+      recipe_id TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      material_type TEXT NOT NULL DEFAULT 'raw_material',
+      quantity REAL NOT NULL,
+      unit TEXT NOT NULL,
+      loss_percent REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY(recipe_id) REFERENCES mouneh_recipes(id)
+    );
+    ''',
+    '''
+    CREATE TABLE cost_components (
+      id TEXT PRIMARY KEY,
+      product_id TEXT,
+      batch_id TEXT,
+      cost_type TEXT NOT NULL,
+      label TEXT,
+      calculation_method TEXT NOT NULL DEFAULT 'fixed',
+      amount REAL,
+      quantity REAL,
+      unit_cost REAL
+    );
+    ''',
+    '''
+    CREATE TABLE production_batches (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      recipe_id TEXT NOT NULL,
+      batch_code TEXT NOT NULL,
+      planned_qty REAL NOT NULL,
+      actual_output_qty REAL,
+      waste_qty REAL NOT NULL DEFAULT 0,
+      damaged_qty REAL NOT NULL DEFAULT 0,
+      quality_status TEXT NOT NULL DEFAULT 'good',
+      expiry_date TEXT,
+      warehouse_location TEXT,
+      status TEXT NOT NULL DEFAULT 'in_progress',
+      planned_unit_cost REAL,
+      planned_total_cost REAL,
+      actual_unit_cost REAL,
+      actual_total_cost REAL,
+      labor_hours REAL,
+      started_at TEXT NOT NULL,
+      completed_at TEXT,
+      FOREIGN KEY(product_id) REFERENCES mouneh_products(id),
+      FOREIGN KEY(recipe_id) REFERENCES mouneh_recipes(id)
+    );
+    ''',
+    '''
+    CREATE TABLE batch_input_consumptions (
+      id TEXT PRIMARY KEY,
+      batch_id TEXT NOT NULL,
+      material_id TEXT NOT NULL,
+      planned_qty REAL NOT NULL,
+      actual_qty REAL,
+      unit_cost REAL NOT NULL,
+      total_cost REAL,
+      FOREIGN KEY(batch_id) REFERENCES production_batches(id)
+    );
+    ''',
+    '''
+    CREATE TABLE finished_goods_stock (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      batch_id TEXT NOT NULL,
+      warehouse_location TEXT,
+      quantity_produced REAL NOT NULL DEFAULT 0,
+      quantity_available REAL NOT NULL DEFAULT 0,
+      quantity_reserved REAL NOT NULL DEFAULT 0,
+      quantity_sold REAL NOT NULL DEFAULT 0,
+      quantity_expired REAL NOT NULL DEFAULT 0,
+      quantity_damaged REAL NOT NULL DEFAULT 0,
+      unit_cost REAL NOT NULL DEFAULT 0,
+      expiry_date TEXT,
+      FOREIGN KEY(product_id) REFERENCES mouneh_products(id),
+      FOREIGN KEY(batch_id) REFERENCES production_batches(id)
+    );
+    ''',
+    '''
+    CREATE TABLE mouneh_sale_lines (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      product_id TEXT NOT NULL,
+      batch_id TEXT NOT NULL,
+      finished_goods_stock_id TEXT NOT NULL,
+      quantity REAL NOT NULL,
+      unit_price REAL NOT NULL,
+      discount REAL NOT NULL DEFAULT 0,
+      channel TEXT NOT NULL DEFAULT 'retail',
+      cost_per_unit REAL NOT NULL,
+      revenue REAL NOT NULL,
+      margin REAL NOT NULL,
+      sold_at TEXT NOT NULL,
+      FOREIGN KEY(product_id) REFERENCES mouneh_products(id),
+      FOREIGN KEY(finished_goods_stock_id) REFERENCES finished_goods_stock(id)
+    );
+    ''',
   ];
 
   /// Test-only: drop and recreate every table (used by repository tests).

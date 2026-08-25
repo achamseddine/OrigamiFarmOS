@@ -141,6 +141,111 @@ INSERT INTO expenses (farm_id, category, amount, incurred_at) VALUES
   ('00000000-0000-0000-0000-000000000001', 'fuel', 420, now()),
   ('00000000-0000-0000-0000-000000000001', 'other', 260, now());
 
+-- ============================================================================
+-- Mouneh & Farm Product Processing module demo data (tech spec v0.5).
+-- Makdous is used purely as an EXAMPLE — every row below is inserted the
+-- same way a farm manager's Product Builder / Recipe / Batch screens would
+-- write it; nothing about "Makdous" is special-cased in the schema or the
+-- application code (see backend/app/mouneh/seed.py, the Python equivalent
+-- of this block).
+-- ============================================================================
+
+-- Super user: the only role allowed to activate/deactivate the module.
+INSERT INTO users (id, farm_id, name, email, password_hash, role, language) VALUES
+  ('00000000-0000-0000-0000-000000000015', '00000000-0000-0000-0000-000000000001', 'Sami Nassar (Platform Admin)', 'super@origamifarms.com', '$2b$12$C9x1qk3f0m2v6VwYQwXrZuKt2yq6Zt0m1yQe1oQvVYVYV9m1kq1Sa', 'super_user', 'en');
+
+INSERT INTO module_licenses (id, farm_id, module_code, status, plan, starts_at, activated_by) VALUES
+  ('00000000-0000-0000-0000-000000000100', '00000000-0000-0000-0000-000000000001', 'mouneh', 'active', 'mouneh_addon', now() - interval '60 days', '00000000-0000-0000-0000-000000000015');
+
+-- Raw materials + packaging (reusable across any future Mouneh product).
+INSERT INTO raw_materials (id, farm_id, name, category, source_type, unit, default_unit_cost, current_stock, loss_percent_default) VALUES
+  ('00000000-0000-0000-0000-000000000101', '00000000-0000-0000-0000-000000000001', 'Baby Eggplant', 'raw_material', 'farm_produced', 'kg', 1.20, 320, 6),
+  ('00000000-0000-0000-0000-000000000102', '00000000-0000-0000-0000-000000000001', 'Walnuts', 'raw_material', 'purchased', 'kg', 7.50, 25, 0),
+  ('00000000-0000-0000-0000-000000000103', '00000000-0000-0000-0000-000000000001', 'Red Pepper Paste', 'raw_material', 'purchased', 'kg', 3.80, 18, 0),
+  ('00000000-0000-0000-0000-000000000104', '00000000-0000-0000-0000-000000000001', 'Garlic', 'raw_material', 'farm_produced', 'kg', 2.10, 12, 3),
+  ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-000000000001', 'Olive Oil', 'raw_material', 'farm_produced', 'liter', 6.50, 60, 0),
+  ('00000000-0000-0000-0000-000000000106', '00000000-0000-0000-0000-000000000001', 'Salt', 'raw_material', 'purchased', 'kg', 0.35, 40, 0),
+  ('00000000-0000-0000-0000-000000000107', '00000000-0000-0000-0000-000000000001', 'Glass Jars (500ml)', 'packaging', 'purchased', 'piece', 0.35, 600, 1),
+  ('00000000-0000-0000-0000-000000000108', '00000000-0000-0000-0000-000000000001', 'Jar Lids', 'packaging', 'purchased', 'piece', 0.08, 600, 1),
+  ('00000000-0000-0000-0000-000000000109', '00000000-0000-0000-0000-000000000001', 'Labels', 'packaging', 'purchased', 'piece', 0.05, 600, 0);
+
+-- Product (created via the Dynamic Product Builder — output_unit, shelf
+-- life, and pricing are all manager-entered, not hard-coded).
+INSERT INTO mouneh_products (id, farm_id, name, category, output_unit, default_batch_size, shelf_life_days, warehouse_rules, low_stock_threshold, target_price, wholesale_price, target_margin_pct, status, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000001', 'Makdous', 'Mouneh', 'jar', 100, 365, 'Store in a cool, dark room. Fully submerged in olive oil.', 20, 6.50, 5.00, 40, 'active', '00000000-0000-0000-0000-000000000015');
+
+-- Recipe (Bill of Materials, per a 100-jar batch).
+INSERT INTO mouneh_recipes (id, product_id, version, basis_quantity, basis_unit, notes) VALUES
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000200', 1, 100, 'jar', 'Standard Makdous recipe — baby eggplant stuffed with walnuts, red pepper paste and garlic, cured in olive oil.');
+
+INSERT INTO mouneh_recipe_items (recipe_id, material_id, material_type, quantity, unit, loss_percent) VALUES
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000101', 'raw_material', 45, 'kg', 6),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000102', 'raw_material', 4, 'kg', 0),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000103', 'raw_material', 3, 'kg', 0),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000104', 'raw_material', 2, 'kg', 3),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000105', 'raw_material', 18, 'liter', 0),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000106', 'raw_material', 2.5, 'kg', 0),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000107', 'packaging', 100, 'piece', 1),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000108', 'packaging', 100, 'piece', 1),
+  ('00000000-0000-0000-0000-000000000201', '00000000-0000-0000-0000-000000000109', 'packaging', 100, 'piece', 0);
+
+-- Product-level cost template (labor/overhead — applies to every future batch).
+INSERT INTO cost_components (id, product_id, cost_type, label, calculation_method, amount, quantity, unit_cost) VALUES
+  ('00000000-0000-0000-0000-000000000221', '00000000-0000-0000-0000-000000000200', 'labor', 'Labor (curing + packing)', 'quantity_x_rate', NULL, 10, 5.0),
+  ('00000000-0000-0000-0000-000000000222', '00000000-0000-0000-0000-000000000200', 'utilities', 'Gas & Electricity', 'fixed', 14, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000223', '00000000-0000-0000-0000-000000000200', 'transport', 'Delivery to market', 'per_output_unit', 0.10, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000224', '00000000-0000-0000-0000-000000000200', 'cooling_storage', 'Cold storage allocation', 'fixed', 8, NULL, NULL),
+  ('00000000-0000-0000-0000-000000000225', '00000000-0000-0000-0000-000000000200', 'market_fees', 'Co-op commission', 'percentage', 3, NULL, NULL);
+
+-- Batch 1: completed 65 days ago -> 98 jars of finished goods stock.
+-- Cost numbers below are the same costing engine's output for this
+-- recipe/output_qty=98 (see backend/tests/test_mouneh_costing.py) —
+-- snapshotted onto the batch exactly as app/api/v1/mouneh.py would.
+INSERT INTO production_batches (id, farm_id, product_id, recipe_version_id, batch_code, planned_qty, actual_output_qty, waste_qty, damaged_qty, quality_status, expiry_date, warehouse_location, status, planned_unit_cost, planned_total_cost, actual_unit_cost, actual_total_cost, labor_hours, started_at, completed_at, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000201', 'MOU-20260620-001', 100, 98, 2, 0, 'good', now() + interval '350 days', 'Storage Room A — Shelf 3', 'completed', 3.6898, 361.6031, 3.6898, 361.6031, 10, now() - interval '66 days', now() - interval '65 days', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO batch_input_consumptions (batch_id, material_id, planned_qty, actual_qty, unit_cost, total_cost) VALUES
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000101', 47.7, 47.7, 1.20, 57.24),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000102', 4.0, 4.0, 7.50, 30.00),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000103', 3.0, 3.0, 3.80, 11.40),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000104', 2.06, 2.06, 2.10, 4.326),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000105', 18.0, 18.0, 6.50, 117.00),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000106', 2.5, 2.5, 0.35, 0.875),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000107', 101.0, 101.0, 0.35, 35.35),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000108', 101.0, 101.0, 0.08, 8.08),
+  ('00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000109', 100.0, 100.0, 0.05, 5.00);
+
+INSERT INTO finished_goods_stock (id, farm_id, product_id, batch_id, warehouse_location, quantity_produced, quantity_available, quantity_sold, unit_cost, expiry_date) VALUES
+  ('00000000-0000-0000-0000-000000000400', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000300', 'Storage Room A — Shelf 3', 98, 53, 45, 3.6898, now() + interval '350 days');
+
+-- Batch 2: still in progress (60-jar batch, started 2 days ago) — shows up
+-- as an "active batch" on the dashboard.
+INSERT INTO production_batches (id, farm_id, product_id, recipe_version_id, batch_code, planned_qty, status, planned_unit_cost, planned_total_cost, warehouse_location, started_at, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000201', 'MOU-20260821-001', 60, 'in_progress', 4.1125, 246.7495, 'Storage Room A — Shelf 3', now() - interval '2 days', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO batch_input_consumptions (batch_id, material_id, planned_qty, unit_cost) VALUES
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000101', 28.62, 1.20),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000102', 2.4, 7.50),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000103', 1.8, 3.80),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000104', 1.236, 2.10),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000105', 10.8, 6.50),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000106', 1.5, 0.35),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000107', 60.6, 0.35),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000108', 60.6, 0.08),
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000109', 60.0, 0.05);
+
+-- Sales against the completed batch's finished goods (retail/wholesale/market).
+INSERT INTO mouneh_sale_lines (id, farm_id, product_id, batch_id, finished_goods_stock_id, quantity, unit_price, discount, channel, cost_per_unit, revenue, margin, sold_at, sold_by) VALUES
+  ('00000000-0000-0000-0000-000000000410', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000400', 20, 6.50, 0, 'retail', 3.6898, 130.00, 56.204, now() - interval '8 days', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000411', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000400', 15, 5.00, 5, 'wholesale', 3.6898, 70.00, 14.653, now() - interval '5 days', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000412', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000400', 10, 6.50, 0, 'market', 3.6898, 65.00, 28.102, now() - interval '2 days', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO mouneh_events (farm_id, entity_type, entity_id, event_type, payload_json, created_by, created_at) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'mouneh_product', '00000000-0000-0000-0000-000000000200', 'product_created', '{"name": "Makdous"}', '00000000-0000-0000-0000-000000000015', now() - interval '67 days'),
+  ('00000000-0000-0000-0000-000000000001', 'mouneh_recipe', '00000000-0000-0000-0000-000000000201', 'recipe_created', '{"product_id": "00000000-0000-0000-0000-000000000200", "version": 1}', '00000000-0000-0000-0000-000000000015', now() - interval '67 days'),
+  ('00000000-0000-0000-0000-000000000001', 'production_batch', '00000000-0000-0000-0000-000000000300', 'batch_completed', '{"actual_output_qty": 98}', '00000000-0000-0000-0000-000000000015', now() - interval '65 days'),
+  ('00000000-0000-0000-0000-000000000001', 'production_batch', '00000000-0000-0000-0000-000000000301', 'batch_started', '{"planned_qty": 60}', '00000000-0000-0000-0000-000000000015', now() - interval '2 days');
+
 COMMIT;
 
 -- Recommendations are intentionally NOT seeded here — call

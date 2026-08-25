@@ -19,6 +19,8 @@ from sqlalchemy.orm import Session
 from app.core.security import hash_password
 from app.db.base import Base, SessionLocal, engine
 from app.domain import models
+from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
+from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
 
 FARM_ID = "farm-origami"
@@ -217,6 +219,9 @@ def seed_demo_data(db: Session) -> None:
     expenses = [("feed", 1680), ("medicine", 720), ("labor", 1150), ("fuel", 420), ("other", 260)]
     for category, amount in expenses:
         db.add(models.Expense(id=new_id(), farm_id=FARM_ID, category=category, amount=amount, incurred_at=_days_ago(0, hour=8)))
+
+    db.flush()
+    seed_mouneh_demo_data(db, FARM_ID)
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")

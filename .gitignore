@@ -18,6 +18,8 @@ backend/*.db
 backend/.pytest_cache/
 backend/htmlcov/
 backend/.coverage
+database/migrations/**/__pycache__/
+database/migrations/**/*.pyc
 
 # General
 .DS_Store

@@ -63,7 +63,26 @@ and a real local-first write pipeline (SQLite + event log + sync queue)
 for the core animal/task/feed workflows. The FastAPI backend implements
 every endpoint from the tech spec, a rule-based recommendation engine
 (6 rules, unit tested and wired end-to-end against real seeded data), and
-role-based access control — 66 backend tests pass. See
+role-based access control — 91 backend tests pass. See
 `backend/README.md` and `mobile/flutter_app/README.md` for the detailed
 "what's complete / what's mocked / what remains" breakdown, and
 `product/TRACEABILITY.md` for the full requirement map.
+
+### Mouneh & Farm Product Processing module (v0.5)
+
+A license-gated module (activated per farm by a super user) letting a
+manager turn any farm harvest into a priced, sellable product — Makdous,
+Labneh, Kishk, Jam, or a custom item, with no code changes. Covers the
+full loop: Dynamic Product Builder → recipe (raw materials, packaging,
+labor, optional overhead costs) → automatic planned/actual cost per unit
+→ production batches → finished-goods stock → sales → profitability
+dashboard (cost per unit, margin, sales velocity, and a
+continue-production / slow-mover / review-pricing call per product).
+Backend: `backend/app/mouneh/`, `backend/app/api/v1/{modules,mouneh}.py`,
+`backend/app/domain/mouneh_models.py` — 41 tests (`backend/tests/test_mouneh_*.py`),
+verified against real PostgreSQL (schema + Alembic migration). Mobile:
+`mobile/flutter_app/lib/{mouneh,features/mouneh}/` — 7 screens behind one
+"Mouneh & Products" nav entry, a Dart port of the costing engine, and the
+same offline-first SQLite write pipeline as the rest of the app. Makdous
+is demo data only; see `product/TRACEABILITY.md` for the full
+requirement-to-code map.

@@ -28,7 +28,7 @@ CREATE TABLE users (
     phone          TEXT,
     email          TEXT UNIQUE,
     password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only')),
+    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user')),
     language       TEXT NOT NULL DEFAULT 'en',
     active         BOOLEAN NOT NULL DEFAULT true
 );
@@ -324,3 +324,204 @@ CREATE TABLE audit_log (
     metadata_json  JSONB NOT NULL DEFAULT '{}'::jsonb
 );
 CREATE INDEX idx_audit_farm_time ON audit_log(farm_id, timestamp);
+
+-- ============================================================================
+-- Mouneh & Farm Product Processing module (tech spec v0.5 §3 "Core Data
+-- Model"). License-gated per farm via module_licenses; nothing here
+-- hard-codes a product type — mouneh_products rows are created dynamically
+-- by a farm manager through the Product Builder (see database/seed_demo_data.sql
+-- for Makdous used purely as demo data).
+-- ============================================================================
+
+CREATE TABLE module_licenses (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    module_code    TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active','inactive','expired')),
+    plan           TEXT NOT NULL DEFAULT 'mouneh_addon',
+    starts_at      TIMESTAMPTZ,
+    expires_at     TIMESTAMPTZ,
+    max_users      INTEGER,
+    max_products   INTEGER,
+    activated_by   UUID REFERENCES users(id),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, module_code)
+);
+
+CREATE TABLE mouneh_products (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                   UUID NOT NULL REFERENCES farms(id),
+    name                      TEXT NOT NULL,
+    category                  TEXT NOT NULL DEFAULT 'general',
+    photo_path                TEXT,
+    output_unit               TEXT NOT NULL CHECK (output_unit IN ('jar','bottle','pack','kg','liter','tray','piece','custom')),
+    custom_output_unit_label  TEXT,
+    default_batch_size        NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (default_batch_size > 0),
+    shelf_life_days           INTEGER,
+    warehouse_rules           TEXT,
+    low_stock_threshold       NUMERIC(10,2),
+    target_price              NUMERIC(10,2),
+    wholesale_price           NUMERIC(10,2),
+    target_margin_pct         NUMERIC(5,2),
+    status                    TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','archived')),
+    license_required          TEXT NOT NULL DEFAULT 'mouneh',
+    created_by                UUID REFERENCES users(id),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, category, name)
+);
+CREATE INDEX idx_mouneh_products_farm ON mouneh_products(farm_id);
+
+CREATE TABLE raw_materials (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                UUID NOT NULL REFERENCES farms(id),
+    name                   TEXT NOT NULL,
+    category               TEXT NOT NULL DEFAULT 'raw_material' CHECK (category IN ('raw_material','packaging')),
+    source_type            TEXT NOT NULL DEFAULT 'purchased' CHECK (source_type IN ('farm_produced','purchased')),
+    inventory_item_id      UUID REFERENCES inventory_items(id),
+    unit                   TEXT NOT NULL,
+    default_unit_cost      NUMERIC(10,4) NOT NULL DEFAULT 0 CHECK (default_unit_cost >= 0),
+    stock_tracking_enabled BOOLEAN NOT NULL DEFAULT true,
+    current_stock          NUMERIC(12,3) NOT NULL DEFAULT 0 CHECK (current_stock >= 0),
+    loss_percent_default   NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (loss_percent_default BETWEEN 0 AND 100),
+    active                 BOOLEAN NOT NULL DEFAULT true,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_raw_materials_farm ON raw_materials(farm_id);
+
+CREATE TABLE mouneh_recipes (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id       UUID NOT NULL REFERENCES mouneh_products(id),
+    version          INTEGER NOT NULL DEFAULT 1,
+    effective_from   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    basis_quantity   NUMERIC(10,2) NOT NULL CHECK (basis_quantity > 0),
+    basis_unit       TEXT NOT NULL,
+    active           BOOLEAN NOT NULL DEFAULT true,
+    notes            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_id, version)
+);
+CREATE INDEX idx_mouneh_recipes_product ON mouneh_recipes(product_id);
+
+CREATE TABLE mouneh_recipe_items (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipe_id     UUID NOT NULL REFERENCES mouneh_recipes(id) ON DELETE CASCADE,
+    material_id   UUID NOT NULL REFERENCES raw_materials(id),
+    material_type TEXT NOT NULL DEFAULT 'raw_material',
+    quantity      NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
+    unit          TEXT NOT NULL,
+    loss_percent  NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (loss_percent BETWEEN 0 AND 100),
+    is_optional   BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX idx_mouneh_recipe_items_recipe ON mouneh_recipe_items(recipe_id);
+
+CREATE TABLE production_batches (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    product_id          UUID NOT NULL REFERENCES mouneh_products(id),
+    recipe_version_id   UUID NOT NULL REFERENCES mouneh_recipes(id),
+    batch_code          TEXT NOT NULL,
+    planned_qty         NUMERIC(10,2) NOT NULL CHECK (planned_qty > 0),
+    actual_output_qty   NUMERIC(10,2),
+    waste_qty           NUMERIC(10,2) NOT NULL DEFAULT 0,
+    damaged_qty         NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quality_status      TEXT NOT NULL DEFAULT 'good' CHECK (quality_status IN ('good','substandard','rejected')),
+    expiry_date         TIMESTAMPTZ,
+    warehouse_location  TEXT,
+    status              TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','in_progress','completed','cancelled')),
+    planned_unit_cost   NUMERIC(10,4),
+    planned_total_cost  NUMERIC(12,2),
+    actual_unit_cost    NUMERIC(10,4),
+    actual_total_cost   NUMERIC(12,2),
+    labor_hours         NUMERIC(8,2),
+    started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at        TIMESTAMPTZ,
+    created_by          UUID REFERENCES users(id),
+    notes               TEXT,
+    UNIQUE (farm_id, batch_code)
+);
+CREATE INDEX idx_production_batches_farm ON production_batches(farm_id);
+CREATE INDEX idx_production_batches_product ON production_batches(product_id, status);
+
+CREATE TABLE cost_components (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id          UUID REFERENCES mouneh_products(id),
+    batch_id            UUID REFERENCES production_batches(id),
+    cost_type           TEXT NOT NULL CHECK (cost_type IN
+                           ('labor','packaging_extra','utilities','transport','cooling_storage','market_fees','byproduct_credit','other')),
+    label               TEXT,
+    calculation_method  TEXT NOT NULL DEFAULT 'fixed' CHECK (calculation_method IN ('fixed','per_output_unit','quantity_x_rate','percentage')),
+    amount              NUMERIC(10,4),
+    quantity            NUMERIC(10,2),
+    unit_cost           NUMERIC(10,4),
+    allocation_basis    TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (product_id IS NOT NULL OR batch_id IS NOT NULL)
+);
+CREATE INDEX idx_cost_components_product ON cost_components(product_id);
+CREATE INDEX idx_cost_components_batch ON cost_components(batch_id);
+
+CREATE TABLE batch_input_consumptions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id      UUID NOT NULL REFERENCES production_batches(id) ON DELETE CASCADE,
+    material_id   UUID NOT NULL REFERENCES raw_materials(id),
+    planned_qty   NUMERIC(12,3) NOT NULL,
+    actual_qty    NUMERIC(12,3),
+    unit_cost     NUMERIC(10,4) NOT NULL,
+    total_cost    NUMERIC(12,2)
+);
+CREATE INDEX idx_batch_input_consumptions_batch ON batch_input_consumptions(batch_id);
+
+CREATE TABLE finished_goods_stock (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    product_id           UUID NOT NULL REFERENCES mouneh_products(id),
+    batch_id             UUID NOT NULL REFERENCES production_batches(id),
+    warehouse_location   TEXT,
+    quantity_produced    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_available   NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (quantity_available >= 0),
+    quantity_reserved    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_sold        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_expired     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_damaged     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    unit_cost            NUMERIC(10,4) NOT NULL DEFAULT 0,
+    expiry_date          TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_finished_goods_product ON finished_goods_stock(product_id);
+CREATE INDEX idx_finished_goods_expiry ON finished_goods_stock(expiry_date);
+
+CREATE TABLE mouneh_sale_lines (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                   UUID NOT NULL REFERENCES farms(id),
+    sale_id                   UUID REFERENCES sales(id),
+    product_id                UUID NOT NULL REFERENCES mouneh_products(id),
+    batch_id                  UUID NOT NULL REFERENCES production_batches(id),
+    finished_goods_stock_id   UUID NOT NULL REFERENCES finished_goods_stock(id),
+    quantity                  NUMERIC(10,2) NOT NULL CHECK (quantity > 0),
+    unit_price                NUMERIC(10,2) NOT NULL CHECK (unit_price > 0),
+    discount                  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (discount >= 0),
+    customer_id               UUID REFERENCES customers(id),
+    channel                   TEXT NOT NULL DEFAULT 'retail' CHECK (channel IN ('retail','wholesale','market','other')),
+    cost_per_unit             NUMERIC(10,4) NOT NULL,
+    revenue                   NUMERIC(12,2) NOT NULL,
+    margin                    NUMERIC(12,2) NOT NULL,
+    sold_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sold_by                   UUID REFERENCES users(id)
+);
+CREATE INDEX idx_mouneh_sale_lines_farm_time ON mouneh_sale_lines(farm_id, sold_at);
+CREATE INDEX idx_mouneh_sale_lines_product ON mouneh_sale_lines(product_id);
+
+CREATE TABLE mouneh_events (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    entity_type   TEXT NOT NULL,
+    entity_id     UUID NOT NULL,
+    event_type    TEXT NOT NULL,
+    payload_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_by    UUID REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_mouneh_events_entity ON mouneh_events(entity_type, entity_id);
+CREATE INDEX idx_mouneh_events_farm_time ON mouneh_events(farm_id, created_at);

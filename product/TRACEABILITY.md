@@ -1,8 +1,10 @@
 # Traceability Matrix
 
-Maps the tech spec (`Origami_FarmOS_Technical_Specifications_v0.3.pdf`) and
-`CONSTITUTION.md` to the code that implements each requirement. Update this
-file whenever a requirement's implementation moves.
+Maps the tech spec (`Origami_FarmOS_Technical_Specifications_v0.3.pdf`,
+extended by `Origami_FarmOS_Technical_Specifications_v0.5.pdf` for the
+Mouneh & Farm Product Processing module) and `CONSTITUTION.md` to the code
+that implements each requirement. Update this file whenever a requirement's
+implementation moves.
 
 ## Option C screens (tech spec §7/§8)
 
@@ -81,6 +83,39 @@ Every endpoint in the spec's table is implemented — see
 `backend/app/api/v1/*.py` and `api/openapi.yaml` for the generated
 OpenAPI 3.1 spec. RBAC roles (tech spec §17) are enforced in
 `backend/app/api/deps.py`.
+
+## Mouneh & Farm Product Processing module (tech spec v0.5)
+
+License-gated bounded context, kept out of the core domain — see
+`backend/app/domain/mouneh_models.py`, `backend/app/mouneh/`,
+`backend/app/api/v1/{modules,mouneh}.py`, and the mobile mirror under
+`mobile/flutter_app/lib/{mouneh,features/mouneh}/`. Makdous is demo data
+only (`backend/app/mouneh/seed.py`, `mobile/flutter_app/lib/data/demo/mouneh_demo_data.dart`)
+— nothing in the module's code branches on a specific product name.
+
+| Requirement | Backend | Mobile |
+|---|---|---|
+| REQ-MOU-001 License-controlled module, super user activates/deactivates per farm | `api/v1/modules.py`, `api/deps.py::require_module_license`, `domain/mouneh_models.py::ModuleLicense` | `providers/mouneh_provider.dart::setModuleActive`, `features/settings/settings_screen.dart` "Modules" section |
+| REQ-MOU-002/003 Dynamic Product Builder — no hard-coded product types | `api/v1/mouneh.py::create_product/create_recipe`, `schemas/mouneh.py` (free-text `name`/`category`, enum only on `output_unit`) | `features/mouneh/product_builder_tab.dart`, `features/mouneh/recipe_setup_tab.dart` |
+| REQ-MOU-004 Planned cost per batch and per unit | `app/mouneh/costing.py::compute_cost_breakdown` (pure), `services/mouneh_service.py` (DB-touching wrapper), `POST /mouneh/cost-preview` | `lib/mouneh/costing.dart` (Dart port), `features/mouneh/cost_preview_tab.dart` |
+| REQ-MOU-005 Batch completion consumes stock and creates finished goods | `api/v1/mouneh.py::create_batch/consume_batch_inputs/complete_batch` | `providers/mouneh_provider.dart::createBatch/consumeBatchInputs/completeBatch`, `mouneh/mouneh_write_service.dart` |
+| REQ-MOU-006 Sales reduce finished goods stock and calculate profit | `api/v1/mouneh.py::record_sale`, `app/mouneh/costing.py::compute_sale_margin` | `providers/mouneh_provider.dart::recordSale`, `features/mouneh/sales_profitability_tab.dart` |
+| REQ-MOU-007 Dashboard: production, cost, sales, stock, profitability | `api/v1/mouneh.py::dashboard/product_profitability`, `services/mouneh_service.py::product_profitability` | `features/mouneh/mouneh_dashboard_tab.dart`, `providers/mouneh_provider.dart::allProfitability` |
+| REQ-MOU-008 Works offline, syncs safely; never overwrites historical batch records | `mouneh_recipes.version` (new row per change, never mutated), `mouneh_events` mirror table | `mouneh/mouneh_write_service.dart` (local-first SQLite write + `events`/`sync_queue` row per action, same pipeline as `farm_write_service.dart`) |
+
+Database entities match the names given in the v0.5 build prompt (as
+plural SQLAlchemy/PostgreSQL table names, consistent with every other
+table in this schema): `module_licenses`, `mouneh_products`,
+`mouneh_recipes`, `mouneh_recipe_items`, `raw_materials`,
+`cost_components`, `production_batches`, `batch_input_consumptions`,
+`finished_goods_stock`, `mouneh_sale_lines` — see
+`database/schema.sql` and `database/migrations/versions/..._mouneh_module.py`.
+
+Tests: `backend/tests/test_mouneh_costing.py` (pure engine, mirrors
+`mobile/flutter_app/test/mouneh/costing_test.dart`) and
+`backend/tests/test_mouneh_api.py` (license gating, dynamic product
+creation, recipe versioning, full batch lifecycle, sales, dashboard —
+covering every acceptance criterion in the v0.5 build prompt).
 
 ## What remains
 
