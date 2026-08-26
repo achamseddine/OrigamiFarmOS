@@ -1,6 +1,6 @@
 /// Farm Visits & Agri-Tourism module — local domain entities (tech spec
 /// v0.6 §4). Field names mirror `backend/app/domain/visits_models.py` so
-/// payloads round-trip cleanly once sync is wired to the real API.
+/// payloads round-trip cleanly with the real API.
 ///
 /// The module license itself reuses [ModuleLicense] from
 /// `domain/entities/mouneh.dart` — one generic license class backs every
@@ -138,9 +138,8 @@ class VisitPackage {
       );
 }
 
-/// An individual bookable activity — "Horse Ride" is only ever demo data
-/// (see data/demo/visits_demo_data.dart); a manager can create any
-/// activity through the Activity Manager screen.
+/// An individual bookable activity — a manager can create any activity
+/// through the Activity Manager screen.
 class VisitActivity {
   const VisitActivity({
     required this.id,
@@ -242,10 +241,9 @@ class VisitBookingActivity {
       );
 }
 
-/// A visitor reservation. Status transitions are validated by
-/// `lib/visits/analytics.dart::validateStatusTransition` (RULE-VIS-008);
-/// every transition is written as an event by `VisitsWriteService`, never
-/// silently overwritten.
+/// A visitor reservation. Status transitions are validated server-side
+/// (RULE-VIS-008) and every transition is written as an event on the
+/// backend, never silently overwritten.
 class VisitBooking {
   const VisitBooking({
     required this.id,

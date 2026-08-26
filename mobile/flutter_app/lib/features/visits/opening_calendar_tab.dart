@@ -11,9 +11,9 @@ const List<String> _kWeekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday
 
 /// Opening Calendar (tech spec v0.6 §6, screen 2). RULE-VIS-003: opening
 /// days are configurable per farm and never hard-coded — every one of the
-/// 7 weekdays below is the same editable row; a Lebanese farm's Friday /
-/// Saturday / Sunday default (see `data/demo/visits_demo_data.dart`) is
-/// only this farm's own choice, not a rule baked into the code.
+/// 7 weekdays below is the same editable row; a Lebanese farm choosing
+/// Friday/Saturday/Sunday as its days off is only this farm's own choice,
+/// not a rule baked into the code.
 class OpeningCalendarTab extends StatelessWidget {
   const OpeningCalendarTab({super.key});
 
