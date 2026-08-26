@@ -9,7 +9,6 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../data/demo/demo_data.dart';
 import '../../domain/entities/animal.dart';
 import '../../providers/animals_provider.dart';
 import 'animal_digital_twin_screen.dart';
@@ -34,7 +33,14 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
       return speciesOk && healthOk;
     }).toList();
 
-    final summary = DemoData.animalSummary;
+    final total = animals.length;
+    final healthyCount = animals.where((a) => a.status == AnimalHealthStatus.healthy).length;
+    final observationCount = animals.where((a) => a.status == AnimalHealthStatus.underObservation).length;
+    final treatmentCount = animals.where((a) => a.status == AnimalHealthStatus.underTreatment).length;
+    final femalesCount = animals.where((a) => a.sex.toUpperCase() == 'F').length;
+    final pregnantCount = animals.where((a) => a.pregnant).length;
+    final lactatingCount = animals.where((a) => a.lactating).length;
+    String pctOf(int part, int whole) => whole == 0 ? '0.0' : (part / whole * 100).toStringAsFixed(1);
 
     return SingleChildScrollView(
       child: Column(
@@ -74,12 +80,12 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
             final perRow = c.maxWidth > 1100 ? 6 : (c.maxWidth > 700 ? 3 : 2);
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
             final cards = [
-              KpiCard(icon: FarmIcon.cow, label: context.t('totalAnimals'), value: '${summary['total']}', caption: context.t('acrossSpecies')),
-              KpiCard(icon: FarmIcon.heart, label: context.t('healthy'), value: '${summary['healthy']}', caption: '82.4% ${context.t('ofTotal')}', tint: FarmColors.success),
-              KpiCard(icon: FarmIcon.eye, label: context.t('underObservation'), value: '${summary['underObservation']}', caption: '8.1% ${context.t('ofTotal')}', tint: FarmColors.warning),
-              KpiCard(icon: FarmIcon.medicine, label: context.t('underTreatment'), value: '${summary['underTreatment']}', caption: '4.6% ${context.t('ofTotal')}', tint: FarmColors.danger),
-              KpiCard(icon: FarmIcon.pregnancy, label: context.t('pregnant'), value: '${summary['pregnant']}', caption: '12.3% ${context.t('ofFemales')}'),
-              KpiCard(icon: FarmIcon.milkBottle, label: context.t('lactating'), value: '${summary['lactating']}', caption: '33.1% ${context.t('ofFemales')}'),
+              KpiCard(icon: FarmIcon.cow, label: context.t('totalAnimals'), value: '$total', caption: context.t('acrossSpecies')),
+              KpiCard(icon: FarmIcon.heart, label: context.t('healthy'), value: '$healthyCount', caption: '${pctOf(healthyCount, total)}% ${context.t('ofTotal')}', tint: FarmColors.success),
+              KpiCard(icon: FarmIcon.eye, label: context.t('underObservation'), value: '$observationCount', caption: '${pctOf(observationCount, total)}% ${context.t('ofTotal')}', tint: FarmColors.warning),
+              KpiCard(icon: FarmIcon.medicine, label: context.t('underTreatment'), value: '$treatmentCount', caption: '${pctOf(treatmentCount, total)}% ${context.t('ofTotal')}', tint: FarmColors.danger),
+              KpiCard(icon: FarmIcon.pregnancy, label: context.t('pregnant'), value: '$pregnantCount', caption: '${pctOf(pregnantCount, femalesCount)}% ${context.t('ofFemales')}'),
+              KpiCard(icon: FarmIcon.milkBottle, label: context.t('lactating'), value: '$lactatingCount', caption: '${pctOf(lactatingCount, femalesCount)}% ${context.t('ofFemales')}'),
             ];
             return Wrap(
               spacing: FarmSpacing.md,
@@ -90,43 +96,56 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
+            final herdGroups = _computeHerdGroups(animals);
             final herdCard = SectionCard(
               title: context.t('herdFlockSummary'),
-              child: Column(
-                children: [
-                  for (final g in DemoData.herdGroups) ...[
-                    _HerdGroupRow(group: g),
-                    const Divider(height: 20, color: FarmColors.border),
-                  ],
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(onPressed: () {}, child: Text(context.t('viewAllGroups'))),
-                  ),
-                ],
-              ),
+              child: herdGroups.isEmpty
+                  ? Text('No animals recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  : Column(
+                      children: [
+                        for (final g in herdGroups) ...[
+                          _HerdGroupRow(group: g),
+                          const Divider(height: 20, color: FarmColors.border),
+                        ],
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(onPressed: () {}, child: Text(context.t('viewAllGroups'))),
+                        ),
+                      ],
+                    ),
             );
             final animalsGrid = SectionCard(
               title: context.t('recentAnimals'),
-              child: LayoutBuilder(builder: (context, gridConstraints) {
-                final cols = gridConstraints.maxWidth > 760 ? 4 : (gridConstraints.maxWidth > 420 ? 2 : 1);
-                final cardW = (gridConstraints.maxWidth - FarmSpacing.sm * (cols - 1)) / cols;
-                return Wrap(
-                  spacing: FarmSpacing.sm,
-                  runSpacing: FarmSpacing.sm,
-                  children: [
-                    for (final animal in filtered)
-                      SizedBox(
-                        width: cardW,
-                        child: _AnimalCard(
-                          animal: animal,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => AnimalDigitalTwinScreen(animalId: animal.id)),
-                          ),
+              child: filtered.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text(
+                          animals.isEmpty ? 'No animals recorded yet.' : 'No animals match the selected filters.',
+                          style: FarmTypography.textTheme.bodySmall,
                         ),
                       ),
-                  ],
-                );
-              }),
+                    )
+                  : LayoutBuilder(builder: (context, gridConstraints) {
+                      final cols = gridConstraints.maxWidth > 760 ? 4 : (gridConstraints.maxWidth > 420 ? 2 : 1);
+                      final cardW = (gridConstraints.maxWidth - FarmSpacing.sm * (cols - 1)) / cols;
+                      return Wrap(
+                        spacing: FarmSpacing.sm,
+                        runSpacing: FarmSpacing.sm,
+                        children: [
+                          for (final animal in filtered)
+                            SizedBox(
+                              width: cardW,
+                              child: _AnimalCard(
+                                animal: animal,
+                                onTap: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => AnimalDigitalTwinScreen(animalId: animal.id)),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    }),
             );
             if (!wide) {
               return Column(children: [herdCard, const SizedBox(height: FarmSpacing.md), animalsGrid]);
@@ -146,6 +165,29 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
       ),
     );
   }
+}
+
+/// Groups the real herd by [Animal.groupName] (falling back to species
+/// label for animals with no group assigned) — a client-side computation
+/// over already-loaded [Animal]s, since the backend has no dedicated
+/// herd-group rollup endpoint.
+List<Map<String, Object>> _computeHerdGroups(List<Animal> animals) {
+  final groups = <String, List<Animal>>{};
+  for (final a in animals) {
+    groups.putIfAbsent(a.groupName ?? a.species.label, () => []).add(a);
+  }
+  final result = <Map<String, Object>>[
+    for (final entry in groups.entries)
+      {
+        'name': entry.key,
+        'species': entry.value.first.species.label,
+        'count': entry.value.length,
+        'healthy': entry.value.where((a) => a.status == AnimalHealthStatus.healthy).length,
+        'attention': entry.value.where((a) => a.status != AnimalHealthStatus.healthy).length,
+      },
+  ];
+  result.sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+  return result;
 }
 
 class _SpeciesFilterRow extends StatelessWidget {
