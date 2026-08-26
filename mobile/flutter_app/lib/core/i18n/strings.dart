@@ -15,10 +15,6 @@ class FarmStrings {
 
   static const Map<String, String> _en = {
     'appName': 'Origami FarmOS',
-    'synced': 'Synced',
-    'offline': 'Offline',
-    'syncing': 'Syncing',
-    'syncError': 'Sync error',
     'justNow': 'Just now',
     'navMorningBriefing': 'Morning Briefing',
     'navAnimals': 'Animals',
@@ -247,7 +243,8 @@ class FarmStrings {
     'notes': 'Notes (optional)',
     'entityRequired': 'Select an animal, flock, or field first.',
     'valueMustBePositive': 'Value cannot be negative.',
-    'savedOffline': 'Saved.',
+    'saved': 'Saved.',
+    'couldNotSave': "Could not save — the change wasn't recorded.",
     'pendingSync': 'items pending sync',
 
     // ---- Production readiness upgrade: permissions, employees,
@@ -486,10 +483,6 @@ class FarmStrings {
 
   static const Map<String, String> _ar = {
     'appName': 'Origami FarmOS',
-    'synced': 'متزامن',
-    'offline': 'غير متصل',
-    'syncing': 'جارٍ المزامنة',
-    'syncError': 'خطأ في المزامنة',
     'justNow': 'الآن',
     'navMorningBriefing': 'موجز الصباح',
     'navAnimals': 'الحيوانات',
@@ -717,7 +710,8 @@ class FarmStrings {
     'notes': 'ملاحظات (اختياري)',
     'entityRequired': 'اختر حيوانًا أو قطيعًا أو حقلًا أولاً.',
     'valueMustBePositive': 'لا يمكن أن تكون القيمة سالبة.',
-    'savedOffline': 'تم الحفظ.',
+    'saved': 'تم الحفظ.',
+    'couldNotSave': 'تعذّر الحفظ — لم يُسجَّل التغيير.',
     'pendingSync': 'عنصر بانتظار المزامنة',
 
     // ---- Production readiness upgrade: permissions, employees,

@@ -149,8 +149,10 @@ class _ReorderCard extends StatelessWidget {
             onPressed: () async {
               final result = await context.read<FeedProvider>().recordPurchase(itemId: item.id, quantityKg: item.shortfall + item.reorderLevel * 0.2);
               if (!context.mounted) return;
+              // A failed reorder must never report "Saved." — the fallback
+              // has to be a failure message, not the success one.
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(result.success ? context.t('savedOffline') : (result.error ?? context.t('savedOffline')))),
+                SnackBar(content: Text(result.success ? context.t('saved') : (result.error ?? context.t('couldNotSave')))),
               );
             },
             child: Text(context.t('reorderNow')),

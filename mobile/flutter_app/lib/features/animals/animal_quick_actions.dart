@@ -125,7 +125,7 @@ class _ObserveDialogState extends State<_ObserveDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -253,7 +253,7 @@ class _MilkDialogState extends State<_MilkDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -375,7 +375,7 @@ class _TreatDialogState extends State<_TreatDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -425,7 +425,7 @@ class _MoveDialogState extends State<_MoveDialog> {
                   await context.read<AnimalsProvider>().moveAnimal(animalId: widget.animal.id, newLocation: _location.text.trim());
                   if (!context.mounted) return;
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
                 },
           child: Text(context.t('save')),
         ),
@@ -516,7 +516,7 @@ class _FeedDialogState extends State<_FeedDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
