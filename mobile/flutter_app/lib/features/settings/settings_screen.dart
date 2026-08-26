@@ -9,6 +9,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../data/demo/demo_data.dart';
 import '../../providers/mouneh_provider.dart';
+import '../../providers/visits_provider.dart';
 import '../../sync/sync_queue_controller.dart';
 
 /// Farm configuration (tech spec §6 nav table: "Users, roles, languages,
@@ -21,6 +22,7 @@ class SettingsScreen extends StatelessWidget {
     final locale = context.watch<LocaleController>();
     final sync = context.watch<SyncQueueController>();
     final mouneh = context.watch<MounehProvider>();
+    final visits = context.watch<VisitsProvider>();
 
     return SingleChildScrollView(
       child: Column(
@@ -96,6 +98,31 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text('Toggle acts as the super-user activation control (REQ-MOU-001) — a real deployment gates this behind a super-user login.', style: FarmTypography.textTheme.bodySmall),
+                const Divider(height: 24, color: FarmColors.border),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(children: [
+                            Text('Farm Visits & Agri-Tourism', style: FarmTypography.textTheme.titleSmall),
+                            const SizedBox(width: 8),
+                            StatusPill(label: visits.isActive ? 'Active' : 'Inactive', level: visits.isActive ? FarmStatusLevel.good : FarmStatusLevel.neutral, dense: true),
+                          ]),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Bookings, activities, visitor check-in, farm-shop POS and visit profitability — only shown once licensed.',
+                            style: FarmTypography.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(value: visits.isActive, onChanged: (v) => visits.setModuleActive(v)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text('Toggle acts as the super-user activation control (RULE-VIS-001) — a real deployment gates this behind a super-user login.', style: FarmTypography.textTheme.bodySmall),
               ],
             ),
           ),

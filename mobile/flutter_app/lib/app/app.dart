@@ -17,13 +17,16 @@ import '../features/production/milk_production_screen.dart';
 import '../features/produce/produce_harvest_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/visits/visits_module_screen.dart';
 import '../features/welcome/welcome_screen.dart';
 import '../mouneh/mouneh_write_service.dart';
 import '../providers/animals_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/tasks_provider.dart';
+import '../providers/visits_provider.dart';
 import '../sync/sync_queue_controller.dart';
+import '../visits/visits_write_service.dart';
 
 class FarmOSApp extends StatelessWidget {
   const FarmOSApp({super.key});
@@ -64,6 +67,15 @@ class FarmOSApp extends StatelessWidget {
             syncQueue: context.read<SyncQueueController>(),
           ),
           update: (context, sync, previous) => previous!,
+        ),
+        ChangeNotifierProxyProvider3<SyncQueueController, FeedProvider, MounehProvider, VisitsProvider>(
+          create: (context) => VisitsProvider(
+            writeService: VisitsWriteService(),
+            syncQueue: context.read<SyncQueueController>(),
+            feedProvider: context.read<FeedProvider>(),
+            mounehProvider: context.read<MounehProvider>(),
+          ),
+          update: (context, sync, feed, mouneh, previous) => previous!,
         ),
       ],
       child: Consumer<LocaleController>(
@@ -128,6 +140,7 @@ class _RootRouterState extends State<_RootRouter> {
           HealthIntelligenceScreen(),
           ProduceHarvestScreen(),
           MounehModuleScreen(),
+          VisitsModuleScreen(),
           SalesFinanceScreen(),
           TasksScreen(),
           SettingsScreen(),

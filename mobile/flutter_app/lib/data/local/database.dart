@@ -463,6 +463,170 @@ class FarmDatabase {
       FOREIGN KEY(finished_goods_stock_id) REFERENCES finished_goods_stock(id)
     );
     ''',
+    // ------------------------------------------------------------------
+    // Farm Visits & Agri-Tourism module (tech spec v0.6 §4). Mirrors the
+    // entity names in database/schema.sql's Visits section exactly.
+    // ------------------------------------------------------------------
+    '''
+    CREATE TABLE visit_opening_calendar (
+      weekday INTEGER PRIMARY KEY,
+      is_open INTEGER NOT NULL DEFAULT 0,
+      open_time TEXT,
+      close_time TEXT,
+      default_capacity INTEGER NOT NULL DEFAULT 0,
+      notes TEXT
+    );
+    ''',
+    '''
+    CREATE TABLE visit_sessions (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      capacity INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      weather_note TEXT,
+      expected_staff_cost REAL
+    );
+    ''',
+    '''
+    CREATE TABLE visit_packages (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      base_price REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'USD',
+      duration_minutes INTEGER,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    ''',
+    '''
+    CREATE TABLE visit_activities (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      activity_type TEXT NOT NULL DEFAULT 'other',
+      price REAL NOT NULL DEFAULT 0,
+      capacity_per_slot INTEGER NOT NULL DEFAULT 1,
+      duration_minutes INTEGER,
+      requires_staff_role TEXT,
+      requires_animal_id TEXT,
+      max_uses_per_day INTEGER,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    ''',
+    '''
+    CREATE TABLE visitor_profiles (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      phone TEXT,
+      email TEXT,
+      preferred_language TEXT NOT NULL DEFAULT 'en',
+      notes TEXT,
+      consent_marketing INTEGER NOT NULL DEFAULT 0
+    );
+    ''',
+    '''
+    CREATE TABLE visit_bookings (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      visitor_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      package_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'draft',
+      adults INTEGER NOT NULL DEFAULT 1,
+      children INTEGER NOT NULL DEFAULT 0,
+      total_amount REAL NOT NULL DEFAULT 0,
+      deposit_amount REAL NOT NULL DEFAULT 0,
+      balance_due REAL NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      notes TEXT,
+      idempotency_key TEXT,
+      created_at TEXT NOT NULL,
+      confirmed_at TEXT,
+      checked_in_at TEXT,
+      completed_at TEXT,
+      cancelled_at TEXT,
+      FOREIGN KEY(visitor_id) REFERENCES visitor_profiles(id),
+      FOREIGN KEY(session_id) REFERENCES visit_sessions(id),
+      FOREIGN KEY(package_id) REFERENCES visit_packages(id)
+    );
+    ''',
+    '''
+    CREATE TABLE visit_booking_activities (
+      id TEXT PRIMARY KEY,
+      booking_id TEXT NOT NULL,
+      activity_id TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit_price REAL NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'scheduled',
+      FOREIGN KEY(booking_id) REFERENCES visit_bookings(id),
+      FOREIGN KEY(activity_id) REFERENCES visit_activities(id)
+    );
+    ''',
+    '''
+    CREATE TABLE visit_staff_roster (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      worker_id TEXT NOT NULL,
+      worker_name TEXT,
+      role TEXT NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT NOT NULL,
+      hourly_rate REAL NOT NULL DEFAULT 0,
+      total_cost REAL
+    );
+    ''',
+    '''
+    CREATE TABLE visit_costs (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      allocation_method TEXT NOT NULL DEFAULT 'per_session'
+    );
+    ''',
+    '''
+    CREATE TABLE visit_retail_sales (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      booking_id TEXT,
+      visitor_id TEXT,
+      channel TEXT NOT NULL DEFAULT 'farm_shop',
+      total_amount REAL NOT NULL DEFAULT 0,
+      sold_at TEXT NOT NULL
+    );
+    ''',
+    '''
+    CREATE TABLE visitor_feedback (
+      id TEXT PRIMARY KEY,
+      booking_id TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      comments TEXT,
+      would_return INTEGER,
+      submitted_at TEXT NOT NULL
+    );
+    ''',
+    '''
+    CREATE TABLE visit_incidents (
+      id TEXT PRIMARY KEY,
+      farm_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      booking_id TEXT,
+      incident_type TEXT NOT NULL,
+      severity TEXT NOT NULL DEFAULT 'low',
+      description TEXT NOT NULL,
+      action_taken TEXT,
+      created_at TEXT NOT NULL
+    );
+    ''',
   ];
 
   /// Test-only: drop and recreate every table (used by repository tests).

@@ -63,7 +63,7 @@ and a real local-first write pipeline (SQLite + event log + sync queue)
 for the core animal/task/feed workflows. The FastAPI backend implements
 every endpoint from the tech spec, a rule-based recommendation engine
 (6 rules, unit tested and wired end-to-end against real seeded data), and
-role-based access control — 91 backend tests pass. See
+role-based access control — 149 backend tests pass. See
 `backend/README.md` and `mobile/flutter_app/README.md` for the detailed
 "what's complete / what's mocked / what remains" breakdown, and
 `product/TRACEABILITY.md` for the full requirement map.
@@ -86,3 +86,29 @@ verified against real PostgreSQL (schema + Alembic migration). Mobile:
 same offline-first SQLite write pipeline as the rest of the app. Makdous
 is demo data only; see `product/TRACEABILITY.md` for the full
 requirement-to-code map.
+
+### Farm Visits & Agri-Tourism module (v0.6)
+
+A second license-gated module, structured the same way as Mouneh, letting
+a farm owner open the farm to visitors on a configurable set of days
+(never hard-coded to any specific weekday) and manage the full loop:
+opening calendar, dynamic package/activity builders (any activity, not
+just a ride or a workshop), visitor bookings with a full status machine
+(draft to confirmed to checked_in to completed, or cancelled/no_show to
+refunded), session-capacity/activity-capacity/animal-welfare/handler
+checks enforced at the right step, staff roster & direct costs, a Farm
+Shop / Visitor POS that deducts real inventory or Mouneh finished-goods
+stock and posts into Sales & Finance, and a profitability report covering
+every formula in the spec (visitor revenue, direct visit cost, gross
+margin, revenue per visitor, activity utilization, retail conversion,
+average basket value, package profitability). Backend:
+`backend/app/visits/`, `backend/app/api/v1/visits.py`,
+`backend/app/domain/visits_models.py` — 58 tests
+(`backend/tests/test_visits_*.py`), verified against real PostgreSQL
+(schema + Alembic migration), including a cross-module demo sale that
+debits real Mouneh Makdous stock. Mobile:
+`mobile/flutter_app/lib/{visits,features/visits}/` — 10 screens behind
+one "Farm Visits" nav entry, a Dart port of the analytics engine, and the
+same offline-first SQLite write pipeline as the rest of the app. Horse
+Ride and the weekend-only opening calendar are demo data only; see
+`product/TRACEABILITY.md` for the full requirement-to-code map.

@@ -21,6 +21,7 @@ const List<NavEntry> kNavEntries = [
   NavEntry(FarmIcon.stethoscope, 'navHealth'),
   NavEntry(FarmIcon.harvestBasket, 'navProduce'),
   NavEntry(FarmIcon.inventory, 'navMouneh'),
+  NavEntry(FarmIcon.calendar, 'navVisits'),
   NavEntry(FarmIcon.money, 'navSales'),
   NavEntry(FarmIcon.task, 'navTasks'),
   NavEntry(FarmIcon.settings, 'navSettings'),

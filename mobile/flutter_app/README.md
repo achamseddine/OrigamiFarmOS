@@ -39,9 +39,9 @@ flutter analyze
 2. Tapping **Start My Day** seeds the local SQLite database (idempotent —
    safe to call on every launch) and opens the tablet shell: a left nav
    rail (Morning Briefing, Animals, Feed & Inventory, Milk, Eggs, Health
-   Intelligence, Produce & Harvest, **Mouneh & Products**, Sales & Finance,
-   Tasks, Settings) and a top bar with sync status, EN/AR toggle,
-   notifications, and the manager avatar.
+   Intelligence, Produce & Harvest, **Mouneh & Products**, **Farm Visits**,
+   Sales & Finance, Tasks, Settings) and a top bar with sync status, EN/AR
+   toggle, notifications, and the manager avatar.
 3. From **Animal Status**, tapping any animal card opens its **Digital
    Twin** — profile, quick actions (Observe / Treat / Feed / Milk / Move /
    View History), life-history timeline, milk & feed trend charts, health
@@ -67,24 +67,29 @@ lib/
                                    AlertCard, SectionCard, StatusPill, FarmDataTable,
                                    PhotoSlot, BekaaBackdrop, charts/ (LineTrendChart, BarTrendChart)
   domain/entities/                Plain Dart models mirroring the backend's domain model
-                                   (entities/mouneh.dart for the Mouneh module)
+                                   (entities/mouneh.dart, entities/visits.dart for those modules)
   mouneh/
     costing.dart                  Pure Dart port of the backend's cost/pricing/margin engine
     mouneh_write_service.dart     Offline-first write pipeline for the Mouneh module (same
                                    shape as data/local/farm_write_service.dart)
+  visits/
+    analytics.dart                 Pure Dart port of the backend's capacity/status/profitability engine
+    visits_write_service.dart      Offline-first write pipeline for the Visits module (same shape)
   data/
     demo/demo_data.dart           Rich Option C demo dataset (all 10 screens' data)
     demo/mouneh_demo_data.dart    Makdous demo dataset for the Mouneh module (example data only)
-    local/                        SQLite schema (database.dart, incl. the Mouneh module's
+    demo/visits_demo_data.dart    Weekend-calendar + Horse Ride/Cheese Workshop demo dataset (example data only)
+    local/                        SQLite schema (database.dart, incl. the Mouneh/Visits modules'
                                    tables), FarmWriteService (validated writes + event log +
                                    sync queue), DemoSeed (seed loader)
   providers/                      ChangeNotifier controllers: AnimalsProvider, FeedProvider,
-                                   TasksProvider, MounehProvider — call the write services +
-                                   SyncQueueController
+                                   TasksProvider, MounehProvider, VisitsProvider — call the
+                                   write services + SyncQueueController
   sync/sync_queue_controller.dart Sync status simulation (see "What's mocked" below)
   features/                       One folder per screen (welcome, morning, animals, feed,
                                    production, health, produce, finance, tasks, settings) plus
-                                   features/mouneh/ (7 screens behind one nav entry — see below)
+                                   features/mouneh/ (7 screens) and features/visits/ (10 screens)
+                                   behind one nav entry each — see below
 ```
 
 ### Mouneh & Farm Product Processing module
@@ -104,6 +109,32 @@ locks every Mouneh screen behind the same message the backend's
 `require_module_license` dependency returns. Nothing in this module
 hard-codes a product type; Makdous only appears in
 `data/demo/mouneh_demo_data.dart` as example data.
+
+### Farm Visits & Agri-Tourism module
+
+A second nav-rail entry ("Farm Visits") opens
+`features/visits/visits_module_screen.dart`, structured the same way:
+one internal tab row hosting all 10 screens from the v0.6 build prompt —
+**Dashboard**, **Opening Calendar** (7 independently-toggleable weekdays,
+never hard-coded to any specific day), **Package Builder**, **Activity
+Manager** (capacity/price/duration plus an optional required staff role
+and an optional animal-welfare daily-use limit), **Booking Form** (also
+where a session is created), **Visit-Day Briefing** (also hosts session
+status and offline incident logging), **Visitor Check-in** (also hosts
+feedback capture — the tech spec PDF's UI table lists an 11th
+"Feedback & Follow-up" screen; it lives here instead of as a separate
+tab), **Farm Shop / Visitor POS**, **Staff Roster & Costs**, and
+**Visitor Profitability Report**. The same Settings → Modules `Switch`
+pattern gates the whole module behind a license toggle. A booking's
+status machine, activity/session capacity checks, the animal-welfare
+limit, and every §9 analytics formula are all implemented in
+`lib/visits/analytics.dart`, a line-for-line Dart port of
+`backend/app/visits/analytics.py`. The Farm Shop / Visitor POS deducts
+real stock through the existing `FeedProvider` (plain inventory) or
+`MounehProvider` (finished-goods stock) rather than a private copy of
+either — one visitor sale, one real stock movement, either way. Nothing
+hard-codes "Horse Ride" or a specific opening day; both are only ever
+example data in `data/demo/visits_demo_data.dart`.
 
 ## What's complete
 
@@ -136,6 +167,18 @@ hard-codes a product type; Makdous only appears in
   update the UI immediately. `lib/mouneh/costing.dart` is a line-for-line
   Dart port of the backend's costing engine, unit tested in
   `test/mouneh/costing_test.dart`.
+- **Farm Visits & Agri-Tourism module** (tech spec v0.6): all 10 screens,
+  wired to a real `VisitsProvider` + `VisitsWriteService`. Creating a
+  session/package/activity, building a booking (existing visitor or a
+  walk-in), running it through confirm → check-in → complete (each
+  transition validated by `lib/visits/analytics.dart` before it's
+  persisted), rostering staff, recording a direct cost, ringing up a
+  Farm Shop / Visitor POS sale, capturing feedback and logging an
+  incident all write through to local SQLite (new domain rows + an
+  `events` row + a `sync_queue` row each) and update the UI immediately.
+  A POS sale of a Mouneh product calls straight into the already-tested
+  `MounehProvider.recordSale`, so the two modules' stock numbers can
+  never drift apart from a visitor sale.
 
 ## What's mocked / simplified
 
@@ -159,16 +202,18 @@ hard-codes a product type; Makdous only appears in
   single manager session (matching the "first user is the farm manager"
   framing); backend RBAC (owner/manager/worker/veterinarian/accountant) is
   fully implemented and tested but not yet surfaced as a mobile login flow.
-  The Mouneh module's "super user" activation control in Settings is the
-  same simplification: a plain `Switch`, standing in for a real super-user
-  login the way this whole app stands in for full role switching.
-- **Mouneh module state doesn't survive an app restart.** Like the rest of
-  this build (see the dashboard-wiring note above), `MounehProvider` seeds
-  its in-memory state from `mouneh_demo_data.dart` on every launch rather
+  The Mouneh and Visits modules' "super user" activation controls in
+  Settings are the same simplification: a plain `Switch` each, standing
+  in for a real super-user login the way this whole app stands in for
+  full role switching.
+- **Mouneh and Visits module state don't survive an app restart.** Like
+  the rest of this build (see the dashboard-wiring note above),
+  `MounehProvider`/`VisitsProvider` seed their in-memory state from
+  `mouneh_demo_data.dart`/`visits_demo_data.dart` on every launch rather
   than reading back from SQLite. Every write during a session *does*
-  persist to the local `mouneh_*` tables (and queues for sync) via
-  `MounehWriteService` — a relaunch just doesn't read them back yet. Wiring
-  that read path is the same follow-on work already tracked for
+  persist to the local `mouneh_*`/`visit_*` tables (and queues for sync)
+  via their write services — a relaunch just doesn't read them back yet.
+  Wiring that read path is the same follow-on work already tracked for
   Animals/Feed/Tasks above.
 - **No bundled Fraunces/Inter/Noto Sans Arabic font files.** Typography
   uses the platform serif/UI-font fallback tier the brand guideline
@@ -192,18 +237,20 @@ ship as in-app backgrounds (§19, §24 anti-patterns table).
 
 - **Not run locally**: `flutter pub get` / `flutter analyze` / `flutter
   test` / `flutter run` — no Flutter SDK is available in the environment
-  this was built in. The base app (10 screens) has since been built
-  successfully by `.github/workflows/build-apk.yml` on GitHub-hosted
-  runners (which do have the SDK), producing an installable release APK —
-  see that workflow for the actual `flutter analyze` / `flutter build apk`
-  output. The Mouneh module added on top of that is **not yet verified by
-  a real build**: every file was written and cross-checked by hand (import
-  resolution, const-context correctness, `num`-vs-`double` `.clamp()`
-  return types, `Column`+`Expanded` constraint-boundedness through the
-  `IndexedStack` chain, brace/paren balance per file), but this is not a
-  substitute for `flutter analyze`/`flutter test`/a real build — run those
-  (or re-run the GitHub Actions workflow) before trusting this module for
-  a demo.
+  this was built in. The base app (10 screens) plus the Mouneh module
+  have since been built successfully by
+  `.github/workflows/build-apk.yml` on GitHub-hosted runners (which do
+  have the SDK), producing an installable release APK — see that
+  workflow's run history for the actual `flutter analyze` / `flutter
+  build apk` output, including one real compile error the build caught
+  (a null-safety promotion-scope bug in `cost_preview_tab.dart`) that a
+  hand review had missed. The Visits module added on top of that was
+  written and cross-checked by hand with the same care (import
+  resolution, const-context correctness, exact SQLite column-name
+  matches against `database.dart`'s new tables, list-widget keys,
+  null-safety promotion scoping per closure) and validated against the
+  next GitHub Actions run of this workflow before being considered done —
+  see that run for the actual result.
 - **`sqflite`/`shared_preferences` calls fail gracefully with no platform
   channel** (e.g. certain CI/desktop test targets): `_RootRouter._start()`
   and `LocaleController._restore()` both catch and fall back rather than

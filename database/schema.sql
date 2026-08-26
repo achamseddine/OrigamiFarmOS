@@ -28,7 +28,7 @@ CREATE TABLE users (
     phone          TEXT,
     email          TEXT UNIQUE,
     password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user')),
+    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user','visitor_coordinator','activity_staff','cashier')),
     language       TEXT NOT NULL DEFAULT 'en',
     active         BOOLEAN NOT NULL DEFAULT true
 );
@@ -337,12 +337,13 @@ CREATE TABLE module_licenses (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     farm_id        UUID NOT NULL REFERENCES farms(id),
     module_code    TEXT NOT NULL,
-    status         TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active','inactive','expired')),
+    status         TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active','inactive','trial','expired')),
     plan           TEXT NOT NULL DEFAULT 'mouneh_addon',
     starts_at      TIMESTAMPTZ,
     expires_at     TIMESTAMPTZ,
     max_users      INTEGER,
     max_products   INTEGER,
+    features_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
     activated_by   UUID REFERENCES users(id),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -525,3 +526,229 @@ CREATE TABLE mouneh_events (
 );
 CREATE INDEX idx_mouneh_events_entity ON mouneh_events(entity_type, entity_id);
 CREATE INDEX idx_mouneh_events_farm_time ON mouneh_events(farm_id, created_at);
+
+-- ============================================================================
+-- Farm Visits & Agri-Tourism module (tech spec v0.6 §4 "Data Model").
+-- License-gated per farm via module_licenses (module_code =
+-- 'visits_agritourism'); nothing here hard-codes an opening weekday or a
+-- fixed activity list — see database/seed_demo_data.sql for the
+-- Friday/Saturday/Sunday + Horse Ride demo data used purely as an example.
+-- ============================================================================
+
+CREATE TABLE visit_opening_calendar (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id            UUID NOT NULL REFERENCES farms(id),
+    weekday            INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+    is_open            BOOLEAN NOT NULL DEFAULT false,
+    open_time          TIME,
+    close_time         TIME,
+    default_capacity   INTEGER NOT NULL DEFAULT 0,
+    notes              TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by         UUID REFERENCES users(id),
+    sync_status        TEXT NOT NULL DEFAULT 'synced',
+    deleted_at         TIMESTAMPTZ,
+    UNIQUE (farm_id, weekday)
+);
+
+CREATE TABLE visit_sessions (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    date                 DATE NOT NULL,
+    start_time           TIME NOT NULL,
+    end_time             TIME NOT NULL,
+    capacity             INTEGER NOT NULL CHECK (capacity > 0),
+    status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','full','closed','cancelled','completed')),
+    weather_note         TEXT,
+    expected_staff_cost  NUMERIC(10,2),
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by           UUID REFERENCES users(id),
+    sync_status          TEXT NOT NULL DEFAULT 'synced',
+    deleted_at           TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_sessions_farm_date ON visit_sessions(farm_id, date);
+
+CREATE TABLE visit_packages (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id               UUID NOT NULL REFERENCES farms(id),
+    name                  TEXT NOT NULL,
+    description           TEXT,
+    base_price            NUMERIC(10,2) NOT NULL DEFAULT 0,
+    currency              TEXT NOT NULL DEFAULT 'USD',
+    duration_minutes      INTEGER,
+    included_items_json   JSONB NOT NULL DEFAULT '{}'::jsonb,
+    active                BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by            UUID REFERENCES users(id),
+    sync_status           TEXT NOT NULL DEFAULT 'synced',
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_packages_farm ON visit_packages(farm_id);
+
+CREATE TABLE visit_activities (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id               UUID NOT NULL REFERENCES farms(id),
+    name                  TEXT NOT NULL,
+    activity_type         TEXT NOT NULL DEFAULT 'other' CHECK (activity_type IN ('tour','ride','workshop','tasting','event','other')),
+    price                 NUMERIC(10,2) NOT NULL DEFAULT 0,
+    capacity_per_slot     INTEGER NOT NULL DEFAULT 1 CHECK (capacity_per_slot > 0),
+    duration_minutes      INTEGER,
+    requires_staff_role   TEXT,
+    requires_animal_id    UUID REFERENCES animals(id),
+    welfare_limit_json    JSONB,
+    active                BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by            UUID REFERENCES users(id),
+    sync_status           TEXT NOT NULL DEFAULT 'synced',
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_activities_farm ON visit_activities(farm_id);
+
+CREATE TABLE visitor_profiles (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    full_name            TEXT NOT NULL,
+    phone                TEXT,
+    email                TEXT,
+    preferred_language   TEXT NOT NULL DEFAULT 'en' CHECK (preferred_language IN ('en','ar')),
+    notes                TEXT,
+    consent_marketing    BOOLEAN NOT NULL DEFAULT false,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by           UUID REFERENCES users(id),
+    sync_status          TEXT NOT NULL DEFAULT 'synced',
+    deleted_at           TIMESTAMPTZ
+);
+CREATE INDEX idx_visitor_profiles_farm ON visitor_profiles(farm_id);
+
+CREATE TABLE visit_bookings (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id           UUID NOT NULL REFERENCES farms(id),
+    visitor_id        UUID NOT NULL REFERENCES visitor_profiles(id),
+    session_id        UUID NOT NULL REFERENCES visit_sessions(id),
+    package_id        UUID NOT NULL REFERENCES visit_packages(id),
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','confirmed','checked_in','completed','cancelled','no_show','refunded')),
+    adults            INTEGER NOT NULL DEFAULT 1 CHECK (adults >= 0),
+    children          INTEGER NOT NULL DEFAULT 0 CHECK (children >= 0),
+    total_amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
+    deposit_amount    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    balance_due       NUMERIC(10,2) NOT NULL DEFAULT 0,
+    source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','whatsapp','website','phone','walk_in')),
+    payment_method    TEXT,
+    notes             TEXT,
+    idempotency_key   TEXT,
+    confirmed_at      TIMESTAMPTZ,
+    checked_in_at     TIMESTAMPTZ,
+    completed_at      TIMESTAMPTZ,
+    cancelled_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by        UUID REFERENCES users(id),
+    sync_status       TEXT NOT NULL DEFAULT 'synced',
+    deleted_at        TIMESTAMPTZ,
+    UNIQUE (farm_id, idempotency_key)
+);
+CREATE INDEX idx_visit_bookings_session ON visit_bookings(session_id, status);
+CREATE INDEX idx_visit_bookings_visitor ON visit_bookings(visitor_id);
+
+CREATE TABLE visit_booking_activities (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    booking_id     UUID NOT NULL REFERENCES visit_bookings(id) ON DELETE CASCADE,
+    activity_id    UUID NOT NULL REFERENCES visit_activities(id),
+    scheduled_at   TIMESTAMPTZ NOT NULL,
+    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    unit_price     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    status         TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled','missed')),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_visit_booking_activities_booking ON visit_booking_activities(booking_id);
+CREATE INDEX idx_visit_booking_activities_slot ON visit_booking_activities(activity_id, scheduled_at);
+
+CREATE TABLE visit_staff_roster (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    session_id     UUID NOT NULL REFERENCES visit_sessions(id),
+    worker_id      UUID NOT NULL REFERENCES users(id),
+    role           TEXT NOT NULL,
+    start_time     TIME NOT NULL,
+    end_time       TIME NOT NULL,
+    hourly_rate    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    total_cost     NUMERIC(10,2),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by     UUID REFERENCES users(id),
+    sync_status    TEXT NOT NULL DEFAULT 'synced',
+    deleted_at     TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_staff_roster_session ON visit_staff_roster(session_id);
+
+CREATE TABLE visit_costs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    session_id          UUID NOT NULL REFERENCES visit_sessions(id),
+    category            TEXT NOT NULL CHECK (category IN ('staff','cleaning','utilities','tasting','marketing','safety','maintenance','other')),
+    description         TEXT,
+    amount              NUMERIC(10,2) NOT NULL DEFAULT 0,
+    allocation_method   TEXT NOT NULL DEFAULT 'per_session' CHECK (allocation_method IN ('per_session','per_guest','per_package','per_activity')),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by          UUID REFERENCES users(id),
+    sync_status         TEXT NOT NULL DEFAULT 'synced',
+    deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_costs_session ON visit_costs(session_id);
+
+CREATE TABLE visit_retail_sales (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    booking_id    UUID REFERENCES visit_bookings(id),
+    visitor_id    UUID REFERENCES visitor_profiles(id),
+    sale_id       UUID NOT NULL REFERENCES sales(id),
+    channel       TEXT NOT NULL DEFAULT 'farm_shop' CHECK (channel IN ('farm_shop','tasting_upgrade','delivery_after_visit')),
+    notes         TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sync_status   TEXT NOT NULL DEFAULT 'synced'
+);
+CREATE INDEX idx_visit_retail_sales_booking ON visit_retail_sales(booking_id);
+
+CREATE TABLE visitor_feedback (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    booking_id     UUID NOT NULL REFERENCES visit_bookings(id),
+    rating         INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comments       TEXT,
+    would_return   BOOLEAN,
+    submitted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE visit_incidents (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id          UUID NOT NULL REFERENCES farms(id),
+    session_id       UUID NOT NULL REFERENCES visit_sessions(id),
+    booking_id       UUID REFERENCES visit_bookings(id),
+    incident_type    TEXT NOT NULL CHECK (incident_type IN ('safety','animal','weather','payment','complaint','other')),
+    severity         TEXT NOT NULL DEFAULT 'low' CHECK (severity IN ('low','medium','high')),
+    description      TEXT NOT NULL,
+    action_taken     TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by       UUID REFERENCES users(id),
+    sync_status      TEXT NOT NULL DEFAULT 'synced'
+);
+CREATE INDEX idx_visit_incidents_session ON visit_incidents(session_id);
+
+CREATE TABLE visit_events (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    entity_type   TEXT NOT NULL,
+    entity_id     UUID NOT NULL,
+    event_type    TEXT NOT NULL,
+    payload_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_by    UUID REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_visit_events_entity ON visit_events(entity_type, entity_id);
+CREATE INDEX idx_visit_events_farm_time ON visit_events(farm_id, created_at);

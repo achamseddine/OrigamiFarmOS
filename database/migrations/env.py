@@ -21,6 +21,7 @@ from app.core.config import get_settings  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.domain import models  # noqa: E402,F401  (registers all tables on Base.metadata)
 from app.domain import mouneh_models  # noqa: E402,F401  (registers Mouneh module tables on Base.metadata)
+from app.domain import visits_models  # noqa: E402,F401  (registers Visits module tables on Base.metadata)
 
 config = context.config
 

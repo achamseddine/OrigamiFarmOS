@@ -246,6 +246,97 @@ INSERT INTO mouneh_events (farm_id, entity_type, entity_id, event_type, payload_
   ('00000000-0000-0000-0000-000000000001', 'production_batch', '00000000-0000-0000-0000-000000000300', 'batch_completed', '{"actual_output_qty": 98}', '00000000-0000-0000-0000-000000000015', now() - interval '65 days'),
   ('00000000-0000-0000-0000-000000000001', 'production_batch', '00000000-0000-0000-0000-000000000301', 'batch_started', '{"planned_qty": 60}', '00000000-0000-0000-0000-000000000015', now() - interval '2 days');
 
+-- ============================================================================
+-- Farm Visits & Agri-Tourism module demo data (tech spec v0.6). The
+-- Friday/Saturday/Sunday opening calendar and the Horse Ride activity are
+-- EXAMPLES only — every row below is inserted the same way a farm manager's
+-- Opening Calendar / Package Builder / Activity Manager / Booking screens
+-- would write it (see backend/app/visits/seed.py, the Python equivalent).
+-- ============================================================================
+
+INSERT INTO module_licenses (id, farm_id, module_code, status, plan, starts_at, activated_by, features_json) VALUES
+  ('00000000-0000-0000-0000-000000000500', '00000000-0000-0000-0000-000000000001', 'visits_agritourism', 'active', 'farmos_experience', now() - interval '30 days', '00000000-0000-0000-0000-000000000015', '{"pos_integration": true, "staff_costing": true, "analytics": true}');
+
+-- Opening calendar: weekday 0=Monday .. 6=Sunday. Friday/Saturday/Sunday
+-- open here purely as a Lebanese-farm-context example.
+INSERT INTO visit_opening_calendar (farm_id, weekday, is_open, open_time, close_time, default_capacity, notes, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000001', 0, false, NULL, NULL, 0, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 1, false, NULL, NULL, 0, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 2, false, NULL, NULL, 0, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 3, false, NULL, NULL, 0, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 4, true, '09:00', '17:00', 60, 'Weekend agri-tourism opening', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 5, true, '09:00', '17:00', 60, 'Weekend agri-tourism opening', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', 6, true, '09:00', '17:00', 60, 'Weekend agri-tourism opening', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visitor_profiles (id, farm_id, full_name, phone, email, preferred_language, notes, consent_marketing, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000510', '00000000-0000-0000-0000-000000000001', 'Nour Khalil', '+961 71 555 010', NULL, 'ar', NULL, true, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000511', '00000000-0000-0000-0000-000000000001', 'Samir Aoun', '+961 03 555 020', NULL, 'ar', NULL, false, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000512', '00000000-0000-0000-0000-000000000001', 'Beirut Hills School (Ms. Farah)', '+961 01 555 030', 'trips@beiruthills.example', 'en', 'Group of 20 students, grade 4. Allergy: two students, tree nuts.', true, '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_packages (id, farm_id, name, description, base_price, currency, duration_minutes, included_items_json, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000520', '00000000-0000-0000-0000-000000000001', 'Family Farm Day', 'Entrance, guided animal tour, picnic area access and product tasting.', 15, 'USD', 180, '{"activity_ids": [], "product_lines": [{"finished_goods_product": "makdous_tasting", "quantity": 1}]}', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000521', '00000000-0000-0000-0000-000000000001', 'School Harvest Visit', 'Fixed per-student educational visit: farm tour, harvest picking, hygiene talk.', 8, 'USD', 120, '{"activity_ids": [], "product_lines": []}', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_activities (id, farm_id, name, activity_type, price, capacity_per_slot, duration_minutes, requires_staff_role, requires_animal_id, welfare_limit_json, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000530', '00000000-0000-0000-0000-000000000001', 'Horse Ride', 'ride', 10, 4, 20, 'horse_handler', '00000000-0000-0000-0000-00000000c007', '{"max_uses_per_day": 10, "min_rest_minutes_between_uses": 20}', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000531', '00000000-0000-0000-0000-000000000001', 'Cheese Making Workshop', 'workshop', 12, 8, 45, NULL, NULL, NULL, '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_sessions (id, farm_id, date, start_time, end_time, capacity, status, expected_staff_cost, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000001', (current_date + interval '4 days')::date, '09:00', '17:00', 60, 'open', 90, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000541', '00000000-0000-0000-0000-000000000001', (current_date + interval '5 days')::date, '09:00', '17:00', 60, 'open', 90, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000542', '00000000-0000-0000-0000-000000000001', (current_date - interval '2 days')::date, '09:00', '17:00', 60, 'completed', NULL, '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_staff_roster (farm_id, session_id, worker_id, role, start_time, end_time, hourly_rate, total_cost, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000010', 'guide', '08:30', '17:30', 6, 54, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000013', 'horse_handler', '08:30', '17:30', 8, 72, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000014', 'cashier', '08:30', '17:30', 5, 45, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', '00000000-0000-0000-0000-000000000010', 'guide', '08:30', '17:30', 6, 54, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', '00000000-0000-0000-0000-000000000014', 'cashier', '08:30', '17:30', 5, 45, '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_costs (farm_id, session_id, category, description, amount, allocation_method, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', 'cleaning', 'Bathrooms, waste collection', 20, 'per_session', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', 'utilities', 'Water and electricity for the visit day', 15, 'per_session', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000540', 'tasting', 'Tasting samples and disposable cups', 18, 'per_guest', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', 'cleaning', 'Bathrooms, waste collection', 20, 'per_session', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', 'utilities', 'Water and electricity for the visit day', 15, 'per_session', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', 'tasting', 'Tasting samples and disposable cups', 18, 'per_guest', '00000000-0000-0000-0000-000000000015');
+
+-- Bookings across every status the state machine supports.
+INSERT INTO visit_bookings (id, farm_id, visitor_id, session_id, package_id, status, adults, children, total_amount, deposit_amount, balance_due, source, confirmed_at, checked_in_at, completed_at, cancelled_at, notes, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000570', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000510', '00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000520', 'confirmed', 2, 2, 80, 20, 60, 'whatsapp', now() - interval '2 days', NULL, NULL, NULL, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000571', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000511', '00000000-0000-0000-0000-000000000540', '00000000-0000-0000-0000-000000000520', 'checked_in', 1, 0, 15, 0, 15, 'walk_in', now(), now(), NULL, NULL, NULL, '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000572', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000512', '00000000-0000-0000-0000-000000000541', '00000000-0000-0000-0000-000000000521', 'draft', 2, 20, 176, 0, 176, 'phone', NULL, NULL, NULL, NULL, 'Awaiting school''s payment confirmation.', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000573', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000511', '00000000-0000-0000-0000-000000000541', '00000000-0000-0000-0000-000000000520', 'cancelled', 2, 0, 30, 0, 0, 'manual', NULL, NULL, NULL, now() - interval '1 day', 'Cancellation reason: family reschedule.', '00000000-0000-0000-0000-000000000015'),
+  ('00000000-0000-0000-0000-000000000574', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000510', '00000000-0000-0000-0000-000000000542', '00000000-0000-0000-0000-000000000520', 'completed', 2, 1, 45, 45, 0, 'website', now() - interval '9 days', now() - interval '2 days', now() - interval '2 days', NULL, NULL, '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_booking_activities (booking_id, activity_id, scheduled_at, quantity, unit_price) VALUES
+  ('00000000-0000-0000-0000-000000000570', '00000000-0000-0000-0000-000000000530', (current_date + interval '4 days')::date + time '11:00', 2, 10);
+
+-- Retail sale linked to the completed booking — sells real Makdous
+-- finished-goods stock (Mouneh module), so "visitor sales deduct
+-- finished goods stock" is demonstrated across both modules.
+INSERT INTO sales (id, farm_id, customer_id, product_type, product_label, amount, payment_status, sold_at) VALUES
+  ('00000000-0000-0000-0000-000000000591', '00000000-0000-0000-0000-000000000001', NULL, 'visitor_retail', 'Visitor farm shop purchase', 13.00, 'paid', now() - interval '2 days');
+
+UPDATE finished_goods_stock SET quantity_available = quantity_available - 2, quantity_sold = quantity_sold + 2 WHERE id = '00000000-0000-0000-0000-000000000400';
+
+INSERT INTO mouneh_sale_lines (id, farm_id, product_id, batch_id, finished_goods_stock_id, quantity, unit_price, discount, channel, cost_per_unit, revenue, margin, sold_at, sold_by) VALUES
+  ('00000000-0000-0000-0000-000000000592', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000200', '00000000-0000-0000-0000-000000000300', '00000000-0000-0000-0000-000000000400', 2, 6.50, 0, 'retail', 3.6898, 13.00, 5.6204, now() - interval '2 days', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_retail_sales (farm_id, booking_id, visitor_id, sale_id, channel, notes) VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000574', '00000000-0000-0000-0000-000000000510', '00000000-0000-0000-0000-000000000591', 'farm_shop', '2 jars of Makdous bought after the tour.');
+
+INSERT INTO visitor_feedback (farm_id, booking_id, rating, comments, would_return, submitted_at) VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000574', 5, 'Wonderful morning — kids loved feeding the goats.', true, now() - interval '1 day');
+
+INSERT INTO visit_incidents (farm_id, session_id, booking_id, incident_type, severity, description, action_taken, created_by) VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000542', NULL, 'weather', 'low', 'Brief rain shower around midday.', 'Moved the tasting session under the covered picnic area.', '00000000-0000-0000-0000-000000000015');
+
+INSERT INTO visit_events (farm_id, entity_type, entity_id, event_type, payload_json, created_by, created_at) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'visit_session', '00000000-0000-0000-0000-000000000540', 'session_created', '{}', '00000000-0000-0000-0000-000000000015', now() - interval '10 days'),
+  ('00000000-0000-0000-0000-000000000001', 'visit_booking', '00000000-0000-0000-0000-000000000570', 'booking_status_changed', '{"to": "confirmed"}', '00000000-0000-0000-0000-000000000015', now() - interval '2 days'),
+  ('00000000-0000-0000-0000-000000000001', 'visit_booking', '00000000-0000-0000-0000-000000000574', 'booking_status_changed', '{"to": "completed"}', '00000000-0000-0000-0000-000000000015', now() - interval '2 days');
+
 COMMIT;
 
 -- Recommendations are intentionally NOT seeded here — call

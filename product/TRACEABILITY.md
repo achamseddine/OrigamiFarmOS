@@ -2,9 +2,10 @@
 
 Maps the tech spec (`Origami_FarmOS_Technical_Specifications_v0.3.pdf`,
 extended by `Origami_FarmOS_Technical_Specifications_v0.5.pdf` for the
-Mouneh & Farm Product Processing module) and `CONSTITUTION.md` to the code
-that implements each requirement. Update this file whenever a requirement's
-implementation moves.
+Mouneh & Farm Product Processing module and
+`Origami_FarmOS_Technical_Specifications_v0.6.pdf` for the Farm Visits &
+Agri-Tourism module) and `CONSTITUTION.md` to the code that implements each
+requirement. Update this file whenever a requirement's implementation moves.
 
 ## Option C screens (tech spec §7/§8)
 
@@ -116,6 +117,56 @@ Tests: `backend/tests/test_mouneh_costing.py` (pure engine, mirrors
 `backend/tests/test_mouneh_api.py` (license gating, dynamic product
 creation, recipe versioning, full batch lifecycle, sales, dashboard —
 covering every acceptance criterion in the v0.5 build prompt).
+
+## Farm Visits & Agri-Tourism module (tech spec v0.6)
+
+A second license-gated bounded context, structured identically to the
+Mouneh module — see `backend/app/domain/visits_models.py`,
+`backend/app/visits/`, `backend/app/api/v1/visits.py`, and the mobile
+mirror under `mobile/flutter_app/lib/{visits,features/visits}/`. Both
+modules reuse the same generic `module_licenses` table (`ModuleLicense`)
+rather than each defining their own. "Horse Ride" and opening on
+Friday/Saturday/Sunday are demo data only (`backend/app/visits/seed.py`,
+`mobile/flutter_app/lib/data/demo/visits_demo_data.dart`) — RULE-VIS-003
+and RULE-VIS-010 both require that opening days and activities stay
+dynamic, never hard-coded, and nothing in the module's code branches on
+either.
+
+| Rule | Backend | Mobile |
+|---|---|---|
+| RULE-VIS-001 License-controlled module (status active/trial), super user activates/deactivates per farm | `api/deps.py::require_module_license` (`LICENSE_ACTIVE_STATUSES`), `domain/mouneh_models.py::ModuleLicense` | `providers/visits_provider.dart::setModuleActive`, `features/settings/settings_screen.dart` "Modules" section |
+| RULE-VIS-002 Booking cannot be confirmed if session capacity would be exceeded | `app/visits/analytics.py::validate_session_capacity`, checked in `api/v1/visits.py::confirm_booking` | `lib/visits/analytics.dart::validateSessionCapacity`, checked in `providers/visits_provider.dart::confirmBooking` |
+| RULE-VIS-003 Opening days configurable per farm, never hard-coded | `domain/visits_models.py::VisitOpeningCalendar`, `POST /visit-calendar` | `features/visits/opening_calendar_tab.dart`, `providers/visits_provider.dart::upsertCalendarDay` |
+| RULE-VIS-004 Activity capacity/duration/price + animal-welfare daily limit | `app/visits/analytics.py::validate_activity_capacity/validate_welfare_limit` | `lib/visits/analytics.dart::validateActivityCapacity/validateWelfareLimit`, `features/visits/activity_manager_tab.dart` |
+| RULE-VIS-005 Ride/animal-interaction activities require a handler assigned to the session | `app/visits/analytics.py::validate_handler_assignment`, checked at confirm time | `lib/visits/analytics.dart::validateHandlerAssignment`, `providers/visits_provider.dart::confirmBooking` |
+| RULE-VIS-006 Visitor POS sales deduct inventory and appear in Sales & Finance | `api/v1/visits.py::create_retail_sale` (deducts `InventoryTransaction` or `MounehSaleLine`, creates a core `Sale` row `product_type="visitor_retail"`) | `providers/visits_provider.dart::recordInventoryRetailSale/recordMounehRetailSale` (deducts via `FeedProvider`/`MounehProvider`'s own write service) |
+| RULE-VIS-008 Booking status machine (draft→confirmed→checked_in→completed, cancelled/no_show/refunded) | `app/visits/analytics.py::validate_status_transition` | `lib/visits/analytics.dart::validateStatusTransition`, `providers/visits_provider.dart::_transition` |
+| RULE-VIS-009 Offline walk-in bookings sync with conflict handling | `visit_bookings.idempotency_key` (unique per farm, dedup on repeated sync) | `visit_bookings.idempotency_key` column, `VisitsProvider.createBooking`'s dedup check |
+| Analytics formulas (§9): visitor revenue, direct visit cost, gross margin, revenue/visitor, activity utilization, retail conversion, avg basket value, package profitability | `app/visits/analytics.py` (pure functions) + `services/visits_service.py::_profitability_for_bookings` (DB aggregation, recomputes from granular components rather than trusting `booking.total_amount`) | `lib/visits/analytics.dart` (Dart port) + `providers/visits_provider.dart::profitabilityFor` |
+
+Database entities match the exact names given in the v0.6 build prompt:
+`module_license` (reuses `module_licenses`), `visit_opening_calendar`,
+`visit_session`, `visit_package`, `visit_activity`, `visitor_profile`,
+`visit_booking`, `visit_booking_activity`, `visit_staff_roster`,
+`visit_cost`, `visit_retail_sale`, `visitor_feedback`, `visit_incident` —
+see `database/schema.sql` and
+`database/migrations/versions/..._farm_visits_and_agritourism_module.py`.
+
+Screens (tech spec v0.6 §6 — the build prompt's 10 named screens; the tech
+spec PDF's UI table also lists an 11th, "Feedback & Follow-up", which is
+folded into Visitor Check-in rather than added as a separate tab):
+Visitor Module Dashboard, Opening Calendar, Package Builder, Activity
+Manager, Booking Form (also hosts session creation), Visit-Day Briefing
+(also hosts incident logging and session status), Visitor Check-in (also
+hosts feedback capture), Farm Shop / Visitor POS, Staff Roster & Costs,
+Visitor Profitability Report — all under
+`mobile/flutter_app/lib/features/visits/`.
+
+Tests: `backend/tests/test_visits_analytics.py` (pure engine, mirrors
+`mobile/flutter_app/test/visits/analytics_test.dart`) and
+`backend/tests/test_visits_api.py` (license gating, capacity/welfare/handler
+rejection, booking lifecycle, idempotent walk-ins, POS deduction against
+both inventory and Mouneh finished-goods stock, profitability).
 
 ## What remains
 

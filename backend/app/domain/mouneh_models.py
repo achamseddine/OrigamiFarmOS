@@ -36,6 +36,10 @@ class ModuleLicense(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     max_users: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_products: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Sub-feature flags for modules with a tiered license (e.g. Visits'
+    # FarmOS Pro vs FarmOS Experience tiers, tech spec v0.6 §3.3).
+    # Unused by the Mouneh module.
+    features_json: Mapped[dict] = mapped_column(JSON, default=dict)
     activated_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

@@ -10,10 +10,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.v1 import animals, auth, farms, feed, health, modules, mouneh, observations, production, recommendations, reports, sync, tasks
+from app.api.v1 import animals, auth, farms, feed, health, modules, mouneh, observations, production, recommendations, reports, sync, tasks, visits
 from app.core.config import get_settings
 from app.db.base import Base, engine
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
+from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 
 settings = get_settings()
 
@@ -71,3 +72,5 @@ app.include_router(recommendations.router, prefix=api_prefix)
 app.include_router(reports.router, prefix=api_prefix)
 app.include_router(modules.router, prefix=api_prefix)
 app.include_router(mouneh.router, prefix=api_prefix)
+app.include_router(visits.status_router, prefix=api_prefix)
+app.include_router(visits.router, prefix=api_prefix)

@@ -1390,6 +1390,885 @@ paths:
                 $ref: '#/components/schemas/MounehDashboardOut'
       security:
       - HTTPBearer: []
+  /api/v1/modules/visits/status:
+    get:
+      tags:
+      - visits
+      summary: Visits Module Status
+      operationId: visits_module_status_api_v1_modules_visits_status_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Visits Module Status Api V1 Modules Visits Status
+                  Get
+      security:
+      - HTTPBearer: []
+  /api/v1/visit-calendar:
+    get:
+      tags:
+      - visits
+      summary: List Opening Calendar
+      operationId: list_opening_calendar_api_v1_visit_calendar_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/OpeningCalendarDayOut'
+                type: array
+                title: Response List Opening Calendar Api V1 Visit Calendar Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - visits
+      summary: Upsert Opening Calendar Day
+      operationId: upsert_opening_calendar_day_api_v1_visit_calendar_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpeningCalendarDayUpsert'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpeningCalendarDayOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/visit-sessions:
+    post:
+      tags:
+      - visits
+      summary: Create Session
+      operationId: create_session_api_v1_visit_sessions_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitSessionCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitSessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Sessions
+      operationId: list_sessions_api_v1_visit_sessions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitSessionOut'
+                title: Response List Sessions Api V1 Visit Sessions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-sessions/{session_id}:
+    get:
+      tags:
+      - visits
+      summary: Get Session
+      operationId: get_session_api_v1_visit_sessions__session_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitSessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - visits
+      summary: Update Session
+      description: 'RULE-VIS-009: the manager can close a session (weather, safety,
+
+        staffing, private event) by setting status=''closed''/''cancelled''.'
+      operationId: update_session_api_v1_visit_sessions__session_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Session Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitSessionUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitSessionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-packages:
+    get:
+      tags:
+      - visits
+      summary: List Packages
+      operationId: list_packages_api_v1_visit_packages_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VisitPackageOut'
+                type: array
+                title: Response List Packages Api V1 Visit Packages Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - visits
+      summary: Create Package
+      operationId: create_package_api_v1_visit_packages_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitPackageCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitPackageOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/visit-activities:
+    get:
+      tags:
+      - visits
+      summary: List Activities
+      operationId: list_activities_api_v1_visit_activities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VisitActivityOut'
+                type: array
+                title: Response List Activities Api V1 Visit Activities Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - visits
+      summary: Create Activity
+      operationId: create_activity_api_v1_visit_activities_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitActivityCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitActivityOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/visitors:
+    get:
+      tags:
+      - visits
+      summary: List Visitors
+      description: "RULE-VIS-010: visitor PII is permission-controlled \u2014 only\n\
+        visit-operations roles (owner/manager/visitor_coordinator) can list\nvisitor\
+        \ CRM records; nobody else gets a route to it in this router."
+      operationId: list_visitors_api_v1_visitors_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/VisitorProfileOut'
+                type: array
+                title: Response List Visitors Api V1 Visitors Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - visits
+      summary: Create Visitor
+      operationId: create_visitor_api_v1_visitors_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitorProfileCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitorProfileOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/visit-bookings:
+    post:
+      tags:
+      - visits
+      summary: Create Booking
+      operationId: create_booking_api_v1_visit_bookings_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitBookingCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Bookings
+      operationId: list_bookings_api_v1_visit_bookings_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitBookingOut'
+                title: Response List Bookings Api V1 Visit Bookings Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-bookings/{booking_id}/confirm:
+    post:
+      tags:
+      - visits
+      summary: Confirm Booking
+      description: 'RULE-VIS-002: cannot confirm if the session capacity would be
+
+        exceeded.'
+      operationId: confirm_booking_api_v1_visit_bookings__booking_id__confirm_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Booking Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-bookings/{booking_id}/check-in:
+    post:
+      tags:
+      - visits
+      summary: Check In Booking
+      operationId: check_in_booking_api_v1_visit_bookings__booking_id__check_in_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Booking Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-bookings/{booking_id}/complete:
+    post:
+      tags:
+      - visits
+      summary: Complete Booking
+      operationId: complete_booking_api_v1_visit_bookings__booking_id__complete_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Booking Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-bookings/{booking_id}/no-show:
+    post:
+      tags:
+      - visits
+      summary: Mark Booking No Show
+      operationId: mark_booking_no_show_api_v1_visit_bookings__booking_id__no_show_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Booking Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-bookings/{booking_id}/cancel:
+    post:
+      tags:
+      - visits
+      summary: Cancel Booking
+      operationId: cancel_booking_api_v1_visit_bookings__booking_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Booking Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitBookingCancelRequest'
+              default:
+                refund: false
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitBookingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-staff-roster:
+    post:
+      tags:
+      - visits
+      summary: Create Staff Roster Entry
+      operationId: create_staff_roster_entry_api_v1_visit_staff_roster_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitStaffRosterCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitStaffRosterOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Staff Roster
+      operationId: list_staff_roster_api_v1_visit_staff_roster_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitStaffRosterOut'
+                title: Response List Staff Roster Api V1 Visit Staff Roster Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-costs:
+    post:
+      tags:
+      - visits
+      summary: Create Cost
+      operationId: create_cost_api_v1_visit_costs_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitCostCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitCostOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Costs
+      operationId: list_costs_api_v1_visit_costs_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitCostOut'
+                title: Response List Costs Api V1 Visit Costs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visit-retail-sales:
+    post:
+      tags:
+      - visits
+      summary: Record Retail Sale
+      description: 'Deducts inventory (plain items or Mouneh finished goods) and
+
+        creates a core `Sale` row so the purchase flows into Sales & Finance
+
+        (RULE-VIS-006), then links it back to the booking/visitor.'
+      operationId: record_retail_sale_api_v1_visit_retail_sales_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitRetailSaleCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitRetailSaleOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Retail Sales
+      operationId: list_retail_sales_api_v1_visit_retail_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: booking_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Retail Sales Api V1 Visit Retail Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visitor-feedback:
+    post:
+      tags:
+      - visits
+      summary: Submit Feedback
+      operationId: submit_feedback_api_v1_visitor_feedback_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitorFeedbackCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitorFeedbackOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/visit-incidents:
+    post:
+      tags:
+      - visits
+      summary: Report Incident
+      operationId: report_incident_api_v1_visit_incidents_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VisitIncidentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitIncidentOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - visits
+      summary: List Incidents
+      operationId: list_incidents_api_v1_visit_incidents_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VisitIncidentOut'
+                title: Response List Incidents Api V1 Visit Incidents Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/visit-profitability:
+    get:
+      tags:
+      - visits
+      summary: Visit Profitability
+      operationId: visit_profitability_api_v1_reports_visit_profitability_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: session_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session Id
+      - name: date_from
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date From
+      - name: date_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Date To
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitProfitabilityOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/visits/dashboard:
+    get:
+      tags:
+      - visits
+      summary: Visits Dashboard
+      operationId: visits_dashboard_api_v1_visits_dashboard_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitDashboardOut'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AnimalDigitalTwinOut:
@@ -1715,6 +2594,54 @@ components:
       - planned_qty
       - unit_cost
       title: BatchInputConsumptionOut
+    BookingActivityOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        activity_id:
+          type: string
+          title: Activity Id
+        scheduled_at:
+          type: string
+          format: date-time
+          title: Scheduled At
+        quantity:
+          type: integer
+          title: Quantity
+        unit_price:
+          type: number
+          title: Unit Price
+        status:
+          type: string
+          title: Status
+      type: object
+      required:
+      - id
+      - activity_id
+      - scheduled_at
+      - quantity
+      - unit_price
+      - status
+      title: BookingActivityOut
+    BookingActivitySelection:
+      properties:
+        activity_id:
+          type: string
+          title: Activity Id
+        scheduled_at:
+          type: string
+          format: date-time
+          title: Scheduled At
+        quantity:
+          type: integer
+          title: Quantity
+          default: 1
+      type: object
+      required:
+      - activity_id
+      - scheduled_at
+      title: BookingActivitySelection
     BootstrapResponse:
       properties:
         farm:
@@ -2878,6 +3805,78 @@ components:
       - observer_id
       - notes
       title: ObservationOut
+    OpeningCalendarDayOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        weekday:
+          type: integer
+          title: Weekday
+        is_open:
+          type: boolean
+          title: Is Open
+        open_time:
+          anyOf:
+          - type: string
+            format: time
+          - type: 'null'
+          title: Open Time
+        close_time:
+          anyOf:
+          - type: string
+            format: time
+          - type: 'null'
+          title: Close Time
+        default_capacity:
+          type: integer
+          title: Default Capacity
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - weekday
+      - is_open
+      - default_capacity
+      title: OpeningCalendarDayOut
+    OpeningCalendarDayUpsert:
+      properties:
+        weekday:
+          type: integer
+          title: Weekday
+        is_open:
+          type: boolean
+          title: Is Open
+          default: false
+        open_time:
+          anyOf:
+          - type: string
+            format: time
+          - type: 'null'
+          title: Open Time
+        close_time:
+          anyOf:
+          - type: string
+            format: time
+          - type: 'null'
+          title: Close Time
+        default_capacity:
+          type: integer
+          title: Default Capacity
+          default: 0
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - weekday
+      title: OpeningCalendarDayUpsert
     ProductProfitabilityOut:
       properties:
         product_id:
@@ -3408,6 +4407,31 @@ components:
       - status
       - generated_at
       title: RecommendationOut
+    RetailSaleLine:
+      properties:
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        finished_goods_stock_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Finished Goods Stock Id
+        quantity:
+          type: number
+          title: Quantity
+        unit_price:
+          type: number
+          title: Unit Price
+      type: object
+      required:
+      - quantity
+      - unit_price
+      title: RetailSaleLine
+      description: "Either a plain inventory item (eggs, milk, produce) or a Mouneh\n\
+        finished-goods line \u2014 never both."
     SyncItemResult:
       properties:
         idempotency_key:
@@ -3768,6 +4792,958 @@ components:
       - msg
       - type
       title: ValidationError
+    VisitActivityCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        activity_type:
+          type: string
+          title: Activity Type
+          default: other
+        price:
+          type: number
+          title: Price
+          default: 0
+        capacity_per_slot:
+          type: integer
+          title: Capacity Per Slot
+          default: 1
+        duration_minutes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Minutes
+        requires_staff_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requires Staff Role
+        requires_animal_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requires Animal Id
+        welfare_limit_json:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Welfare Limit Json
+        active:
+          type: boolean
+          title: Active
+          default: true
+      type: object
+      required:
+      - name
+      title: VisitActivityCreate
+    VisitActivityOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        activity_type:
+          type: string
+          title: Activity Type
+        price:
+          type: number
+          title: Price
+        capacity_per_slot:
+          type: integer
+          title: Capacity Per Slot
+        duration_minutes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Minutes
+        requires_staff_role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requires Staff Role
+        requires_animal_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requires Animal Id
+        welfare_limit_json:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Welfare Limit Json
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - activity_type
+      - price
+      - capacity_per_slot
+      - active
+      title: VisitActivityOut
+    VisitBookingCancelRequest:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+        refund:
+          type: boolean
+          title: Refund
+          default: false
+      type: object
+      title: VisitBookingCancelRequest
+    VisitBookingCreate:
+      properties:
+        visitor_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Visitor Id
+        visitor:
+          anyOf:
+          - $ref: '#/components/schemas/VisitorProfileCreate'
+          - type: 'null'
+        session_id:
+          type: string
+          title: Session Id
+        package_id:
+          type: string
+          title: Package Id
+        adults:
+          type: integer
+          title: Adults
+          default: 1
+        children:
+          type: integer
+          title: Children
+          default: 0
+        activities:
+          items:
+            $ref: '#/components/schemas/BookingActivitySelection'
+          type: array
+          title: Activities
+          default: []
+        deposit_amount:
+          type: number
+          title: Deposit Amount
+          default: 0
+        source:
+          type: string
+          title: Source
+          default: manual
+        payment_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Method
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        idempotency_key:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Idempotency Key
+      type: object
+      required:
+      - session_id
+      - package_id
+      title: VisitBookingCreate
+    VisitBookingOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        visitor_id:
+          type: string
+          title: Visitor Id
+        session_id:
+          type: string
+          title: Session Id
+        package_id:
+          type: string
+          title: Package Id
+        status:
+          type: string
+          title: Status
+        adults:
+          type: integer
+          title: Adults
+        children:
+          type: integer
+          title: Children
+        total_amount:
+          type: number
+          title: Total Amount
+        deposit_amount:
+          type: number
+          title: Deposit Amount
+        balance_due:
+          type: number
+          title: Balance Due
+        source:
+          type: string
+          title: Source
+        payment_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Method
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        confirmed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Confirmed At
+        checked_in_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Checked In At
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        cancelled_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cancelled At
+        activities:
+          items:
+            $ref: '#/components/schemas/BookingActivityOut'
+          type: array
+          title: Activities
+          default: []
+      type: object
+      required:
+      - id
+      - farm_id
+      - visitor_id
+      - session_id
+      - package_id
+      - status
+      - adults
+      - children
+      - total_amount
+      - deposit_amount
+      - balance_due
+      - source
+      title: VisitBookingOut
+    VisitCostCreate:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        category:
+          type: string
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        amount:
+          type: number
+          title: Amount
+        allocation_method:
+          type: string
+          title: Allocation Method
+          default: per_session
+      type: object
+      required:
+      - session_id
+      - category
+      - amount
+      title: VisitCostCreate
+    VisitCostOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        session_id:
+          type: string
+          title: Session Id
+        category:
+          type: string
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        amount:
+          type: number
+          title: Amount
+        allocation_method:
+          type: string
+          title: Allocation Method
+      type: object
+      required:
+      - id
+      - session_id
+      - category
+      - amount
+      - allocation_method
+      title: VisitCostOut
+    VisitDashboardOut:
+      properties:
+        module_status:
+          type: string
+          title: Module Status
+        upcoming_sessions:
+          type: integer
+          title: Upcoming Sessions
+        today_bookings:
+          type: integer
+          title: Today Bookings
+        today_expected_visitors:
+          type: integer
+          title: Today Expected Visitors
+        today_expected_revenue:
+          type: number
+          title: Today Expected Revenue
+        open_incidents:
+          type: integer
+          title: Open Incidents
+        sessions:
+          items:
+            $ref: '#/components/schemas/VisitSessionOut'
+          type: array
+          title: Sessions
+      type: object
+      required:
+      - module_status
+      - upcoming_sessions
+      - today_bookings
+      - today_expected_visitors
+      - today_expected_revenue
+      - open_incidents
+      - sessions
+      title: VisitDashboardOut
+    VisitIncidentCreate:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        booking_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Id
+        incident_type:
+          type: string
+          title: Incident Type
+        severity:
+          type: string
+          title: Severity
+          default: low
+        description:
+          type: string
+          title: Description
+        action_taken:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action Taken
+      type: object
+      required:
+      - session_id
+      - incident_type
+      - description
+      title: VisitIncidentCreate
+    VisitIncidentOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        session_id:
+          type: string
+          title: Session Id
+        booking_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Id
+        incident_type:
+          type: string
+          title: Incident Type
+        severity:
+          type: string
+          title: Severity
+        description:
+          type: string
+          title: Description
+        action_taken:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Action Taken
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - session_id
+      - incident_type
+      - severity
+      - description
+      - created_at
+      title: VisitIncidentOut
+    VisitPackageCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        base_price:
+          type: number
+          title: Base Price
+          default: 0
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        duration_minutes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Minutes
+        included_items_json:
+          additionalProperties: true
+          type: object
+          title: Included Items Json
+          default: {}
+        active:
+          type: boolean
+          title: Active
+          default: true
+      type: object
+      required:
+      - name
+      title: VisitPackageCreate
+    VisitPackageOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        base_price:
+          type: number
+          title: Base Price
+        currency:
+          type: string
+          title: Currency
+        duration_minutes:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Duration Minutes
+        included_items_json:
+          additionalProperties: true
+          type: object
+          title: Included Items Json
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - base_price
+      - currency
+      - included_items_json
+      - active
+      title: VisitPackageOut
+    VisitProfitabilityOut:
+      properties:
+        scope:
+          type: string
+          title: Scope
+        package_revenue:
+          type: number
+          title: Package Revenue
+        activity_revenue:
+          type: number
+          title: Activity Revenue
+        retail_revenue:
+          type: number
+          title: Retail Revenue
+        visitor_revenue:
+          type: number
+          title: Visitor Revenue
+        staff_cost:
+          type: number
+          title: Staff Cost
+        activity_cost:
+          type: number
+          title: Activity Cost
+        included_product_cost:
+          type: number
+          title: Included Product Cost
+        cleaning_utilities_cost:
+          type: number
+          title: Cleaning Utilities Cost
+        other_cost:
+          type: number
+          title: Other Cost
+        direct_visit_cost:
+          type: number
+          title: Direct Visit Cost
+        gross_margin:
+          type: number
+          title: Gross Margin
+        checked_in_visitors:
+          type: integer
+          title: Checked In Visitors
+        revenue_per_visitor:
+          type: number
+          title: Revenue Per Visitor
+        retail_conversion_pct:
+          type: number
+          title: Retail Conversion Pct
+        average_basket_value:
+          type: number
+          title: Average Basket Value
+        by_package:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: By Package
+        by_activity:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: By Activity
+      type: object
+      required:
+      - scope
+      - package_revenue
+      - activity_revenue
+      - retail_revenue
+      - visitor_revenue
+      - staff_cost
+      - activity_cost
+      - included_product_cost
+      - cleaning_utilities_cost
+      - other_cost
+      - direct_visit_cost
+      - gross_margin
+      - checked_in_visitors
+      - revenue_per_visitor
+      - retail_conversion_pct
+      - average_basket_value
+      - by_package
+      - by_activity
+      title: VisitProfitabilityOut
+    VisitRetailSaleCreate:
+      properties:
+        booking_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Id
+        visitor_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Visitor Id
+        channel:
+          type: string
+          title: Channel
+          default: farm_shop
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        lines:
+          items:
+            $ref: '#/components/schemas/RetailSaleLine'
+          type: array
+          title: Lines
+      type: object
+      required:
+      - lines
+      title: VisitRetailSaleCreate
+    VisitRetailSaleOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        booking_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Booking Id
+        visitor_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Visitor Id
+        sale_id:
+          type: string
+          title: Sale Id
+        channel:
+          type: string
+          title: Channel
+        total_amount:
+          type: number
+          title: Total Amount
+      type: object
+      required:
+      - id
+      - sale_id
+      - channel
+      - total_amount
+      title: VisitRetailSaleOut
+    VisitSessionCreate:
+      properties:
+        date:
+          type: string
+          format: date
+          title: Date
+        start_time:
+          type: string
+          format: time
+          title: Start Time
+        end_time:
+          type: string
+          format: time
+          title: End Time
+        capacity:
+          type: integer
+          title: Capacity
+        weather_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Weather Note
+        expected_staff_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Staff Cost
+      type: object
+      required:
+      - date
+      - start_time
+      - end_time
+      - capacity
+      title: VisitSessionCreate
+    VisitSessionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        date:
+          type: string
+          format: date
+          title: Date
+        start_time:
+          type: string
+          format: time
+          title: Start Time
+        end_time:
+          type: string
+          format: time
+          title: End Time
+        capacity:
+          type: integer
+          title: Capacity
+        status:
+          type: string
+          title: Status
+        weather_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Weather Note
+        expected_staff_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Staff Cost
+      type: object
+      required:
+      - id
+      - farm_id
+      - date
+      - start_time
+      - end_time
+      - capacity
+      - status
+      title: VisitSessionOut
+    VisitSessionUpdate:
+      properties:
+        capacity:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Capacity
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        weather_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Weather Note
+        expected_staff_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Staff Cost
+      type: object
+      title: VisitSessionUpdate
+    VisitStaffRosterCreate:
+      properties:
+        session_id:
+          type: string
+          title: Session Id
+        worker_id:
+          type: string
+          title: Worker Id
+        role:
+          type: string
+          title: Role
+        start_time:
+          type: string
+          format: time
+          title: Start Time
+        end_time:
+          type: string
+          format: time
+          title: End Time
+        hourly_rate:
+          type: number
+          title: Hourly Rate
+          default: 0
+      type: object
+      required:
+      - session_id
+      - worker_id
+      - role
+      - start_time
+      - end_time
+      title: VisitStaffRosterCreate
+    VisitStaffRosterOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        session_id:
+          type: string
+          title: Session Id
+        worker_id:
+          type: string
+          title: Worker Id
+        role:
+          type: string
+          title: Role
+        start_time:
+          type: string
+          format: time
+          title: Start Time
+        end_time:
+          type: string
+          format: time
+          title: End Time
+        hourly_rate:
+          type: number
+          title: Hourly Rate
+        total_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total Cost
+      type: object
+      required:
+      - id
+      - session_id
+      - worker_id
+      - role
+      - start_time
+      - end_time
+      - hourly_rate
+      title: VisitStaffRosterOut
+    VisitorFeedbackCreate:
+      properties:
+        booking_id:
+          type: string
+          title: Booking Id
+        rating:
+          type: integer
+          title: Rating
+        comments:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comments
+        would_return:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Would Return
+      type: object
+      required:
+      - booking_id
+      - rating
+      title: VisitorFeedbackCreate
+    VisitorFeedbackOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        booking_id:
+          type: string
+          title: Booking Id
+        rating:
+          type: integer
+          title: Rating
+        comments:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comments
+        would_return:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Would Return
+        submitted_at:
+          type: string
+          format: date-time
+          title: Submitted At
+      type: object
+      required:
+      - id
+      - booking_id
+      - rating
+      - submitted_at
+      title: VisitorFeedbackOut
+    VisitorProfileCreate:
+      properties:
+        full_name:
+          type: string
+          title: Full Name
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        preferred_language:
+          type: string
+          title: Preferred Language
+          default: en
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        consent_marketing:
+          type: boolean
+          title: Consent Marketing
+          default: false
+      type: object
+      required:
+      - full_name
+      title: VisitorProfileCreate
+    VisitorProfileOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        full_name:
+          type: string
+          title: Full Name
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        preferred_language:
+          type: string
+          title: Preferred Language
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        consent_marketing:
+          type: boolean
+          title: Consent Marketing
+      type: object
+      required:
+      - id
+      - farm_id
+      - full_name
+      - preferred_language
+      - consent_marketing
+      title: VisitorProfileOut
   securitySchemes:
     HTTPBearer:
       type: http

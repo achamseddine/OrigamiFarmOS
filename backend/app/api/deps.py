@@ -56,6 +56,11 @@ require_diagnostic_role = require_roles(*DIAGNOSTIC_ROLES)
 require_finance_role = require_roles(*FINANCE_ROLES)
 require_manager_role = require_roles("owner", "manager")
 
+# Tech spec v0.6 §3 "Permissions and Roles" (Farm Visits & Agri-Tourism).
+require_visit_operations_role = require_roles("owner", "manager", "visitor_coordinator")
+require_cashier_role = require_roles("owner", "manager", "cashier")
+require_incident_report_role = require_roles("owner", "manager", "visitor_coordinator", "activity_staff")
+
 # Tech spec v0.5 REQ-MOU-001: "License-controlled module activated by a
 # super user per farm" — a super_user is a platform-level role, distinct
 # from the farm-scoped owner/manager/worker/vet/accountant roles above.
@@ -64,11 +69,17 @@ require_manager_role = require_roles("owner", "manager")
 require_super_user = require_roles(*SUPER_USER_ROLES)
 
 
+LICENSE_ACTIVE_STATUSES = {"active", "trial"}
+
+
 def require_module_license(module_code: str):
-    """Tech spec v0.5 REQ-MOU-001/008: every Mouneh read/write endpoint is
-    gated on the farm's module_licenses row being 'active' — deactivating
-    the module (super user only) immediately locks out the rest of the
-    module without deleting any data.
+    """Tech spec v0.5 REQ-MOU-001/008 and v0.6 RULE-VIS-001: every
+    module-gated read/write endpoint is gated on the farm's
+    module_licenses row being 'active' (or 'trial') — deactivating the
+    module (super user only) immediately locks out the rest of the
+    module without deleting any data. One generic license table backs
+    every licensed module (Mouneh, Visits, ...); `module_code` picks
+    which row to check.
     """
 
     def _check(
@@ -83,7 +94,7 @@ def require_module_license(module_code: str):
             )
             .one_or_none()
         )
-        if license_row is None or license_row.status != "active":
+        if license_row is None or license_row.status not in LICENSE_ACTIVE_STATUSES:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 f"The '{module_code}' module is not active for this farm. Ask a super user to activate it.",

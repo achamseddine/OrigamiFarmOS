@@ -20,8 +20,10 @@ from app.core.security import hash_password
 from app.db.base import Base, SessionLocal, engine
 from app.domain import models
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
+from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
+from app.visits.seed import seed_visits_demo_data
 
 FARM_ID = "farm-origami"
 
@@ -222,6 +224,8 @@ def seed_demo_data(db: Session) -> None:
 
     db.flush()
     seed_mouneh_demo_data(db, FARM_ID)
+    db.flush()
+    seed_visits_demo_data(db, FARM_ID)
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")

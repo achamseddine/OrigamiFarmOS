@@ -263,9 +263,11 @@ class TestSalesAndProfitability:
         r = client.get("/api/v1/mouneh/products/prod-makdous/profitability", headers=headers)
         assert r.status_code == 200
         body = r.json()
+        # 45 direct Mouneh sales + 2 sold through a Visits demo booking's
+        # farm-shop purchase (see app/visits/seed.py) — same underlying stock.
         assert body["units_produced"] == 98
-        assert body["units_sold"] == 45
-        assert body["units_remaining"] == 53
+        assert body["units_sold"] == 47
+        assert body["units_remaining"] == 51
         assert body["total_revenue"] > 0
         assert body["recommendation"] in {"continue_production", "slow_mover", "review_pricing"}
 
