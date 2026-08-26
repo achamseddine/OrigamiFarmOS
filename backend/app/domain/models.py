@@ -1,6 +1,6 @@
 """SQLAlchemy ORM models — one class per table in tech spec §9
 "Database Schema - MVP Tables". Kept engine-agnostic (plain String ids,
-generic JSON) so the same models work against SQLite (local/demo/tests)
+generic JSON) so the same models work against SQLite (local development/tests)
 and PostgreSQL (pilot/staging/production, see database/schema.sql for the
 authoritative PostgreSQL DDL).
 """

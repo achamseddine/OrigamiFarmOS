@@ -1,20 +1,27 @@
 import 'package:flutter/foundation.dart';
-import '../data/demo/demo_data.dart';
+import '../data/local/farm_read_service.dart';
 import '../data/local/farm_write_service.dart';
 import '../domain/entities/inventory.dart';
 import '../sync/sync_queue_controller.dart';
 
 class FeedProvider extends ChangeNotifier {
-  FeedProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
+  FeedProvider({required FarmWriteService writeService, required FarmReadService readService, required SyncQueueController syncQueue})
       : _writeService = writeService,
+        _readService = readService,
         _syncQueue = syncQueue,
-        _items = List.of(DemoData.feedInventory);
+        _items = [];
 
   final FarmWriteService _writeService;
+  final FarmReadService _readService;
   final SyncQueueController _syncQueue;
   List<InventoryItem> _items;
 
   List<InventoryItem> get items => List.unmodifiable(_items);
+
+  Future<void> load() async {
+    _items = await _readService.inventoryItems();
+    notifyListeners();
+  }
 
   Future<WriteResult> recordDistribution({
     required String itemId,

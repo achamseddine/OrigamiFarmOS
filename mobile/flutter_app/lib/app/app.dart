@@ -4,18 +4,10 @@ import 'package:provider/provider.dart';
 import '../core/i18n/locale_controller.dart';
 import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
-import '../data/local/demo_seed.dart';
+import '../data/local/farm_read_service.dart';
 import '../data/local/farm_write_service.dart';
-import '../features/animals/animal_status_screen.dart';
-import '../features/feed/feed_inventory_screen.dart';
-import '../features/finance/sales_finance_screen.dart';
-import '../features/health/health_intelligence_screen.dart';
-import '../features/morning/morning_briefing_screen.dart';
-import '../features/production/egg_production_screen.dart';
-import '../features/production/milk_production_screen.dart';
-import '../features/produce/produce_harvest_screen.dart';
+import '../features/live_data_screen.dart';
 import '../features/tasks/tasks_screen.dart';
-import '../features/settings/settings_screen.dart';
 import '../features/welcome/welcome_screen.dart';
 import '../providers/animals_provider.dart';
 import '../providers/feed_provider.dart';
@@ -28,15 +20,18 @@ class FarmOSApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final writeService = FarmWriteService();
+    final readService = FarmReadService();
 
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
         ChangeNotifierProvider(create: (_) => SyncQueueController()),
         Provider<FarmWriteService>.value(value: writeService),
+        Provider<FarmReadService>.value(value: readService),
         ChangeNotifierProxyProvider<SyncQueueController, TasksProvider>(
           create: (context) => TasksProvider(
             writeService: writeService,
+            readService: readService,
             syncQueue: context.read<SyncQueueController>(),
           ),
           update: (context, sync, previous) => previous!,
@@ -44,6 +39,7 @@ class FarmOSApp extends StatelessWidget {
         ChangeNotifierProxyProvider<SyncQueueController, AnimalsProvider>(
           create: (context) => AnimalsProvider(
             writeService: writeService,
+            readService: readService,
             syncQueue: context.read<SyncQueueController>(),
           ),
           update: (context, sync, previous) => previous!,
@@ -51,6 +47,7 @@ class FarmOSApp extends StatelessWidget {
         ChangeNotifierProxyProvider<SyncQueueController, FeedProvider>(
           create: (context) => FeedProvider(
             writeService: writeService,
+            readService: readService,
             syncQueue: context.read<SyncQueueController>(),
           ),
           update: (context, sync, previous) => previous!,
@@ -86,21 +83,23 @@ class _RootRouter extends StatefulWidget {
 
 class _RootRouterState extends State<_RootRouter> {
   bool _started = false;
-  bool _seeding = false;
+  bool _loading = false;
 
   Future<void> _start() async {
-    setState(() => _seeding = true);
+    setState(() => _loading = true);
     try {
-      await DemoSeed.ensureSeeded();
+      await Future.wait([
+        context.read<AnimalsProvider>().load(),
+        context.read<FeedProvider>().load(),
+        context.read<TasksProvider>().load(),
+      ]);
     } catch (_) {
-      // Local persistence is a progressive enhancement in this build —
-      // screens still render from the in-memory demo dataset if the
-      // platform's SQLite plugin is unavailable (e.g. certain CI/desktop
-      // test targets), matching the mock-data-first milestone (M3).
+      // The shell still opens with explicit empty states when SQLite is not
+      // available (for example in widget tests without platform channels).
     }
     if (!mounted) return;
     setState(() {
-      _seeding = false;
+      _loading = false;
       _started = true;
     });
   }
@@ -110,20 +109,20 @@ class _RootRouterState extends State<_RootRouter> {
     if (_started) {
       return const AppShell(
         screens: [
-          MorningBriefingScreen(),
-          AnimalStatusScreen(),
-          FeedInventoryScreen(),
-          MilkProductionScreen(),
-          EggProductionScreen(),
-          HealthIntelligenceScreen(),
-          ProduceHarvestScreen(),
-          SalesFinanceScreen(),
+          LiveDataScreen(section: LiveDataSection.overview),
+          LiveDataScreen(section: LiveDataSection.animals),
+          LiveDataScreen(section: LiveDataSection.inventory),
+          LiveDataScreen(section: LiveDataSection.milk),
+          LiveDataScreen(section: LiveDataSection.eggs),
+          LiveDataScreen(section: LiveDataSection.health),
+          LiveDataScreen(section: LiveDataSection.produce),
+          LiveDataScreen(section: LiveDataSection.finance),
           TasksScreen(),
-          SettingsScreen(),
+          LiveDataScreen(section: LiveDataSection.settings),
         ],
       );
     }
-    if (_seeding) {
+    if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return WelcomeScreen(onStart: _start);

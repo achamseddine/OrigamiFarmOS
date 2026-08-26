@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import '../data/demo/demo_data.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/farm_read_service.dart';
 import '../domain/entities/animal.dart';
 import '../sync/sync_queue_controller.dart';
 
@@ -10,18 +10,30 @@ import '../sync/sync_queue_controller.dart';
 /// projection so every screen reflects the change immediately — the same
 /// "save locally, update UI, sync later" flow described in tech spec §10.
 class AnimalsProvider extends ChangeNotifier {
-  AnimalsProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
+  AnimalsProvider({required FarmWriteService writeService, required FarmReadService readService, required SyncQueueController syncQueue})
       : _writeService = writeService,
+        _readService = readService,
         _syncQueue = syncQueue,
-        _animals = List.of(DemoData.animals);
+        _animals = [];
 
   final FarmWriteService _writeService;
+  final FarmReadService _readService;
   final SyncQueueController _syncQueue;
   List<Animal> _animals;
 
   List<Animal> get animals => List.unmodifiable(_animals);
 
-  Animal byId(String id) => _animals.firstWhere((a) => a.id == id, orElse: () => _animals.first);
+  Animal? byId(String id) {
+    for (final animal in _animals) {
+      if (animal.id == id) return animal;
+    }
+    return null;
+  }
+
+  Future<void> load() async {
+    _animals = await _readService.animals();
+    notifyListeners();
+  }
 
   Future<WriteResult> recordObservation({
     required String animalId,
@@ -29,7 +41,7 @@ class AnimalsProvider extends ChangeNotifier {
     required String quality,
     String? severity,
     String? notes,
-    String observerId = 'user-worker-1',
+    required String observerId,
   }) async {
     final result = await _writeService.recordObservation(
       entityType: 'animal',
@@ -53,6 +65,7 @@ class AnimalsProvider extends ChangeNotifier {
     required String destination,
   }) async {
     final animal = byId(animalId);
+    if (animal == null) return const WriteResult.fail('Unknown animal.');
     final result = await _writeService.recordMilk(
       animalId: animalId,
       session: session,
@@ -102,7 +115,7 @@ class AnimalsProvider extends ChangeNotifier {
     String? diagnosis,
     DateTime? withdrawalUntil,
     String? notes,
-    String responsibleUserId = 'user-vet-1',
+    required String responsibleUserId,
   }) async {
     final result = await _writeService.recordTreatment(
       entityType: 'animal',

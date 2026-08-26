@@ -18,14 +18,14 @@ class WriteResult {
 /// change" and therefore always writes both the domain row *and* an
 /// [FarmEvent] row in the same transaction — never one without the other.
 class FarmWriteService {
-  FarmWriteService({FarmDatabase? db, String farmId = 'farm-origami', String userId = 'user-rami'})
+  FarmWriteService({FarmDatabase? db, String? farmId, String? userId})
       : _db = db ?? FarmDatabase.instance,
         _farmId = farmId,
         _userId = userId;
 
   final FarmDatabase _db;
-  final String _farmId;
-  final String _userId;
+  final String? _farmId;
+  final String? _userId;
   static const _uuid = Uuid();
 
   Future<Database> get _database => _db.database;
@@ -61,6 +61,10 @@ class FarmWriteService {
     });
   }
 
+  WriteResult? get _missingIdentity => _farmId == null || _userId == null
+      ? const WriteResult.fail('Sign in before changing farm records.')
+      : null;
+
   // ------------------------------------------------------------ Observation
 
   /// Worker-facing capture. Constitution: "Workers record observations.
@@ -78,6 +82,7 @@ class FarmWriteService {
     String? severity,
     String? notes,
   }) async {
+    if (_missingIdentity case final error?) return error;
     if (entityId.isEmpty) {
       return const WriteResult.fail('entityRequired');
     }
@@ -126,6 +131,7 @@ class FarmWriteService {
     required bool isUnderWithdrawal,
     String? recordedBy,
   }) async {
+    if (_missingIdentity case final error?) return error;
     if (liters < 0) return const WriteResult.fail('valueMustBePositive');
     if (isUnderWithdrawal && destination == 'sold') {
       return const WriteResult.fail('Blocked: animal is under an active withdrawal period.');
@@ -168,6 +174,7 @@ class FarmWriteService {
     String? linkedEntityId,
     bool allowNegative = false,
   }) async {
+    if (_missingIdentity case final error?) return error;
     if (quantity <= 0) return const WriteResult.fail('valueMustBePositive');
     final db = await _database;
     final id = _uuid.v4();
@@ -221,6 +228,7 @@ class FarmWriteService {
     DateTime? withdrawalUntil,
     String? notes,
   }) async {
+    if (_missingIdentity case final error?) return error;
     if (medication.isEmpty || dose.isEmpty || route.isEmpty) {
       return const WriteResult.fail('Medication, dose and route are required.');
     }
@@ -264,6 +272,7 @@ class FarmWriteService {
   // -------------------------------------------------------------------- Move
 
   Future<WriteResult> moveAnimal({required String animalId, required String newLocation}) async {
+    if (_missingIdentity case final error?) return error;
     if (newLocation.trim().isEmpty) return const WriteResult.fail('entityRequired');
     final db = await _database;
     await db.transaction((txn) async {
@@ -283,6 +292,7 @@ class FarmWriteService {
   // ------------------------------------------------------------------- Tasks
 
   Future<WriteResult> updateTaskStatus({required String taskId, required String status}) async {
+    if (_missingIdentity case final error?) return error;
     final db = await _database;
     await db.transaction((txn) async {
       await txn.update('tasks', {'status': status}, where: 'id = ?', whereArgs: [taskId]);

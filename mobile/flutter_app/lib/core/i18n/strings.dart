@@ -8,7 +8,7 @@ import 'locale_controller.dart';
 /// translation is partial at first"), this covers navigation, KPI labels and
 /// every screen headline/section title. Deep mock-data content (animal
 /// names, evidence sentences) stays English-authored for now — translating
-/// generated demo narrative text is explicitly out of scope for a partial
+/// generated narrative text is explicitly out of scope for a partial
 /// first pass.
 class FarmStrings {
   FarmStrings._();
@@ -34,7 +34,6 @@ class FarmStrings {
     'welcomeSubline': "Here's what needs your attention today.",
     'morningSubline': "Here's what's happening on your farm today.",
     'startMyDay': 'Start My Day',
-    'viewDemoFarm': 'View Demo Farm',
     'kpiAnimals': 'Animals',
     'kpiMilkToday': 'Milk Today',
     'kpiEggsToday': 'Eggs Today',
@@ -270,7 +269,6 @@ class FarmStrings {
     'welcomeSubline': 'إليك ما يحتاج انتباهك اليوم.',
     'morningSubline': 'إليك ما يحدث في مزرعتك اليوم.',
     'startMyDay': 'ابدأ يومي',
-    'viewDemoFarm': 'عرض المزرعة التجريبية',
     'kpiAnimals': 'الحيوانات',
     'kpiMilkToday': 'الحليب اليوم',
     'kpiEggsToday': 'البيض اليوم',

@@ -8,13 +8,13 @@ import 'package:farmos/app/app.dart';
 // channel is registered, so the UI still renders. Run with
 // `flutter test` (see mobile/flutter_app/README.md).
 void main() {
-  testWidgets('Welcome screen shows the practical greeting and CTAs', (WidgetTester tester) async {
+  testWidgets('Welcome screen has no embedded farm identity', (WidgetTester tester) async {
     await tester.pumpWidget(const FarmOSApp());
     await tester.pump();
 
     expect(find.text('Start My Day'), findsOneWidget);
-    expect(find.text('View Demo Farm'), findsOneWidget);
-    expect(find.textContaining('Good Morning'), findsOneWidget);
+    expect(find.text('Origami FarmOS'), findsOneWidget);
+    expect(find.textContaining('Sample Farm'), findsNothing);
   });
 
   testWidgets('Start My Day navigates into the Morning Briefing shell', (WidgetTester tester) async {

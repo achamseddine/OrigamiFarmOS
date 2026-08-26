@@ -2,7 +2,7 @@
 --
 -- This is the authoritative DDL for pilot/staging/production deployments.
 -- The FastAPI backend's SQLAlchemy models (backend/app/domain/models.py)
--- are engine-agnostic and will also run against SQLite for local dev/demo
+-- are engine-agnostic and will also run against SQLite for local development
 -- and tests; this file documents the "real" PostgreSQL shape (UUIDs,
 -- TIMESTAMPTZ, JSONB, foreign keys, indexes) and is what
 -- database/migrations/ (Alembic) evolves going forward.

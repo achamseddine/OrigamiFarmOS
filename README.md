@@ -29,7 +29,7 @@ origami-farmos/
   Branding kit/                         Full Option C UI kit: mockup screenshots, tokens, icons, styleguide
   mobile/flutter_app/                   Tablet app (Flutter) — see mobile/flutter_app/README.md
   backend/                              API (FastAPI) — see backend/README.md
-  database/                             schema.sql (PostgreSQL DDL), migrations/ (Alembic), seed_demo_data.sql
+  database/                             schema.sql, migrations/, optional sample_data.sql and setup_with_sample_data.sql
   api/openapi.yaml                      Generated OpenAPI 3.1 spec for the backend
 ```
 
@@ -42,12 +42,11 @@ Please refer to the `handbook/` and `product/` directories for detailed informat
 * `product/MVP_SCOPE.md`: The defined scope for the Minimum Viable Product.
 * `product/TRACEABILITY.md`: Maps every tech-spec requirement to the code that implements it.
 
-To run the backend API (seeded demo data, no PostgreSQL required):
+To run the backend API with an empty local SQLite database:
 
 ```bash
 cd backend
 pip install -r requirements.txt
-python -m app.seed
 uvicorn app.main:app --reload
 ```
 
@@ -57,9 +56,8 @@ README's "Verification status" section).
 
 ## MVP Status
 
-This is the first tablet MVP build. All 10 Option C manager-demo screens
-are implemented in Flutter with the full brand theme, EN/AR + RTL support,
-and a real local-first write pipeline (SQLite + event log + sync queue)
+This tablet MVP uses database-backed empty states, the full brand theme,
+EN/AR + RTL support, and a local-first write pipeline (SQLite + event log + sync queue)
 for the core animal/task/feed workflows. The FastAPI backend implements
 every endpoint from the tech spec, a rule-based recommendation engine
 (6 rules, unit tested and wired end-to-end against real seeded data), and

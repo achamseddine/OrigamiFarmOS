@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import '../data/demo/demo_data.dart';
+import '../data/local/farm_read_service.dart';
 import '../data/local/farm_write_service.dart';
 import '../domain/entities/task.dart';
 import '../sync/sync_queue_controller.dart';
@@ -8,17 +8,24 @@ import '../sync/sync_queue_controller.dart';
 /// updates SQLite, writes an event, and queues a sync item (tech spec
 /// milestone M5 "core actions write events").
 class TasksProvider extends ChangeNotifier {
-  TasksProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
+  TasksProvider({required FarmWriteService writeService, required FarmReadService readService, required SyncQueueController syncQueue})
       : _writeService = writeService,
+        _readService = readService,
         _syncQueue = syncQueue,
-        _tasks = List.of(DemoData.todaysTasks);
+        _tasks = [];
 
   final FarmWriteService _writeService;
+  final FarmReadService _readService;
   final SyncQueueController _syncQueue;
   List<FarmTask> _tasks;
 
   List<FarmTask> get tasks => List.unmodifiable(_tasks);
   int get openCount => _tasks.where((t) => t.status != TaskStatus.done).length;
+
+  Future<void> load() async {
+    _tasks = await _readService.tasks();
+    notifyListeners();
+  }
 
   Future<void> toggle(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);
