@@ -45,6 +45,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(30))
+    department: Mapped[str | None] = mapped_column(String(30), nullable=True)
     language: Mapped[str] = mapped_column(String(5), default="en")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 

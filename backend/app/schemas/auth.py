@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.schemas.users import UserProfileOut
+
 
 class LoginRequest(BaseModel):
     email: str
@@ -9,19 +11,17 @@ class LoginRequest(BaseModel):
     device_id: str | None = None
 
 
-class UserOut(BaseModel):
-    id: str
-    farm_id: str
-    name: str
-    role: str
-    language: str
+# Kept as an alias so existing imports of `UserOut` from this module keep
+# working — the canonical definition now lives in schemas/users.py so
+# /auth/login, /auth/me and GET /users all return the exact same shape.
+UserOut = UserProfileOut
 
 
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in_minutes: int
-    user: UserOut
+    user: UserProfileOut
 
 
 class BootstrapResponse(BaseModel):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -10,6 +11,18 @@ from app.repositories.base import new_id, now, write_event
 from app.schemas.observations import ObservationCreate, ObservationOut
 
 router = APIRouter(prefix="/observations", tags=["observations"])
+
+
+@router.get("", response_model=list[ObservationOut])
+def list_observations(
+    farm_id: str, entity_type: str | None = None, entity_id: str | None = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)
+) -> list[models.Observation]:
+    stmt = select(models.Observation).where(models.Observation.farm_id == farm_id)
+    if entity_type:
+        stmt = stmt.where(models.Observation.entity_type == entity_type)
+    if entity_id:
+        stmt = stmt.where(models.Observation.entity_id == entity_id)
+    return list(db.scalars(stmt.order_by(models.Observation.observed_at.desc())))
 
 
 @router.post("", response_model=ObservationOut, status_code=status.HTTP_201_CREATED)

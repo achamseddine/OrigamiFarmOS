@@ -29,6 +29,7 @@ CREATE TABLE users (
     email          TEXT UNIQUE,
     password_hash  TEXT NOT NULL,
     role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user','visitor_coordinator','activity_staff','cashier')),
+    department     TEXT CHECK (department IN ('animals','produce','mouneh','visits')),
     language       TEXT NOT NULL DEFAULT 'en',
     active         BOOLEAN NOT NULL DEFAULT true
 );

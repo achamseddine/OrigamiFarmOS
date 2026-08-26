@@ -62,14 +62,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth
+      summary: Me
+      description: 'Lets the mobile app restore a session from its stored token on
+
+        relaunch ("log in once, stay logged in") without re-sending a
+
+        password — it just re-validates the bearer token and returns the
+
+        current profile.'
+      operationId: me_api_v1_auth_me_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileOut'
+      security:
+      - HTTPBearer: []
+  /api/v1/users:
+    get:
+      tags:
+      - users
+      summary: List Users
+      description: 'The farm''s staff roster — used by the manager''s Team screen
+        and by
+
+        the task-assignment picker. Always scoped to the caller''s own farm
+
+        (never accepts a farm_id param) so one account can never enumerate
+
+        another farm''s staff.'
+      operationId: list_users_api_v1_users_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/UserProfileOut'
+                type: array
+                title: Response List Users Api V1 Users Get
+      security:
+      - HTTPBearer: []
   /api/v1/farms/{farm_id}/bootstrap:
     get:
       tags:
       - farms
       summary: Bootstrap
-      description: "GET /farms/{farm_id}/bootstrap \u2014 initial local cache data\
-        \ (tech spec\n\xA712). The tablet writes this straight into SQLite on first\
-        \ login /\nwhen activating demo mode, per the offline-first flow in \xA710."
+      description: 'GET /farms/{farm_id}/bootstrap — initial local cache data (tech
+        spec
+
+        §12). The tablet writes this straight into SQLite on first login /
+
+        when activating demo mode, per the offline-first flow in §10.'
       operationId: bootstrap_api_v1_farms__farm_id__bootstrap_get
       security:
       - HTTPBearer: []
@@ -98,19 +149,38 @@ paths:
       tags:
       - sync
       summary: Push
-      description: "POST /sync/push \u2014 upload a batch of queued tablet writes.\n\
-        \nTech spec \xA714: \"Duplicate idempotency key must not create duplicate\n\
-        server record.\" Each item's `idempotency_key` is unique-constrained on\n\
-        `sync_queue`, so replaying a batch after a dropped connection is safe.\n\n\
-        Because every domain-row ID is generated client-side (a UUID, written\nonce\
-        \ by `FarmWriteService` and never reused), the server can accept\nentity IDs\
-        \ as-is with no remapping step \u2014 a deliberate simplification\nthat keeps\
-        \ this push endpoint correct without needing a second\nID-translation pass.\n\
-        \nThis build durably records every item (event + sync_queue row,\nidempotent)\
-        \ and materializes the common write types the tablet already\nproduces (observations,\
-        \ milk, tasks, feed transactions) back into\ntheir domain tables. Less common\
-        \ event types are still accepted and\nqueued/event-logged, ready for a same-shaped\
-        \ repository call to be\nadded \u2014 see README \"What remains\"."
+      description: 'POST /sync/push — upload a batch of queued tablet writes.
+
+
+        Tech spec §14: "Duplicate idempotency key must not create duplicate
+
+        server record." Each item''s `idempotency_key` is unique-constrained on
+
+        `sync_queue`, so replaying a batch after a dropped connection is safe.
+
+
+        Because every domain-row ID is generated client-side (a UUID, written
+
+        once by `FarmWriteService` and never reused), the server can accept
+
+        entity IDs as-is with no remapping step — a deliberate simplification
+
+        that keeps this push endpoint correct without needing a second
+
+        ID-translation pass.
+
+
+        This build durably records every item (event + sync_queue row,
+
+        idempotent) and materializes the common write types the tablet already
+
+        produces (observations, milk, tasks, feed transactions) back into
+
+        their domain tables. Less common event types are still accepted and
+
+        queued/event-logged, ready for a same-shaped repository call to be
+
+        added — see README "What remains".'
       operationId: push_api_v1_sync_push_post
       requestBody:
         content:
@@ -138,7 +208,7 @@ paths:
       tags:
       - sync
       summary: Pull
-      description: "GET /sync/pull \u2014 changes since `cursor` (tech spec \xA712)."
+      description: GET /sync/pull — changes since `cursor` (tech spec §12).
       operationId: pull_api_v1_sync_pull_get
       security:
       - HTTPBearer: []
@@ -174,6 +244,138 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncPullResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/sales:
+    get:
+      tags:
+      - sales
+      summary: List Sales
+      description: 'Read-only for now — every row here today comes from the Mouneh
+        and
+
+        Visits modules'' own sale-recording endpoints (`product_type` is
+
+        ''mouneh''/''visitor_retail''); a general manual sale-entry endpoint is
+
+        tracked as follow-on work, not yet built.'
+      operationId: list_sales_api_v1_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SaleOut'
+                title: Response List Sales Api V1 Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/expenses:
+    get:
+      tags:
+      - sales
+      summary: List Expenses
+      operationId: list_expenses_api_v1_expenses_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseOut'
+                title: Response List Expenses Api V1 Expenses Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/customers:
+    get:
+      tags:
+      - sales
+      summary: List Customers
+      operationId: list_customers_api_v1_customers_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomerOut'
+                title: Response List Customers Api V1 Customers Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/suppliers:
+    get:
+      tags:
+      - sales
+      summary: List Suppliers
+      operationId: list_suppliers_api_v1_suppliers_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierOut'
+                title: Response List Suppliers Api V1 Suppliers Get
         '422':
           description: Validation Error
           content:
@@ -264,6 +466,52 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/observations:
+    get:
+      tags:
+      - observations
+      summary: List Observations
+      operationId: list_observations_api_v1_observations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: entity_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Type
+      - name: entity_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ObservationOut'
+                title: Response List Observations Api V1 Observations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - observations
@@ -276,12 +524,14 @@ paths:
 
         role.'
       operationId: create_observation_api_v1_observations_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/ObservationCreate'
-        required: true
       responses:
         '201':
           description: Successful Response
@@ -295,8 +545,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      security:
-      - HTTPBearer: []
   /api/v1/tasks:
     get:
       tags:
@@ -320,6 +568,14 @@ paths:
           - type: string
           - type: 'null'
           title: Status Filter
+      - name: assigned_to
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
       responses:
         '200':
           description: Successful Response
@@ -340,6 +596,14 @@ paths:
       tags:
       - tasks
       summary: Create Task
+      description: '"Farm managers decide, assign and review; employees see and act
+        on
+
+        their own tasks" — a task assigned to someone other than the creator
+
+        requires a manager/owner; self-assigned tasks (a worker jotting down
+
+        their own reminder) need no special role.'
       operationId: create_task_api_v1_tasks_post
       security:
       - HTTPBearer: []
@@ -396,13 +660,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - tasks
+      summary: Delete Task
+      operationId: delete_task_api_v1_tasks__task_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: task_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Task Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed/transactions:
     post:
       tags:
       - feed
       summary: Create Feed Transaction
-      description: "Validation rule (tech spec \xA714): \"Inventory should not go\
-        \ negative\nwithout explicit override.\""
+      description: 'Validation rule (tech spec §14): "Inventory should not go negative
+
+        without explicit override."'
       operationId: create_feed_transaction_api_v1_feed_transactions_post
       requestBody:
         content:
@@ -426,29 +714,71 @@ paths:
       security:
       - HTTPBearer: []
   /api/v1/production/milk:
+    get:
+      tags:
+      - production
+      summary: List Milk Records
+      operationId: list_milk_records_api_v1_production_milk_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MilkRecordOut'
+                title: Response List Milk Records Api V1 Production Milk Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - production
       summary: Record Milk
-      description: "Validation rule (tech spec \xA714): \"Milk from an animal under\n\
-        withdrawal must show a hard warning or be blocked from sale\ndestination.\"\
-        \ This endpoint hard-blocks it, matching RULE-WITHDRAWAL\nin the recommendation\
-        \ engine."
+      description: 'Validation rule (tech spec §14): "Milk from an animal under
+
+        withdrawal must show a hard warning or be blocked from sale
+
+        destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
+
+        in the recommendation engine.'
       operationId: record_milk_api_v1_production_milk_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/MilkRecordCreate'
-        required: true
       responses:
         '201':
           description: Successful Response
           content:
             application/json:
               schema:
-                additionalProperties: true
                 type: object
+                additionalProperties: true
                 title: Response Record Milk Api V1 Production Milk Post
         '422':
           description: Validation Error
@@ -456,30 +786,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/eggs:
+    get:
+      tags:
+      - production
+      summary: List Egg Records
+      operationId: list_egg_records_api_v1_production_eggs_get
       security:
       - HTTPBearer: []
-  /api/v1/production/eggs:
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 30
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EggRecordOut'
+                title: Response List Egg Records Api V1 Production Eggs Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - production
       summary: Record Eggs
-      description: "Validation rule (tech spec \xA714): \"Sellable + broken + consumed\
-        \ +\nhatched + wasted cannot exceed total eggs.\""
+      description: 'Validation rule (tech spec §14): "Sellable + broken + consumed
+        +
+
+        hatched + wasted cannot exceed total eggs."'
       operationId: record_eggs_api_v1_production_eggs_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/EggRecordCreate'
-        required: true
       responses:
         '201':
           description: Successful Response
           content:
             application/json:
               schema:
-                additionalProperties: true
                 type: object
+                additionalProperties: true
                 title: Response Record Eggs Api V1 Production Eggs Post
         '422':
           description: Validation Error
@@ -487,28 +856,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/harvest:
+    get:
+      tags:
+      - production
+      summary: List Harvest Records
+      operationId: list_harvest_records_api_v1_production_harvest_get
       security:
       - HTTPBearer: []
-  /api/v1/production/harvest:
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 90
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HarvestRecordOut'
+                title: Response List Harvest Records Api V1 Production Harvest Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - production
       summary: Record Harvest
       operationId: record_harvest_api_v1_production_harvest_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/HarvestRecordCreate'
-        required: true
       responses:
         '201':
           description: Successful Response
           content:
             application/json:
               schema:
-                additionalProperties: true
                 type: object
+                additionalProperties: true
                 title: Response Record Harvest Api V1 Production Harvest Post
         '422':
           description: Validation Error
@@ -516,9 +922,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/health/treatments:
+    get:
+      tags:
+      - health
+      summary: List Treatments
+      description: 'Treatment rows aren''t farm-scoped directly (entity_type/entity_id
+
+        is generic) so this resolves the farm''s animal and flock ids first,
+
+        matching the same generic-entity pattern used in api/v1/animals.py.'
+      operationId: list_treatments_api_v1_health_treatments_get
       security:
       - HTTPBearer: []
-  /api/v1/health/treatments:
+      parameters:
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TreatmentOut'
+                title: Response List Treatments Api V1 Health Treatments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     post:
       tags:
       - health
@@ -529,20 +968,22 @@ paths:
 
         worker/accountant/read-only accounts before this body ever runs.'
       operationId: record_treatment_api_v1_health_treatments_post
+      security:
+      - HTTPBearer: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/TreatmentCreate'
-        required: true
       responses:
         '201':
           description: Successful Response
           content:
             application/json:
               schema:
-                additionalProperties: true
                 type: object
+                additionalProperties: true
                 title: Response Record Treatment Api V1 Health Treatments Post
         '422':
           description: Validation Error
@@ -550,17 +991,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
-      security:
-      - HTTPBearer: []
   /api/v1/recommendations:
     get:
       tags:
       - recommendations
       summary: List Recommendations
-      description: "GET /recommendations. By default re-evaluates every rule against\n\
-        current farm state first (`refresh=true`) so the list is always\nevidence-fresh,\
-        \ then returns what's stored \u2014 never generated without\npersisted evidence\
-        \ (CONSTITUTION.md)."
+      description: 'GET /recommendations. By default re-evaluates every rule against
+
+        current farm state first (`refresh=true`) so the list is always
+
+        evidence-fresh, then returns what''s stored — never generated without
+
+        persisted evidence (CONSTITUTION.md).'
       operationId: list_recommendations_api_v1_recommendations_get
       security:
       - HTTPBearer: []
@@ -615,10 +1057,13 @@ paths:
       tags:
       - recommendations
       summary: Decide Recommendation
-      description: "PATCH /recommendations/{id}/decision \u2014 accept/reject/postpone.\n\
-        Tech spec \xA715 lifecycle: \"Generated -> Reviewed -> Accepted/Rejected/\n\
-        Postponed -> Task Created -> Action Taken -> Outcome Recorded ->\nClosed.\"\
-        \ Every decision is itself an event, so the trail is never lost."
+      description: 'PATCH /recommendations/{id}/decision — accept/reject/postpone.
+
+        Tech spec §15 lifecycle: "Generated -> Reviewed -> Accepted/Rejected/
+
+        Postponed -> Task Created -> Action Taken -> Outcome Recorded ->
+
+        Closed." Every decision is itself an event, so the trail is never lost.'
       operationId: decide_recommendation_api_v1_recommendations__recommendation_id__decision_patch
       security:
       - HTTPBearer: []
@@ -653,10 +1098,14 @@ paths:
       tags:
       - reports
       summary: Morning Briefing
-      description: "Tech spec \xA716: \"Morning Briefing ... Local cache refresh on\
-        \ app open\nand after sync.\" Refreshing recommendations here (not just from\n\
-        GET /recommendations) means the briefing's priorities are current even\nif\
-        \ nothing else has called the recommendations endpoint yet today."
+      description: 'Tech spec §16: "Morning Briefing ... Local cache refresh on app
+        open
+
+        and after sync." Refreshing recommendations here (not just from
+
+        GET /recommendations) means the briefing''s priorities are current even
+
+        if nothing else has called the recommendations endpoint yet today.'
       operationId: morning_briefing_api_v1_morning_briefing_get
       security:
       - HTTPBearer: []
@@ -1678,9 +2127,11 @@ paths:
       tags:
       - visits
       summary: List Visitors
-      description: "RULE-VIS-010: visitor PII is permission-controlled \u2014 only\n\
-        visit-operations roles (owner/manager/visitor_coordinator) can list\nvisitor\
-        \ CRM records; nobody else gets a route to it in this router."
+      description: 'RULE-VIS-010: visitor PII is permission-controlled — only
+
+        visit-operations roles (owner/manager/visitor_coordinator) can list
+
+        visitor CRM records; nobody else gets a route to it in this router.'
       operationId: list_visitors_api_v1_visitors_get
       responses:
         '200':
@@ -2546,10 +2997,13 @@ components:
       required:
       - lines
       title: BatchConsumeRequest
-      description: "POST /mouneh/batches/{id}/consume \u2014 records actual raw-material\n\
-        usage and deducts it from raw-material stock. Can be called\nincrementally;\
-        \ completion (below) does not require this to have run\nfirst (it falls back\
-        \ to planned quantities)."
+      description: 'POST /mouneh/batches/{id}/consume — records actual raw-material
+
+        usage and deducts it from raw-material stock. Can be called
+
+        incrementally; completion (below) does not require this to have run
+
+        first (it falls back to planned quantities).'
     BatchConsumptionLine:
       properties:
         material_id:
@@ -2717,9 +3171,11 @@ components:
       - server_time
       - sync_cursor
       title: BootstrapResponse
-      description: "GET /farms/{farm_id}/bootstrap \u2014 initial local-cache payload\n\
-        (tech spec \xA712). The tablet stores this verbatim into SQLite on first\n\
-        login / demo activation."
+      description: 'GET /farms/{farm_id}/bootstrap — initial local-cache payload
+
+        (tech spec §12). The tablet stores this verbatim into SQLite on first
+
+        login / demo activation.'
     CostBreakdownOut:
       properties:
         material_cost:
@@ -2901,6 +3357,28 @@ components:
         entirely ad-hoc set of materials/components (used by the Product
 
         Builder wizard before the product is even saved).'
+    CustomerOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      title: CustomerOut
     EggRecordCreate:
       properties:
         flock_id:
@@ -2940,8 +3418,54 @@ components:
       - flock_id
       - total_eggs
       title: EggRecordCreate
-      description: "POST /production/eggs.\n\nValidation rule (tech spec \xA714):\
-        \ \"Sellable + broken + consumed +\nhatched + wasted cannot exceed total eggs.\""
+      description: 'POST /production/eggs.
+
+
+        Validation rule (tech spec §14): "Sellable + broken + consumed +
+
+        hatched + wasted cannot exceed total eggs."'
+    EggRecordOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        flock_id:
+          type: string
+          title: Flock Id
+        total_eggs:
+          type: integer
+          title: Total Eggs
+        sellable_eggs:
+          type: integer
+          title: Sellable Eggs
+        broken_eggs:
+          type: integer
+          title: Broken Eggs
+        consumed:
+          type: integer
+          title: Consumed
+        hatched:
+          type: integer
+          title: Hatched
+        wasted:
+          type: integer
+          title: Wasted
+        recorded_at:
+          type: string
+          format: date-time
+          title: Recorded At
+      type: object
+      required:
+      - id
+      - flock_id
+      - total_eggs
+      - sellable_eggs
+      - broken_eggs
+      - consumed
+      - hatched
+      - wasted
+      - recorded_at
+      title: EggRecordOut
     Evidence:
       properties:
         label:
@@ -2955,6 +3479,51 @@ components:
       - label
       - value
       title: Evidence
+    ExpenseOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        category:
+          type: string
+          title: Category
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        linked_entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Linked Entity Type
+        linked_entity_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Linked Entity Id
+        incurred_at:
+          type: string
+          format: date-time
+          title: Incurred At
+      type: object
+      required:
+      - id
+      - farm_id
+      - category
+      - amount
+      - currency
+      - incurred_at
+      title: ExpenseOut
     FeedTransactionCreate:
       properties:
         item_id:
@@ -2996,8 +3565,12 @@ components:
       - direction
       - quantity
       title: FeedTransactionCreate
-      description: "POST /feed/transactions.\n\nValidation rule (tech spec \xA714):\
-        \ \"Inventory should not go negative\nwithout explicit override.\""
+      description: 'POST /feed/transactions.
+
+
+        Validation rule (tech spec §14): "Inventory should not go negative
+
+        without explicit override."'
     HTTPValidationError:
       properties:
         detail:
@@ -3044,6 +3617,45 @@ components:
       - quantity
       title: HarvestRecordCreate
       description: POST /production/harvest.
+    HarvestRecordOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        field_id:
+          type: string
+          title: Field Id
+        product_name:
+          type: string
+          title: Product Name
+        quantity:
+          type: number
+          title: Quantity
+        unit:
+          type: string
+          title: Unit
+        waste_qty:
+          type: number
+          title: Waste Qty
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        recorded_at:
+          type: string
+          format: date-time
+          title: Recorded At
+      type: object
+      required:
+      - id
+      - field_id
+      - product_name
+      - quantity
+      - unit
+      - waste_qty
+      - recorded_at
+      title: HarvestRecordOut
     InventoryItemOut:
       properties:
         id:
@@ -3125,7 +3737,7 @@ components:
           type: integer
           title: Expires In Minutes
         user:
-          $ref: '#/components/schemas/UserOut'
+          $ref: '#/components/schemas/UserProfileOut'
       type: object
       required:
       - access_token
@@ -3168,10 +3780,55 @@ components:
       - session
       - liters
       title: MilkRecordCreate
-      description: "POST /production/milk.\n\nValidation rule (tech spec \xA714):\
-        \ \"Liters >= 0; destination sale blocked\nor hard-warned if withdrawal active.\"\
-        \ The hard block (not just a\nwarning) happens in services/production.py,\
-        \ which has access to the\nanimal's current withdrawal_until date."
+      description: 'POST /production/milk.
+
+
+        Validation rule (tech spec §14): "Liters >= 0; destination sale blocked
+
+        or hard-warned if withdrawal active." The hard block (not just a
+
+        warning) happens in services/production.py, which has access to the
+
+        animal''s current withdrawal_until date.'
+    MilkRecordOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        animal_id:
+          type: string
+          title: Animal Id
+        session:
+          type: string
+          title: Session
+        liters:
+          type: number
+          title: Liters
+        quality_status:
+          type: string
+          title: Quality Status
+        destination:
+          type: string
+          title: Destination
+        recorded_at:
+          type: string
+          format: date-time
+          title: Recorded At
+        recorded_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recorded By
+      type: object
+      required:
+      - id
+      - animal_id
+      - session
+      - liters
+      - quality_status
+      - destination
+      - recorded_at
+      title: MilkRecordOut
     ModuleLicenseOut:
       properties:
         id:
@@ -3730,9 +4387,14 @@ components:
       - observation_type
       - observer_id
       title: ObservationCreate
-      description: "POST /observations.\n\nConstitution: \"Workers record observations.\
-        \ Workers do not diagnose.\"\nThere is deliberately no `diagnosis` field here\
-        \ \u2014 see\nschemas/health.TreatmentCreate for the manager/vet-gated path."
+      description: 'POST /observations.
+
+
+        Constitution: "Workers record observations. Workers do not diagnose."
+
+        There is deliberately no `diagnosis` field here — see
+
+        schemas/health.TreatmentCreate for the manager/vet-gated path.'
     ObservationOut:
       properties:
         id:
@@ -4204,10 +4866,13 @@ components:
       - basis_unit
       - items
       title: RecipeCreate
-      description: "POST /mouneh/products/{id}/recipes. A new recipe call always creates\n\
-        a new *version* (never mutates a prior one \u2014 see tech spec's \"never\n\
-        overwrite historical batch records\" requirement, which extends to the\nBOM\
-        \ feeding those batches)."
+      description: 'POST /mouneh/products/{id}/recipes. A new recipe call always creates
+
+        a new *version* (never mutates a prior one — see tech spec''s "never
+
+        overwrite historical batch records" requirement, which extends to the
+
+        BOM feeding those batches).'
     RecipeItemCreate:
       properties:
         material_id:
@@ -4430,8 +5095,85 @@ components:
       - quantity
       - unit_price
       title: RetailSaleLine
-      description: "Either a plain inventory item (eggs, milk, produce) or a Mouneh\n\
-        finished-goods line \u2014 never both."
+      description: 'Either a plain inventory item (eggs, milk, produce) or a Mouneh
+
+        finished-goods line — never both.'
+    SaleOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        customer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Customer Id
+        product_type:
+          type: string
+          title: Product Type
+        product_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Label
+        quantity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+        payment_status:
+          type: string
+          title: Payment Status
+        sold_at:
+          type: string
+          format: date-time
+          title: Sold At
+      type: object
+      required:
+      - id
+      - farm_id
+      - product_type
+      - amount
+      - currency
+      - payment_status
+      - sold_at
+      title: SaleOut
+    SupplierOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      title: SupplierOut
     SyncItemResult:
       properties:
         idempotency_key:
@@ -4516,11 +5258,15 @@ components:
       - payload
       - client_created_at
       title: SyncPushItem
-      description: "One queued item from the tablet's local `sync_queue` table\n(tech\
-        \ spec \xA79/\xA710). `idempotency_key` prevents duplicate server\nrecords\
-        \ when the same batch is retried after a dropped connection\n(tech spec \xA7\
-        14: \"Duplicate idempotency key must not create duplicate\nserver record.\"\
-        )."
+      description: 'One queued item from the tablet''s local `sync_queue` table
+
+        (tech spec §9/§10). `idempotency_key` prevents duplicate server
+
+        records when the same batch is retried after a dropped connection
+
+        (tech spec §14: "Duplicate idempotency key must not create duplicate
+
+        server record.").'
     SyncPushRequest:
       properties:
         farm_id:
@@ -4736,12 +5482,93 @@ components:
       - route
       - responsible_user_id
       title: TreatmentCreate
-      description: "POST /health/treatments.\n\nManager/veterinarian-gated (Constitution:\
-        \ \"Veterinarians diagnose and\nprescribe\" \u2014 enforced by the `require_diagnostic_role`\
-        \ dependency in\napi/deps.py). Validation rule (tech spec \xA714): \"Medication,\
-        \ dose,\nroute, start date, responsible user, and withdrawal period are\n\
-        required where applicable.\""
-    UserOut:
+      description: 'POST /health/treatments.
+
+
+        Manager/veterinarian-gated (Constitution: "Veterinarians diagnose and
+
+        prescribe" — enforced by the `require_diagnostic_role` dependency in
+
+        api/deps.py). Validation rule (tech spec §14): "Medication, dose,
+
+        route, start date, responsible user, and withdrawal period are
+
+        required where applicable."'
+    TreatmentOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        diagnosis:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Diagnosis
+        medication:
+          type: string
+          title: Medication
+        dose:
+          type: string
+          title: Dose
+        route:
+          type: string
+          title: Route
+        start_at:
+          type: string
+          format: date-time
+          title: Start At
+        end_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: End At
+        withdrawal_until:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Withdrawal Until
+        vet_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Vet Id
+        responsible_user_id:
+          type: string
+          title: Responsible User Id
+        status:
+          type: string
+          title: Status
+        cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Cost
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - id
+      - entity_type
+      - entity_id
+      - medication
+      - dose
+      - route
+      - start_at
+      - responsible_user_id
+      - status
+      title: TreatmentOut
+    UserProfileOut:
       properties:
         id:
           type: string
@@ -4752,12 +5579,30 @@ components:
         name:
           type: string
           title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
         role:
           type: string
           title: Role
+        department:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
         language:
           type: string
           title: Language
+        active:
+          type: boolean
+          title: Active
       type: object
       required:
       - id
@@ -4765,7 +5610,22 @@ components:
       - name
       - role
       - language
-      title: UserOut
+      - active
+      title: UserProfileOut
+      description: 'Canonical user-facing shape — used by /auth/login, /auth/me, and
+
+        GET /users, so the mobile app has exactly one profile shape to parse
+
+        regardless of which endpoint produced it.
+
+
+        `department` (nullable) is a mobile-UI/task-assignment concern only —
+
+        it drives which nav entries an employee sees and who a task can be
+
+        assigned to for a given area; it never gates a backend permission
+
+        (that''s still `role`, checked by api/deps.py).'
     ValidationError:
       properties:
         loc:

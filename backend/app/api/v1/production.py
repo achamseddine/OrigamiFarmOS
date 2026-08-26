@@ -1,17 +1,54 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_event
-from app.schemas.production import EggRecordCreate, HarvestRecordCreate, MilkRecordCreate
+from app.schemas.production import EggRecordCreate, EggRecordOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
 router = APIRouter(prefix="/production", tags=["production"])
+
+
+@router.get("/milk", response_model=list[MilkRecordOut])
+def list_milk_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.MilkRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.MilkRecord)
+        .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
+        .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= cutoff)
+        .order_by(models.MilkRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/eggs", response_model=list[EggRecordOut])
+def list_egg_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.EggRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.EggRecord)
+        .join(models.Flock, models.Flock.id == models.EggRecord.flock_id)
+        .where(models.Flock.farm_id == farm_id, models.EggRecord.recorded_at >= cutoff)
+        .order_by(models.EggRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/harvest", response_model=list[HarvestRecordOut])
+def list_harvest_records(farm_id: str, days: int = 90, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.HarvestRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.HarvestRecord)
+        .join(models.Field, models.Field.id == models.HarvestRecord.field_id)
+        .where(models.Field.farm_id == farm_id, models.HarvestRecord.recorded_at >= cutoff)
+        .order_by(models.HarvestRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
 
 
 @router.post("/milk", status_code=status.HTTP_201_CREATED)

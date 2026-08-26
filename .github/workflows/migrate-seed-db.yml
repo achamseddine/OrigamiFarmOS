@@ -1,0 +1,60 @@
+name: Migrate & seed the production database
+
+# Manual trigger only — this must never run on a push. It applies Alembic
+# migrations and (optionally) the production seed script to a REAL
+# database, so it only runs when someone explicitly asks for it from the
+# Actions tab, with a database connection string that comes from a repo
+# secret and is never written to a file or committed anywhere.
+#
+# One-time setup: add a repository secret named PROD_DATABASE_URL with
+# the target database's connection string (Settings -> Secrets and
+# variables -> Actions -> New repository secret). This workflow only
+# reads that secret at run time; it is never logged (GitHub Actions
+# automatically masks a secret's value in the log output).
+#
+# The target database must also allow inbound connections from GitHub's
+# hosted-runner IP ranges — an Azure Postgres Flexible Server blocks all
+# public access by default, so its "Networking" settings need either
+# "Allow public access from any Azure service" or a firewall rule wide
+# enough to cover GitHub Actions' published IP ranges.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "What to run"
+        required: true
+        default: migrate_and_seed
+        type: choice
+        options:
+          - migrate_and_seed
+          - migrate_only
+          - seed_only
+
+jobs:
+  migrate-seed:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations
+        if: ${{ inputs.action == 'migrate_and_seed' || inputs.action == 'migrate_only' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: alembic -c alembic.ini upgrade head
+
+      - name: Seed the 5 real accounts (idempotent — skips if the farm already exists)
+        if: ${{ inputs.action == 'migrate_and_seed' || inputs.action == 'seed_only' }}
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          python -m app.seed_production
+          echo "::notice::Passwords were printed above, once. Save them now — this log is the only place they appear in plaintext. Consider deleting this run's log afterward (Actions run page -> ... -> Delete all logs) once you have them."
