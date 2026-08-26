@@ -103,7 +103,7 @@ class _CostPreviewTabState extends State<CostPreviewTab> {
                   if (breakdown.byproductCredit > 0) _costRow('Byproduct credit', -breakdown.byproductCredit),
                   const Divider(color: FarmColors.border),
                   _costRow('Total cost', breakdown.totalCost, bold: true),
-                  _costRow('Cost per ${product.outputUnit}', breakdown.unitCost, bold: true),
+                  _costRow('Cost per ${product!.outputUnit}', breakdown.unitCost, bold: true),
                 ],
               ),
             ),
