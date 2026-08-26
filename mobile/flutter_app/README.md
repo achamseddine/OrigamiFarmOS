@@ -248,9 +248,13 @@ ship as in-app backgrounds (§19, §24 anti-patterns table).
   written and cross-checked by hand with the same care (import
   resolution, const-context correctness, exact SQLite column-name
   matches against `database.dart`'s new tables, list-widget keys,
-  null-safety promotion scoping per closure) and validated against the
-  next GitHub Actions run of this workflow before being considered done —
-  see that run for the actual result.
+  null-safety promotion scoping per closure) and then verified against
+  a real GitHub Actions build: the first run caught one real error
+  (`opening_calendar_tab.dart` used `VisitOpeningCalendarDay` without
+  importing `domain/entities/visits.dart`, missed by hand review the
+  same way the Mouneh null-safety bug was), fixed in the next commit,
+  and the following run succeeded — producing an installable release
+  APK with all 10 Visits screens included.
 - **`sqflite`/`shared_preferences` calls fail gracefully with no platform
   channel** (e.g. certain CI/desktop test targets): `_RootRouter._start()`
   and `LocaleController._restore()` both catch and fall back rather than
