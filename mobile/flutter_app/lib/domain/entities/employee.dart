@@ -124,7 +124,7 @@ class Employee {
   /// permission list is empty by design rather than by omission.
   final bool fullAccess;
 
-  String get initials => name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase();
+  String get initials => name.trim().isEmpty ? '?' : name.trim().substring(0, 1).toUpperCase();
 
   ModulePermission? permissionFor(String moduleCode) {
     for (final p in permissions) {

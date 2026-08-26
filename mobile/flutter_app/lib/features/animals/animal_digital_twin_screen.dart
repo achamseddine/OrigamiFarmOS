@@ -210,6 +210,7 @@ class _ProfileColumn extends StatelessWidget {
         AnimalSpecies.horse => FarmIcon.horse,
         AnimalSpecies.layerHen || AnimalSpecies.turkey => FarmIcon.poultry,
         AnimalSpecies.duck => FarmIcon.duck,
+        AnimalSpecies.other => FarmIcon.barn,
       };
 }
 

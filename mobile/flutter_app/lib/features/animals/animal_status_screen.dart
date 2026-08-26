@@ -455,6 +455,8 @@ class _AnimalCard extends StatelessWidget {
       case AnimalSpecies.layerHen:
       case AnimalSpecies.turkey:
         return FarmIcon.poultry;
+      case AnimalSpecies.other:
+        return FarmIcon.barn;
       case AnimalSpecies.duck:
         return FarmIcon.duck;
     }

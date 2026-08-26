@@ -46,6 +46,7 @@ class AccessProvider extends ChangeNotifier {
   bool canCreate(String moduleCode) => _access.canCreate(moduleCode);
   bool canEdit(String moduleCode) => _access.canEdit(moduleCode);
   bool canDelete(String moduleCode) => _access.canDelete(moduleCode);
+  bool canAssign(String moduleCode) => _access.canAssign(moduleCode);
   bool get isFullAccess => _access.fullAccess;
 
   Future<void> load() async {

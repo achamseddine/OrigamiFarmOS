@@ -57,7 +57,7 @@ class _MyProfileDialogState extends State<_MyProfileDialog> {
                   decoration: const BoxDecoration(color: FarmColors.gold, shape: BoxShape.circle),
                   child: Center(
                     child: Text(
-                      user.name.trim().isEmpty ? '?' : user.name.trim().characters.first.toUpperCase(),
+                      user.name.trim().isEmpty ? '?' : user.name.trim().substring(0, 1).toUpperCase(),
                       style: FarmTypography.textTheme.titleLarge?.copyWith(color: FarmColors.ink),
                     ),
                   ),

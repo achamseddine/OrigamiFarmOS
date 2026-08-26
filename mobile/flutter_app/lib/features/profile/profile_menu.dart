@@ -31,7 +31,7 @@ class UserMenuButton extends StatelessWidget {
     final access = context.watch<AccessProvider>();
     final navigator = context.read<AppNavigator>();
     final name = user?.name ?? '?';
-    final initials = name.trim().isEmpty ? '?' : name.trim().characters.first.toUpperCase();
+    final initials = name.trim().isEmpty ? '?' : name.trim().substring(0, 1).toUpperCase();
     final isManager = access.isFullAccess || (user?.isManager ?? false);
 
     return PopupMenuButton<String>(
