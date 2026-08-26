@@ -4,6 +4,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/section_card.dart';
+import '../../domain/entities/visits.dart';
 import '../../providers/visits_provider.dart';
 
 const List<String> _kWeekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
