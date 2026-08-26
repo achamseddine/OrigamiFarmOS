@@ -26,6 +26,7 @@ enum FarmIcon {
   medicine,
   milkBottle,
   money,
+  people,
   poultry,
   pregnancy,
   qr,

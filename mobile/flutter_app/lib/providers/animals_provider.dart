@@ -85,35 +85,23 @@ class AnimalsProvider extends ChangeNotifier {
           'destination': destination,
         }));
     if (result.success) {
-      final index = _animals.indexWhere((a) => a.id == animalId);
-      if (index != -1) {
-        final current = _animals[index];
-        _animals[index] = Animal(
-          id: current.id,
-          tag: current.tag,
-          name: current.name,
-          species: current.species,
-          breed: current.breed,
-          sex: current.sex,
-          birthDate: current.birthDate,
-          status: current.status,
-          location: current.location,
-          healthScore: current.healthScore,
-          photoPath: current.photoPath,
-          pregnant: current.pregnant,
-          pregnancyDays: current.pregnancyDays,
-          lactating: current.lactating,
-          lactationCycle: current.lactationCycle,
-          underWithdrawalUntil: current.underWithdrawalUntil,
-          withdrawalReason: current.withdrawalReason,
-          milkTodayL: (current.milkTodayL ?? 0) + liters,
-          eggsToday: current.eggsToday,
-          weightKg: current.weightKg,
-          groupName: current.groupName,
-        );
-        notifyListeners();
-      }
+      _replace(animalId, (a) => a.copyWith(milkTodayL: (a.milkTodayL ?? 0) + liters));
     }
+    return result;
+  }
+
+  /// Registers a new animal (tech spec §13). Financial fields are dropped
+  /// server-side unless the caller also holds Finance.
+  Future<WriteResult> createAnimal(Map<String, dynamic> body) async {
+    final result = await _api.write(() => _api.post('/animals', body: body));
+    if (result.success) await load();
+    return result;
+  }
+
+  /// Full edit of an animal record (tech spec §12).
+  Future<WriteResult> updateAnimal(String animalId, Map<String, dynamic> body) async {
+    final result = await _api.write(() => _api.put('/animals/$animalId', body: body));
+    if (result.success) await load();
     return result;
   }
 
@@ -139,7 +127,14 @@ class AnimalsProvider extends ChangeNotifier {
           'notes': notes,
         }));
     if (result.success) {
-      _replace(animalId, (a) => _withStatus(a, status: AnimalHealthStatus.underTreatment, withdrawalUntil: withdrawalUntil));
+      _replace(
+        animalId,
+        (a) => a.copyWith(
+          status: AnimalHealthStatus.underTreatment,
+          underWithdrawalUntil: withdrawalUntil,
+          withdrawalReason: withdrawalUntil != null ? 'Medication' : null,
+        ),
+      );
     }
     return result;
   }
@@ -147,7 +142,7 @@ class AnimalsProvider extends ChangeNotifier {
   Future<WriteResult> moveAnimal({required String animalId, required String newLocation}) async {
     final result = await _api.write(() => _api.patch('/animals/$animalId', body: {'location_label': newLocation}));
     if (result.success) {
-      _replace(animalId, (a) => _withLocation(a, newLocation));
+      _replace(animalId, (a) => a.copyWith(location: newLocation));
     }
     return result;
   }
@@ -158,52 +153,4 @@ class AnimalsProvider extends ChangeNotifier {
     _animals[index] = transform(_animals[index]);
     notifyListeners();
   }
-
-  Animal _withStatus(Animal a, {required AnimalHealthStatus status, DateTime? withdrawalUntil}) => Animal(
-        id: a.id,
-        tag: a.tag,
-        name: a.name,
-        species: a.species,
-        breed: a.breed,
-        sex: a.sex,
-        birthDate: a.birthDate,
-        status: status,
-        location: a.location,
-        healthScore: a.healthScore,
-        photoPath: a.photoPath,
-        pregnant: a.pregnant,
-        pregnancyDays: a.pregnancyDays,
-        lactating: a.lactating,
-        lactationCycle: a.lactationCycle,
-        underWithdrawalUntil: withdrawalUntil ?? a.underWithdrawalUntil,
-        withdrawalReason: withdrawalUntil != null ? 'Medication' : a.withdrawalReason,
-        milkTodayL: a.milkTodayL,
-        eggsToday: a.eggsToday,
-        weightKg: a.weightKg,
-        groupName: a.groupName,
-      );
-
-  Animal _withLocation(Animal a, String newLocation) => Animal(
-        id: a.id,
-        tag: a.tag,
-        name: a.name,
-        species: a.species,
-        breed: a.breed,
-        sex: a.sex,
-        birthDate: a.birthDate,
-        status: a.status,
-        location: newLocation,
-        healthScore: a.healthScore,
-        photoPath: a.photoPath,
-        pregnant: a.pregnant,
-        pregnancyDays: a.pregnancyDays,
-        lactating: a.lactating,
-        lactationCycle: a.lactationCycle,
-        underWithdrawalUntil: a.underWithdrawalUntil,
-        withdrawalReason: a.withdrawalReason,
-        milkTodayL: a.milkTodayL,
-        eggsToday: a.eggsToday,
-        weightKg: a.weightKg,
-        groupName: a.groupName,
-      );
 }

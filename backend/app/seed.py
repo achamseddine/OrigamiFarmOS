@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core import permissions as perms
 from app.core.security import hash_password
 from app.db.base import Base, SessionLocal, engine
 from app.domain import models
@@ -49,15 +50,39 @@ def seed_demo_data(db: Session) -> None:
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
     db.add(farm)
 
+    # (id, name, email, role, department) — department drives the starting
+    # module responsibilities below; owner/manager need none (they hold
+    # every module implicitly, see api/deps.py).
     users = [
-        ("user-rami", "Rami Farah", "rami@origami.farm", "manager"),
-        ("user-owner", "Joseph Origami", "owner@origami.farm", "owner"),
-        ("user-vet-1", "Dr. Layla Haddad", "layla.vet@origami.farm", "veterinarian"),
-        ("user-worker-1", "Karim Youssef", "karim.worker@origami.farm", "worker"),
-        ("user-acct-1", "Nadine Saab", "nadine.acct@origami.farm", "accountant"),
+        ("user-rami", "Rami Farah", "rami@origami.farm", "manager", None),
+        ("user-owner", "Joseph Origami", "owner@origami.farm", "owner", None),
+        ("user-vet-1", "Dr. Layla Haddad", "layla.vet@origami.farm", "veterinarian", "animals"),
+        ("user-worker-1", "Karim Youssef", "karim.worker@origami.farm", "worker", "animals"),
+        ("user-acct-1", "Nadine Saab", "nadine.acct@origami.farm", "accountant", None),
     ]
-    for user_id, name, email, role in users:
-        db.add(models.User(id=user_id, farm_id=FARM_ID, name=name, email=email, password_hash=hash_password("farmos123"), role=role, language="en"))
+    for user_id, name, email, role, department in users:
+        db.add(
+            models.User(
+                id=user_id, farm_id=FARM_ID, name=name, email=email,
+                password_hash=hash_password("farmos123"), role=role, language="en",
+                department=department, job_title=role.replace("_", " ").title(),
+            )
+        )
+    db.flush()
+    for user_id, _name, _email, role, department in users:
+        if perms.is_full_access(role):
+            continue
+        codes = list(perms.BASELINE_EMPLOYEE_MODULES)
+        codes += [c for c in perms.DEPARTMENT_MODULE_PRESETS.get(department or "", ()) if c not in codes]
+        if role == "accountant":
+            codes += [perms.FINANCE, perms.SALES, perms.EXPENSES, perms.REPORTS]
+        for code in codes:
+            db.add(
+                models.UserModulePermission(
+                    id=new_id(), farm_id=FARM_ID, user_id=user_id, module_code=code,
+                    **{f"can_{a}": v for a, v in perms.DEFAULT_RESPONSIBILITY_GRANT.items()},
+                )
+            )
 
     suppliers = {
         "Al Mashreq": new_id(),

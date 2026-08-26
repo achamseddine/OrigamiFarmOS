@@ -29,10 +29,69 @@ CREATE TABLE users (
     email          TEXT UNIQUE,
     password_hash  TEXT NOT NULL,
     role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user','visitor_coordinator','activity_staff','cashier','mouneh_operator')),
+    -- A starting point for a new hire's module responsibilities only; the
+    -- authoritative answer to "what may this person do" is
+    -- user_module_permissions below, which is many-to-many by design.
     department     TEXT CHECK (department IN ('animals','produce','mouneh','visits')),
     language       TEXT NOT NULL DEFAULT 'en',
-    active         BOOLEAN NOT NULL DEFAULT true
+    active         BOOLEAN NOT NULL DEFAULT true,
+    -- Employee record (tech spec §8)
+    job_title          TEXT,
+    employment_status  TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','seasonal','suspended','ended')),
+    start_date         TIMESTAMPTZ,
+    photo_path         TEXT,
+    working_days       JSONB,
+    working_hours      TEXT,
+    notes              TEXT
 );
+
+-- The flexible User <-> Responsibility <-> Module relationship (tech spec
+-- §9/§11). One row per module an employee is responsible for, carrying the
+-- granular action flags for that module — so an employee can hold Animals
+-- with create+edit and Mouneh with view-only at the same time.
+-- Owners/managers hold no rows: the API grants them everything implicitly,
+-- so a farm is never locked out of its own data.
+CREATE TABLE user_module_permissions (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    user_id        UUID NOT NULL REFERENCES users(id),
+    module_code    TEXT NOT NULL,
+    can_view       BOOLEAN NOT NULL DEFAULT true,
+    can_create     BOOLEAN NOT NULL DEFAULT false,
+    can_edit       BOOLEAN NOT NULL DEFAULT false,
+    can_delete     BOOLEAN NOT NULL DEFAULT false,
+    can_approve    BOOLEAN NOT NULL DEFAULT false,
+    can_export     BOOLEAN NOT NULL DEFAULT false,
+    can_assign     BOOLEAN NOT NULL DEFAULT false,
+    can_configure  BOOLEAN NOT NULL DEFAULT false,
+    granted_by     UUID REFERENCES users(id),
+    granted_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, module_code)
+);
+CREATE INDEX idx_user_module_permissions_user ON user_module_permissions(user_id);
+
+-- Derived farm alerts backing the notification bell (tech spec §3). Rows
+-- are reconciled against live farm state on every read: a signal that stops
+-- being true stops being shown. entity_type/entity_id are what make a
+-- notification actionable — they are the record the tablet opens on tap.
+CREATE TABLE notifications (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id            UUID NOT NULL REFERENCES farms(id),
+    user_id            UUID REFERENCES users(id),   -- NULL = farm-wide
+    module_code        TEXT NOT NULL,
+    notification_type  TEXT NOT NULL,
+    title              TEXT NOT NULL,
+    description        TEXT,
+    priority           TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('critical','high','medium','low','info')),
+    entity_type        TEXT,
+    entity_id          UUID,
+    source_type        TEXT,
+    source_id          TEXT,
+    read_at            TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notifications_farm ON notifications(farm_id);
+CREATE INDEX idx_notifications_source ON notifications(farm_id, source_type, source_id);
 
 CREATE TABLE locations (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -79,6 +138,17 @@ CREATE TABLE animals (
     weight_kg          NUMERIC(8,2),
     group_name         TEXT,
     photo_path         TEXT,
+    -- Full Add-Animal record (tech spec §13): provenance, description and
+    -- the financial fields, which the API only writes for a caller who
+    -- also holds the Finance module.
+    acquisition_date   TIMESTAMPTZ,
+    acquisition_source TEXT,
+    sire_tag           TEXT,
+    dam_tag            TEXT,
+    color_markings     TEXT,
+    purchase_cost      NUMERIC(12,2),
+    current_value      NUMERIC(12,2),
+    notes              TEXT,
     active             BOOLEAN NOT NULL DEFAULT true,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -106,8 +176,49 @@ CREATE TABLE fields (
     area_unit              TEXT,
     stage                  TEXT,
     expected_harvest_date  TIMESTAMPTZ,
-    est_yield_kg           NUMERIC(10,2)
+    est_yield_kg           NUMERIC(10,2),
+    -- Add-Field record (tech spec §15)
+    field_code             TEXT,
+    location_label         TEXT,
+    soil_type              TEXT,
+    irrigation_method      TEXT,
+    status                 TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','fallow','retired')),
+    notes                  TEXT
 );
+
+-- Crop types are farm data, never a hard-coded list (tech spec §16): an
+-- authorized user adds whatever this farm actually grows.
+CREATE TABLE crops (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    name                TEXT NOT NULL,
+    category            TEXT,
+    default_cycle_days  INTEGER,
+    active              BOOLEAN NOT NULL DEFAULT true,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, name)
+);
+
+-- One planting of a crop in a field — what is actually growing where, so a
+-- harvest can be attributed to it (tech spec §16).
+CREATE TABLE crop_plantings (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                UUID NOT NULL REFERENCES farms(id),
+    field_id               UUID NOT NULL REFERENCES fields(id),
+    crop_id                UUID NOT NULL REFERENCES crops(id),
+    variety                TEXT,
+    planted_area           NUMERIC(10,2),
+    area_unit              TEXT,
+    planted_date           TIMESTAMPTZ,
+    expected_harvest_date  TIMESTAMPTZ,
+    expected_yield_kg      NUMERIC(10,2),
+    stage                  TEXT NOT NULL DEFAULT 'planted' CHECK (stage IN ('planted','growing','flowering','developing','ripening','mature','harvested')),
+    status                 TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','harvested','failed','cleared')),
+    notes                  TEXT,
+    created_by             UUID REFERENCES users(id),
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_crop_plantings_field ON crop_plantings(field_id);
 
 CREATE TABLE inventory_items (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -322,9 +433,16 @@ CREATE TABLE audit_log (
     entity_type    TEXT NOT NULL,
     entity_id      UUID NOT NULL,
     timestamp      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    metadata_json  JSONB NOT NULL DEFAULT '{}'::jsonb
+    metadata_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Tech spec §23: the log records the actual before/after values, so a
+    -- manager can read what changed, not just that something did.
+    module_code    TEXT,
+    summary        TEXT,
+    changes_json   JSONB,
+    device         TEXT
 );
 CREATE INDEX idx_audit_farm_time ON audit_log(farm_id, timestamp);
+CREATE INDEX idx_audit_entity ON audit_log(farm_id, entity_type, entity_id);
 
 -- ============================================================================
 -- Mouneh & Farm Product Processing module (tech spec v0.5 §3 "Core Data

@@ -102,6 +102,746 @@ paths:
                 title: Response List Users Api V1 Users Get
       security:
       - HTTPBearer: []
+  /api/v1/modules/catalog:
+    get:
+      tags:
+      - employees
+      summary: Module Catalog
+      description: "Every module the product has, with whether this farm's licence\
+        \ for\nit is active (tech spec \xA710 \u2014 modules can be switched off per\
+        \ farm's\nsubscription). Any signed-in user may read it; it describes the\n\
+        product, not the farm's data."
+      operationId: module_catalog_api_v1_modules_catalog_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/ModuleCatalogEntry'
+                type: array
+                title: Response Module Catalog Api V1 Modules Catalog Get
+      security:
+      - HTTPBearer: []
+  /api/v1/me/access:
+    get:
+      tags:
+      - employees
+      summary: My Access
+      operationId: my_access_api_v1_me_access_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyAccessOut'
+      security:
+      - HTTPBearer: []
+  /api/v1/employees:
+    get:
+      tags:
+      - employees
+      summary: List Employees
+      operationId: list_employees_api_v1_employees_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: include_inactive
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Inactive
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeDetailOut'
+                title: Response List Employees Api V1 Employees Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - employees
+      summary: Create Employee
+      operationId: create_employee_api_v1_employees_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{employee_id}:
+    get:
+      tags:
+      - employees
+      summary: Get Employee
+      operationId: get_employee_api_v1_employees__employee_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    patch:
+      tags:
+      - employees
+      summary: Update Employee
+      operationId: update_employee_api_v1_employees__employee_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    delete:
+      tags:
+      - employees
+      summary: Deactivate Employee
+      description: 'Deactivates rather than deletes: an employee''s name is attached
+        to
+
+        every record they ever entered, and the Constitution''s "history is
+
+        never silently deleted" applies to who did the work too.'
+      operationId: deactivate_employee_api_v1_employees__employee_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{employee_id}/permissions:
+    put:
+      tags:
+      - employees
+      summary: Set Employee Permissions
+      description: "Replaces the employee's whole responsibility set \u2014 send every\
+        \ module\nthey should hold, and anything omitted is revoked."
+      operationId: set_employee_permissions_api_v1_employees__employee_id__permissions_put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionSet'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notifications:
+    get:
+      tags:
+      - notifications
+      summary: List Notifications
+      operationId: list_notifications_api_v1_notifications_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: unread_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Unread Only
+      - name: module
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Module
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationsPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notifications/{notification_id}/read:
+    post:
+      tags:
+      - notifications
+      summary: Mark Read
+      operationId: mark_read_api_v1_notifications__notification_id__read_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Notification Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/notifications/read-all:
+    post:
+      tags:
+      - notifications
+      summary: Mark All Read
+      operationId: mark_all_read_api_v1_notifications_read_all_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Module
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Mark All Read Api V1 Notifications Read All Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/priorities:
+    get:
+      tags:
+      - priorities
+      summary: List Priorities
+      operationId: list_priorities_api_v1_priorities_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: module
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Module
+      - name: priority
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: critical | high | medium | low | info
+          title: Priority
+        description: critical | high | medium | low | info
+      - name: kind
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: alert | task
+          title: Kind
+        description: alert | task
+      - name: assignment
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: me | team | unassigned
+          title: Assignment
+        description: me | team | unassigned
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrioritiesPage'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/audit:
+    get:
+      tags:
+      - priorities
+      summary: List Audit Events
+      description: "Audit History (tech spec \xA723). Gated on Reports/view \u2014\
+        \ seeing who\nchanged what across the farm is a supervisory capability, not\
+        \ something\nevery employee holds by default."
+      operationId: list_audit_events_api_v1_audit_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: entity_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Type
+      - name: entity_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Id
+      - name: module
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Module
+      - name: user_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEventOut'
+                title: Response List Audit Events Api V1 Audit Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/fields:
+    post:
+      tags:
+      - agriculture
+      summary: Create Field
+      operationId: create_field_api_v1_fields_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/fields/{field_id}:
+    patch:
+      tags:
+      - agriculture
+      summary: Update Field
+      operationId: update_field_api_v1_fields__field_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: field_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Field Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FieldOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crops:
+    get:
+      tags:
+      - agriculture
+      summary: List Crops
+      operationId: list_crops_api_v1_crops_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: include_inactive
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Inactive
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CropOut'
+                title: Response List Crops Api V1 Crops Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - agriculture
+      summary: Create Crop
+      operationId: create_crop_api_v1_crops_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CropCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CropOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crops/{crop_id}:
+    delete:
+      tags:
+      - agriculture
+      summary: Archive Crop
+      operationId: archive_crop_api_v1_crops__crop_id__delete
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: crop_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Crop Id
+      responses:
+        '204':
+          description: Successful Response
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings:
+    get:
+      tags:
+      - agriculture
+      summary: List Plantings
+      operationId: list_plantings_api_v1_crop_plantings_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: field_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field Id
+      - name: active_only
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: true
+          title: Active Only
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CropPlantingOut'
+                title: Response List Plantings Api V1 Crop Plantings Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - agriculture
+      summary: Create Planting
+      operationId: create_planting_api_v1_crop_plantings_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CropPlantingCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CropPlantingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}:
+    patch:
+      tags:
+      - agriculture
+      summary: Update Planting
+      operationId: update_planting_api_v1_crop_plantings__planting_id__patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CropPlantingUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CropPlantingOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/harvest:
+    post:
+      tags:
+      - agriculture
+      summary: Record Daily Harvest
+      description: 'Records the day''s pick and moves the sellable part into real
+
+        inventory, so "168 kg ready for sale" on the Produce screen is stock
+
+        that exists rather than a number someone typed.'
+      operationId: record_daily_harvest_api_v1_harvest_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DailyHarvestCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DailyHarvestOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/farms/me:
     get:
       tags:
@@ -424,7 +1164,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - animals
+      summary: Create Animal
+      description: "Registers a new animal \u2014 the start of its digital twin (tech\
+        \ spec \xA713)."
+      operationId: create_animal_api_v1_animals_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/animals/{animal_id}:
+    put:
+      tags:
+      - animals
+      summary: Update Animal
+      description: "Full edit of an animal record (tech spec \xA712)."
+      operationId: update_animal_api_v1_animals__animal_id__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnimalOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
     patch:
       tags:
       - animals
@@ -2814,6 +3616,129 @@ paths:
       - HTTPBearer: []
 components:
   schemas:
+    AnimalCreate:
+      properties:
+        tag:
+          type: string
+          title: Tag
+        name:
+          type: string
+          title: Name
+        species:
+          type: string
+          title: Species
+        breed:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Breed
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        birth_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Birth Date
+        acquisition_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Acquisition Date
+        acquisition_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acquisition Source
+        sire_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sire Tag
+        dam_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dam Tag
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Weight Kg
+        color_markings:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color Markings
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        status:
+          type: string
+          title: Status
+          default: healthy
+        health_score:
+          type: integer
+          title: Health Score
+          default: 100
+        pregnant:
+          type: boolean
+          title: Pregnant
+          default: false
+        pregnancy_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pregnancy Days
+        lactating:
+          type: boolean
+          title: Lactating
+          default: false
+        lactation_cycle:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lactation Cycle
+        purchase_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Purchase Cost
+        current_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Current Value
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - tag
+      - name
+      - species
+      title: AnimalCreate
+      description: "The full Add-Animal record (tech spec \xA713). Only tag/name/species\n\
+        are required \u2014 a farmer standing in a barn should be able to register\n\
+        an animal in three fields and fill in the rest later."
     AnimalDigitalTwinOut:
       properties:
         id:
@@ -2900,6 +3825,51 @@ components:
           - type: string
           - type: 'null'
           title: Photo Path
+        acquisition_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Acquisition Date
+        acquisition_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acquisition Source
+        sire_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sire Tag
+        dam_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dam Tag
+        color_markings:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color Markings
+        purchase_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Purchase Cost
+        current_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Current Value
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        active:
+          type: boolean
+          title: Active
+          default: true
         recent_observations:
           items:
             additionalProperties: true
@@ -3028,6 +3998,51 @@ components:
           - type: string
           - type: 'null'
           title: Photo Path
+        acquisition_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Acquisition Date
+        acquisition_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acquisition Source
+        sire_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sire Tag
+        dam_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dam Tag
+        color_markings:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color Markings
+        purchase_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Purchase Cost
+        current_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Current Value
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        active:
+          type: boolean
+          title: Active
+          default: true
       type: object
       required:
       - id
@@ -3040,6 +4055,200 @@ components:
       - pregnant
       - lactating
       title: AnimalOut
+    AnimalUpdate:
+      properties:
+        tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        species:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Species
+        breed:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Breed
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        birth_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Birth Date
+        acquisition_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Acquisition Date
+        acquisition_source:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Acquisition Source
+        sire_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sire Tag
+        dam_tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Dam Tag
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Weight Kg
+        color_markings:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Color Markings
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        health_score:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Health Score
+        pregnant:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Pregnant
+        pregnancy_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Pregnancy Days
+        lactating:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Lactating
+        lactation_cycle:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Lactation Cycle
+        purchase_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Purchase Cost
+        current_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Current Value
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Active
+      type: object
+      title: AnimalUpdate
+      description: "Full edit (tech spec \xA712). `location_label` is here too, so\
+        \ the\ndedicated Move action and a general edit share one code path."
+    AuditEventOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        user_id:
+          type: string
+          title: User Id
+        user_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: User Name
+        action:
+          type: string
+          title: Action
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        module_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Module Code
+        summary:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Summary
+        changes_json:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Changes Json
+        metadata_json:
+          additionalProperties: true
+          type: object
+          title: Metadata Json
+          default: {}
+        device:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Device
+        timestamp:
+          type: string
+          format: date-time
+          title: Timestamp
+      type: object
+      required:
+      - id
+      - user_id
+      - action
+      - entity_type
+      - entity_id
+      - timestamp
+      title: AuditEventOut
     BatchCompleteRequest:
       properties:
         actual_output_qty:
@@ -3453,6 +4662,216 @@ components:
         entirely ad-hoc set of materials/components (used by the Product
 
         Builder wizard before the product is even saved).'
+    CropCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        default_cycle_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Cycle Days
+      type: object
+      required:
+      - name
+      title: CropCreate
+      description: "Tech spec \xA716: crop types are farm data, never a hard-coded\
+        \ list."
+    CropOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        name:
+          type: string
+          title: Name
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Category
+        default_cycle_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Default Cycle Days
+        active:
+          type: boolean
+          title: Active
+      type: object
+      required:
+      - id
+      - name
+      - active
+      title: CropOut
+    CropPlantingCreate:
+      properties:
+        field_id:
+          type: string
+          title: Field Id
+        crop_id:
+          type: string
+          title: Crop Id
+        variety:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Variety
+        planted_area:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Planted Area
+        area_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Area Unit
+          default: m2
+        planted_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Planted Date
+        expected_harvest_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Harvest Date
+        expected_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Yield Kg
+        stage:
+          type: string
+          title: Stage
+          default: planted
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - field_id
+      - crop_id
+      title: CropPlantingCreate
+    CropPlantingOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        field_id:
+          type: string
+          title: Field Id
+        crop_id:
+          type: string
+          title: Crop Id
+        variety:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Variety
+        planted_area:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Planted Area
+        area_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Area Unit
+        planted_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Planted Date
+        expected_harvest_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Harvest Date
+        expected_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Yield Kg
+        stage:
+          type: string
+          title: Stage
+        status:
+          type: string
+          title: Status
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - field_id
+      - crop_id
+      - stage
+      - status
+      - created_at
+      title: CropPlantingOut
+    CropPlantingUpdate:
+      properties:
+        variety:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Variety
+        planted_area:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Planted Area
+        expected_harvest_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Harvest Date
+        expected_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Yield Kg
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: CropPlantingUpdate
     CustomerOut:
       properties:
         id:
@@ -3475,6 +4894,114 @@ components:
       - farm_id
       - name
       title: CustomerOut
+    DailyHarvestCreate:
+      properties:
+        field_id:
+          type: string
+          title: Field Id
+        planting_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Planting Id
+        crop_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Crop Id
+        product_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Name
+        total_quantity:
+          type: number
+          title: Total Quantity
+        sellable_quantity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Sellable Quantity
+        waste_quantity:
+          type: number
+          title: Waste Quantity
+          default: 0
+        unit:
+          type: string
+          title: Unit
+          default: kg
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        recorded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Recorded At
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - field_id
+      - total_quantity
+      title: DailyHarvestCreate
+      description: "Tech spec \xA717 \"How much was harvested today?\" \u2014 the\
+        \ sellable/waste\nsplit is the point: it is what makes waste and cost-per-kg\
+        \ real\nnumbers instead of estimates."
+    DailyHarvestOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        field_id:
+          type: string
+          title: Field Id
+        product_name:
+          type: string
+          title: Product Name
+        total_quantity:
+          type: number
+          title: Total Quantity
+        sellable_quantity:
+          type: number
+          title: Sellable Quantity
+        waste_quantity:
+          type: number
+          title: Waste Quantity
+        unit:
+          type: string
+          title: Unit
+        recorded_at:
+          type: string
+          format: date-time
+          title: Recorded At
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        inventory_qty_after:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Inventory Qty After
+      type: object
+      required:
+      - id
+      - field_id
+      - product_name
+      - total_quantity
+      - sellable_quantity
+      - waste_quantity
+      - unit
+      - recorded_at
+      title: DailyHarvestOut
     EggRecordCreate:
       properties:
         flock_id:
@@ -3558,6 +5085,259 @@ components:
       - wasted
       - recorded_at
       title: EggRecordOut
+    EmployeeCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        role:
+          type: string
+          title: Role
+          default: worker
+        department:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+        language:
+          type: string
+          title: Language
+          default: en
+        job_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Title
+        employment_status:
+          type: string
+          title: Employment Status
+          default: active
+        start_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Start Date
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        working_days:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Working Days
+        working_hours:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Working Hours
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        password:
+          type: string
+          title: Password
+        permissions:
+          items:
+            $ref: '#/components/schemas/ModulePermissionIn'
+          type: array
+          title: Permissions
+          default: []
+      type: object
+      required:
+      - name
+      - password
+      title: EmployeeCreate
+    EmployeeDetailOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        farm_id:
+          type: string
+          title: Farm Id
+        name:
+          type: string
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        role:
+          type: string
+          title: Role
+        department:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+        language:
+          type: string
+          title: Language
+        active:
+          type: boolean
+          title: Active
+        job_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Title
+        employment_status:
+          type: string
+          title: Employment Status
+        start_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Start Date
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        working_days:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Working Days
+        working_hours:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Working Hours
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        permissions:
+          items:
+            $ref: '#/components/schemas/ModulePermissionOut'
+          type: array
+          title: Permissions
+          default: []
+        full_access:
+          type: boolean
+          title: Full Access
+          default: false
+      type: object
+      required:
+      - id
+      - farm_id
+      - name
+      - role
+      - language
+      - active
+      - employment_status
+      title: EmployeeDetailOut
+    EmployeeUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+        phone:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Phone
+        role:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Role
+        department:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Department
+        language:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Language
+        job_title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Job Title
+        employment_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Employment Status
+        start_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Start Date
+        photo_path:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Photo Path
+        working_days:
+          anyOf:
+          - items:
+              type: string
+            type: array
+          - type: 'null'
+          title: Working Days
+        working_hours:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Working Hours
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        active:
+          anyOf:
+          - type: boolean
+          - type: 'null'
+          title: Active
+        password:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Password
+      type: object
+      title: EmployeeUpdate
+      description: "Every field optional \u2014 a PATCH only changes what it names."
     Evidence:
       properties:
         label:
@@ -3659,6 +5439,55 @@ components:
       title: FeedTransactionCreate
       description: "POST /feed/transactions.\n\nValidation rule (tech spec \xA714):\
         \ \"Inventory should not go negative\nwithout explicit override.\""
+    FieldCreate:
+      properties:
+        name:
+          type: string
+          title: Name
+        field_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field Code
+        area_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Area Value
+        area_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Area Unit
+          default: m2
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        soil_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Soil Type
+        irrigation_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Irrigation Method
+        status:
+          type: string
+          title: Status
+          default: active
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - name
+      title: FieldCreate
     FieldOut:
       properties:
         id:
@@ -3698,11 +5527,110 @@ components:
           - type: number
           - type: 'null'
           title: Est Yield Kg
+        field_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field Code
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        soil_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Soil Type
+        irrigation_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Irrigation Method
+        status:
+          type: string
+          title: Status
+          default: active
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
       type: object
       required:
       - id
       - name
       title: FieldOut
+    FieldUpdate:
+      properties:
+        name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Name
+        field_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Field Code
+        area_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Area Value
+        area_unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Area Unit
+        location_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Location Label
+        soil_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Soil Type
+        irrigation_method:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Irrigation Method
+        status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        crop_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Crop Type
+        stage:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Stage
+        expected_harvest_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Harvest Date
+        est_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Est Yield Kg
+      type: object
+      title: FieldUpdate
     HTTPValidationError:
       properties:
         detail:
@@ -3955,6 +5883,36 @@ components:
       - destination
       - recorded_at
       title: MilkRecordOut
+    ModuleCatalogEntry:
+      properties:
+        code:
+          type: string
+          title: Code
+        label_en:
+          type: string
+          title: Label En
+        label_ar:
+          type: string
+          title: Label Ar
+        group:
+          type: string
+          title: Group
+        license_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: License Code
+        licensed_active:
+          type: boolean
+          title: Licensed Active
+          default: true
+      type: object
+      required:
+      - code
+      - label_en
+      - label_ar
+      - group
+      title: ModuleCatalogEntry
     ModuleLicenseOut:
       properties:
         id:
@@ -4030,6 +5988,88 @@ components:
           title: Max Products
       type: object
       title: ModuleLicenseUpdate
+    ModulePermissionIn:
+      properties:
+        module_code:
+          type: string
+          title: Module Code
+        can_view:
+          type: boolean
+          title: Can View
+          default: true
+        can_create:
+          type: boolean
+          title: Can Create
+          default: false
+        can_edit:
+          type: boolean
+          title: Can Edit
+          default: false
+        can_delete:
+          type: boolean
+          title: Can Delete
+          default: false
+        can_approve:
+          type: boolean
+          title: Can Approve
+          default: false
+        can_export:
+          type: boolean
+          title: Can Export
+          default: false
+        can_assign:
+          type: boolean
+          title: Can Assign
+          default: false
+        can_configure:
+          type: boolean
+          title: Can Configure
+          default: false
+      type: object
+      required:
+      - module_code
+      title: ModulePermissionIn
+    ModulePermissionOut:
+      properties:
+        module_code:
+          type: string
+          title: Module Code
+        can_view:
+          type: boolean
+          title: Can View
+        can_create:
+          type: boolean
+          title: Can Create
+        can_edit:
+          type: boolean
+          title: Can Edit
+        can_delete:
+          type: boolean
+          title: Can Delete
+        can_approve:
+          type: boolean
+          title: Can Approve
+        can_export:
+          type: boolean
+          title: Can Export
+        can_assign:
+          type: boolean
+          title: Can Assign
+        can_configure:
+          type: boolean
+          title: Can Configure
+      type: object
+      required:
+      - module_code
+      - can_view
+      - can_create
+      - can_edit
+      - can_delete
+      - can_approve
+      - can_export
+      - can_assign
+      - can_configure
+      title: ModulePermissionOut
     MounehDashboardOut:
       properties:
         module_status:
@@ -4453,6 +6493,113 @@ components:
       - margin
       - sold_at
       title: MounehSaleOut
+    MyAccessOut:
+      properties:
+        user_id:
+          type: string
+          title: User Id
+        role:
+          type: string
+          title: Role
+        full_access:
+          type: boolean
+          title: Full Access
+        modules:
+          additionalProperties:
+            additionalProperties:
+              type: boolean
+            type: object
+          type: object
+          title: Modules
+      type: object
+      required:
+      - user_id
+      - role
+      - full_access
+      - modules
+      title: MyAccessOut
+      description: "What the signed-in user may do \u2014 the tablet builds its navigation\n\
+        and hides its action buttons from this."
+    NotificationOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        module_code:
+          type: string
+          title: Module Code
+        notification_type:
+          type: string
+          title: Notification Type
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        priority:
+          type: string
+          title: Priority
+        entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Type
+        entity_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Entity Id
+        source_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Type
+        source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Id
+        read_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Read At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+      type: object
+      required:
+      - id
+      - module_code
+      - notification_type
+      - title
+      - priority
+      - created_at
+      title: NotificationOut
+    NotificationsPage:
+      properties:
+        unread_count:
+          type: integer
+          title: Unread Count
+        total:
+          type: integer
+          title: Total
+        notifications:
+          items:
+            $ref: '#/components/schemas/NotificationOut'
+          type: array
+          title: Notifications
+      type: object
+      required:
+      - unread_count
+      - total
+      - notifications
+      title: NotificationsPage
     ObservationCreate:
       properties:
         farm_id:
@@ -4660,6 +6807,127 @@ components:
       required:
       - weekday
       title: OpeningCalendarDayUpsert
+    PermissionSet:
+      properties:
+        permissions:
+          items:
+            $ref: '#/components/schemas/ModulePermissionIn'
+          type: array
+          title: Permissions
+      type: object
+      required:
+      - permissions
+      title: PermissionSet
+      description: 'Replaces an employee''s whole responsibility set in one call,
+        so the
+
+        tablet''s permission matrix can save exactly what it shows.'
+    PrioritiesPage:
+      properties:
+        total:
+          type: integer
+          title: Total
+        counts_by_priority:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Counts By Priority
+        counts_by_module:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Counts By Module
+        priorities:
+          items:
+            $ref: '#/components/schemas/PriorityOut'
+          type: array
+          title: Priorities
+      type: object
+      required:
+      - total
+      - counts_by_priority
+      - counts_by_module
+      - priorities
+      title: PrioritiesPage
+    PriorityOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        kind:
+          type: string
+          title: Kind
+        module_code:
+          type: string
+          title: Module Code
+        notification_type:
+          type: string
+          title: Notification Type
+        title:
+          type: string
+          title: Title
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        priority:
+          type: string
+          title: Priority
+        status:
+          type: string
+          title: Status
+        entity_type:
+          type: string
+          title: Entity Type
+        entity_id:
+          type: string
+          title: Entity Id
+        source_type:
+          type: string
+          title: Source Type
+        source_id:
+          type: string
+          title: Source Id
+        due_at:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Due At
+        assigned_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To
+        assigned_to_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Assigned To Name
+        metadata:
+          additionalProperties: true
+          type: object
+          title: Metadata
+          default: {}
+      type: object
+      required:
+      - id
+      - kind
+      - module_code
+      - notification_type
+      - title
+      - priority
+      - status
+      - entity_type
+      - entity_id
+      - source_type
+      - source_id
+      title: PriorityOut
+      description: 'One actionable item in the Today''s Priorities feed. `entity_type`
+
+        and `entity_id` are what the tablet turns into a deep link, so every
+
+        card opens the record that produced it.'
     ProductProfitabilityOut:
       properties:
         product_id:

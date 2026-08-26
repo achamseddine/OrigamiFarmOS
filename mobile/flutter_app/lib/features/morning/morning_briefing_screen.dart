@@ -11,11 +11,17 @@ import '../../core/widgets/charts/line_trend_chart.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../app/app_navigator.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/inventory.dart';
 import '../../domain/entities/task.dart';
 import '../../providers/feed_provider.dart';
+import '../../providers/notifications_provider.dart';
 import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
+import '../navigation/entity_router.dart';
+import '../priorities/priorities_screen.dart';
+import '../priorities/priority_card.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
 /// (tech spec §2 "Morning first: default route after login is Morning
@@ -97,7 +103,7 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
           LayoutBuilder(builder: (context, constraints) {
             final wide = constraints.maxWidth > kTabletBreakpoint;
             final columns = <Widget>[
-              _PrioritiesCard(priorities: priorities),
+              const _PrioritiesCard(),
               Column(children: [_AnimalAlertsCard(priorities: priorities), const SizedBox(height: FarmSpacing.md), const _FeedWarningsCard()]),
               const Column(children: [_MilkTodayCard(), SizedBox(height: FarmSpacing.md), _EggProductionCard()]),
               const _TasksCard(),
@@ -184,29 +190,53 @@ FarmStatusLevel _levelForPriority(String priority) => switch (priority) {
       _ => FarmStatusLevel.good,
     };
 
+/// Today's Priorities (tech spec §4/§5).
+///
+/// Reads the live priority feed rather than the briefing's own snapshot,
+/// so every card carries the `entityType`/`entityId` that makes it
+/// tappable, and "Expand" opens the full filtered list.
 class _PrioritiesCard extends StatelessWidget {
-  const _PrioritiesCard({required this.priorities});
-  final List<Map<String, dynamic>> priorities;
+  const _PrioritiesCard();
 
   @override
   Widget build(BuildContext context) {
-    final top = priorities.take(4).toList();
+    final provider = context.watch<NotificationsProvider>();
+    final all = provider.priorities;
+    final top = all.take(4).toList();
+
     return SectionCard(
       title: context.t('todaysPriorities'),
+      subtitle: all.length > top.length ? '${all.length} ${context.t('itemsTotal')}' : null,
+      trailing: context.t('expand'),
+      onTrailingTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PrioritiesScreen()),
+      ),
       child: top.isEmpty
-          ? Text('No priorities right now.', style: FarmTypography.textTheme.bodySmall)
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                const AppIcon(FarmIcon.check, size: 18, color: FarmColors.success),
+                const SizedBox(width: 8),
+                Text(context.t('nothingNeedsAttention'), style: FarmTypography.textTheme.bodySmall),
+              ]),
+            )
           : Column(
               children: [
-                for (final rec in top) ...[
-                  AlertCard(
-                    icon: _iconForCategory(rec['category'] as String? ?? ''),
-                    title: rec['title'] as String? ?? '—',
-                    eyebrow: rec['entity_label'] as String?,
-                    level: _levelForPriority(rec['priority'] as String? ?? ''),
-                    onTap: () {},
-                  ),
+                for (final item in top) ...[
+                  PriorityCard(priority: item, dense: true),
                   const SizedBox(height: 8),
                 ],
+                if (all.length > top.length)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PrioritiesScreen()),
+                      ),
+                      icon: const Icon(Icons.open_in_full, size: 15),
+                      label: Text('${context.t('viewAll')} (${all.length})'),
+                    ),
+                  ),
               ],
             ),
     );
@@ -223,6 +253,7 @@ class _AnimalAlertsCard extends StatelessWidget {
     return SectionCard(
       title: context.t('animalAlerts'),
       trailing: context.t('viewAll'),
+      onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.animalHealth),
       child: animalAlerts.isEmpty
           ? Text('No animal alerts right now.', style: FarmTypography.textTheme.bodySmall)
           : Column(
@@ -233,6 +264,13 @@ class _AnimalAlertsCard extends StatelessWidget {
                     title: animalAlerts[i]['entity_label'] as String? ?? (animalAlerts[i]['title'] as String? ?? '—'),
                     level: _levelForPriority(animalAlerts[i]['priority'] as String? ?? ''),
                     evidence: [animalAlerts[i]['title'] as String? ?? ''],
+                    // The briefing's own priority rows are recommendations;
+                    // opening one shows the animal or record behind it.
+                    onTap: () => EntityRouter.openEntityOrExplain(
+                      context,
+                      'recommendation',
+                      animalAlerts[i]['id'] as String?,
+                    ),
                   ),
                   if (i != animalAlerts.length - 1) const SizedBox(height: 8),
                 ],
@@ -251,6 +289,7 @@ class _FeedWarningsCard extends StatelessWidget {
     return SectionCard(
       title: context.t('feedWarnings'),
       trailing: context.t('manageFeed'),
+      onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.feedNutrition),
       child: items.isEmpty
           ? Text('No feed warnings right now.', style: FarmTypography.textTheme.bodySmall)
           : AlertCard(
@@ -258,6 +297,7 @@ class _FeedWarningsCard extends StatelessWidget {
               title: 'Low feed: ${items.first.name}',
               level: items.first.status == StockStatus.critical ? FarmStatusLevel.alert : FarmStatusLevel.watch,
               evidence: ['${items.first.currentQty.toStringAsFixed(1)} ${items.first.unit} remaining', 'Reorder recommended'],
+              onTap: () => EntityRouter.openEntityOrExplain(context, 'inventory_item', items.first.id),
             ),
     );
   }

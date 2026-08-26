@@ -12,6 +12,12 @@ class Field {
     this.stage,
     this.expectedHarvestDate,
     this.estYieldKg,
+    this.fieldCode,
+    this.locationLabel,
+    this.soilType,
+    this.irrigationMethod,
+    this.status = 'active',
+    this.notes,
   });
 
   final String id;
@@ -22,6 +28,26 @@ class Field {
   final String? stage;
   final DateTime? expectedHarvestDate;
   final double? estYieldKg;
+  final String? fieldCode;
+  final String? locationLabel;
+  final String? soilType;
+  final String? irrigationMethod;
+  final String status;
+  final String? notes;
+
+  /// "4,200 m²" — the label the Produce screen shows under a field's name.
+  String? get areaLabel {
+    if (areaValue == null) return null;
+    final unit = switch (areaUnit) {
+      'm2' => 'm²',
+      'dunam' => 'dunam',
+      'hectare' => 'ha',
+      'acre' => 'ac',
+      _ => areaUnit ?? '',
+    };
+    final value = areaValue! % 1 == 0 ? areaValue!.toStringAsFixed(0) : areaValue!.toStringAsFixed(1);
+    return '$value $unit'.trim();
+  }
 
   factory Field.fromJson(Map<String, dynamic> json) => Field(
         id: json['id'] as String,
@@ -32,5 +58,11 @@ class Field {
         stage: json['stage'] as String?,
         expectedHarvestDate: json['expected_harvest_date'] != null ? DateTime.parse(json['expected_harvest_date'] as String) : null,
         estYieldKg: (json['est_yield_kg'] as num?)?.toDouble(),
+        fieldCode: json['field_code'] as String?,
+        locationLabel: json['location_label'] as String?,
+        soilType: json['soil_type'] as String?,
+        irrigationMethod: json['irrigation_method'] as String?,
+        status: json['status'] as String? ?? 'active',
+        notes: json['notes'] as String?,
       );
 }

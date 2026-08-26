@@ -6,7 +6,16 @@ AnimalHealthStatus _statusFromApi(String v) => switch (v) {
       _ => AnimalHealthStatus.healthy,
     };
 
-enum AnimalSpecies { cow, goat, sheep, horse, layerHen, duck, turkey }
+/// Dart's `.name` is camelCase and the backend's values are snake_case, so
+/// every enum crossing the wire goes through an explicit mapper. A silent
+/// mismatch here fails a Postgres CHECK constraint at write time.
+String animalStatusToApi(AnimalHealthStatus s) => switch (s) {
+      AnimalHealthStatus.healthy => 'healthy',
+      AnimalHealthStatus.underObservation => 'under_observation',
+      AnimalHealthStatus.underTreatment => 'under_treatment',
+    };
+
+enum AnimalSpecies { cow, goat, sheep, horse, layerHen, duck, turkey, other }
 
 AnimalSpecies _speciesFromApi(String v) => switch (v) {
       'goat' => AnimalSpecies.goat,
@@ -15,7 +24,19 @@ AnimalSpecies _speciesFromApi(String v) => switch (v) {
       'layer_hen' => AnimalSpecies.layerHen,
       'duck' => AnimalSpecies.duck,
       'turkey' => AnimalSpecies.turkey,
+      'other' => AnimalSpecies.other,
       _ => AnimalSpecies.cow,
+    };
+
+String animalSpeciesToApi(AnimalSpecies s) => switch (s) {
+      AnimalSpecies.cow => 'cow',
+      AnimalSpecies.goat => 'goat',
+      AnimalSpecies.sheep => 'sheep',
+      AnimalSpecies.horse => 'horse',
+      AnimalSpecies.layerHen => 'layer_hen',
+      AnimalSpecies.duck => 'duck',
+      AnimalSpecies.turkey => 'turkey',
+      AnimalSpecies.other => 'other',
     };
 
 extension AnimalSpeciesX on AnimalSpecies {
@@ -35,6 +56,8 @@ extension AnimalSpeciesX on AnimalSpecies {
         return 'Duck';
       case AnimalSpecies.turkey:
         return 'Turkey';
+      case AnimalSpecies.other:
+        return 'Other';
     }
   }
 }
@@ -63,6 +86,14 @@ class Animal {
     this.eggsToday,
     this.weightKg,
     this.groupName,
+    this.acquisitionDate,
+    this.acquisitionSource,
+    this.sireTag,
+    this.damTag,
+    this.colorMarkings,
+    this.purchaseCost,
+    this.currentValue,
+    this.notes,
   });
 
   final String id;
@@ -86,6 +117,17 @@ class Animal {
   final int? eggsToday;
   final double? weightKg;
   final String? groupName;
+  final DateTime? acquisitionDate;
+  final String? acquisitionSource;
+  final String? sireTag;
+  final String? damTag;
+  final String? colorMarkings;
+
+  /// Finance data: null for a user who does not hold the Finance module —
+  /// the backend omits it rather than the client hiding it.
+  final double? purchaseCost;
+  final double? currentValue;
+  final String? notes;
 
   bool get isUnderWithdrawal =>
       underWithdrawalUntil != null && underWithdrawalUntil!.isAfter(DateTime.now());
@@ -114,6 +156,56 @@ class Animal {
         withdrawalReason: json['withdrawal_reason'] as String?,
         weightKg: (json['weight_kg'] as num?)?.toDouble(),
         groupName: json['group_name'] as String?,
+        acquisitionDate: json['acquisition_date'] != null ? DateTime.parse(json['acquisition_date'] as String) : null,
+        acquisitionSource: json['acquisition_source'] as String?,
+        sireTag: json['sire_tag'] as String?,
+        damTag: json['dam_tag'] as String?,
+        colorMarkings: json['color_markings'] as String?,
+        purchaseCost: (json['purchase_cost'] as num?)?.toDouble(),
+        currentValue: (json['current_value'] as num?)?.toDouble(),
+        notes: json['notes'] as String?,
+      );
+
+  /// Copies with selected overrides. Every field is carried through by
+  /// name, so adding a column to [Animal] can never silently drop it from
+  /// an in-place update the way hand-written copies did.
+  Animal copyWith({
+    AnimalHealthStatus? status,
+    String? location,
+    double? milkTodayL,
+    DateTime? underWithdrawalUntil,
+    String? withdrawalReason,
+  }) =>
+      Animal(
+        id: id,
+        tag: tag,
+        name: name,
+        species: species,
+        breed: breed,
+        sex: sex,
+        birthDate: birthDate,
+        status: status ?? this.status,
+        location: location ?? this.location,
+        healthScore: healthScore,
+        photoPath: photoPath,
+        pregnant: pregnant,
+        pregnancyDays: pregnancyDays,
+        lactating: lactating,
+        lactationCycle: lactationCycle,
+        underWithdrawalUntil: underWithdrawalUntil ?? this.underWithdrawalUntil,
+        withdrawalReason: withdrawalReason ?? this.withdrawalReason,
+        milkTodayL: milkTodayL ?? this.milkTodayL,
+        eggsToday: eggsToday,
+        weightKg: weightKg,
+        groupName: groupName,
+        acquisitionDate: acquisitionDate,
+        acquisitionSource: acquisitionSource,
+        sireTag: sireTag,
+        damTag: damTag,
+        colorMarkings: colorMarkings,
+        purchaseCost: purchaseCost,
+        currentValue: currentValue,
+        notes: notes,
       );
 
   String get ageLabel {

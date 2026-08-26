@@ -133,3 +133,9 @@ class FieldOut(ORMModel):
     stage: str | None = None
     expected_harvest_date: datetime | None = None
     est_yield_kg: float | None = None
+    field_code: str | None = None
+    location_label: str | None = None
+    soil_type: str | None = None
+    irrigation_method: str | None = None
+    status: str = "active"
+    notes: str | None = None

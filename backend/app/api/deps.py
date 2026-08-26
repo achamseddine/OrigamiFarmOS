@@ -6,8 +6,10 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import permissions as perms
 from app.core.security import decode_access_token
 from app.db.base import get_db
 from app.domain import models
@@ -73,6 +75,71 @@ require_mouneh_operations_role = require_roles("owner", "manager", "mouneh_opera
 # Only a super_user may flip a farm's module license on or off; once
 # active, ordinary farm roles (manager/owner) operate the module.
 require_super_user = require_roles(*SUPER_USER_ROLES)
+
+
+# ---------------------------------------------------------------------------
+# Granular module permissions (tech spec §11)
+# ---------------------------------------------------------------------------
+def load_permission_map(db: Session, user: models.User) -> dict[str, dict[str, bool]]:
+    """Every module this user can touch, and what they may do in each.
+
+    An owner/manager gets the whole catalog with every action set — tech
+    spec §7, so a farm always has someone able to act. Everyone else gets
+    exactly the rows a manager granted them.
+    """
+    if perms.is_full_access(user.role):
+        return {code: {action: True for action in perms.ACTIONS} for code in perms.MODULE_CODES}
+
+    rows = db.scalars(
+        select(models.UserModulePermission).where(models.UserModulePermission.user_id == user.id)
+    ).all()
+    granted: dict[str, dict[str, bool]] = {}
+    for row in rows:
+        if row.module_code not in perms.MODULES_BY_CODE:
+            continue  # a module that no longer exists in the catalog
+        granted[row.module_code] = {
+            action: bool(getattr(row, perms.ACTION_COLUMNS[action])) for action in perms.ACTIONS
+        }
+    return granted
+
+
+def user_can(db: Session, user: models.User, module_code: str, action: str) -> bool:
+    if perms.is_full_access(user.role):
+        return True
+    row = db.scalars(
+        select(models.UserModulePermission).where(
+            models.UserModulePermission.user_id == user.id,
+            models.UserModulePermission.module_code == module_code,
+        )
+    ).one_or_none()
+    if row is None:
+        return False
+    return bool(getattr(row, perms.ACTION_COLUMNS[action], False))
+
+
+def require_permission(module_code: str, action: str = perms.VIEW):
+    """Endpoint gate: "a permission must be enforced both in the UI and
+    backend" — the tablet hides what you cannot do, and this makes sure
+    hiding it was not the only thing stopping you.
+    """
+    if module_code not in perms.MODULES_BY_CODE:
+        raise ValueError(f"Unknown module '{module_code}'")
+    if action not in perms.ACTIONS:
+        raise ValueError(f"Unknown action '{action}'")
+
+    def _check(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> models.User:
+        if not user_can(db, current_user, module_code, action):
+            label = perms.MODULES_BY_CODE[module_code].label_en
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"You do not have permission to {action} in {label}. Ask a farm manager to grant it.",
+            )
+        return current_user
+
+    return _check
 
 
 LICENSE_ACTIVE_STATUSES = {"active", "trial"}

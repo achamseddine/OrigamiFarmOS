@@ -58,6 +58,7 @@ class ApiClient {
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) => _send('GET', path, query: query);
   Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query}) => _send('POST', path, body: body, query: query);
   Future<dynamic> patch(String path, {Object? body}) => _send('PATCH', path, body: body);
+  Future<dynamic> put(String path, {Object? body}) => _send('PUT', path, body: body);
   Future<dynamic> delete(String path) => _send('DELETE', path);
 
   Future<dynamic> _send(String method, String path, {Object? body, Map<String, dynamic>? query}) async {
@@ -72,6 +73,8 @@ class ApiClient {
           response = await _http.post(uri, headers: _headers, body: encodedBody);
         case 'PATCH':
           response = await _http.patch(uri, headers: _headers, body: encodedBody);
+        case 'PUT':
+          response = await _http.put(uri, headers: _headers, body: encodedBody);
         case 'DELETE':
           response = await _http.delete(uri, headers: _headers);
         default:

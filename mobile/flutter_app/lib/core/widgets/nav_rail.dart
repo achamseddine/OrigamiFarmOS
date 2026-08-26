@@ -6,37 +6,14 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
-/// One row of the nav rail. Visibility (see `app/nav_config.dart`) is
-/// role/department-driven: an owner/manager always sees every entry;
-/// an employee sees only entries with `departments == null` (general,
-/// e.g. Tasks/Settings) or containing their own department. `managerOnly`
-/// entries (e.g. Sales & Finance, Morning Briefing's farm-wide view)
-/// never show for an employee, regardless of department.
+/// One row of the nav rail. Which rows a user gets is decided in
+/// `app/nav_config.dart` from their actual module permissions, so this is
+/// only what a row looks like — never who may see it.
 class NavEntry {
-  const NavEntry(this.icon, this.labelKey, {this.departments, this.managerOnly = false});
+  const NavEntry(this.icon, this.labelKey);
   final FarmIcon icon;
   final String labelKey;
-  final Set<String>? departments;
-  final bool managerOnly;
 }
-
-/// The master list — order here must match the screens list built in
-/// `app/app.dart` index-for-index; both are filtered together by the
-/// same predicate so they can never drift out of sync.
-const List<NavEntry> kNavEntries = [
-  NavEntry(FarmIcon.sun, 'navMorningBriefing', managerOnly: true),
-  NavEntry(FarmIcon.cow, 'navAnimals', departments: {'animals'}),
-  NavEntry(FarmIcon.feedBag, 'navFeedInventory', departments: {'animals'}),
-  NavEntry(FarmIcon.milkBottle, 'navMilk', departments: {'animals'}),
-  NavEntry(FarmIcon.egg, 'navEggs', departments: {'animals'}),
-  NavEntry(FarmIcon.stethoscope, 'navHealth', departments: {'animals'}),
-  NavEntry(FarmIcon.harvestBasket, 'navProduce', departments: {'produce'}),
-  NavEntry(FarmIcon.inventory, 'navMouneh', departments: {'mouneh'}),
-  NavEntry(FarmIcon.calendar, 'navVisits', departments: {'visits'}),
-  NavEntry(FarmIcon.money, 'navSales', managerOnly: true),
-  NavEntry(FarmIcon.task, 'navTasks'),
-  NavEntry(FarmIcon.settings, 'navSettings'),
-];
 
 /// Left navigation rail (tech spec §7 / component-spec.md "SidebarNav").
 class NavRail extends StatelessWidget {
@@ -48,8 +25,8 @@ class NavRail extends StatelessWidget {
     this.compact = false,
   });
 
-  /// The already role/department-filtered subset of [kNavEntries] to
-  /// show — see `app/nav_config.dart`.
+  /// The entries this user may see, already filtered by their module
+  /// permissions — see `app/nav_config.dart`.
   final List<NavEntry> entries;
   final int selectedIndex;
   final ValueChanged<int> onSelect;

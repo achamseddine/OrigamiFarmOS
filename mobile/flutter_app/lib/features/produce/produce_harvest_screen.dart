@@ -9,10 +9,13 @@ import '../../core/widgets/charts/bar_trend_chart.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/field.dart';
 import '../../domain/entities/production_records.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/production_provider.dart';
+import 'agriculture_forms.dart';
 
 /// Produce & Harvest is always-online now: [ProductionProvider] (fields +
 /// harvest history) and [FeedProvider] (the whole farm's generic inventory,
@@ -106,6 +109,10 @@ class ProduceHarvestScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: FarmSpacing.md),
+          // Tech spec §14: the agriculture employee's actions, each shown
+          // only to whoever holds the module behind it.
+          const _AgricultureActions(),
+          const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 900 ? 4 : 2;
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
@@ -186,6 +193,51 @@ class ProduceHarvestScreen extends StatelessWidget {
 }
 
 String _fmtQty(double qty) => qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1);
+
+/// The action row that turns this screen from a report into a workplace
+/// (tech spec §14). Recording the harvest is the primary action, so it is
+/// the filled button — it is what an agriculture employee does daily.
+class _AgricultureActions extends StatelessWidget {
+  const _AgricultureActions();
+
+  @override
+  Widget build(BuildContext context) {
+    final access = context.watch<AccessProvider>();
+    final canRecordHarvest = access.canCreate(FarmModule.produceHarvest);
+    final canManageFields = access.canCreate(FarmModule.agriculture);
+    if (!canRecordHarvest && !canManageFields) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        if (canRecordHarvest)
+          FilledButton.icon(
+            onPressed: () => showHarvestForm(context),
+            icon: const AppIcon(FarmIcon.harvestBasket, size: 17, color: FarmColors.white),
+            label: Text(context.t('recordHarvest')),
+          ),
+        if (canManageFields) ...[
+          OutlinedButton.icon(
+            onPressed: () => showFieldForm(context),
+            icon: const Icon(Icons.add, size: 17),
+            label: Text(context.t('addField')),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => showPlantingForm(context),
+            icon: const AppIcon(FarmIcon.leaf, size: 16),
+            label: Text(context.t('recordPlanting')),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => showCropForm(context),
+            icon: const Icon(Icons.local_florist_outlined, size: 17),
+            label: Text(context.t('addCropType')),
+          ),
+        ],
+      ],
+    );
+  }
+}
 
 class _FieldRow extends StatelessWidget {
   const _FieldRow({required this.field});

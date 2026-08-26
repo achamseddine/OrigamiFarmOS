@@ -7,14 +7,19 @@ import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
 import '../domain/entities/user_profile.dart';
 import '../features/auth/login_screen.dart';
+import '../providers/access_provider.dart';
+import '../providers/agriculture_provider.dart';
 import '../providers/animals_provider.dart';
+import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/mouneh_provider.dart';
+import '../providers/notifications_provider.dart';
 import '../providers/production_provider.dart';
 import '../providers/recommendations_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../providers/visits_provider.dart';
+import 'app_navigator.dart';
 import 'nav_config.dart';
 
 class FarmOSApp extends StatelessWidget {
@@ -48,10 +53,9 @@ class FarmOSApp extends StatelessWidget {
   }
 }
 
-/// No demo mode, no offline cache, and — per the "one-time login" design —
-/// no Welcome screen: [SessionController.restore] runs once at startup and
-/// this just reflects whatever it found (a still-valid saved token, or
-/// nothing, in which case [LoginScreen] is the entire landing page).
+/// One login, then straight to work. [SessionController.restore] runs once
+/// at startup, so a returning user goes to their dashboard without seeing
+/// this screen at all.
 class _RootRouter extends StatelessWidget {
   const _RootRouter();
 
@@ -69,11 +73,9 @@ class _RootRouter extends StatelessWidget {
   }
 }
 
-/// Everything behind the login — one farm-data provider tree per signed-in
-/// account. Keyed on the user's id so logging out and back in as a
-/// different account (e.g. handing the tablet to another employee) always
-/// rebuilds a fresh provider tree rather than reusing one that may still
-/// hold the previous account's data.
+/// Everything behind the login — one provider tree per signed-in account.
+/// Keyed on the user's id so handing the tablet to a colleague rebuilds
+/// the tree rather than leaving the previous account's data behind it.
 class _AuthenticatedApp extends StatelessWidget {
   const _AuthenticatedApp({super.key, required this.session});
   final SessionController session;
@@ -84,6 +86,11 @@ class _AuthenticatedApp extends StatelessWidget {
     final user = session.user!;
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AppNavigator()),
+        ChangeNotifierProvider(create: (_) => AccessProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => NotificationsProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => EmployeesProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => AgricultureProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => TasksProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
@@ -98,11 +105,12 @@ class _AuthenticatedApp extends StatelessWidget {
   }
 }
 
-/// Loads every farm-data provider once up front so the shell's screens can
-/// read from them synchronously (no per-screen loading spinners) — the
-/// same one-shot-then-cached shape [MounehProvider]/[VisitsProvider] have
-/// always used, just fanned out across the whole app now that there's no
-/// local database to seed instead.
+/// Loads the farm data once up front so screens can read it synchronously.
+///
+/// Permissions come first and alone: the navigation itself depends on
+/// them, and a module the user does not hold should not be fetched at all.
+/// The rest load together, and a module the user cannot see is skipped
+/// rather than fetched and discarded.
 class _DataLoader extends StatefulWidget {
   const _DataLoader({required this.user});
   final UserProfile user;
@@ -112,34 +120,70 @@ class _DataLoader extends StatefulWidget {
 }
 
 class _DataLoaderState extends State<_DataLoader> {
-  late final Future<void> _loadAll;
+  late final Future<void> _boot = _load();
 
-  @override
-  void initState() {
-    super.initState();
-    _loadAll = Future.wait([
-      context.read<TasksProvider>().load(includeRoster: widget.user.isManager),
-      context.read<AnimalsProvider>().load(),
-      context.read<FeedProvider>().load(),
-      context.read<ProductionProvider>().load(),
-      context.read<RecommendationsProvider>().load(),
-      context.read<SalesProvider>().load(),
-      context.read<MounehProvider>().load(),
-      context.read<VisitsProvider>().load(),
+  Future<void> _load() async {
+    final access = context.read<AccessProvider>();
+    await access.load();
+    if (!mounted) return;
+
+    // A failed module load must not take the whole app down with it — a
+    // farm with no Visits data should still get its animals.
+    Future<void> ifAllowed(String module, Future<void> Function() load) async {
+      if (!access.isModuleAvailable(module)) return;
+      try {
+        await load();
+      } catch (_) {
+        // Screens render their own empty/error state.
+      }
+    }
+
+    await Future.wait([
+      ifAllowed(FarmModuleShortcuts.tasks, () => context.read<TasksProvider>().load(includeRoster: access.isFullAccess)),
+      ifAllowed(FarmModuleShortcuts.animals, () => context.read<AnimalsProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.produce, () => context.read<ProductionProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.agriculture, () => context.read<AgricultureProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.ai, () => context.read<RecommendationsProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.finance, () => context.read<SalesProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.mouneh, () => context.read<MounehProvider>().load()),
+      ifAllowed(FarmModuleShortcuts.visits, () => context.read<VisitsProvider>().load()),
+      // The bell is for everyone: the backend already scopes its contents
+      // to the modules this user holds.
+      context.read<NotificationsProvider>().load(),
     ]);
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
-      future: _loadAll,
+      future: _boot,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
-        final nav = buildNavForUser(widget.user);
-        return AppShell(entries: nav.entries, screens: nav.screens);
+        final access = context.watch<AccessProvider>();
+        final plan = buildNavForAccess(access);
+        // Registered every build so the tab map follows a permission change
+        // (a manager granting themselves a module mid-session, say).
+        context.read<AppNavigator>().registerTabs(plan.moduleIndex);
+        return AppShell(entries: plan.entries, screens: plan.screens);
       },
     );
   }
+}
+
+/// The module codes `_DataLoader` gates each fetch on, named for the
+/// provider they belong to so the wiring above reads as a list of
+/// "load this if they can see it".
+class FarmModuleShortcuts {
+  static const tasks = 'tasks';
+  static const animals = 'animals';
+  static const feed = 'feed_nutrition';
+  static const produce = 'produce_harvest';
+  static const agriculture = 'agriculture';
+  static const ai = 'ai_intelligence';
+  static const finance = 'finance';
+  static const mouneh = 'mouneh_production';
+  static const visits = 'farm_visits';
 }

@@ -9,8 +9,11 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
 
 class AnimalStatusScreen extends StatefulWidget {
@@ -58,11 +61,22 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                   ],
                 ),
               ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.file_download_outlined, size: 18),
-                label: Text(context.t('exportReport')),
-              ),
+              // Tech spec §12: the Animals screen must not be read-only for
+              // whoever looks after the animals.
+              if (context.watch<AccessProvider>().canCreate(FarmModule.animals))
+                FilledButton.icon(
+                  onPressed: () => showAnimalForm(context),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(context.t('addAnimal')),
+                ),
+              if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export)) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: () {},
+                  icon: const Icon(Icons.file_download_outlined, size: 18),
+                  label: Text(context.t('exportReport')),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: FarmSpacing.md),
