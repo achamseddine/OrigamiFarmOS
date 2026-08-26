@@ -28,7 +28,7 @@ def _serialize(obj) -> dict:
 def bootstrap(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> BootstrapResponse:
     """GET /farms/{farm_id}/bootstrap — initial local cache data (tech spec
     §12). The tablet writes this straight into SQLite on first login /
-    when activating demo mode, per the offline-first flow in §10.
+    during first synchronization, per the offline-first flow in §10.
     """
     farm = db.get(models.Farm, farm_id)
     if farm is None:

@@ -19,7 +19,7 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Dev/demo convenience: create tables if they don't exist yet. Real
+    # Local-development convenience: create tables if they don't exist yet. Real
     # deployments use the Alembic migrations in database/migrations/.
     Base.metadata.create_all(bind=engine)
     yield

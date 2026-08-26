@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from app.db.base import Base, get_db
 from app.domain import models  # noqa: F401 - ensures all tables are registered on Base
 from app.main import app
-from app.seed import seed_demo_data
+from tests.sample_data import seed_test_data
 
 
 @pytest.fixture()
@@ -19,7 +19,7 @@ def db_session(tmp_path):
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
     session = TestingSessionLocal()
-    seed_demo_data(session)
+    seed_test_data(session)
     session.commit()
 
     try:

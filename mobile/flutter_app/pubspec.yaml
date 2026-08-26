@@ -32,8 +32,4 @@ flutter:
   assets:
     - assets/icons/
     - assets/logo/
-    # Reference copies of the original design-system data (not read by app
-    # code today — the i18n table lives in core/i18n/strings.dart and demo
-    # data in data/demo/demo_data.dart — kept bundled for provenance).
     - assets/i18n/
-    - assets/data/

@@ -123,7 +123,7 @@ class _SyncPill extends StatelessWidget {
                 const SizedBox(height: FarmSpacing.md),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Simulate offline (demo)'),
+                  title: const Text('Work offline'),
                   subtitle: const Text('Core workflows keep working with no connection.'),
                   value: !s.online,
                   onChanged: (offline) => s.setOnline(!offline),

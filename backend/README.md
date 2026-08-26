@@ -5,59 +5,38 @@ Offline-first, tablet-first farm operating system API. See the repo root
 product principles this API enforces, and `product/TRACEABILITY.md` for a
 requirement-by-requirement map to the code below.
 
-## Quick start (SQLite, no Postgres needed)
+## Quick start (empty local SQLite database)
 
 ```bash
 cd backend
-python3 -m venv .venv && source .venv/bin/activate   # optional but recommended
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-
-# Seed the Option C demo dataset (creates origami_farmos.db in this folder)
-python -m app.seed
-
-# Run the API
 uvicorn app.main:app --reload
 ```
 
-Open http://127.0.0.1:8000/docs for interactive OpenAPI docs, or import
-`api/openapi.yaml` (repo root) into your API client of choice.
-
-Demo login (from the seed data):
-
-| Email | Password | Role |
-|---|---|---|
-| `rami@origami.farm` | `farmos123` | manager |
-| `owner@origami.farm` | `farmos123` | owner |
-| `layla.vet@origami.farm` | `farmos123` | veterinarian |
-| `karim.worker@origami.farm` | `farmos123` | worker |
-| `nadine.acct@origami.farm` | `farmos123` | accountant |
-
-```bash
-curl -s -X POST http://127.0.0.1:8000/api/v1/auth/login \
-  -H 'content-type: application/json' \
-  -d '{"email":"rami@origami.farm","password":"farmos123"}'
-```
-
-Try `GET /api/v1/morning-briefing?farm_id=farm-origami` (with the returned
-bearer token) — it re-evaluates the rule engine against the seeded history
-and returns real, evidence-backed priorities (Bella's mastitis risk, the
-duck flock's egg drop, low Corn Silage/Layer Feed stock, Willow's
-withdrawal period, and the Field 2 harvest reminder — see
-`app/seed.py` for how each scenario's history was built).
+The API creates an empty `origami_farmos.db` for local development. Open
+http://127.0.0.1:8000/docs for the interactive OpenAPI documentation. No
+farm identity, user credentials, or operational records are embedded in the
+runtime.
 
 ## Running against PostgreSQL
 
 ```bash
-createdb origami_farmos
-psql origami_farmos -f ../database/schema.sql
-export DATABASE_URL=postgresql://USER:PASS@localhost:5432/origami_farmos
-python -m app.seed        # or: psql origami_farmos -f ../database/seed_demo_data.sql
+export DATABASE_URL=postgresql://USER:PASS@HOST:5432/origami_farmos
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-`database/schema.sql` and `database/seed_demo_data.sql` are both verified
-to apply cleanly to a real PostgreSQL 16 instance (including every CHECK
-constraint) as part of this build.
+For a disposable development database only, the repository also provides a
+convenience script that creates the schema and inserts a small, clearly
+labelled sample dataset:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f ../database/setup_with_sample_data.sql
+```
+
+Use Alembic (not the convenience script) for production and long-lived
+databases.
 
 ## Migrations (Alembic)
 
@@ -110,12 +89,11 @@ app/
   api/
     deps.py                  get_current_user, require_roles(...) RBAC dependencies
     v1/*.py                  One router per resource, matching tech spec §12's endpoint table
-  seed.py                    Idempotent demo-data seeder (also the tests' fixture data source)
 ```
 
 Engine-agnostic by design: `domain/models.py` uses plain `String` ids and
 `sqlalchemy.JSON` (not Postgres-specific `UUID`/`JSONB` types) so the exact
-same code runs against SQLite for local dev/demo/tests and PostgreSQL for
+same code runs against SQLite for local development/tests and PostgreSQL for
 pilot/staging/production. `database/schema.sql` is the hand-authored
 PostgreSQL-specific source of truth (proper `UUID`, `TIMESTAMPTZ`, `JSONB`,
 `CHECK` constraints) for environments that provision the database directly
@@ -148,7 +126,7 @@ caught and fixed by the test suite during development — see git history.
 - **Conflict resolution UI does not exist.** `SyncItemResult.status` distinguishes `accepted`/`duplicate`/`rejected`, satisfying REQ-SYNC-004's "conflicts must be visible", but there's no manager-facing conflict review screen yet (tracked as pilot-hardening work, tech spec milestone M9).
 - **No refresh-token flow.** `POST /auth/login` issues a single long-lived (8h default) access token; a refresh-token endpoint is straightforward follow-on work.
 - **No media/photo upload endpoint.** Matches the mobile app's `PhotoSlot` being a placeholder-only widget in this build.
-- **`GET /animals` search is a simple `ILIKE`**, not a full-text index — fine at demo/pilot scale, would want a proper index before commercial scale.
+- **`GET /animals` search is a simple `ILIKE`**, not a full-text index — fine at pilot scale, would want a proper index before commercial scale.
 
 ## Known limitations
 

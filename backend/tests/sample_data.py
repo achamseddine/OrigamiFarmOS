@@ -1,14 +1,7 @@
-"""Seeds the Origami Farms Option C demo dataset.
+"""Private fixture data used only by the backend test suite.
 
-Mirrors `mobile/flutter_app/lib/data/demo/demo_data.dart` so the tablet
-mock-data narrative and the backend's *computed* state agree, and adds
-enough small history (milk/feed/egg/treatment/observation rows) that the
-rule engine in app/recommendations/engine.py fires for real from that
-history rather than from hand-authored recommendation rows — see
-app/services/recommendation_service.py.
-
-Usage:
-    python -m app.seed            # seed into DATABASE_URL (creates tables first)
+The history is intentionally isolated under ``tests`` so application runtime
+and deployment packages do not expose a data-seeding command.
 """
 from __future__ import annotations
 
@@ -17,7 +10,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from app.core.security import hash_password
-from app.db.base import Base, SessionLocal, engine
 from app.domain import models
 from app.repositories.base import new_id
 
@@ -37,9 +29,9 @@ def _in_hours(h: float) -> datetime:
     return _now() + timedelta(hours=h)
 
 
-def seed_demo_data(db: Session) -> None:
+def seed_test_data(db: Session) -> None:
     if db.get(models.Farm, FARM_ID) is not None:
-        print("Demo data already present — skipping (delete the DB file to reseed).")
+        print("Test data already present — skipping (delete the DB file to reseed).")
         return
 
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
@@ -220,9 +212,3 @@ def seed_demo_data(db: Session) -> None:
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")
-
-
-if __name__ == "__main__":
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as session:
-        seed_demo_data(session)

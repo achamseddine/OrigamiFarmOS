@@ -27,7 +27,7 @@ class LoginResponse(BaseModel):
 class BootstrapResponse(BaseModel):
     """GET /farms/{farm_id}/bootstrap — initial local-cache payload
     (tech spec §12). The tablet stores this verbatim into SQLite on first
-    login / demo activation.
+    login / first synchronization.
     """
 
     farm: dict

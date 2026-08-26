@@ -65,7 +65,7 @@ class SyncQueueController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Demo/testing hook: simulate airplane mode (tech spec §20 "Offline
+  /// Testing hook: simulate airplane mode (tech spec §20 "Offline
   /// tests: airplane-mode workflow completion and later sync").
   void setOnline(bool value) {
     if (_online == value) return;
