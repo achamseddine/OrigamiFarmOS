@@ -10,9 +10,14 @@ from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_event
-from app.schemas.production import EggRecordCreate, EggRecordOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
+from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
 router = APIRouter(prefix="/production", tags=["production"])
+
+
+@router.get("/fields", response_model=list[FieldOut])
+def list_fields(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.Field]:
+    return list(db.scalars(select(models.Field).where(models.Field.farm_id == farm_id).order_by(models.Field.name)))
 
 
 @router.get("/milk", response_model=list[MilkRecordOut])

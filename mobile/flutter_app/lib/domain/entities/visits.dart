@@ -47,7 +47,20 @@ class VisitOpeningCalendarDay {
         defaultCapacity: defaultCapacity ?? this.defaultCapacity,
         notes: notes ?? this.notes,
       );
+
+  factory VisitOpeningCalendarDay.fromJson(Map<String, dynamic> json) => VisitOpeningCalendarDay(
+        weekday: json['weekday'] as int,
+        isOpen: json['is_open'] as bool? ?? false,
+        openTime: _shortTime(json['open_time'] as String?),
+        closeTime: _shortTime(json['close_time'] as String?),
+        defaultCapacity: json['default_capacity'] as int? ?? 0,
+        notes: json['notes'] as String?,
+      );
 }
+
+/// The backend serializes `time` fields as "HH:MM:SS" — trimmed to
+/// "HH:MM" here since every screen displays and edits them that way.
+String? _shortTime(String? raw) => raw != null && raw.length >= 5 ? raw.substring(0, 5) : raw;
 
 class VisitSession {
   const VisitSession({
@@ -80,6 +93,17 @@ class VisitSession {
         weatherNote: weatherNote ?? this.weatherNote,
         expectedStaffCost: expectedStaffCost ?? this.expectedStaffCost,
       );
+
+  factory VisitSession.fromJson(Map<String, dynamic> json) => VisitSession(
+        id: json['id'] as String,
+        date: DateTime.parse(json['date'] as String),
+        startTime: _shortTime(json['start_time'] as String) ?? '',
+        endTime: _shortTime(json['end_time'] as String) ?? '',
+        capacity: json['capacity'] as int,
+        status: json['status'] as String? ?? 'open',
+        weatherNote: json['weather_note'] as String?,
+        expectedStaffCost: (json['expected_staff_cost'] as num?)?.toDouble(),
+      );
 }
 
 /// A sellable bundled experience — created dynamically through the
@@ -102,6 +126,16 @@ class VisitPackage {
   final String currency;
   final int? durationMinutes;
   final bool active;
+
+  factory VisitPackage.fromJson(Map<String, dynamic> json) => VisitPackage(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        description: json['description'] as String?,
+        basePrice: (json['base_price'] as num?)?.toDouble() ?? 0,
+        currency: json['currency'] as String? ?? 'USD',
+        durationMinutes: json['duration_minutes'] as int?,
+        active: json['active'] as bool? ?? true,
+      );
 }
 
 /// An individual bookable activity — "Horse Ride" is only ever demo data
@@ -131,6 +165,19 @@ class VisitActivity {
   final String? requiresAnimalId;
   final int? maxUsesPerDay; // welfare_limit_json.max_uses_per_day, flattened for the mobile model
   final bool active;
+
+  factory VisitActivity.fromJson(Map<String, dynamic> json) => VisitActivity(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        activityType: json['activity_type'] as String? ?? 'other',
+        price: (json['price'] as num?)?.toDouble() ?? 0,
+        capacityPerSlot: json['capacity_per_slot'] as int? ?? 1,
+        durationMinutes: json['duration_minutes'] as int?,
+        requiresStaffRole: json['requires_staff_role'] as String?,
+        requiresAnimalId: json['requires_animal_id'] as String?,
+        maxUsesPerDay: (json['welfare_limit_json'] as Map<String, dynamic>?)?['max_uses_per_day'] as int?,
+        active: json['active'] as bool? ?? true,
+      );
 }
 
 class VisitorProfile {
@@ -151,6 +198,16 @@ class VisitorProfile {
   final String preferredLanguage;
   final String? notes;
   final bool consentMarketing;
+
+  factory VisitorProfile.fromJson(Map<String, dynamic> json) => VisitorProfile(
+        id: json['id'] as String,
+        fullName: json['full_name'] as String,
+        phone: json['phone'] as String?,
+        email: json['email'] as String?,
+        preferredLanguage: json['preferred_language'] as String? ?? 'en',
+        notes: json['notes'] as String?,
+        consentMarketing: json['consent_marketing'] as bool? ?? false,
+      );
 }
 
 class VisitBookingActivity {
@@ -175,6 +232,14 @@ class VisitBookingActivity {
         unitPrice: unitPrice,
         status: status ?? this.status,
       );
+
+  factory VisitBookingActivity.fromJson(Map<String, dynamic> json) => VisitBookingActivity(
+        activityId: json['activity_id'] as String,
+        scheduledAt: DateTime.parse(json['scheduled_at'] as String),
+        quantity: json['quantity'] as int? ?? 1,
+        unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
+        status: json['status'] as String? ?? 'scheduled',
+      );
 }
 
 /// A visitor reservation. Status transitions are validated by
@@ -196,7 +261,7 @@ class VisitBooking {
     this.source = 'manual',
     this.notes,
     this.activities = const [],
-    required this.createdAt,
+    this.createdAt,
     this.confirmedAt,
     this.checkedInAt,
     this.completedAt,
@@ -216,7 +281,7 @@ class VisitBooking {
   final String source;
   final String? notes;
   final List<VisitBookingActivity> activities;
-  final DateTime createdAt;
+  final DateTime? createdAt; // not exposed by the backend's VisitBookingOut — the API list is already ordered newest-first
   final DateTime? confirmedAt;
   final DateTime? checkedInAt;
   final DateTime? completedAt;
@@ -257,6 +322,26 @@ class VisitBooking {
         completedAt: completedAt ?? this.completedAt,
         cancelledAt: cancelledAt ?? this.cancelledAt,
       );
+
+  factory VisitBooking.fromJson(Map<String, dynamic> json) => VisitBooking(
+        id: json['id'] as String,
+        visitorId: json['visitor_id'] as String,
+        sessionId: json['session_id'] as String,
+        packageId: json['package_id'] as String,
+        status: json['status'] as String? ?? 'draft',
+        adults: json['adults'] as int? ?? 1,
+        children: json['children'] as int? ?? 0,
+        totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+        depositAmount: (json['deposit_amount'] as num?)?.toDouble() ?? 0,
+        balanceDue: (json['balance_due'] as num?)?.toDouble() ?? 0,
+        source: json['source'] as String? ?? 'manual',
+        notes: json['notes'] as String?,
+        activities: (json['activities'] as List<dynamic>? ?? []).map((e) => VisitBookingActivity.fromJson(e as Map<String, dynamic>)).toList(),
+        confirmedAt: json['confirmed_at'] != null ? DateTime.parse(json['confirmed_at'] as String) : null,
+        checkedInAt: json['checked_in_at'] != null ? DateTime.parse(json['checked_in_at'] as String) : null,
+        completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
+        cancelledAt: json['cancelled_at'] != null ? DateTime.parse(json['cancelled_at'] as String) : null,
+      );
 }
 
 class VisitStaffRosterEntry {
@@ -281,6 +366,21 @@ class VisitStaffRosterEntry {
   final String endTime;
   final double hourlyRate;
   final double totalCost;
+
+  /// [resolvedWorkerName] falls back to [workerId] when the roster lookup
+  /// can't resolve a name (the backend's VisitStaffRosterOut only stores
+  /// `worker_id`, not a display name).
+  factory VisitStaffRosterEntry.fromJson(Map<String, dynamic> json, {String? resolvedWorkerName}) => VisitStaffRosterEntry(
+        id: json['id'] as String,
+        sessionId: json['session_id'] as String,
+        workerId: json['worker_id'] as String,
+        workerName: resolvedWorkerName ?? json['worker_id'] as String,
+        role: json['role'] as String,
+        startTime: _shortTime(json['start_time'] as String) ?? '',
+        endTime: _shortTime(json['end_time'] as String) ?? '',
+        hourlyRate: (json['hourly_rate'] as num?)?.toDouble() ?? 0,
+        totalCost: (json['total_cost'] as num?)?.toDouble() ?? 0,
+      );
 }
 
 class VisitCost {
@@ -299,6 +399,15 @@ class VisitCost {
   final String? description;
   final double amount;
   final String allocationMethod;
+
+  factory VisitCost.fromJson(Map<String, dynamic> json) => VisitCost(
+        id: json['id'] as String,
+        sessionId: json['session_id'] as String,
+        category: json['category'] as String,
+        description: json['description'] as String?,
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        allocationMethod: json['allocation_method'] as String? ?? 'per_session',
+      );
 }
 
 class VisitRetailSale {
@@ -308,7 +417,7 @@ class VisitRetailSale {
     this.visitorId,
     required this.channel,
     required this.totalAmount,
-    required this.soldAt,
+    this.soldAt,
   });
 
   final String id;
@@ -316,7 +425,15 @@ class VisitRetailSale {
   final String? visitorId;
   final String channel;
   final double totalAmount;
-  final DateTime soldAt;
+  final DateTime? soldAt; // not exposed by the backend's retail-sale endpoints
+
+  factory VisitRetailSale.fromJson(Map<String, dynamic> json) => VisitRetailSale(
+        id: json['id'] as String,
+        bookingId: json['booking_id'] as String?,
+        visitorId: json['visitor_id'] as String?,
+        channel: json['channel'] as String? ?? 'farm_shop',
+        totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+      );
 }
 
 class VisitorFeedbackEntry {
@@ -335,6 +452,15 @@ class VisitorFeedbackEntry {
   final String? comments;
   final bool? wouldReturn;
   final DateTime submittedAt;
+
+  factory VisitorFeedbackEntry.fromJson(Map<String, dynamic> json) => VisitorFeedbackEntry(
+        id: json['id'] as String,
+        bookingId: json['booking_id'] as String,
+        rating: json['rating'] as int,
+        comments: json['comments'] as String?,
+        wouldReturn: json['would_return'] as bool?,
+        submittedAt: DateTime.parse(json['submitted_at'] as String),
+      );
 }
 
 class VisitIncident {
@@ -357,6 +483,17 @@ class VisitIncident {
   final String description;
   final String? actionTaken;
   final DateTime createdAt;
+
+  factory VisitIncident.fromJson(Map<String, dynamic> json) => VisitIncident(
+        id: json['id'] as String,
+        sessionId: json['session_id'] as String,
+        bookingId: json['booking_id'] as String?,
+        incidentType: json['incident_type'] as String,
+        severity: json['severity'] as String? ?? 'low',
+        description: json['description'] as String,
+        actionTaken: json['action_taken'] as String?,
+        createdAt: DateTime.parse(json['created_at'] as String),
+      );
 }
 
 /// Per-scope roll-up shown on the Profitability Report (tech spec v0.6 §9).

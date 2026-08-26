@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -10,6 +11,11 @@ from app.repositories.base import new_id, now, write_event
 from app.schemas.feed import FeedTransactionCreate, InventoryItemOut
 
 router = APIRouter(prefix="/feed", tags=["feed"])
+
+
+@router.get("/items", response_model=list[InventoryItemOut])
+def list_inventory_items(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.InventoryItem]:
+    return list(db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == farm_id).order_by(models.InventoryItem.name)))
 
 
 @router.post("/transactions", response_model=InventoryItemOut, status_code=status.HTTP_201_CREATED)

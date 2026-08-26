@@ -9,8 +9,12 @@ import '../theme/spacing.dart';
 /// Target width 1024–1366px landscape; below [kTabletBreakpoint] the rail
 /// collapses to icon-only so the shell still degrades gracefully.
 class AppShell extends StatefulWidget {
-  const AppShell({super.key, required this.screens, this.initialIndex = 0});
+  const AppShell({super.key, required this.entries, required this.screens, this.initialIndex = 0});
 
+  /// The role/department-filtered nav entries — index-aligned with
+  /// [screens] (see `app/nav_config.dart`, which builds both together so
+  /// they can't drift apart).
+  final List<NavEntry> entries;
   final List<Widget> screens;
   final int initialIndex;
 
@@ -32,6 +36,7 @@ class _AppShellState extends State<AppShell> {
         child: Row(
           children: [
             NavRail(
+              entries: widget.entries,
               selectedIndex: _index,
               compact: compact,
               onSelect: (i) => setState(() => _index = i),

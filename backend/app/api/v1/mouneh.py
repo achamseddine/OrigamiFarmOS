@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_manager_role, require_module_license
+from app.api.deps import get_current_user, require_module_license, require_mouneh_operations_role
 from app.db.base import get_db
 from app.domain import models, mouneh_models
 from app.mouneh import costing
@@ -71,7 +71,7 @@ def _write_event(
 def create_raw_material(
     payload: RawMaterialCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.RawMaterial:
     material = mouneh_models.RawMaterial(id=new_id(), farm_id=current_user.farm_id, **payload.model_dump())
     db.add(material)
@@ -114,7 +114,7 @@ def _product_or_404(db: Session, product_id: str, farm_id: str) -> mouneh_models
 def create_product(
     payload: MounehProductCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.MounehProduct:
     existing = db.scalars(
         select(mouneh_models.MounehProduct).where(
@@ -169,7 +169,7 @@ def update_product(
     product_id: str,
     payload: MounehProductUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.MounehProduct:
     product = _product_or_404(db, product_id, current_user.farm_id)
     changes = payload.model_dump(exclude_unset=True)
@@ -219,7 +219,7 @@ def create_recipe(
     product_id: str,
     payload: RecipeCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> dict:
     product = _product_or_404(db, product_id, current_user.farm_id)
 
@@ -368,7 +368,7 @@ def _batch_or_404(db: Session, batch_id: str, farm_id: str) -> mouneh_models.Pro
 def create_batch(
     payload: ProductionBatchCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.ProductionBatch:
     product = _product_or_404(db, payload.product_id, current_user.farm_id)
     recipe = mouneh_service.get_active_recipe(db, product.id)
@@ -445,7 +445,7 @@ def consume_batch_inputs(
     batch_id: str,
     payload: BatchConsumeRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.ProductionBatch:
     batch = _batch_or_404(db, batch_id, current_user.farm_id)
     if batch.status != "in_progress":
@@ -488,7 +488,7 @@ def complete_batch(
     batch_id: str,
     payload: BatchCompleteRequest,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.ProductionBatch:
     """REQ-MOU-005: "Batch completion consumes stock and creates finished
     goods." Any material never explicitly /consume'd is deducted here
@@ -595,7 +595,7 @@ def list_finished_goods(
 def record_sale(
     payload: MounehSaleCreate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_manager_role),
+    current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.MounehSaleLine:
     product = _product_or_404(db, payload.product_id, current_user.farm_id)
 

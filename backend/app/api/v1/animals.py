@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
-from app.schemas.animals import AnimalDigitalTwinOut, AnimalOut
+from app.repositories.base import write_event
+from app.schemas.animals import AnimalDigitalTwinOut, AnimalMove, AnimalOut
 
 router = APIRouter(prefix="/animals", tags=["animals"])
 
@@ -30,6 +31,26 @@ def list_animals(
         like = f"%{search.lower()}%"
         stmt = stmt.where((models.Animal.name.ilike(like)) | (models.Animal.tag.ilike(like)))
     return list(db.scalars(stmt.order_by(models.Animal.name)))
+
+
+@router.patch("/{animal_id}", response_model=AnimalOut)
+def move_animal(animal_id: str, payload: AnimalMove, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> models.Animal:
+    animal = db.get(models.Animal, animal_id)
+    if animal is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+    animal.location_label = payload.location_label
+    write_event(
+        db,
+        farm_id=animal.farm_id,
+        entity_type="animal",
+        entity_id=animal.id,
+        event_type="animal_moved",
+        payload={"location_label": payload.location_label},
+        created_by=current_user.id,
+    )
+    db.commit()
+    db.refresh(animal)
+    return animal
 
 
 @router.get("/{animal_id}", response_model=AnimalDigitalTwinOut)

@@ -115,3 +115,26 @@ class TestNewReadEndpoints:
             r = client.get(path, params={"farm_id": FARM_ID}, headers=headers)
             assert r.status_code == 200, f"{path}: {r.text}"
             assert isinstance(r.json(), list)
+
+    def test_list_fields(self, client: TestClient):
+        r = client.get("/api/v1/production/fields", params={"farm_id": FARM_ID}, headers=auth_headers(client))
+        assert r.status_code == 200, r.text
+        assert isinstance(r.json(), list)
+
+    def test_list_feed_items(self, client: TestClient):
+        r = client.get("/api/v1/feed/items", params={"farm_id": FARM_ID}, headers=auth_headers(client))
+        assert r.status_code == 200, r.text
+        assert len(r.json()) >= 1
+
+
+class TestMoveAnimal:
+    def test_manager_can_move_an_animal(self, client: TestClient):
+        headers = auth_headers(client)
+        animal = client.get("/api/v1/animals", params={"farm_id": FARM_ID}, headers=headers).json()[0]
+        r = client.patch(f"/api/v1/animals/{animal['id']}", json={"location_label": "South Barn"}, headers=headers)
+        assert r.status_code == 200, r.text
+        assert r.json()["location_label"] == "South Barn"
+
+    def test_move_unknown_animal_404s(self, client: TestClient):
+        r = client.patch("/api/v1/animals/not-a-real-id", json={"location_label": "Nowhere"}, headers=auth_headers(client))
+        assert r.status_code == 404

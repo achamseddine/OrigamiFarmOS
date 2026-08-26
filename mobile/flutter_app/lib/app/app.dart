@@ -1,82 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import '../auth/session_controller.dart';
 import '../core/i18n/locale_controller.dart';
 import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
-import '../data/local/demo_seed.dart';
-import '../data/local/farm_write_service.dart';
-import '../features/animals/animal_status_screen.dart';
-import '../features/feed/feed_inventory_screen.dart';
-import '../features/finance/sales_finance_screen.dart';
-import '../features/health/health_intelligence_screen.dart';
-import '../features/morning/morning_briefing_screen.dart';
-import '../features/mouneh/mouneh_module_screen.dart';
-import '../features/production/egg_production_screen.dart';
-import '../features/production/milk_production_screen.dart';
-import '../features/produce/produce_harvest_screen.dart';
-import '../features/tasks/tasks_screen.dart';
-import '../features/settings/settings_screen.dart';
-import '../features/visits/visits_module_screen.dart';
-import '../features/welcome/welcome_screen.dart';
-import '../mouneh/mouneh_write_service.dart';
+import '../domain/entities/user_profile.dart';
+import '../features/auth/login_screen.dart';
 import '../providers/animals_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/mouneh_provider.dart';
+import '../providers/production_provider.dart';
+import '../providers/recommendations_provider.dart';
+import '../providers/sales_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../providers/visits_provider.dart';
-import '../sync/sync_queue_controller.dart';
-import '../visits/visits_write_service.dart';
+import 'nav_config.dart';
 
 class FarmOSApp extends StatelessWidget {
   const FarmOSApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final writeService = FarmWriteService();
-
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
-        ChangeNotifierProvider(create: (_) => SyncQueueController()),
-        Provider<FarmWriteService>.value(value: writeService),
-        ChangeNotifierProxyProvider<SyncQueueController, TasksProvider>(
-          create: (context) => TasksProvider(
-            writeService: writeService,
-            syncQueue: context.read<SyncQueueController>(),
-          ),
-          update: (context, sync, previous) => previous!,
-        ),
-        ChangeNotifierProxyProvider<SyncQueueController, AnimalsProvider>(
-          create: (context) => AnimalsProvider(
-            writeService: writeService,
-            syncQueue: context.read<SyncQueueController>(),
-          ),
-          update: (context, sync, previous) => previous!,
-        ),
-        ChangeNotifierProxyProvider<SyncQueueController, FeedProvider>(
-          create: (context) => FeedProvider(
-            writeService: writeService,
-            syncQueue: context.read<SyncQueueController>(),
-          ),
-          update: (context, sync, previous) => previous!,
-        ),
-        ChangeNotifierProxyProvider<SyncQueueController, MounehProvider>(
-          create: (context) => MounehProvider(
-            writeService: MounehWriteService(),
-            syncQueue: context.read<SyncQueueController>(),
-          ),
-          update: (context, sync, previous) => previous!,
-        ),
-        ChangeNotifierProxyProvider3<SyncQueueController, FeedProvider, MounehProvider, VisitsProvider>(
-          create: (context) => VisitsProvider(
-            writeService: VisitsWriteService(),
-            syncQueue: context.read<SyncQueueController>(),
-            feedProvider: context.read<FeedProvider>(),
-            mounehProvider: context.read<MounehProvider>(),
-          ),
-          update: (context, sync, feed, mouneh, previous) => previous!,
-        ),
+        ChangeNotifierProvider(create: (_) => SessionController()..restore()),
       ],
       child: Consumer<LocaleController>(
         builder: (context, locale, _) {
@@ -99,57 +48,98 @@ class FarmOSApp extends StatelessWidget {
   }
 }
 
-class _RootRouter extends StatefulWidget {
+/// No demo mode, no offline cache, and — per the "one-time login" design —
+/// no Welcome screen: [SessionController.restore] runs once at startup and
+/// this just reflects whatever it found (a still-valid saved token, or
+/// nothing, in which case [LoginScreen] is the entire landing page).
+class _RootRouter extends StatelessWidget {
   const _RootRouter();
 
   @override
-  State<_RootRouter> createState() => _RootRouterState();
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    switch (session.status) {
+      case SessionStatus.checking:
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      case SessionStatus.loggedOut:
+        return const LoginScreen();
+      case SessionStatus.loggedIn:
+        return _AuthenticatedApp(key: ValueKey(session.user!.id), session: session);
+    }
+  }
 }
 
-class _RootRouterState extends State<_RootRouter> {
-  bool _started = false;
-  bool _seeding = false;
+/// Everything behind the login — one farm-data provider tree per signed-in
+/// account. Keyed on the user's id so logging out and back in as a
+/// different account (e.g. handing the tablet to another employee) always
+/// rebuilds a fresh provider tree rather than reusing one that may still
+/// hold the previous account's data.
+class _AuthenticatedApp extends StatelessWidget {
+  const _AuthenticatedApp({super.key, required this.session});
+  final SessionController session;
 
-  Future<void> _start() async {
-    setState(() => _seeding = true);
-    try {
-      await DemoSeed.ensureSeeded();
-    } catch (_) {
-      // Local persistence is a progressive enhancement in this build —
-      // screens still render from the in-memory demo dataset if the
-      // platform's SQLite plugin is unavailable (e.g. certain CI/desktop
-      // test targets), matching the mock-data-first milestone (M3).
-    }
-    if (!mounted) return;
-    setState(() {
-      _seeding = false;
-      _started = true;
-    });
+  @override
+  Widget build(BuildContext context) {
+    final api = session.apiClient;
+    final user = session.user!;
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => TasksProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
+        ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
+        ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
+        ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)),
+        ChangeNotifierProvider(create: (_) => RecommendationsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
+        ChangeNotifierProvider(create: (_) => SalesProvider(apiClient: api, farmId: user.farmId)),
+        ChangeNotifierProvider(create: (_) => MounehProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => VisitsProvider(apiClient: api)),
+      ],
+      child: _DataLoader(user: user),
+    );
+  }
+}
+
+/// Loads every farm-data provider once up front so the shell's screens can
+/// read from them synchronously (no per-screen loading spinners) — the
+/// same one-shot-then-cached shape [MounehProvider]/[VisitsProvider] have
+/// always used, just fanned out across the whole app now that there's no
+/// local database to seed instead.
+class _DataLoader extends StatefulWidget {
+  const _DataLoader({required this.user});
+  final UserProfile user;
+
+  @override
+  State<_DataLoader> createState() => _DataLoaderState();
+}
+
+class _DataLoaderState extends State<_DataLoader> {
+  late final Future<void> _loadAll;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAll = Future.wait([
+      context.read<TasksProvider>().load(includeRoster: widget.user.isManager),
+      context.read<AnimalsProvider>().load(),
+      context.read<FeedProvider>().load(),
+      context.read<ProductionProvider>().load(),
+      context.read<RecommendationsProvider>().load(),
+      context.read<SalesProvider>().load(),
+      context.read<MounehProvider>().load(),
+      context.read<VisitsProvider>().load(),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_started) {
-      return const AppShell(
-        screens: [
-          MorningBriefingScreen(),
-          AnimalStatusScreen(),
-          FeedInventoryScreen(),
-          MilkProductionScreen(),
-          EggProductionScreen(),
-          HealthIntelligenceScreen(),
-          ProduceHarvestScreen(),
-          MounehModuleScreen(),
-          VisitsModuleScreen(),
-          SalesFinanceScreen(),
-          TasksScreen(),
-          SettingsScreen(),
-        ],
-      );
-    }
-    if (_seeding) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    return WelcomeScreen(onStart: _start);
+    return FutureBuilder<void>(
+      future: _loadAll,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+        final nav = buildNavForUser(widget.user);
+        return AppShell(entries: nav.entries, screens: nav.screens);
+      },
+    );
   }
 }

@@ -2,143 +2,40 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_icon.dart';
 import '../i18n/locale_controller.dart';
-import '../i18n/strings.dart';
+import '../../auth/session_controller.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
-import '../../sync/sync_queue_controller.dart';
 
-/// Sync pill, EN/AR toggle, notification bell, manager avatar.
-/// Tech spec §7 (Welcome), §2 ("sync status visible in top bar").
+/// EN/AR toggle, notification bell, and the logged-in user's avatar (with
+/// a log-out action) — tech spec §7. The sync-status pill this used to
+/// show is gone along with the rest of the offline-first pipeline: the
+/// app is always-online now, so there's no local queue to report on.
 class TopBar extends StatelessWidget implements PreferredSizeWidget {
-  const TopBar({super.key, this.notificationCount = 3, this.managerName = 'Rami'});
+  const TopBar({super.key, this.notificationCount = 0});
 
   final int notificationCount;
-  final String managerName;
 
   @override
   Size get preferredSize => const Size.fromHeight(64);
 
   @override
   Widget build(BuildContext context) {
-    final sync = context.watch<SyncQueueController>();
     final locale = context.watch<LocaleController>();
+    final session = context.watch<SessionController>();
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: FarmSpacing.lg, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          _SyncPill(sync: sync),
-          const SizedBox(width: FarmSpacing.md),
           _LanguageToggle(locale: locale),
           const SizedBox(width: FarmSpacing.md),
           _NotificationBell(count: notificationCount),
           const SizedBox(width: FarmSpacing.md),
-          _ManagerAvatar(name: managerName),
+          _UserMenu(session: session),
         ],
       ),
-    );
-  }
-}
-
-class _SyncPill extends StatelessWidget {
-  const _SyncPill({required this.sync});
-  final SyncQueueController sync;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, color, icon) = switch (sync.status) {
-      SyncStatus.synced => (context.t('synced'), FarmColors.success, Icons.cloud_done_outlined),
-      SyncStatus.syncing => (context.t('syncing'), FarmColors.warning, Icons.cloud_sync_outlined),
-      SyncStatus.offline => (context.t('offline'), FarmColors.muted, Icons.cloud_off_outlined),
-      SyncStatus.error => (context.t('syncError'), FarmColors.danger, Icons.error_outline),
-    };
-    return InkWell(
-      borderRadius: BorderRadius.circular(FarmRadii.pill),
-      onTap: () => _showSyncSheet(context, sync),
-      child: Container(
-        constraints: const BoxConstraints(minHeight: kFarmTouchTarget),
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: FarmColors.card,
-          border: Border.all(color: FarmColors.border),
-          borderRadius: BorderRadius.circular(FarmRadii.pill),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(label, style: FarmTypography.textTheme.titleSmall),
-                Text(
-                  sync.pendingCount > 0
-                      ? '${sync.pendingCount} ${context.t('pendingSync')}'
-                      : context.t('justNow'),
-                  style: const TextStyle(fontSize: 10.5, color: FarmColors.muted),
-                ),
-              ],
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showSyncSheet(BuildContext context, SyncQueueController sync) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: FarmColors.stone,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(FarmRadii.xl)),
-      ),
-      builder: (sheetContext) {
-        return Consumer<SyncQueueController>(
-          builder: (sheetContext, s, _) => Padding(
-            padding: const EdgeInsets.all(FarmSpacing.lg),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Sync status', style: FarmTypography.textTheme.titleLarge),
-                const SizedBox(height: 8),
-                Text(
-                  s.pendingCount > 0
-                      ? '${s.pendingCount} record(s) queued locally. They are safe on this '
-                          'tablet and will upload automatically once the connection is back.'
-                      : 'Everything is synced.'
-                          '${s.lastSyncedAt != null ? ' Last synced ${TimeOfDay.fromDateTime(s.lastSyncedAt!).format(sheetContext)}.' : ''}',
-                  style: FarmTypography.textTheme.bodyMedium,
-                ),
-                const SizedBox(height: FarmSpacing.md),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Simulate offline (demo)'),
-                  subtitle: const Text('Core workflows keep working with no connection.'),
-                  value: !s.online,
-                  onChanged: (offline) => s.setOnline(!offline),
-                ),
-                const SizedBox(height: FarmSpacing.sm),
-                if (s.online)
-                  FilledButton(
-                    onPressed: s.pendingCount == 0 ? null : s.syncNow,
-                    child: const Text('Sync now'),
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -233,29 +130,40 @@ class _NotificationBell extends StatelessWidget {
   }
 }
 
-class _ManagerAvatar extends StatelessWidget {
-  const _ManagerAvatar({required this.name});
-  final String name;
+class _UserMenu extends StatelessWidget {
+  const _UserMenu({required this.session});
+  final SessionController session;
 
   @override
   Widget build(BuildContext context) {
+    final name = session.user?.name ?? '?';
     final initials = name.isEmpty ? '?' : name.trim().substring(0, 1).toUpperCase();
-    return Row(
-      children: [
-        Container(
-          width: kFarmTouchTarget - 4,
-          height: kFarmTouchTarget - 4,
-          decoration: const BoxDecoration(color: FarmColors.gold, shape: BoxShape.circle),
-          child: Center(
-            child: Text(
-              initials,
-              style: const TextStyle(color: FarmColors.ink, fontWeight: FontWeight.w700),
+    return PopupMenuButton<String>(
+      tooltip: name,
+      onSelected: (value) {
+        if (value == 'logout') session.logout();
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(enabled: false, child: Text(name, style: FarmTypography.textTheme.titleSmall)),
+        if (session.user?.role != null) PopupMenuItem(enabled: false, child: Text(session.user!.role, style: const TextStyle(color: FarmColors.muted, fontSize: 12))),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'logout', child: Text('Log out')),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: kFarmTouchTarget - 4,
+            height: kFarmTouchTarget - 4,
+            decoration: const BoxDecoration(color: FarmColors.gold, shape: BoxShape.circle),
+            child: Center(
+              child: Text(initials, style: const TextStyle(color: FarmColors.ink, fontWeight: FontWeight.w700)),
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        const Icon(Icons.expand_more, color: FarmColors.muted),
-      ],
+          const SizedBox(width: 4),
+          const Icon(Icons.expand_more, color: FarmColors.muted),
+        ],
+      ),
     );
   }
 }

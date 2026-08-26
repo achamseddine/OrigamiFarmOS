@@ -38,7 +38,7 @@ ACCOUNTS = [
     ("manager@origamifarms.com", "Farm Manager", "owner", None),
     ("animals@origamifarms.com", "Animal Care Lead", "worker", "animals"),
     ("produce@origamifarms.com", "Vegetables & Produce Lead", "worker", "produce"),
-    ("mouneh@origamifarms.com", "Mouneh Production Lead", "worker", "mouneh"),
+    ("mouneh@origamifarms.com", "Mouneh Production Lead", "mouneh_operator", "mouneh"),
     ("visits@origamifarms.com", "Visitor & Booking Lead", "visitor_coordinator", "visits"),
 ]
 

@@ -76,7 +76,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
     final feed = context.watch<FeedProvider>();
     final mouneh = context.watch<MounehProvider>();
     final checkedInBookings = visits.bookings.where((b) => b.status == 'checked_in' || b.status == 'completed').toList();
-    final sales = [...visits.retailSales]..sort((a, b) => b.soldAt.compareTo(a.soldAt));
+    final sales = visits.retailSales;
 
     return SingleChildScrollView(
       child: Column(
@@ -187,7 +187,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
                           Text(s.visitorId != null ? (visits.visitorById(s.visitorId!)?.fullName ?? s.visitorId!) : 'Walk-in'),
                           Text(s.channel.replaceAll('_', ' ')),
                           Text('\$${s.totalAmount.toStringAsFixed(2)}'),
-                          Text('${s.soldAt.day}/${s.soldAt.month}'),
+                          Text(s.soldAt != null ? '${s.soldAt!.day}/${s.soldAt!.month}' : '—'),
                         ],
                     ],
                   ),

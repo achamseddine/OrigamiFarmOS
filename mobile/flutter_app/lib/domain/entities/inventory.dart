@@ -33,6 +33,19 @@ class InventoryItem {
     final diff = reorderLevel - currentQty;
     return diff > 0 ? diff : 0;
   }
+
+  /// Backend `InventoryItemOut` shape (schemas/feed.py).
+  factory InventoryItem.fromJson(Map<String, dynamic> json) => InventoryItem(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: json['category'] as String? ?? 'other',
+        unit: json['unit'] as String,
+        currentQty: (json['current_qty'] as num).toDouble(),
+        reorderLevel: (json['reorder_level'] as num?)?.toDouble() ?? 0,
+        supplier: json['supplier_label'] as String? ?? '',
+        lastPurchase: json['last_purchase'] != null ? DateTime.parse(json['last_purchase'] as String) : DateTime.now(),
+        unitCost: (json['unit_cost'] as num?)?.toDouble(),
+      );
 }
 
 /// Local mirror of the backend `inventory_transactions` table

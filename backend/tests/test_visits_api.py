@@ -263,6 +263,13 @@ class TestFeedbackAndIncidents:
         r = client.post("/api/v1/visitor-feedback", headers=headers, json={"booking_id": "booking-completed-sun", "rating": 4, "comments": "Lovely visit", "would_return": True})
         assert r.status_code == 201
 
+    def test_submitted_feedback_appears_in_the_list(self, client):
+        headers = _manager_headers(client)
+        client.post("/api/v1/visitor-feedback", headers=headers, json={"booking_id": "booking-completed-sun", "rating": 5, "comments": "Great!"})
+        r = client.get("/api/v1/visitor-feedback", headers=headers, params={"booking_id": "booking-completed-sun"})
+        assert r.status_code == 200
+        assert any(f["rating"] == 5 for f in r.json())
+
     def test_activity_staff_can_report_an_incident(self, client):
         headers = _manager_headers(client)
         r = client.post("/api/v1/visit-incidents", headers=headers, json={"session_id": "session-upcoming-sat", "incident_type": "animal", "severity": "medium", "description": "Goat escaped the pen briefly."})

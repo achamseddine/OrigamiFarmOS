@@ -1,41 +1,27 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
-import '../data/demo/mouneh_demo_data.dart';
-import '../data/local/farm_write_service.dart' show WriteResult;
+import '../api/api_client.dart';
 import '../domain/entities/mouneh.dart';
 import '../mouneh/costing.dart' as costing;
-import '../mouneh/mouneh_write_service.dart';
-import '../sync/sync_queue_controller.dart';
 
 const String kMounehModuleCode = 'mouneh';
-const _uuid = Uuid();
 
-/// Provider for the Mouneh & Farm Product Processing module — same shape
-/// as [FeedProvider]/[AnimalsProvider]: in-memory state seeded from demo
-/// data, mutated only after [MounehWriteService] confirms the offline
-/// write succeeded.
+/// Provider for the Mouneh & Farm Product Processing module — always
+/// online: [load] fetches the farm's real products/materials/batches/
+/// finished-goods/sales from the backend, and every write posts straight
+/// through, then re-reads (or locally applies) the result.
 class MounehProvider extends ChangeNotifier {
-  MounehProvider({required MounehWriteService writeService, required SyncQueueController syncQueue})
-      : _writeService = writeService,
-        _syncQueue = syncQueue,
-        _license = const ModuleLicense(moduleCode: kMounehModuleCode, status: 'active', activatedBy: 'user-super-1'),
-        _products = List.of(MounehDemoData.products),
-        _rawMaterials = List.of(MounehDemoData.rawMaterials),
-        _recipes = {MounehDemoData.makdousRecipe.productId: MounehDemoData.makdousRecipe},
-        _batches = List.of(MounehDemoData.batches),
-        _finishedGoods = [MounehDemoData.finishedGoods],
-        _sales = List.of(MounehDemoData.sales);
+  MounehProvider({required ApiClient apiClient}) : _api = apiClient;
 
-  final MounehWriteService _writeService;
-  final SyncQueueController _syncQueue;
+  final ApiClient _api;
 
-  ModuleLicense _license;
-  List<MounehProduct> _products;
-  List<RawMaterial> _rawMaterials;
-  final Map<String, MounehRecipe> _recipes; // productId -> active recipe
-  List<ProductionBatch> _batches;
-  List<FinishedGoodsStock> _finishedGoods;
-  List<MounehSale> _sales;
+  ModuleLicense _license = const ModuleLicense(moduleCode: kMounehModuleCode, status: 'inactive');
+  List<MounehProduct> _products = [];
+  List<RawMaterial> _rawMaterials = [];
+  final Map<String, MounehRecipe> _recipes = {}; // productId -> active recipe
+  List<ProductionBatch> _batches = [];
+  List<FinishedGoodsStock> _finishedGoods = [];
+  List<MounehSale> _sales = [];
+  bool loading = false;
 
   ModuleLicense get license => _license;
   bool get isActive => _license.isActive;
@@ -51,14 +37,54 @@ class MounehProvider extends ChangeNotifier {
   List<ProductionBatch> batchesFor(String productId) => _batches.where((b) => b.productId == productId).toList();
   List<FinishedGoodsStock> stockFor(String productId) => _finishedGoods.where((s) => s.productId == productId).toList();
 
-  // -------------------------------------------------------------- License
-  Future<void> setModuleActive(bool active) async {
-    final status = active ? 'active' : 'inactive';
-    final result = await _writeService.setModuleStatus(moduleCode: kMounehModuleCode, status: status);
-    if (result.success) {
-      _license = _license.copyWith(status: status);
+  // -------------------------------------------------------------- Loading
+  Future<void> load() async {
+    loading = true;
+    notifyListeners();
+    try {
+      final licenses = await _api.get('/modules') as List<dynamic>;
+      final mine = licenses.cast<Map<String, dynamic>>().where((m) => m['module_code'] == kMounehModuleCode).firstOrNull;
+      _license = mine != null ? ModuleLicense.fromJson(mine) : const ModuleLicense(moduleCode: kMounehModuleCode, status: 'inactive');
+      if (!_license.isActive) {
+        loading = false;
+        notifyListeners();
+        return;
+      }
+
+      final results = await Future.wait([
+        _api.get('/mouneh/products'),
+        _api.get('/mouneh/raw-materials'),
+        _api.get('/mouneh/batches'),
+        _api.get('/mouneh/finished-goods'),
+        _api.get('/mouneh/sales'),
+      ]);
+      _products = (results[0] as List<dynamic>).map((e) => MounehProduct.fromJson(e as Map<String, dynamic>)).toList();
+      _rawMaterials = (results[1] as List<dynamic>).map((e) => RawMaterial.fromJson(e as Map<String, dynamic>)).toList();
+      _batches = (results[2] as List<dynamic>).map((e) => ProductionBatch.fromJson(e as Map<String, dynamic>)).toList();
+      _finishedGoods = (results[3] as List<dynamic>).map((e) => FinishedGoodsStock.fromJson(e as Map<String, dynamic>)).toList();
+      _sales = (results[4] as List<dynamic>).map((e) => MounehSale.fromJson(e as Map<String, dynamic>)).toList();
+
+      _recipes.clear();
+      for (final product in _products) {
+        final json = await _api.get('/mouneh/products/${product.id}') as Map<String, dynamic>;
+        final recipeJson = json['active_recipe'];
+        if (recipeJson != null) _recipes[product.id] = MounehRecipe.fromJson(recipeJson as Map<String, dynamic>);
+      }
+    } finally {
+      loading = false;
       notifyListeners();
     }
+  }
+
+  // -------------------------------------------------------------- License
+  /// Module activation itself is super-user only on the backend
+  /// (RULE-MOU-001) — this call only succeeds for that role; a
+  /// manager/employee's attempt surfaces the 403 as [WriteResult.error].
+  Future<WriteResult> setModuleActive(bool active) async {
+    final action = active ? 'activate' : 'deactivate';
+    final result = await _api.write(() => _api.post('/modules/$kMounehModuleCode/$action'));
+    if (result.success) await load();
+    return result;
   }
 
   // ------------------------------------------------------------- Products
@@ -75,42 +101,20 @@ class MounehProvider extends ChangeNotifier {
     double? wholesalePrice,
     double? targetMarginPct,
   }) async {
-    if (_products.any((p) => p.category == category && p.name.toLowerCase() == name.toLowerCase())) {
-      return WriteResult.fail('A product named "$name" already exists in "$category".');
-    }
-    final id = _uuid.v4();
-    final result = await _writeService.createProduct(
-      id: id,
-      name: name,
-      category: category,
-      outputUnit: outputUnit,
-      customOutputUnitLabel: customOutputUnitLabel,
-      defaultBatchSize: defaultBatchSize,
-      shelfLifeDays: shelfLifeDays,
-      warehouseRules: warehouseRules,
-      lowStockThreshold: lowStockThreshold,
-      targetPrice: targetPrice,
-      wholesalePrice: wholesalePrice,
-      targetMarginPct: targetMarginPct,
-    );
-    if (result.success) {
-      _products.add(MounehProduct(
-        id: id,
-        name: name,
-        category: category,
-        outputUnit: outputUnit,
-        customOutputUnitLabel: customOutputUnitLabel,
-        defaultBatchSize: defaultBatchSize,
-        shelfLifeDays: shelfLifeDays,
-        warehouseRules: warehouseRules,
-        lowStockThreshold: lowStockThreshold,
-        targetPrice: targetPrice,
-        wholesalePrice: wholesalePrice,
-        targetMarginPct: targetMarginPct,
-      ));
-      _syncQueue.enqueue(entityType: 'mouneh_product', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/products', body: {
+          'name': name,
+          'category': category,
+          'output_unit': outputUnit,
+          'custom_output_unit_label': customOutputUnitLabel,
+          'default_batch_size': defaultBatchSize,
+          'shelf_life_days': shelfLifeDays,
+          'warehouse_rules': warehouseRules,
+          'low_stock_threshold': lowStockThreshold,
+          'target_price': targetPrice,
+          'wholesale_price': wholesalePrice,
+          'target_margin_pct': targetMarginPct,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -124,31 +128,16 @@ class MounehProvider extends ChangeNotifier {
     double currentStock = 0,
     double lossPercentDefault = 0,
   }) async {
-    final id = _uuid.v4();
-    final result = await _writeService.createRawMaterial(
-      id: id,
-      name: name,
-      category: category,
-      sourceType: sourceType,
-      unit: unit,
-      defaultUnitCost: defaultUnitCost,
-      currentStock: currentStock,
-      lossPercentDefault: lossPercentDefault,
-    );
-    if (result.success) {
-      _rawMaterials.add(RawMaterial(
-        id: id,
-        name: name,
-        category: category,
-        sourceType: sourceType,
-        unit: unit,
-        defaultUnitCost: defaultUnitCost,
-        currentStock: currentStock,
-        lossPercentDefault: lossPercentDefault,
-      ));
-      _syncQueue.enqueue(entityType: 'raw_material', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/raw-materials', body: {
+          'name': name,
+          'category': category,
+          'source_type': sourceType,
+          'unit': unit,
+          'default_unit_cost': defaultUnitCost,
+          'current_stock': currentStock,
+          'loss_percent_default': lossPercentDefault,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -162,43 +151,16 @@ class MounehProvider extends ChangeNotifier {
     String? notes,
   }) async {
     if (items.isEmpty) return const WriteResult.fail('Add at least one raw material or packaging line.');
-    final prior = _recipes[productId];
-    final nextVersion = (prior?.version ?? 0) + 1;
-    final id = _uuid.v4();
-    final result = await _writeService.createRecipe(
-      id: id,
-      productId: productId,
-      version: nextVersion,
-      basisQuantity: basisQuantity,
-      basisUnit: basisUnit,
-      notes: notes,
-      items: [
-        for (final i in items)
-          {'material_id': i.materialId, 'material_type': i.materialType, 'quantity': i.quantity, 'unit': i.unit, 'loss_percent': i.lossPercent},
-      ],
-      costComponents: [
-        for (final c in costComponents)
-          {'cost_type': c.costType, 'label': c.label, 'calculation_method': c.calculationMethod, 'amount': c.amount, 'quantity': c.quantity, 'unit_cost': c.unitCost},
-      ],
-    );
-    if (result.success) {
-      _recipes[productId] = MounehRecipe(
-        id: id,
-        productId: productId,
-        version: nextVersion,
-        basisQuantity: basisQuantity,
-        basisUnit: basisUnit,
-        items: items,
-        costComponents: costComponents,
-        notes: notes,
-      );
-      final index = _products.indexWhere((p) => p.id == productId);
-      if (index != -1 && _products[index].status == 'draft') {
-        _products[index] = _products[index].copyWith(status: 'active');
-      }
-      _syncQueue.enqueue(entityType: 'mouneh_recipe', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/products/$productId/recipes', body: {
+          'basis_quantity': basisQuantity,
+          'basis_unit': basisUnit,
+          'notes': notes,
+          'items': [for (final i in items) {'material_id': i.materialId, 'quantity': i.quantity, 'unit': i.unit, 'loss_percent': i.lossPercent}],
+          'cost_components': [
+            for (final c in costComponents) {'cost_type': c.costType, 'label': c.label, 'calculation_method': c.calculationMethod, 'amount': c.amount, 'quantity': c.quantity, 'unit_cost': c.unitCost},
+          ],
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -235,7 +197,9 @@ class MounehProvider extends ChangeNotifier {
   }
 
   /// REQ-MOU-004: planned cost per batch and per unit, before a batch even
-  /// starts.
+  /// starts — computed locally from the already-loaded recipe/material
+  /// data (same pure engine as the backend) for instant feedback while a
+  /// manager is typing, rather than a round-trip per keystroke.
   costing.CostBreakdown? previewCost(String productId, double outputQty) {
     final recipe = _recipes[productId];
     if (recipe == null || outputQty <= 0) return null;
@@ -250,82 +214,23 @@ class MounehProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- Batch
-  String _generateBatchCode(MounehProduct product) {
-    final prefix = '${(product.category.isEmpty ? 'GEN' : product.category).substring(0, product.category.length < 3 ? product.category.length : 3).toUpperCase()}-'
-        '${DateTime.now().toIso8601String().substring(0, 10).replaceAll('-', '')}';
-    final existing = _batches.where((b) => b.batchCode.startsWith(prefix)).length;
-    return '$prefix-${(existing + 1).toString().padLeft(3, '0')}';
-  }
-
   Future<WriteResult> createBatch({required String productId, required double plannedQty, String? warehouseLocation}) async {
     final product = productById(productId);
-    final recipe = _recipes[productId];
-    if (product == null || recipe == null) {
+    if (product == null || _recipes[productId] == null) {
       return const WriteResult.fail('This product has no recipe yet — add raw materials before starting a batch.');
     }
     if (plannedQty <= 0) return const WriteResult.fail('valueMustBePositive');
-    final breakdown = previewCost(productId, plannedQty)!;
-    final materials = _materialLinesFor(recipe, plannedQty);
-    final id = _uuid.v4();
-    final batchCode = _generateBatchCode(product);
-
-    final result = await _writeService.createBatch(
-      id: id,
-      productId: productId,
-      recipeId: recipe.id,
-      batchCode: batchCode,
-      plannedQty: plannedQty,
-      plannedUnitCost: breakdown.unitCost,
-      plannedTotalCost: breakdown.totalCost,
-      warehouseLocation: warehouseLocation,
-      consumptions: [
-        for (final m in materials) {'material_id': m.materialId, 'planned_qty': m.effectiveQuantity, 'unit_cost': m.unitCost},
-      ],
-    );
-    if (result.success) {
-      _batches.add(ProductionBatch(
-        id: id,
-        productId: productId,
-        recipeId: recipe.id,
-        batchCode: batchCode,
-        plannedQty: plannedQty,
-        plannedUnitCost: breakdown.unitCost,
-        plannedTotalCost: breakdown.totalCost,
-        warehouseLocation: warehouseLocation,
-        startedAt: DateTime.now(),
-        consumptions: [for (final m in materials) BatchInputConsumption(materialId: m.materialId, plannedQty: m.effectiveQuantity, unitCost: m.unitCost)],
-      ));
-      _syncQueue.enqueue(entityType: 'production_batch', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/batches', body: {'product_id': productId, 'planned_qty': plannedQty, 'warehouse_location': warehouseLocation}));
+    if (result.success) await load();
     return result;
   }
 
   Future<WriteResult> consumeBatchInputs({required String batchId, required Map<String, double> actualQtyByMaterial, bool allowNegative = false}) async {
-    final batchIndex = _batches.indexWhere((b) => b.id == batchId);
-    if (batchIndex == -1) return const WriteResult.fail('Batch not found.');
-    final batch = _batches[batchIndex];
-
-    final unitCosts = {for (final c in batch.consumptions) c.materialId: c.unitCost};
-    final result = await _writeService.consumeBatchInputs(batchId: batchId, actualQtyByMaterial: actualQtyByMaterial, unitCostByMaterial: unitCosts, allowNegative: allowNegative);
-    if (result.success) {
-      final updatedConsumptions = [
-        for (final c in batch.consumptions)
-          if (actualQtyByMaterial.containsKey(c.materialId))
-            c.copyWith(actualQty: actualQtyByMaterial[c.materialId], totalCost: actualQtyByMaterial[c.materialId]! * c.unitCost)
-          else
-            c,
-      ];
-      _batches[batchIndex] = batch.copyWith(consumptions: updatedConsumptions);
-      for (final entry in actualQtyByMaterial.entries) {
-        final mIndex = _rawMaterials.indexWhere((m) => m.id == entry.key);
-        if (mIndex != -1) {
-          _rawMaterials[mIndex] = _rawMaterials[mIndex].copyWith(currentStock: _rawMaterials[mIndex].currentStock - entry.value);
-        }
-      }
-      _syncQueue.enqueue(entityType: 'production_batch', entityId: batchId, operation: 'update');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/batches/$batchId/consume', body: {
+          'lines': [for (final e in actualQtyByMaterial.entries) {'material_id': e.key, 'actual_qty': e.value}],
+          'allow_negative': allowNegative,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -341,79 +246,20 @@ class MounehProvider extends ChangeNotifier {
     double? laborHours,
     List<MounehCostComponent> extraCostComponents = const [],
   }) async {
-    final batchIndex = _batches.indexWhere((b) => b.id == batchId);
-    if (batchIndex == -1) return const WriteResult.fail('Batch not found.');
-    final batch = _batches[batchIndex];
-    if (!batch.isInProgress) return WriteResult.fail('Batch is already "${batch.status}".');
     if (actualOutputQty <= 0) return const WriteResult.fail('valueMustBePositive');
-
-    // Fill in any material never explicitly consumed, at its planned qty.
-    final filledConsumptions = [
-      for (final c in batch.consumptions)
-        if (c.actualQty == null) c.copyWith(actualQty: c.plannedQty, totalCost: c.plannedQty * c.unitCost) else c,
-    ];
-    for (final c in batch.consumptions.where((c) => c.actualQty == null)) {
-      final mIndex = _rawMaterials.indexWhere((m) => m.id == c.materialId);
-      if (mIndex != -1) {
-        _rawMaterials[mIndex] = _rawMaterials[mIndex].copyWith(currentStock: _rawMaterials[mIndex].currentStock - c.plannedQty);
-      }
-    }
-
-    final materials = [
-      for (final c in filledConsumptions)
-        costing.MaterialLine(materialId: c.materialId, name: materialById(c.materialId)?.name ?? c.materialId, category: 'raw_material', quantity: c.actualQty!, unit: '', unitCost: c.unitCost),
-    ];
-    final recipe = _recipes[batch.productId]!;
-    final components = [
-      ..._componentLinesFor(recipe, batch.plannedQty).map((c) => costing.CostComponentLine(costType: c.costType, label: c.label, calculationMethod: c.calculationMethod, amount: c.amount, quantity: c.quantity, unitCost: c.unitCost)),
-      for (final c in extraCostComponents)
-        costing.CostComponentLine(costType: c.costType, label: c.label, calculationMethod: c.calculationMethod, amount: c.amount, quantity: c.quantity, unitCost: c.unitCost),
-    ];
-    final breakdown = costing.computeCostBreakdown(materials: materials, components: components, outputQty: actualOutputQty);
-
-    final stockId = _uuid.v4();
-    final result = await _writeService.completeBatch(
-      batchId: batchId,
-      productId: batch.productId,
-      actualOutputQty: actualOutputQty,
-      wasteQty: wasteQty,
-      damagedQty: damagedQty,
-      qualityStatus: qualityStatus,
-      expiryDate: expiryDate,
-      warehouseLocation: warehouseLocation ?? batch.warehouseLocation,
-      laborHours: laborHours,
-      actualUnitCost: breakdown.unitCost,
-      actualTotalCost: breakdown.totalCost,
-      finishedGoodsStockId: stockId,
-    );
-    if (result.success) {
-      _batches[batchIndex] = batch.copyWith(
-        actualOutputQty: actualOutputQty,
-        wasteQty: wasteQty,
-        damagedQty: damagedQty,
-        qualityStatus: qualityStatus,
-        expiryDate: expiryDate,
-        warehouseLocation: warehouseLocation,
-        status: 'completed',
-        actualUnitCost: breakdown.unitCost,
-        actualTotalCost: breakdown.totalCost,
-        laborHours: laborHours,
-        completedAt: DateTime.now(),
-        consumptions: filledConsumptions,
-      );
-      _finishedGoods.add(FinishedGoodsStock(
-        id: stockId,
-        productId: batch.productId,
-        batchId: batchId,
-        warehouseLocation: warehouseLocation ?? batch.warehouseLocation,
-        quantityProduced: actualOutputQty,
-        quantityAvailable: actualOutputQty,
-        unitCost: breakdown.unitCost,
-        expiryDate: expiryDate,
-      ));
-      _syncQueue.enqueue(entityType: 'production_batch', entityId: batchId, operation: 'update');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/batches/$batchId/complete', body: {
+          'actual_output_qty': actualOutputQty,
+          'waste_qty': wasteQty,
+          'damaged_qty': damagedQty,
+          'quality_status': qualityStatus,
+          'expiry_date': expiryDate?.toIso8601String(),
+          'warehouse_location': warehouseLocation,
+          'labor_hours': laborHours,
+          'extra_cost_components': [
+            for (final c in extraCostComponents) {'cost_type': c.costType, 'label': c.label, 'calculation_method': c.calculationMethod, 'amount': c.amount, 'quantity': c.quantity, 'unit_cost': c.unitCost},
+          ],
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -428,54 +274,15 @@ class MounehProvider extends ChangeNotifier {
   }) async {
     if (quantity <= 0) return const WriteResult.fail('valueMustBePositive');
     if (discount < 0) return const WriteResult.fail('valueMustBePositive');
-    FinishedGoodsStock? stock;
-    if (finishedGoodsStockId != null) {
-      stock = _finishedGoods.where((s) => s.id == finishedGoodsStockId).firstOrNull;
-    } else {
-      final candidates = _finishedGoods.where((s) => s.productId == productId && s.quantityAvailable > 0).toList()
-        ..sort((a, b) => (a.expiryDate ?? DateTime(9999)).compareTo(b.expiryDate ?? DateTime(9999)));
-      stock = candidates.firstOrNull;
-    }
-    if (stock == null) return const WriteResult.fail('No available stock for this product.');
-    if (quantity > stock.quantityAvailable) {
-      return WriteResult.fail('Only ${stock.quantityAvailable} units available, cannot sell $quantity.');
-    }
-
-    final margin = costing.computeSaleMargin(quantity: quantity, unitPrice: unitPrice, discount: discount, unitCost: stock.unitCost);
-    final id = _uuid.v4();
-    final result = await _writeService.recordSale(
-      id: id,
-      productId: productId,
-      batchId: stock.batchId,
-      finishedGoodsStockId: stock.id,
-      quantity: quantity,
-      unitPrice: unitPrice,
-      discount: discount,
-      channel: channel,
-      costPerUnit: stock.unitCost,
-      revenue: margin.revenue,
-      margin: margin.profit,
-    );
-    if (result.success) {
-      final stockIndex = _finishedGoods.indexWhere((s) => s.id == stock!.id);
-      _finishedGoods[stockIndex] = stock.copyWith(quantityAvailable: stock.quantityAvailable - quantity, quantitySold: stock.quantitySold + quantity);
-      _sales.add(MounehSale(
-        id: id,
-        productId: productId,
-        batchId: stock.batchId,
-        finishedGoodsStockId: stock.id,
-        quantity: quantity,
-        unitPrice: unitPrice,
-        discount: discount,
-        channel: channel,
-        costPerUnit: stock.unitCost,
-        revenue: margin.revenue,
-        margin: margin.profit,
-        soldAt: DateTime.now(),
-      ));
-      _syncQueue.enqueue(entityType: 'mouneh_sale_line', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/mouneh/sales', body: {
+          'product_id': productId,
+          'finished_goods_stock_id': finishedGoodsStockId,
+          'quantity': quantity,
+          'unit_price': unitPrice,
+          'discount': discount,
+          'channel': channel,
+        }));
+    if (result.success) await load();
     return result;
   }
 

@@ -21,6 +21,12 @@ class TestAuth:
 
 
 class TestBootstrapAndAnimals:
+    def test_my_farm_returns_the_signed_in_users_farm(self, client):
+        headers = auth_headers(client)
+        r = client.get("/api/v1/farms/me", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["id"] == "farm-origami"
+
     def test_bootstrap_returns_full_local_cache_payload(self, client):
         headers = auth_headers(client)
         r = client.get("/api/v1/farms/farm-origami/bootstrap", headers=headers)

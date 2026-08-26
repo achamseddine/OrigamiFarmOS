@@ -247,7 +247,7 @@ class FarmStrings {
     'notes': 'Notes (optional)',
     'entityRequired': 'Select an animal, flock, or field first.',
     'valueMustBePositive': 'Value cannot be negative.',
-    'savedOffline': 'Saved offline — queued for sync.',
+    'savedOffline': 'Saved.',
     'pendingSync': 'items pending sync',
   };
 
@@ -484,7 +484,7 @@ class FarmStrings {
     'notes': 'ملاحظات (اختياري)',
     'entityRequired': 'اختر حيوانًا أو قطيعًا أو حقلًا أولاً.',
     'valueMustBePositive': 'لا يمكن أن تكون القيمة سالبة.',
-    'savedOffline': 'تم الحفظ دون اتصال — بانتظار المزامنة.',
+    'savedOffline': 'تم الحفظ.',
     'pendingSync': 'عنصر بانتظار المزامنة',
   };
 

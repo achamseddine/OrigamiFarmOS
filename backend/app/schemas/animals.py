@@ -42,6 +42,10 @@ class AnimalOut(ORMModel):
         return withdrawal_until > datetime.now(timezone.utc)
 
 
+class AnimalMove(BaseModel):
+    location_label: str
+
+
 class AnimalCreate(BaseModel):
     tag: str
     name: str

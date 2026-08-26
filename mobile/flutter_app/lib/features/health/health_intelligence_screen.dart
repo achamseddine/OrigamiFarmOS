@@ -325,7 +325,6 @@ class _DetailCard extends StatelessWidget {
                       ? null
                       : () {
                           context.read<TasksProvider>().addFromRecommendation(
-                                id: 'task-${rec.id}',
                                 title: '${rec.title} — ${rec.entityLabel}',
                                 category: 'From recommendation',
                                 sourceId: rec.id,

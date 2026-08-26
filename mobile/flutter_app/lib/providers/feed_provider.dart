@@ -1,20 +1,30 @@
 import 'package:flutter/foundation.dart';
-import '../data/demo/demo_data.dart';
-import '../data/local/farm_write_service.dart';
+import '../api/api_client.dart';
 import '../domain/entities/inventory.dart';
-import '../sync/sync_queue_controller.dart';
 
 class FeedProvider extends ChangeNotifier {
-  FeedProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
-      : _writeService = writeService,
-        _syncQueue = syncQueue,
-        _items = List.of(DemoData.feedInventory);
+  FeedProvider({required ApiClient apiClient, required String farmId})
+      : _api = apiClient,
+        _farmId = farmId;
 
-  final FarmWriteService _writeService;
-  final SyncQueueController _syncQueue;
-  List<InventoryItem> _items;
+  final ApiClient _api;
+  final String _farmId;
+  List<InventoryItem> _items = [];
+  bool loading = false;
 
   List<InventoryItem> get items => List.unmodifiable(_items);
+
+  Future<void> load() async {
+    loading = true;
+    notifyListeners();
+    try {
+      final json = await _api.get('/feed/items', query: {'farm_id': _farmId}) as List<dynamic>;
+      _items = json.map((e) => InventoryItem.fromJson(e as Map<String, dynamic>)).toList();
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
 
   Future<WriteResult> recordDistribution({
     required String itemId,
@@ -23,32 +33,26 @@ class FeedProvider extends ChangeNotifier {
     String? linkedEntityType,
     String? linkedEntityId,
   }) async {
-    final result = await _writeService.recordFeedTransaction(
-      itemId: itemId,
-      direction: 'out',
-      quantity: quantityKg,
-      reason: reason,
-      linkedEntityType: linkedEntityType,
-      linkedEntityId: linkedEntityId,
-    );
-    if (result.success) {
-      _applyDelta(itemId, -quantityKg);
-      _syncQueue.enqueue(entityType: 'inventory_item', entityId: itemId, operation: 'update');
-    }
+    final result = await _api.write(() => _api.post('/feed/transactions', body: {
+          'item_id': itemId,
+          'direction': 'out',
+          'quantity': quantityKg,
+          'reason': reason,
+          'linked_entity_type': linkedEntityType,
+          'linked_entity_id': linkedEntityId,
+        }));
+    if (result.success) _applyDelta(itemId, -quantityKg);
     return result;
   }
 
   Future<WriteResult> recordPurchase({required String itemId, required double quantityKg, String? supplier}) async {
-    final result = await _writeService.recordFeedTransaction(
-      itemId: itemId,
-      direction: 'in',
-      quantity: quantityKg,
-      reason: 'purchase',
-    );
-    if (result.success) {
-      _applyDelta(itemId, quantityKg);
-      _syncQueue.enqueue(entityType: 'inventory_item', entityId: itemId, operation: 'update');
-    }
+    final result = await _api.write(() => _api.post('/feed/transactions', body: {
+          'item_id': itemId,
+          'direction': 'in',
+          'quantity': quantityKg,
+          'reason': 'purchase',
+        }));
+    if (result.success) _applyDelta(itemId, quantityKg);
     return result;
   }
 

@@ -122,3 +122,14 @@ class HarvestRecordOut(ORMModel):
     waste_qty: float
     destination: str | None = None
     recorded_at: datetime
+
+
+class FieldOut(ORMModel):
+    id: str
+    name: str
+    crop_type: str | None = None
+    area_value: float | None = None
+    area_unit: str | None = None
+    stage: str | None = None
+    expected_harvest_date: datetime | None = None
+    est_yield_kg: float | None = None

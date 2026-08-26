@@ -26,6 +26,13 @@ class ModuleLicense {
         plan: plan,
         activatedBy: activatedBy,
       );
+
+  factory ModuleLicense.fromJson(Map<String, dynamic> json) => ModuleLicense(
+        moduleCode: json['module_code'] as String,
+        status: json['status'] as String,
+        plan: json['plan'] as String? ?? 'mouneh_addon',
+        activatedBy: json['activated_by'] as String?,
+      );
 }
 
 const List<String> kMounehOutputUnits = ['jar', 'bottle', 'pack', 'kg', 'liter', 'tray', 'piece', 'custom'];
@@ -79,6 +86,17 @@ class RawMaterial {
         currentStock: currentStock ?? this.currentStock,
         lossPercentDefault: lossPercentDefault,
       );
+
+  factory RawMaterial.fromJson(Map<String, dynamic> json) => RawMaterial(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: json['category'] as String? ?? 'raw_material',
+        sourceType: json['source_type'] as String? ?? 'purchased',
+        unit: json['unit'] as String,
+        defaultUnitCost: (json['default_unit_cost'] as num?)?.toDouble() ?? 0,
+        currentStock: (json['current_stock'] as num?)?.toDouble() ?? 0,
+        lossPercentDefault: (json['loss_percent_default'] as num?)?.toDouble() ?? 0,
+      );
 }
 
 class MounehRecipeItem {
@@ -95,6 +113,14 @@ class MounehRecipeItem {
   final double quantity;
   final String unit;
   final double lossPercent;
+
+  factory MounehRecipeItem.fromJson(Map<String, dynamic> json) => MounehRecipeItem(
+        materialId: json['material_id'] as String,
+        materialType: json['material_type'] as String? ?? 'raw_material',
+        quantity: (json['quantity'] as num).toDouble(),
+        unit: json['unit'] as String,
+        lossPercent: (json['loss_percent'] as num?)?.toDouble() ?? 0,
+      );
 }
 
 /// Labor / utilities / transport / cooling / market fees / other overhead
@@ -115,6 +141,15 @@ class MounehCostComponent {
   final double? amount;
   final double? quantity;
   final double? unitCost;
+
+  factory MounehCostComponent.fromJson(Map<String, dynamic> json) => MounehCostComponent(
+        costType: json['cost_type'] as String,
+        label: json['label'] as String? ?? '',
+        calculationMethod: json['calculation_method'] as String? ?? 'fixed',
+        amount: (json['amount'] as num?)?.toDouble(),
+        quantity: (json['quantity'] as num?)?.toDouble(),
+        unitCost: (json['unit_cost'] as num?)?.toDouble(),
+      );
 }
 
 /// A versioned Bill of Materials for a product. A new recipe call always
@@ -142,6 +177,18 @@ class MounehRecipe {
   final List<MounehCostComponent> costComponents;
   final bool active;
   final String? notes;
+
+  factory MounehRecipe.fromJson(Map<String, dynamic> json) => MounehRecipe(
+        id: json['id'] as String,
+        productId: json['product_id'] as String,
+        version: json['version'] as int,
+        basisQuantity: (json['basis_quantity'] as num).toDouble(),
+        basisUnit: json['basis_unit'] as String,
+        items: [for (final i in (json['items'] as List<dynamic>? ?? [])) MounehRecipeItem.fromJson(i as Map<String, dynamic>)],
+        costComponents: [for (final c in (json['cost_components'] as List<dynamic>? ?? [])) MounehCostComponent.fromJson(c as Map<String, dynamic>)],
+        active: json['active'] as bool? ?? true,
+        notes: json['notes'] as String?,
+      );
 }
 
 /// A manager-defined product — created dynamically through the Product
@@ -196,6 +243,23 @@ class MounehProduct {
         targetMarginPct: targetMarginPct,
         status: status ?? this.status,
       );
+
+  factory MounehProduct.fromJson(Map<String, dynamic> json) => MounehProduct(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        category: json['category'] as String? ?? 'general',
+        photoPath: json['photo_path'] as String?,
+        outputUnit: json['output_unit'] as String,
+        customOutputUnitLabel: json['custom_output_unit_label'] as String?,
+        defaultBatchSize: (json['default_batch_size'] as num?)?.toDouble() ?? 1,
+        shelfLifeDays: json['shelf_life_days'] as int?,
+        warehouseRules: json['warehouse_rules'] as String?,
+        lowStockThreshold: (json['low_stock_threshold'] as num?)?.toDouble(),
+        targetPrice: (json['target_price'] as num?)?.toDouble(),
+        wholesalePrice: (json['wholesale_price'] as num?)?.toDouble(),
+        targetMarginPct: (json['target_margin_pct'] as num?)?.toDouble(),
+        status: json['status'] as String? ?? 'draft',
+      );
 }
 
 class BatchInputConsumption {
@@ -219,6 +283,14 @@ class BatchInputConsumption {
         actualQty: actualQty ?? this.actualQty,
         unitCost: unitCost,
         totalCost: totalCost ?? this.totalCost,
+      );
+
+  factory BatchInputConsumption.fromJson(Map<String, dynamic> json) => BatchInputConsumption(
+        materialId: json['material_id'] as String,
+        plannedQty: (json['planned_qty'] as num).toDouble(),
+        actualQty: (json['actual_qty'] as num?)?.toDouble(),
+        unitCost: (json['unit_cost'] as num).toDouble(),
+        totalCost: (json['total_cost'] as num?)?.toDouble(),
       );
 }
 
@@ -309,6 +381,29 @@ class ProductionBatch {
         completedAt: completedAt ?? this.completedAt,
         consumptions: consumptions ?? this.consumptions,
       );
+
+  factory ProductionBatch.fromJson(Map<String, dynamic> json) => ProductionBatch(
+        id: json['id'] as String,
+        productId: json['product_id'] as String,
+        recipeId: json['recipe_version_id'] as String,
+        batchCode: json['batch_code'] as String,
+        plannedQty: (json['planned_qty'] as num).toDouble(),
+        actualOutputQty: (json['actual_output_qty'] as num?)?.toDouble(),
+        wasteQty: (json['waste_qty'] as num?)?.toDouble() ?? 0,
+        damagedQty: (json['damaged_qty'] as num?)?.toDouble() ?? 0,
+        qualityStatus: json['quality_status'] as String? ?? 'good',
+        expiryDate: json['expiry_date'] != null ? DateTime.parse(json['expiry_date'] as String) : null,
+        warehouseLocation: json['warehouse_location'] as String?,
+        status: json['status'] as String? ?? 'in_progress',
+        plannedUnitCost: (json['planned_unit_cost'] as num?)?.toDouble(),
+        plannedTotalCost: (json['planned_total_cost'] as num?)?.toDouble(),
+        actualUnitCost: (json['actual_unit_cost'] as num?)?.toDouble(),
+        actualTotalCost: (json['actual_total_cost'] as num?)?.toDouble(),
+        laborHours: (json['labor_hours'] as num?)?.toDouble(),
+        startedAt: DateTime.parse(json['started_at'] as String),
+        completedAt: json['completed_at'] != null ? DateTime.parse(json['completed_at'] as String) : null,
+        consumptions: [for (final c in (json['consumptions'] as List<dynamic>? ?? [])) BatchInputConsumption.fromJson(c as Map<String, dynamic>)],
+      );
 }
 
 /// A completed batch creates one of these; sales draw down from it.
@@ -355,6 +450,21 @@ class FinishedGoodsStock {
         unitCost: unitCost,
         expiryDate: expiryDate,
       );
+
+  factory FinishedGoodsStock.fromJson(Map<String, dynamic> json) => FinishedGoodsStock(
+        id: json['id'] as String,
+        productId: json['product_id'] as String,
+        batchId: json['batch_id'] as String,
+        warehouseLocation: json['warehouse_location'] as String?,
+        quantityProduced: (json['quantity_produced'] as num).toDouble(),
+        quantityAvailable: (json['quantity_available'] as num).toDouble(),
+        quantityReserved: (json['quantity_reserved'] as num?)?.toDouble() ?? 0,
+        quantitySold: (json['quantity_sold'] as num?)?.toDouble() ?? 0,
+        quantityExpired: (json['quantity_expired'] as num?)?.toDouble() ?? 0,
+        quantityDamaged: (json['quantity_damaged'] as num?)?.toDouble() ?? 0,
+        unitCost: (json['unit_cost'] as num).toDouble(),
+        expiryDate: json['expiry_date'] != null ? DateTime.parse(json['expiry_date'] as String) : null,
+      );
 }
 
 /// REQ-MOU-006: sales reduce finished goods stock and calculate profit.
@@ -386,6 +496,21 @@ class MounehSale {
   final double revenue;
   final double margin;
   final DateTime soldAt;
+
+  factory MounehSale.fromJson(Map<String, dynamic> json) => MounehSale(
+        id: json['id'] as String,
+        productId: json['product_id'] as String,
+        batchId: json['batch_id'] as String,
+        finishedGoodsStockId: json['finished_goods_stock_id'] as String,
+        quantity: (json['quantity'] as num).toDouble(),
+        unitPrice: (json['unit_price'] as num).toDouble(),
+        discount: (json['discount'] as num?)?.toDouble() ?? 0,
+        channel: json['channel'] as String? ?? 'retail',
+        costPerUnit: (json['cost_per_unit'] as num).toDouble(),
+        revenue: (json['revenue'] as num).toDouble(),
+        margin: (json['margin'] as num).toDouble(),
+        soldAt: DateTime.parse(json['sold_at'] as String),
+      );
 }
 
 /// Per-product roll-up shown on the profitability dashboard.
@@ -419,4 +544,20 @@ class MounehProductProfitability {
   final double grossMarginPct;
   final double salesVelocityPerDay;
   final String recommendation;
+
+  factory MounehProductProfitability.fromJson(Map<String, dynamic> json) => MounehProductProfitability(
+        productId: json['product_id'] as String,
+        productName: json['product_name'] as String,
+        unitsProduced: (json['units_produced'] as num).toDouble(),
+        unitsSold: (json['units_sold'] as num).toDouble(),
+        unitsRemaining: (json['units_remaining'] as num).toDouble(),
+        avgUnitCost: (json['avg_unit_cost'] as num).toDouble(),
+        avgSalePrice: (json['avg_sale_price'] as num).toDouble(),
+        totalRevenue: (json['total_revenue'] as num).toDouble(),
+        totalCost: (json['total_cost'] as num).toDouble(),
+        totalProfit: (json['total_profit'] as num).toDouble(),
+        grossMarginPct: (json['gross_margin_pct'] as num).toDouble(),
+        salesVelocityPerDay: (json['sales_velocity_per_day'] as num).toDouble(),
+        recommendation: json['recommendation'] as String,
+      );
 }

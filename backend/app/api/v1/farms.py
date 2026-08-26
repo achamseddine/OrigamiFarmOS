@@ -24,6 +24,19 @@ def _serialize(obj) -> dict:
     return out
 
 
+@router.get("/me")
+def my_farm(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> dict:
+    """The signed-in user's own farm — just the farm record, for the
+    Settings screen. `/farms/{farm_id}/bootstrap` below returns this plus
+    the whole offline-cache payload, which is far more than a settings
+    display needs.
+    """
+    farm = db.get(models.Farm, current_user.farm_id)
+    if farm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")
+    return _serialize(farm)
+
+
 @router.get("/{farm_id}/bootstrap", response_model=BootstrapResponse)
 def bootstrap(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> BootstrapResponse:
     """GET /farms/{farm_id}/bootstrap — initial local cache data (tech spec

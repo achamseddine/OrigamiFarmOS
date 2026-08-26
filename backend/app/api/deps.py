@@ -61,6 +61,12 @@ require_visit_operations_role = require_roles("owner", "manager", "visitor_coord
 require_cashier_role = require_roles("owner", "manager", "cashier")
 require_incident_report_role = require_roles("owner", "manager", "visitor_coordinator", "activity_staff")
 
+# A dedicated employee who runs day-to-day Mouneh production (build a
+# recipe, start/complete a batch, record a sale) without being a farm
+# manager/owner — same pattern as the Visits roles above. A plain
+# "worker" still gets 403 on these; only owner/manager/mouneh_operator do.
+require_mouneh_operations_role = require_roles("owner", "manager", "mouneh_operator")
+
 # Tech spec v0.5 REQ-MOU-001: "License-controlled module activated by a
 # super user per farm" — a super_user is a platform-level role, distinct
 # from the farm-scoped owner/manager/worker/vet/accountant roles above.

@@ -1,16 +1,9 @@
 import 'package:flutter/foundation.dart';
-import 'package:uuid/uuid.dart';
-import '../data/demo/visits_demo_data.dart';
-import '../data/local/farm_write_service.dart' show WriteResult;
+import '../api/api_client.dart';
 import '../domain/entities/mouneh.dart';
+import '../domain/entities/user_profile.dart';
 import '../domain/entities/visits.dart';
 import '../visits/analytics.dart' as analytics;
-import '../visits/visits_write_service.dart';
-import 'feed_provider.dart';
-import 'mouneh_provider.dart';
-import '../sync/sync_queue_controller.dart';
-
-const _uuid = Uuid();
 
 /// One row of the Activity Manager utilization breakdown on the
 /// Profitability Report (tech spec v0.6 §9 "Activity utilization = sold
@@ -38,68 +31,53 @@ class PackageProfitabilityRow {
 
 typedef ProfitabilityReport = ({VisitProfitability summary, List<ActivityUtilizationRow> activityUtilization, List<PackageProfitabilityRow> packageProfitability});
 
-/// Provider for the Farm Visits & Agri-Tourism module — same shape as
-/// [MounehProvider]: in-memory state seeded from demo data, mutated only
-/// after [VisitsWriteService] confirms the offline write succeeded.
+/// Provider for the Farm Visits & Agri-Tourism module — always online:
+/// [load] fetches the farm's real calendar/sessions/packages/activities/
+/// visitors/bookings/staff-roster/costs/retail-sales/incidents from the
+/// backend, and every write posts straight through, then reloads.
 ///
-/// Depends directly on [FeedProvider] and [MounehProvider] for the two
-/// Farm Shop / Visitor POS deduction paths (RULE-VIS-006) — a visitor
-/// retail sale always deducts real stock through the *owning* module's own
-/// write service, never by mutating another module's table directly.
+/// The Profitability Report is still computed locally (same pure
+/// `visits/analytics.dart` engine as before) from the freshly-loaded lists
+/// rather than by round-tripping to `GET /reports/visit-profitability`,
+/// because [VisitorProfitabilityTab] reads it synchronously on every build
+/// as the user flips between scopes — exactly the same trade-off
+/// `MounehProvider.previewCost` makes for its cost engine.
 class VisitsProvider extends ChangeNotifier {
-  VisitsProvider({
-    required VisitsWriteService writeService,
-    required SyncQueueController syncQueue,
-    required FeedProvider feedProvider,
-    required MounehProvider mounehProvider,
-  })  : _writeService = writeService,
-        _syncQueue = syncQueue,
-        _feedProvider = feedProvider,
-        _mounehProvider = mounehProvider,
-        _license = const ModuleLicense(moduleCode: kVisitsModuleCode, status: 'active', plan: 'visits_experience', activatedBy: 'user-super-1'),
-        _calendar = {for (final d in VisitsDemoData.openingCalendar) d.weekday: d},
-        _sessions = List.of(VisitsDemoData.sessions),
-        _packages = List.of(VisitsDemoData.packages),
-        _activities = List.of(VisitsDemoData.activities),
-        _visitors = List.of(VisitsDemoData.visitors),
-        _bookings = List.of(VisitsDemoData.bookings),
-        _staffRoster = List.of(VisitsDemoData.staffRoster),
-        _costs = List.of(VisitsDemoData.costs),
-        _retailSales = List.of(VisitsDemoData.retailSales),
-        _feedback = List.of(VisitsDemoData.feedback),
-        _incidents = List.of(VisitsDemoData.incidents);
+  VisitsProvider({required ApiClient apiClient}) : _api = apiClient;
 
-  final VisitsWriteService _writeService;
-  final SyncQueueController _syncQueue;
-  final FeedProvider _feedProvider;
-  final MounehProvider _mounehProvider;
+  final ApiClient _api;
 
-  ModuleLicense _license;
-  final Map<int, VisitOpeningCalendarDay> _calendar;
-  List<VisitSession> _sessions;
-  List<VisitPackage> _packages;
-  List<VisitActivity> _activities;
-  List<VisitorProfile> _visitors;
-  List<VisitBooking> _bookings;
-  List<VisitStaffRosterEntry> _staffRoster;
-  List<VisitCost> _costs;
-  List<VisitRetailSale> _retailSales;
-  List<VisitorFeedbackEntry> _feedback;
-  List<VisitIncident> _incidents;
+  ModuleLicense _license = const ModuleLicense(moduleCode: kVisitsModuleCode, status: 'inactive');
+  List<VisitOpeningCalendarDay> _calendarDays = [];
+  List<VisitSession> _sessions = [];
+  List<VisitPackage> _packages = [];
+  List<VisitActivity> _activities = [];
+  List<VisitorProfile> _visitors = [];
+  List<VisitBooking> _bookings = [];
+  List<VisitStaffRosterEntry> _staffRoster = [];
+  List<VisitCost> _costs = [];
+  List<VisitRetailSale> _retailSales = [];
+  List<VisitorFeedbackEntry> _feedback = [];
+  List<VisitIncident> _incidents = [];
+  List<UserProfile> _roster = [];
+  bool loading = false;
 
   ModuleLicense get license => _license;
   bool get isActive => _license.isActive;
-  List<VisitOpeningCalendarDay> get calendar => [for (var w = 0; w < 7; w++) _calendar[w] ?? VisitOpeningCalendarDay(weekday: w)];
-  List<VisitSession> get sessions => List.unmodifiable([..._sessions]..sort((a, b) => a.date.compareTo(b.date)));
+  List<VisitOpeningCalendarDay> get calendar => [for (var w = 0; w < 7; w++) _firstWhere(_calendarDays, (d) => d.weekday == w) ?? VisitOpeningCalendarDay(weekday: w)];
+  List<VisitSession> get sessions => List.unmodifiable(_sessions);
   List<VisitPackage> get packages => List.unmodifiable(_packages);
   List<VisitActivity> get activities => List.unmodifiable(_activities);
   List<VisitorProfile> get visitors => List.unmodifiable(_visitors);
-  List<VisitBooking> get bookings => List.unmodifiable([..._bookings]..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  List<VisitBooking> get bookings => List.unmodifiable(_bookings);
   List<VisitStaffRosterEntry> get staffRoster => List.unmodifiable(_staffRoster);
   List<VisitCost> get costs => List.unmodifiable(_costs);
   List<VisitRetailSale> get retailSales => List.unmodifiable(_retailSales);
   List<VisitorFeedbackEntry> get feedback => List.unmodifiable(_feedback);
   List<VisitIncident> get incidents => List.unmodifiable(_incidents);
+  /// Farm staff, for the Staff Roster picker — anyone the manager can assign
+  /// to work a session (mirrors [TasksProvider.roster]).
+  List<UserProfile> get roster => List.unmodifiable(_roster);
 
   VisitSession? sessionById(String id) => _firstWhere(_sessions, (s) => s.id == id);
   VisitPackage? packageById(String id) => _firstWhere(_packages, (p) => p.id == id);
@@ -116,14 +94,85 @@ class VisitsProvider extends ChangeNotifier {
   List<VisitSession> get upcomingSessions => sessions.where((s) => s.status == 'open' || s.status == 'full').toList();
   List<VisitSession> sessionsOn(DateTime day) => sessions.where((s) => s.date.year == day.year && s.date.month == day.month && s.date.day == day.day).toList();
 
-  // -------------------------------------------------------------- License
-  Future<void> setModuleActive(bool active) async {
-    final status = active ? 'active' : 'inactive';
-    final result = await _writeService.setModuleStatus(moduleCode: kVisitsModuleCode, status: status);
-    if (result.success) {
-      _license = _license.copyWith(status: status);
+  // -------------------------------------------------------------- Loading
+  Future<void> load() async {
+    loading = true;
+    notifyListeners();
+    try {
+      final statusJson = await _api.get('/modules/visits/status') as Map<String, dynamic>;
+      _license = ModuleLicense(moduleCode: kVisitsModuleCode, status: statusJson['status'] as String? ?? 'inactive');
+      if (!isActive) {
+        _clearData();
+        return;
+      }
+
+      final results = await Future.wait([
+        _api.get('/visit-calendar'),
+        _api.get('/visit-sessions'),
+        _api.get('/visit-packages'),
+        _api.get('/visit-activities'),
+        _api.get('/visit-bookings'),
+        _api.get('/visit-staff-roster'),
+        _api.get('/visit-costs'),
+        _api.get('/visit-retail-sales'),
+        _api.get('/visit-incidents'),
+        _api.get('/visitor-feedback'),
+        _api.get('/users'),
+      ]);
+      _calendarDays = (results[0] as List<dynamic>).map((e) => VisitOpeningCalendarDay.fromJson(e as Map<String, dynamic>)).toList();
+      _sessions = (results[1] as List<dynamic>).map((e) => VisitSession.fromJson(e as Map<String, dynamic>)).toList();
+      _packages = (results[2] as List<dynamic>).map((e) => VisitPackage.fromJson(e as Map<String, dynamic>)).toList();
+      _activities = (results[3] as List<dynamic>).map((e) => VisitActivity.fromJson(e as Map<String, dynamic>)).toList();
+      _bookings = (results[4] as List<dynamic>).map((e) => VisitBooking.fromJson(e as Map<String, dynamic>)).toList();
+      _roster = (results[10] as List<dynamic>).map((e) => UserProfile.fromJson(e as Map<String, dynamic>)).toList();
+      _staffRoster = (results[5] as List<dynamic>).map((e) {
+        final json = e as Map<String, dynamic>;
+        final name = _firstWhere(_roster, (u) => u.id == json['worker_id'])?.name;
+        return VisitStaffRosterEntry.fromJson(json, resolvedWorkerName: name);
+      }).toList();
+      _costs = (results[6] as List<dynamic>).map((e) => VisitCost.fromJson(e as Map<String, dynamic>)).toList();
+      _retailSales = (results[7] as List<dynamic>).map((e) => VisitRetailSale.fromJson(e as Map<String, dynamic>)).toList();
+      _incidents = (results[8] as List<dynamic>).map((e) => VisitIncident.fromJson(e as Map<String, dynamic>)).toList();
+      _feedback = (results[9] as List<dynamic>).map((e) => VisitorFeedbackEntry.fromJson(e as Map<String, dynamic>)).toList();
+
+      // Visitor CRM listing is permission-gated (RULE-VIS-010: owner/
+      // manager/visitor_coordinator only) — an animal/produce/mouneh
+      // employee still sees the rest of the module's read-only views, just
+      // not the visitor directory itself.
+      try {
+        final visitorsJson = await _api.get('/visitors') as List<dynamic>;
+        _visitors = visitorsJson.map((e) => VisitorProfile.fromJson(e as Map<String, dynamic>)).toList();
+      } on ApiException {
+        _visitors = [];
+      }
+    } finally {
+      loading = false;
       notifyListeners();
     }
+  }
+
+  void _clearData() {
+    _calendarDays = [];
+    _sessions = [];
+    _packages = [];
+    _activities = [];
+    _visitors = [];
+    _bookings = [];
+    _staffRoster = [];
+    _costs = [];
+    _retailSales = [];
+    _feedback = [];
+    _incidents = [];
+  }
+
+  // -------------------------------------------------------------- License
+  /// Module activation itself is super-user only on the backend
+  /// (RULE-VIS-001) — this call only succeeds for that role.
+  Future<WriteResult> setModuleActive(bool active) async {
+    final action = active ? 'activate' : 'deactivate';
+    final result = await _api.write(() => _api.post('/modules/$kVisitsModuleCode/$action'));
+    if (result.success) await load();
+    return result;
   }
 
   // ------------------------------------------------------- Opening calendar
@@ -136,52 +185,56 @@ class VisitsProvider extends ChangeNotifier {
     required int defaultCapacity,
     String? notes,
   }) async {
-    final result = await _writeService.upsertCalendarDay(weekday: weekday, isOpen: isOpen, openTime: openTime, closeTime: closeTime, defaultCapacity: defaultCapacity, notes: notes);
-    if (result.success) {
-      _calendar[weekday] = VisitOpeningCalendarDay(weekday: weekday, isOpen: isOpen, openTime: openTime, closeTime: closeTime, defaultCapacity: defaultCapacity, notes: notes);
-      _syncQueue.enqueue(entityType: 'visit_opening_calendar', entityId: 'weekday-$weekday', operation: 'update');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-calendar', body: {
+          'weekday': weekday,
+          'is_open': isOpen,
+          'open_time': openTime,
+          'close_time': closeTime,
+          'default_capacity': defaultCapacity,
+          'notes': notes,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   // -------------------------------------------------------------- Sessions
   Future<WriteResult> createSession({required DateTime date, required String startTime, required String endTime, int? capacity, String? weatherNote, double? expectedStaffCost}) async {
-    final defaultCap = _calendar[(date.weekday - 1) % 7]?.defaultCapacity ?? 0;
+    final defaultCap = _firstWhere(_calendarDays, (d) => d.weekday == (date.weekday - 1) % 7)?.defaultCapacity ?? 0;
     final resolvedCapacity = capacity ?? defaultCap;
     if (resolvedCapacity <= 0) return const WriteResult.fail('Set a capacity greater than zero (or configure a default for this weekday first).');
-    final id = _uuid.v4();
-    final result = await _writeService.createSession(id: id, date: date, startTime: startTime, endTime: endTime, capacity: resolvedCapacity, weatherNote: weatherNote, expectedStaffCost: expectedStaffCost);
-    if (result.success) {
-      _sessions.add(VisitSession(id: id, date: date, startTime: startTime, endTime: endTime, capacity: resolvedCapacity, weatherNote: weatherNote, expectedStaffCost: expectedStaffCost));
-      _syncQueue.enqueue(entityType: 'visit_session', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-sessions', body: {
+          'date': date.toIso8601String().split('T').first,
+          'start_time': startTime,
+          'end_time': endTime,
+          'capacity': resolvedCapacity,
+          'weather_note': weatherNote,
+          'expected_staff_cost': expectedStaffCost,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   Future<WriteResult> updateSession({required String id, int? capacity, String? status, String? weatherNote}) async {
-    final index = _sessions.indexWhere((s) => s.id == id);
-    if (index == -1) return const WriteResult.fail('Session not found.');
-    final result = await _writeService.updateSession(id: id, capacity: capacity, status: status, weatherNote: weatherNote);
-    if (result.success) {
-      _sessions[index] = _sessions[index].copyWith(capacity: capacity, status: status, weatherNote: weatherNote);
-      _syncQueue.enqueue(entityType: 'visit_session', entityId: id, operation: 'update');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.patch('/visit-sessions/$id', body: {
+          if (capacity != null) 'capacity': capacity,
+          if (status != null) 'status': status,
+          if (weatherNote != null) 'weather_note': weatherNote,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   // -------------------------------------------------------------- Packages
   Future<WriteResult> createPackage({required String name, String? description, double basePrice = 0, String currency = 'USD', int? durationMinutes}) async {
     if (name.trim().isEmpty) return const WriteResult.fail('Give the package a name.');
-    final id = _uuid.v4();
-    final result = await _writeService.createPackage(id: id, name: name, description: description, basePrice: basePrice, currency: currency, durationMinutes: durationMinutes);
-    if (result.success) {
-      _packages.add(VisitPackage(id: id, name: name, description: description, basePrice: basePrice, currency: currency, durationMinutes: durationMinutes));
-      _syncQueue.enqueue(entityType: 'visit_package', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-packages', body: {
+          'name': name,
+          'description': description,
+          'base_price': basePrice,
+          'currency': currency,
+          'duration_minutes': durationMinutes,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -200,49 +253,31 @@ class VisitsProvider extends ChangeNotifier {
   }) async {
     if (name.trim().isEmpty) return const WriteResult.fail('Give the activity a name.');
     if (capacityPerSlot <= 0) return const WriteResult.fail('Capacity per slot must be at least 1.');
-    final id = _uuid.v4();
-    final result = await _writeService.createActivity(
-      id: id,
-      name: name,
-      activityType: activityType,
-      price: price,
-      capacityPerSlot: capacityPerSlot,
-      durationMinutes: durationMinutes,
-      requiresStaffRole: requiresStaffRole,
-      requiresAnimalId: requiresAnimalId,
-      maxUsesPerDay: maxUsesPerDay,
-    );
-    if (result.success) {
-      _activities.add(VisitActivity(
-        id: id,
-        name: name,
-        activityType: activityType,
-        price: price,
-        capacityPerSlot: capacityPerSlot,
-        durationMinutes: durationMinutes,
-        requiresStaffRole: requiresStaffRole,
-        requiresAnimalId: requiresAnimalId,
-        maxUsesPerDay: maxUsesPerDay,
-      ));
-      _syncQueue.enqueue(entityType: 'visit_activity', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-activities', body: {
+          'name': name,
+          'activity_type': activityType,
+          'price': price,
+          'capacity_per_slot': capacityPerSlot,
+          'duration_minutes': durationMinutes,
+          'requires_staff_role': requiresStaffRole,
+          'requires_animal_id': requiresAnimalId,
+          'welfare_limit_json': maxUsesPerDay != null ? {'max_uses_per_day': maxUsesPerDay} : null,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   // -------------------------------------------------------------- Visitors
-  Future<WriteResult> _createVisitor({required String fullName, String? phone, String? email, String preferredLanguage = 'en', String? notes, bool consentMarketing = false}) async {
-    final id = _uuid.v4();
-    final result = await _writeService.createVisitor(id: id, fullName: fullName, phone: phone, email: email, preferredLanguage: preferredLanguage, notes: notes, consentMarketing: consentMarketing);
-    if (result.success) {
-      _visitors.add(VisitorProfile(id: id, fullName: fullName, phone: phone, email: email, preferredLanguage: preferredLanguage, notes: notes, consentMarketing: consentMarketing));
-    }
-    return result;
-  }
-
   Future<WriteResult> createVisitor({required String fullName, String? phone, String? email, String preferredLanguage = 'en', String? notes, bool consentMarketing = false}) async {
-    final result = await _createVisitor(fullName: fullName, phone: phone, email: email, preferredLanguage: preferredLanguage, notes: notes, consentMarketing: consentMarketing);
-    if (result.success) notifyListeners();
+    final result = await _api.write(() => _api.post('/visitors', body: {
+          'full_name': fullName,
+          'phone': phone,
+          'email': email,
+          'preferred_language': preferredLanguage,
+          'notes': notes,
+          'consent_marketing': consentMarketing,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -260,28 +295,12 @@ class VisitsProvider extends ChangeNotifier {
     return total;
   }
 
-  int _activityBookedQuantity(String activityId, DateTime scheduledAt) {
-    var total = 0;
-    for (final b in _bookings) {
-      if (b.status == 'cancelled' || b.status == 'no_show') continue;
-      for (final a in b.activities) {
-        if (a.activityId == activityId && a.scheduledAt.isAtSameMomentAs(scheduledAt)) total += a.quantity;
-      }
-    }
-    return total;
-  }
-
-  int _sessionConfirmedGuestCount(String sessionId) =>
-      _bookings.where((b) => b.sessionId == sessionId && (b.status == 'confirmed' || b.status == 'checked_in' || b.status == 'completed')).fold<int>(0, (sum, b) => sum + b.guestCount);
-
-  Set<String> _sessionAssignedRoles(String sessionId) => staffForSession(sessionId).map((r) => r.role).toSet();
-
   /// RULE-VIS-002/004/005/008/010: creates a draft booking. Pass either
   /// [visitorId] (existing visitor) or the `newVisitor*` fields for a
-  /// walk-in — never both. Activity capacity and animal-welfare limits are
-  /// enforced here at creation time; session capacity and handler
-  /// assignment are enforced later, at [confirmBooking] time, matching the
-  /// backend engine exactly.
+  /// walk-in — never both; the backend creates the walk-in's visitor
+  /// profile in the same transaction as the booking. Capacity, welfare-
+  /// limit, session-capacity and handler-assignment checks all happen
+  /// server-side; a violation comes back as [WriteResult.error].
   Future<WriteResult> createBooking({
     String? visitorId,
     String? newVisitorFullName,
@@ -296,220 +315,116 @@ class VisitsProvider extends ChangeNotifier {
     List<({String activityId, DateTime scheduledAt, int quantity})> activitySelections = const [],
     String? idempotencyKey,
   }) async {
-    if (idempotencyKey != null) {
-      final existing = _firstWhere(_bookings, (b) => b.id == idempotencyKey);
-      if (existing != null) return const WriteResult.ok();
+    if (adults + children <= 0) return const WriteResult.fail('A booking needs at least one guest.');
+    if (visitorId == null && (newVisitorFullName == null || newVisitorFullName.trim().isEmpty)) {
+      return const WriteResult.fail('Pick an existing visitor or enter a name for the walk-in guest.');
     }
-    final guestCount = adults + children;
-    if (guestCount <= 0) return const WriteResult.fail('A booking needs at least one guest.');
-    final session = sessionById(sessionId);
-    final package = packageById(packageId);
-    if (session == null) return const WriteResult.fail('Session not found.');
-    if (package == null) return const WriteResult.fail('Package not found.');
-
-    var resolvedVisitorId = visitorId;
-    if (resolvedVisitorId == null) {
-      if (newVisitorFullName == null || newVisitorFullName.trim().isEmpty) {
-        return const WriteResult.fail('Pick an existing visitor or enter a name for the walk-in guest.');
-      }
-      final visitorResult = await _createVisitor(fullName: newVisitorFullName, phone: newVisitorPhone, email: newVisitorEmail);
-      if (!visitorResult.success) return visitorResult;
-      resolvedVisitorId = _visitors.last.id;
-    }
-
-    double activityRevenue = 0;
-    final activityLines = <Map<String, Object?>>[];
-    final bookingActivities = <VisitBookingActivity>[];
-    for (final sel in activitySelections) {
-      final activity = activityById(sel.activityId);
-      if (activity == null) return WriteResult.fail('Unknown activity: ${sel.activityId}');
-      try {
-        analytics.validateActivityCapacity(capacityPerSlot: activity.capacityPerSlot, alreadyBooked: _activityBookedQuantity(activity.id, sel.scheduledAt), requested: sel.quantity);
-        analytics.validateWelfareLimit(maxUsesPerDay: activity.maxUsesPerDay, usesToday: activityUsesOnDay(activity.id, sel.scheduledAt), requested: sel.quantity);
-      } on ArgumentError catch (e) {
-        return WriteResult.fail(e.message.toString());
-      }
-      activityRevenue += activity.price * sel.quantity;
-      activityLines.add({'activity_id': activity.id, 'scheduled_at': sel.scheduledAt.toIso8601String(), 'quantity': sel.quantity, 'unit_price': activity.price, 'status': 'scheduled'});
-      bookingActivities.add(VisitBookingActivity(activityId: activity.id, scheduledAt: sel.scheduledAt, quantity: sel.quantity, unitPrice: activity.price));
-    }
-
-    final packageRevenue = package.basePrice * guestCount;
-    final totalAmount = packageRevenue + activityRevenue;
-    final id = idempotencyKey ?? _uuid.v4();
-
-    final result = await _writeService.createBooking(
-      id: id,
-      visitorId: resolvedVisitorId,
-      sessionId: sessionId,
-      packageId: packageId,
-      adults: adults,
-      children: children,
-      totalAmount: totalAmount,
-      balanceDue: totalAmount,
-      source: source,
-      notes: notes,
-      idempotencyKey: idempotencyKey,
-      activities: activityLines,
-    );
-    if (result.success) {
-      _bookings.add(VisitBooking(
-        id: id,
-        visitorId: resolvedVisitorId,
-        sessionId: sessionId,
-        packageId: packageId,
-        adults: adults,
-        children: children,
-        totalAmount: totalAmount,
-        balanceDue: totalAmount,
-        source: source,
-        notes: notes,
-        activities: bookingActivities,
-        createdAt: DateTime.now(),
-      ));
-      _syncQueue.enqueue(entityType: 'visit_booking', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-bookings', body: {
+          'visitor_id': visitorId,
+          'visitor': visitorId == null
+              ? {
+                  'full_name': newVisitorFullName,
+                  'phone': newVisitorPhone,
+                  'email': newVisitorEmail,
+                }
+              : null,
+          'session_id': sessionId,
+          'package_id': packageId,
+          'adults': adults,
+          'children': children,
+          'activities': [for (final a in activitySelections) {'activity_id': a.activityId, 'scheduled_at': a.scheduledAt.toIso8601String(), 'quantity': a.quantity}],
+          'source': source,
+          'notes': notes,
+          'idempotency_key': idempotencyKey,
+        }));
+    if (result.success) await load();
     return result;
   }
 
-  Future<WriteResult> _transition(String bookingId, String nextStatus, String? timestampColumn) async {
-    final index = _bookings.indexWhere((b) => b.id == bookingId);
-    if (index == -1) return const WriteResult.fail('Booking not found.');
-    final booking = _bookings[index];
-    try {
-      analytics.validateStatusTransition(booking.status, nextStatus);
-    } on ArgumentError catch (e) {
-      return WriteResult.fail(e.message.toString());
-    }
-
-    if (nextStatus == 'confirmed') {
-      final session = sessionById(booking.sessionId);
-      if (session == null) return const WriteResult.fail('Session not found.');
-      try {
-        analytics.validateSessionCapacity(capacity: session.capacity, alreadyBooked: _sessionConfirmedGuestCount(booking.sessionId), requested: booking.guestCount);
-        final assignedRoles = _sessionAssignedRoles(booking.sessionId);
-        for (final a in booking.activities) {
-          final activity = activityById(a.activityId);
-          analytics.validateHandlerAssignment(requiresStaffRole: activity?.requiresStaffRole, assignedRoles: assignedRoles);
-        }
-      } on ArgumentError catch (e) {
-        return WriteResult.fail(e.message.toString());
-      }
-    }
-
-    final result = await _writeService.updateBookingStatus(id: bookingId, status: nextStatus, timestampColumn: timestampColumn);
-    if (result.success) {
-      final now = DateTime.now();
-      _bookings[index] = booking.copyWith(
-        status: nextStatus,
-        confirmedAt: timestampColumn == 'confirmed_at' ? now : null,
-        checkedInAt: timestampColumn == 'checked_in_at' ? now : null,
-        completedAt: timestampColumn == 'completed_at' ? now : null,
-        cancelledAt: timestampColumn == 'cancelled_at' ? now : null,
-      );
-      _syncQueue.enqueue(entityType: 'visit_booking', entityId: bookingId, operation: 'update');
-      notifyListeners();
-    }
+  Future<WriteResult> _transition(String bookingId, String path, {Map<String, dynamic>? body}) async {
+    final result = await _api.write(() => _api.post('/visit-bookings/$bookingId/$path', body: body));
+    if (result.success) await load();
     return result;
   }
 
-  Future<WriteResult> confirmBooking(String bookingId) => _transition(bookingId, 'confirmed', 'confirmed_at');
-  Future<WriteResult> checkInBooking(String bookingId) => _transition(bookingId, 'checked_in', 'checked_in_at');
-  Future<WriteResult> completeBooking(String bookingId) => _transition(bookingId, 'completed', 'completed_at');
-  Future<WriteResult> noShowBooking(String bookingId) => _transition(bookingId, 'no_show', null);
-  Future<WriteResult> cancelBooking(String bookingId) => _transition(bookingId, 'cancelled', 'cancelled_at');
-  Future<WriteResult> refundBooking(String bookingId) => _transition(bookingId, 'refunded', null);
+  Future<WriteResult> confirmBooking(String bookingId) => _transition(bookingId, 'confirm');
+  Future<WriteResult> checkInBooking(String bookingId) => _transition(bookingId, 'check-in');
+  Future<WriteResult> completeBooking(String bookingId) => _transition(bookingId, 'complete');
+  Future<WriteResult> noShowBooking(String bookingId) => _transition(bookingId, 'no-show');
+  Future<WriteResult> cancelBooking(String bookingId, {String? reason}) => _transition(bookingId, 'cancel', body: {'reason': reason, 'refund': false});
+  Future<WriteResult> refundBooking(String bookingId) => _transition(bookingId, 'cancel', body: {'refund': true});
 
   // ---------------------------------------------------- Staff & direct costs
-  double _hoursBetween(String start, String end) {
-    final s = start.split(':');
-    final e = end.split(':');
-    final startMinutes = int.parse(s[0]) * 60 + int.parse(s[1]);
-    final endMinutes = int.parse(e[0]) * 60 + int.parse(e[1]);
-    final diff = endMinutes - startMinutes;
-    return diff > 0 ? diff / 60.0 : 0;
-  }
-
   Future<WriteResult> addStaffRoster({required String sessionId, required String workerId, String? workerName, required String role, required String startTime, required String endTime, double hourlyRate = 0}) async {
     if (sessionById(sessionId) == null) return const WriteResult.fail('Session not found.');
-    final totalCost = _hoursBetween(startTime, endTime) * hourlyRate;
-    final id = _uuid.v4();
-    final result = await _writeService.addStaffRoster(id: id, sessionId: sessionId, workerId: workerId, workerName: workerName, role: role, startTime: startTime, endTime: endTime, hourlyRate: hourlyRate, totalCost: totalCost);
-    if (result.success) {
-      _staffRoster.add(VisitStaffRosterEntry(id: id, sessionId: sessionId, workerId: workerId, workerName: workerName ?? workerId, role: role, startTime: startTime, endTime: endTime, hourlyRate: hourlyRate, totalCost: totalCost));
-      _syncQueue.enqueue(entityType: 'visit_staff_roster', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-staff-roster', body: {
+          'session_id': sessionId,
+          'worker_id': workerId,
+          'role': role,
+          'start_time': startTime,
+          'end_time': endTime,
+          'hourly_rate': hourlyRate,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   Future<WriteResult> addCost({required String sessionId, required String category, String? description, required double amount, String allocationMethod = 'per_session'}) async {
     if (amount <= 0) return const WriteResult.fail('Amount must be greater than zero.');
-    final id = _uuid.v4();
-    final result = await _writeService.addCost(id: id, sessionId: sessionId, category: category, description: description, amount: amount, allocationMethod: allocationMethod);
-    if (result.success) {
-      _costs.add(VisitCost(id: id, sessionId: sessionId, category: category, description: description, amount: amount, allocationMethod: allocationMethod));
-      _syncQueue.enqueue(entityType: 'visit_cost', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-costs', body: {
+          'session_id': sessionId,
+          'category': category,
+          'description': description,
+          'amount': amount,
+          'allocation_method': allocationMethod,
+        }));
+    if (result.success) await load();
     return result;
   }
 
   // -------------------------------------------------- Farm Shop / Visitor POS
-  /// RULE-VIS-006: deducts a plain inventory item through [FeedProvider]'s
-  /// own write service, then records the visitor-facing sale.
-  Future<WriteResult> recordInventoryRetailSale({String? bookingId, String? visitorId, String channel = 'farm_shop', required String inventoryItemId, required double quantity, required double unitPrice}) async {
-    if (quantity <= 0) return const WriteResult.fail('Quantity must be greater than zero.');
-    final deduction = await _feedProvider.recordDistribution(itemId: inventoryItemId, quantityKg: quantity, reason: 'visitor_retail_sale', linkedEntityType: 'visit_retail_sale', linkedEntityId: bookingId);
-    if (!deduction.success) return deduction;
-    return _persistRetailSale(bookingId: bookingId, visitorId: visitorId, channel: channel, totalAmount: quantity * unitPrice);
+  /// RULE-VIS-006: the backend deducts real stock (a plain inventory item
+  /// or Mouneh finished-goods) and records the core `Sale` row atomically
+  /// with the visitor-facing retail sale — see `record_retail_sale` in
+  /// `app/api/v1/visits.py`.
+  Future<WriteResult> recordInventoryRetailSale({String? bookingId, String? visitorId, String channel = 'farm_shop', required String inventoryItemId, required double quantity, required double unitPrice}) {
+    if (quantity <= 0) return Future.value(const WriteResult.fail('Quantity must be greater than zero.'));
+    return _persistRetailSale(bookingId: bookingId, visitorId: visitorId, channel: channel, lines: [
+      {'inventory_item_id': inventoryItemId, 'quantity': quantity, 'unit_price': unitPrice},
+    ]);
   }
 
-  /// RULE-VIS-006: deducts Mouneh finished-goods stock through
-  /// [MounehProvider]'s own write service (mirrors `record_sale` on the
-  /// backend), then records the visitor-facing sale.
-  Future<WriteResult> recordMounehRetailSale({String? bookingId, String? visitorId, String channel = 'farm_shop', required String finishedGoodsStockId, required double quantity, required double unitPrice}) async {
-    if (quantity <= 0) return const WriteResult.fail('Quantity must be greater than zero.');
-    final stock = _firstWhere(_mounehProvider.finishedGoods, (s) => s.id == finishedGoodsStockId);
-    if (stock == null) return const WriteResult.fail('Stock record not found.');
-    final deduction = await _mounehProvider.recordSale(productId: stock.productId, finishedGoodsStockId: stock.id, quantity: quantity, unitPrice: unitPrice, channel: 'retail');
-    if (!deduction.success) return deduction;
-    return _persistRetailSale(bookingId: bookingId, visitorId: visitorId, channel: channel, totalAmount: quantity * unitPrice);
+  Future<WriteResult> recordMounehRetailSale({String? bookingId, String? visitorId, String channel = 'farm_shop', required String finishedGoodsStockId, required double quantity, required double unitPrice}) {
+    if (quantity <= 0) return Future.value(const WriteResult.fail('Quantity must be greater than zero.'));
+    return _persistRetailSale(bookingId: bookingId, visitorId: visitorId, channel: channel, lines: [
+      {'finished_goods_stock_id': finishedGoodsStockId, 'quantity': quantity, 'unit_price': unitPrice},
+    ]);
   }
 
-  Future<WriteResult> _persistRetailSale({String? bookingId, String? visitorId, required String channel, required double totalAmount}) async {
-    final id = _uuid.v4();
-    final result = await _writeService.recordRetailSale(id: id, bookingId: bookingId, visitorId: visitorId, channel: channel, totalAmount: totalAmount);
-    if (result.success) {
-      _retailSales.add(VisitRetailSale(id: id, bookingId: bookingId, visitorId: visitorId, channel: channel, totalAmount: totalAmount, soldAt: DateTime.now()));
-      _syncQueue.enqueue(entityType: 'visit_retail_sale', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+  Future<WriteResult> _persistRetailSale({String? bookingId, String? visitorId, required String channel, required List<Map<String, Object?>> lines}) async {
+    final result = await _api.write(() => _api.post('/visit-retail-sales', body: {'booking_id': bookingId, 'visitor_id': visitorId, 'channel': channel, 'lines': lines}));
+    if (result.success) await load();
     return result;
   }
 
   // ------------------------------------------------------- Feedback & incidents
   Future<WriteResult> addFeedback({required String bookingId, required int rating, String? comments, bool? wouldReturn}) async {
     if (rating < 1 || rating > 5) return const WriteResult.fail('Rating must be between 1 and 5.');
-    final id = _uuid.v4();
-    final result = await _writeService.addFeedback(id: id, bookingId: bookingId, rating: rating, comments: comments, wouldReturn: wouldReturn);
-    if (result.success) {
-      _feedback.add(VisitorFeedbackEntry(id: id, bookingId: bookingId, rating: rating, comments: comments, wouldReturn: wouldReturn, submittedAt: DateTime.now()));
-      _syncQueue.enqueue(entityType: 'visitor_feedback', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visitor-feedback', body: {'booking_id': bookingId, 'rating': rating, 'comments': comments, 'would_return': wouldReturn}));
+    if (result.success) await load();
     return result;
   }
 
   Future<WriteResult> addIncident({required String sessionId, String? bookingId, required String incidentType, String severity = 'low', required String description, String? actionTaken}) async {
-    final id = _uuid.v4();
-    final result = await _writeService.addIncident(id: id, sessionId: sessionId, bookingId: bookingId, incidentType: incidentType, severity: severity, description: description, actionTaken: actionTaken);
-    if (result.success) {
-      _incidents.add(VisitIncident(id: id, sessionId: sessionId, bookingId: bookingId, incidentType: incidentType, severity: severity, description: description, actionTaken: actionTaken, createdAt: DateTime.now()));
-      _syncQueue.enqueue(entityType: 'visit_incident', entityId: id, operation: 'create');
-      notifyListeners();
-    }
+    final result = await _api.write(() => _api.post('/visit-incidents', body: {
+          'session_id': sessionId,
+          'booking_id': bookingId,
+          'incident_type': incidentType,
+          'severity': severity,
+          'description': description,
+          'action_taken': actionTaken,
+        }));
+    if (result.success) await load();
     return result;
   }
 
@@ -518,7 +433,10 @@ class VisitsProvider extends ChangeNotifier {
   /// granular components rather than trusting `booking.totalAmount` — see
   /// `backend/app/visits/analytics.py`'s doc comment for why (avoids
   /// double-counting activity revenue already folded into a booking's
-  /// stored total).
+  /// stored total). A retail sale with no linked booking has no timestamp
+  /// from the API (see `VisitRetailSale.soldAt`'s doc comment), so an
+  /// unlinked walk-in sale counts toward every scope rather than being
+  /// silently dropped from date-range reports.
   ProfitabilityReport profitabilityFor({String? sessionId, DateTime? start, DateTime? end}) {
     final Iterable<VisitSession> scopedSessions;
     if (sessionId != null) {
@@ -553,8 +471,7 @@ class VisitsProvider extends ChangeNotifier {
     final scopedRetail = _retailSales.where((r) {
       if (r.bookingId != null) return countedBookingIds.contains(r.bookingId);
       if (sessionId != null) return false; // a single-session scope needs a booking link to attribute a walk-in sale
-      if (start != null && end != null) return !r.soldAt.isBefore(start) && r.soldAt.isBefore(end.add(const Duration(days: 1)));
-      return true;
+      return true; // no per-sale timestamp from the API — include unlinked walk-ins in every other scope
     }).toList();
     final retailRevenue = scopedRetail.fold<double>(0, (sum, r) => sum + r.totalAmount);
 

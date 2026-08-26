@@ -545,6 +545,14 @@ def submit_feedback(payload: VisitorFeedbackCreate, db: Session = Depends(get_db
     return feedback
 
 
+@router.get("/visitor-feedback", response_model=list[VisitorFeedbackOut])
+def list_feedback(booking_id: str | None = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> list[vm.VisitorFeedback]:
+    stmt = select(vm.VisitorFeedback).where(vm.VisitorFeedback.farm_id == current_user.farm_id)
+    if booking_id:
+        stmt = stmt.where(vm.VisitorFeedback.booking_id == booking_id)
+    return list(db.scalars(stmt.order_by(vm.VisitorFeedback.submitted_at.desc())))
+
+
 @router.post("/visit-incidents", response_model=VisitIncidentOut, status_code=status.HTTP_201_CREATED)
 def report_incident(payload: VisitIncidentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(require_incident_report_role)) -> vm.VisitIncident:
     _session_or_404(db, payload.session_id, current_user.farm_id)

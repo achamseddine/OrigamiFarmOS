@@ -1,6 +1,23 @@
 /// Observation quality levels (handbook/04.3-Observation-Model.md §2).
 enum ObservationQuality { instrumentMeasured, counted, humanObserved, opinion }
 
+/// The backend stores quality as a snake_case string (see
+/// database/schema.sql's CHECK constraint) — never the Dart enum's own
+/// `.name`, which is camelCase.
+ObservationQuality observationQualityFromApi(String v) => switch (v) {
+      'instrument_measured' => ObservationQuality.instrumentMeasured,
+      'counted' => ObservationQuality.counted,
+      'opinion' => ObservationQuality.opinion,
+      _ => ObservationQuality.humanObserved,
+    };
+
+String observationQualityToApi(ObservationQuality q) => switch (q) {
+      ObservationQuality.instrumentMeasured => 'instrument_measured',
+      ObservationQuality.counted => 'counted',
+      ObservationQuality.humanObserved => 'human_observed',
+      ObservationQuality.opinion => 'opinion',
+    };
+
 extension ObservationQualityX on ObservationQuality {
   /// A=highest confidence .. D=lowest.
   String get grade {
@@ -66,54 +83,19 @@ class Observation {
   final String? notes;
   final bool verified;
 
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'farm_id': farmId,
-        'entity_type': entityType,
-        'entity_id': entityId,
-        'observation_type': observationType,
-        'quality': quality.name,
-        'observer_id': observerId,
-        'observed_at': observedAt.toIso8601String(),
-        'value_numeric': valueNumeric,
-        'value_text': valueText,
-        'unit': unit,
-        'severity': severity,
-        'notes': notes,
-        'verified': verified ? 1 : 0,
-      };
-}
-
-/// Constitution: "Every important change is an event. History is never
-/// silently deleted." One immutable row per state change.
-class FarmEvent {
-  const FarmEvent({
-    required this.id,
-    required this.farmId,
-    required this.entityType,
-    required this.entityId,
-    required this.eventType,
-    required this.payload,
-    required this.createdBy,
-    required this.createdAt,
-  });
-
-  final String id;
-  final String farmId;
-  final String entityType;
-  final String entityId;
-  final String eventType;
-  final Map<String, Object?> payload;
-  final String createdBy;
-  final DateTime createdAt;
-
-  Map<String, Object?> toMap() => {
-        'id': id,
-        'farm_id': farmId,
-        'entity_type': entityType,
-        'entity_id': entityId,
-        'event_type': eventType,
-        'created_by': createdBy,
-        'created_at': createdAt.toIso8601String(),
-      };
+  factory Observation.fromJson(Map<String, dynamic> json) => Observation(
+        id: json['id'] as String,
+        farmId: json['farm_id'] as String,
+        entityType: json['entity_type'] as String,
+        entityId: json['entity_id'] as String,
+        observationType: json['observation_type'] as String,
+        quality: observationQualityFromApi(json['quality'] as String? ?? 'human_observed'),
+        observerId: json['observer_id'] as String,
+        observedAt: DateTime.parse(json['observed_at'] as String),
+        valueNumeric: (json['value_numeric'] as num?)?.toDouble(),
+        valueText: json['value_text'] as String?,
+        unit: json['unit'] as String?,
+        severity: json['severity'] as String?,
+        notes: json['notes'] as String?,
+      );
 }

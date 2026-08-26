@@ -118,7 +118,7 @@ class _ObserveDialogState extends State<_ObserveDialog> {
     final result = await context.read<AnimalsProvider>().recordObservation(
           animalId: widget.animalId,
           observationType: _type,
-          quality: ObservationQuality.humanObserved.name,
+          quality: observationQualityToApi(ObservationQuality.humanObserved),
           severity: _severity,
           notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         );

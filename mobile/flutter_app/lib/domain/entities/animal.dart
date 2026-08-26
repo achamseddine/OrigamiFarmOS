@@ -1,6 +1,22 @@
 enum AnimalHealthStatus { healthy, underObservation, underTreatment }
 
+AnimalHealthStatus _statusFromApi(String v) => switch (v) {
+      'under_observation' => AnimalHealthStatus.underObservation,
+      'under_treatment' => AnimalHealthStatus.underTreatment,
+      _ => AnimalHealthStatus.healthy,
+    };
+
 enum AnimalSpecies { cow, goat, sheep, horse, layerHen, duck, turkey }
+
+AnimalSpecies _speciesFromApi(String v) => switch (v) {
+      'goat' => AnimalSpecies.goat,
+      'sheep' => AnimalSpecies.sheep,
+      'horse' => AnimalSpecies.horse,
+      'layer_hen' => AnimalSpecies.layerHen,
+      'duck' => AnimalSpecies.duck,
+      'turkey' => AnimalSpecies.turkey,
+      _ => AnimalSpecies.cow,
+    };
 
 extension AnimalSpeciesX on AnimalSpecies {
   String get label {
@@ -73,6 +89,32 @@ class Animal {
 
   bool get isUnderWithdrawal =>
       underWithdrawalUntil != null && underWithdrawalUntil!.isAfter(DateTime.now());
+
+  /// Backend `AnimalOut` shape (schemas/animals.py) — `milkTodayL`/
+  /// `eggsToday` aren't part of that response (the API doesn't compute a
+  /// per-animal "today" rollup), so they stay null here; the Milk/Egg
+  /// screens get today's totals from `ProductionProvider` instead.
+  factory Animal.fromJson(Map<String, dynamic> json) => Animal(
+        id: json['id'] as String,
+        tag: json['tag'] as String,
+        name: json['name'] as String,
+        species: _speciesFromApi(json['species'] as String),
+        breed: json['breed'] as String? ?? '',
+        sex: json['sex'] as String? ?? '',
+        birthDate: json['birth_date'] != null ? DateTime.parse(json['birth_date'] as String) : DateTime.now(),
+        status: _statusFromApi(json['status'] as String),
+        location: json['location_label'] as String? ?? '',
+        healthScore: (json['health_score'] as num?)?.toInt() ?? 100,
+        photoPath: json['photo_path'] as String?,
+        pregnant: json['pregnant'] as bool? ?? false,
+        pregnancyDays: (json['pregnancy_days'] as num?)?.toInt(),
+        lactating: json['lactating'] as bool? ?? false,
+        lactationCycle: (json['lactation_cycle'] as num?)?.toInt(),
+        underWithdrawalUntil: json['withdrawal_until'] != null ? DateTime.parse(json['withdrawal_until'] as String) : null,
+        withdrawalReason: json['withdrawal_reason'] as String?,
+        weightKg: (json['weight_kg'] as num?)?.toDouble(),
+        groupName: json['group_name'] as String?,
+      );
 
   String get ageLabel {
     final now = DateTime.now();

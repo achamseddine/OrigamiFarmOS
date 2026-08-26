@@ -8,6 +8,9 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.security import hash_password
+from app.domain import models
+from app.repositories.base import new_id
 from tests.conftest import auth_headers
 
 
@@ -56,6 +59,29 @@ class TestModuleLicense:
         # a module that was never activated blocks every mouneh endpoint identically
         r = client.get("/api/v1/modules/never-activated", headers=_manager_headers(client))
         assert r.status_code == 404
+
+
+class TestMounehOperatorRole:
+    """A dedicated Mouneh employee (role=mouneh_operator) can run day-to-day
+    production without being a farm owner/manager — mirrors the Visits
+    module's visitor_coordinator role."""
+
+    def test_mouneh_operator_can_create_a_product(self, client, db_session):
+        session, _factory = db_session
+        session.add(
+            models.User(
+                id=new_id(), farm_id="farm-origami", name="Mouneh Operator", email="mouneh.op@origami.farm",
+                password_hash=hash_password("farmos123"), role="mouneh_operator", department="mouneh",
+            )
+        )
+        session.commit()
+        headers = auth_headers(client, "mouneh.op@origami.farm", "farmos123")
+        r = client.post("/api/v1/mouneh/products", json={"name": "Kishk", "output_unit": "jar"}, headers=headers)
+        assert r.status_code == 201, r.text
+
+    def test_plain_worker_still_blocked(self, client):
+        r = client.post("/api/v1/mouneh/products", json={"name": "Jam", "output_unit": "jar"}, headers=_worker_headers(client))
+        assert r.status_code == 403
 
 
 class TestDynamicProductBuilder:
