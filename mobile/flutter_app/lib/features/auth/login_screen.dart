@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../../auth/session_controller.dart';
+import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -163,9 +164,9 @@ class _LoginForm extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: FarmSpacing.lg),
-          Text('Sign in', style: FarmTypography.display(size: 26)),
+          Text(context.t('startMyDay'), style: FarmTypography.display(size: 26)),
           const SizedBox(height: 4),
-          Text('One login per device — you stay signed in until you log out.', style: FarmTypography.textTheme.bodyMedium),
+          Text(context.t('startMyDaySubtitle'), style: FarmTypography.textTheme.bodyMedium),
           const SizedBox(height: FarmSpacing.lg),
           TextField(
             controller: email,
@@ -197,7 +198,9 @@ class _LoginForm extends StatelessWidget {
             width: double.infinity,
             child: FilledButton(
               onPressed: busy ? null : () => onSubmit(),
-              child: busy ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Sign in'),
+              child: busy
+                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(context.t('startMyDay')),
             ),
           ),
         ],
