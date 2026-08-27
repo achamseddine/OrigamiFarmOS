@@ -1,18 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmos/app/app.dart';
 import 'package:farmos/data/local/cache_effects.dart';
 import 'package:farmos/data/local/local_store.dart';
 import 'package:farmos/data/local/outbox_labels.dart';
 
-/// The widget test runs without a device: there is no SQLite and no
-/// shared_preferences platform channel, so `LocalStore.open()` is never
-/// called and `FarmOSApp` is built with a null store — the app then
-/// behaves as an online-only client. What it can still prove is that the
-/// app boots to the sign-in screen rather than into the farm, which is
-/// the rule the offline design rests on: **the first sign-in needs the
-/// farm network.**
+/// The widget test runs without a device: there is no SQLite, so
+/// `LocalStore.open()` is never called and `FarmOSApp` is built with a
+/// null store — the app then behaves as an online-only client. What it
+/// can still prove is that the app boots to the sign-in screen rather
+/// than into the farm, which is the rule the offline design rests on:
+/// **the first sign-in needs the farm network.**
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('the app opens on the sign-in screen, not the farm', (WidgetTester tester) async {
+    // No stored token, and a working preferences channel so the session
+    // restore actually finishes instead of sitting on the splash.
+    SharedPreferences.setMockInitialValues({});
+
     await tester.pumpWidget(const FarmOSApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));

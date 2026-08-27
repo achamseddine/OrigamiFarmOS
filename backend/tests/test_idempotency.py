@@ -15,10 +15,6 @@ from app.domain import models
 from .conftest import auth_headers
 
 
-def _farm_id(session) -> str:
-    return session.scalars(select(models.Farm)).first().id
-
-
 def _first_cow(session) -> models.Animal:
     return session.scalars(select(models.Animal).where(models.Animal.species == "cow")).first()
 

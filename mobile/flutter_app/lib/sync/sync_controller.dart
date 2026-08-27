@@ -33,12 +33,12 @@ enum SyncOutcome {
 class SyncController extends ChangeNotifier {
   SyncController({required ApiClient api}) : _api = api {
     _api.monitor.addListener(_onConnectionChanged);
-    _api.monitor.onReconnected = _onReconnected;
+    _api.monitor.onReconnected = _handleReconnected;
   }
 
   final ApiClient _api;
 
-  late final VoidCallback _onReconnected = () => syncNow(reason: SyncTrigger.reconnected);
+  void _handleReconnected() => syncNow(reason: SyncTrigger.reconnected);
 
   LocalStore? get _store => _api.store;
 
@@ -224,7 +224,9 @@ class SyncController extends ChangeNotifier {
     // colleague builds the new user's controller before the old one is
     // unmounted, and a blind `= null` here would leave the incoming
     // session with no auto-sync at all.
-    if (identical(_api.monitor.onReconnected, _onReconnected)) {
+    // `==` rather than `identical`: Dart guarantees equality between two
+    // tear-offs of the same method on the same instance, not identity.
+    if (_api.monitor.onReconnected == _handleReconnected) {
       _api.monitor.onReconnected = null;
     }
     super.dispose();

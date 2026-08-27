@@ -55,17 +55,46 @@ To run the tablet app, see `mobile/flutter_app/README.md` (requires the
 Flutter SDK, which was not available while building this MVP — see that
 README's "Verification status" section).
 
+## Working offline
+
+"Farm operations cannot stop because internet connectivity is
+unavailable" is the second principle above, and the tablet app is built
+for it: **online the first time, then usable in the field.**
+
+Signing in needs the farm network — there is no way to verify a password
+or issue a token without it — and that is the only online requirement.
+Afterwards the session, the permission set and every screen the tablet
+has loaded are cached locally, so a worker in a field with no coverage
+still sees their animals, fields and tasks, and can keep recording. Each
+write made offline is queued as the HTTP request itself, so every
+endpoint works offline without a matching branch on the server, and the
+queue is replayed in order the moment the farm server answers again — no
+button press required.
+
+Two things stop the obvious failure modes: every queued request carries
+an `Idempotency-Key`, so a replay of a write that already committed
+returns the original response instead of recording the work twice
+(`backend/app/core/idempotency.py`); and IDs minted on the tablet are
+rewritten to the server's real ones as the queue drains, so a crop
+planted in a field created ten minutes earlier still lands. Anything the
+server rejects is kept and shown with the server's own words rather than
+silently dropped.
+
+See `mobile/flutter_app/README.md` for the full mechanism.
+
 ## MVP Status
 
-This is the first tablet MVP build. All 10 Option C manager-demo screens
-are implemented in Flutter with the full brand theme, EN/AR + RTL support,
-and a real local-first write pipeline (SQLite + event log + sync queue)
-for the core animal/task/feed workflows. The FastAPI backend implements
-every endpoint from the tech spec, a rule-based recommendation engine
-(6 rules, unit tested and wired end-to-end against real seeded data), and
-role-based access control — 149 backend tests pass. See
-`backend/README.md` and `mobile/flutter_app/README.md` for the detailed
-"what's complete / what's mocked / what remains" breakdown, and
+The tablet app is operational rather than a demo: no demo mode, no
+sample dataset, and what a given person sees is decided by the module
+responsibilities their farm manager gave them. All screens are
+implemented in Flutter with the full brand theme and EN/AR + RTL
+support. The FastAPI backend implements every endpoint from the tech
+spec, a flexible per-user/per-module permission model enforced on every
+request, a rule-based recommendation engine (6 rules, unit tested and
+wired end-to-end against real seeded data), and a full audit trail —
+232 backend tests pass. See `backend/README.md` and
+`mobile/flutter_app/README.md` for the detailed "what's complete /
+what's simplified / what remains" breakdown, and
 `product/TRACEABILITY.md` for the full requirement map.
 
 ### Mouneh & Farm Product Processing module (v0.5)
@@ -83,7 +112,7 @@ Backend: `backend/app/mouneh/`, `backend/app/api/v1/{modules,mouneh}.py`,
 verified against real PostgreSQL (schema + Alembic migration). Mobile:
 `mobile/flutter_app/lib/{mouneh,features/mouneh}/` — 7 screens behind one
 "Mouneh & Products" nav entry, a Dart port of the costing engine, and the
-same offline-first SQLite write pipeline as the rest of the app. Makdous
+same offline queue as the rest of the app. Makdous
 is demo data only; see `product/TRACEABILITY.md` for the full
 requirement-to-code map.
 
@@ -109,6 +138,6 @@ average basket value, package profitability). Backend:
 debits real Mouneh Makdous stock. Mobile:
 `mobile/flutter_app/lib/{visits,features/visits}/` — 10 screens behind
 one "Farm Visits" nav entry, a Dart port of the analytics engine, and the
-same offline-first SQLite write pipeline as the rest of the app. Horse
+same offline queue as the rest of the app. Horse
 Ride and the weekend-only opening calendar are demo data only; see
 `product/TRACEABILITY.md` for the full requirement-to-code map.
