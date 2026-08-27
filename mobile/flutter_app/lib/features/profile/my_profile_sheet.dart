@@ -119,7 +119,10 @@ class _ProfileDetails extends StatelessWidget {
         if (user.department != null) _row(context, 'department', user.department as String),
         _row(context, 'language', context.watch<LocaleController>().locale.languageCode == 'ar' ? 'العربية' : 'English'),
         const Divider(height: 24, color: FarmColors.border),
-        _row(context, 'server', session.baseUrl),
+        if (session.standalone)
+          _row(context, 'dataSource', context.t('dataSourceThisTablet'))
+        else
+          _row(context, 'server', session.baseUrl),
         _row(context, 'accessLevel', access.isFullAccess ? context.t('fullFarmAccess') : context.t('moduleBasedAccess')),
         if (sync.enabled)
           _row(

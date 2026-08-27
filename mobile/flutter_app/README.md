@@ -11,10 +11,19 @@ sample dataset: every screen reads and writes the real FastAPI backend,
 and what a given person sees is decided by the module responsibilities
 their farm manager gave them.
 
-**Online the first time, then usable in the field.** Signing in needs the
-farm network; after that the tablet keeps working with no signal, and
-everything recorded out there is sent automatically when it comes back
-into range — see "Working offline" below.
+This build runs in either of two modes:
+
+**Standalone — no server needed.** There is no API deployment yet, so
+the app ships a whole farm inside it. Sign in as **`ali` / `ali123`** and
+everything is there: animals, fields and crops, milk and eggs, feed,
+Mouneh production, visits and bookings, staff, tasks and finance. Add to
+any of it and the change is saved on the tablet and still there after a
+restart. See "The standalone farm" below.
+
+**Against a real deployment — online once, then usable in the field.**
+Signing in needs the farm network; after that the tablet keeps working
+with no signal, and everything recorded out there is sent automatically
+when it comes back into range. See "Working offline" below.
 
 ## Run it
 
@@ -33,11 +42,18 @@ deployment's URL, which is then remembered.
 
 ## Signing in
 
-The landing page is a single login. **Start My Day** authenticates against
-`POST /auth/login` and opens the signed-in user's own dashboard; the
-bearer token is stored in `shared_preferences` and silently re-validated
-against `/auth/me` on the next launch, so a farm worker sees the login
-screen once per install.
+The landing page is a single login, with two ways through it.
+
+**The demo account** — `ali` / `ali123`, offered on the screen itself —
+opens the farm this build carries inside it, with no server involved.
+
+**Any other credentials** authenticate against `POST /auth/login` as
+usual and open that person's own dashboard; the bearer token is stored
+in `shared_preferences` and silently re-validated against `/auth/me` on
+the next launch, so a farm worker sees the login screen once per
+install. On real hardware, tap **"Connecting to a different server?"**
+and enter the deployment's URL first — the built-in default is the
+Android emulator's route to a dev host.
 
 Accounts are created by a farm manager under **Employees &
 Responsibilities**, or seeded for a new deployment by
@@ -162,6 +178,37 @@ read it:
   employee sees and completes their own.
 - **Employees** — create staff accounts, edit them, and set their module
   responsibilities in a permission matrix.
+
+## The standalone farm
+
+`assets/demo/snapshot.json` holds a complete farm, and the app loads it
+into its own SQLite database the first time the demo account signs in.
+From then on the tablet's database *is* the farm: reads come from it,
+writes edit it in place, and nothing is queued because there is nothing
+to send to. The sync indicator is replaced by a **Demo Farm** pill that
+says so — no one should record a morning's work believing it is reaching
+an office that does not exist.
+
+The snapshot is not hand-written fixture JSON, which would drift from
+the API the first time a schema changed. `backend/app/export_demo_snapshot.py`
+seeds a throwaway database with the backend's own demo dataset, starts
+the real API in-process, and records the genuine response of every
+endpoint the tablet reads. The dataset is therefore correct by
+construction, in exactly the shape the server would send. Regenerate it
+with:
+
+```bash
+cd backend && python -m app.export_demo_snapshot
+```
+
+Signing out keeps the farm as you left it. **Reset demo data**, behind
+the Demo Farm pill, is the deliberate way to put it back as it shipped —
+for handing the tablet to the next person.
+
+The credential is checked on the device, because there is no server to
+ask. It is the way in, not a security boundary; a real deployment
+authenticates against `POST /auth/login` as it always did, and entering
+any other credentials still does exactly that.
 
 ## Working offline
 

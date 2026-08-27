@@ -30,14 +30,33 @@ class AppendRecord extends CacheEffect {
 
 /// A shallow field-by-field patch onto the cached record with this id.
 class MergeRecord extends CacheEffect {
-  const MergeRecord(super.collectionPath, this.id, this.patch, {super.listKey});
+  const MergeRecord(super.collectionPath, this.id, this.patch, {super.listKey, this.idField = 'id'});
   final String id;
   final Map<String, dynamic> patch;
+
+  /// Which field identifies the record. Nearly always `id`, but a module
+  /// licence is identified by its `module_code`.
+  final String idField;
 }
 
 class RemoveRecord extends CacheEffect {
-  const RemoveRecord(super.collectionPath, this.id, {super.listKey});
+  const RemoveRecord(super.collectionPath, this.id, {super.listKey, this.idField = 'id'});
   final String id;
+  final String idField;
+}
+
+/// The same patch applied to every record in the list — "mark everything
+/// read", and nothing else so far.
+class PatchAll extends CacheEffect {
+  const PatchAll(super.collectionPath, this.patch, {super.listKey});
+  final Map<String, dynamic> patch;
+}
+
+/// A patch onto a cached response whose body is a single record rather
+/// than a list — an animal's Digital Twin, a Mouneh product's detail.
+class PatchDocument extends CacheEffect {
+  const PatchDocument(super.collectionPath, this.patch);
+  final Map<String, dynamic> patch;
 }
 
 /// Adds [delta] to one numeric field of the cached record — stock moving
@@ -81,6 +100,10 @@ Map<String, dynamic> _newRecord(_Match match, {Map<String, dynamic> extra = cons
 /// One `/…/{id}` segment.
 const String _id = r'([^/]+)';
 
+/// Timestamps the API would set server-side. UTC ISO-8601, matching what
+/// every entity's `fromJson` parses.
+String _now() => DateTime.now().toUtc().toIso8601String();
+
 /// Straightforward "POST to a list, PATCH/DELETE an item in it" endpoints,
 /// where the read path and the write path are the same.
 List<_Rule> _crud(String path, {String? readPath, bool update = true, bool remove = false}) {
@@ -121,23 +144,94 @@ final List<_Rule> _rules = [
   // Recommendations: the decision is the patch.
   _Rule('PATCH', '/recommendations/$_id/decision', (m) => [MergeRecord('/recommendations', m.ids[0], m.body)]),
 
+  // Agriculture's daily harvest. The server also moves the sellable part
+  // into produce inventory and advances the planting; locally we predict
+  // only the harvest row, which is what the screen shows back.
+  _Rule('POST', '/harvest', (m) {
+    final total = (m.body['total_quantity'] as num?)?.toDouble() ?? 0;
+    final waste = (m.body['waste_quantity'] as num?)?.toDouble() ?? 0;
+    return [
+      AppendRecord('/production/harvest', {
+        'id': m.localId,
+        'field_id': m.body['field_id'],
+        'product_name': m.body['product_name'] ?? 'Harvest',
+        'quantity': total,
+        'waste_qty': waste,
+        'unit': m.body['unit'] ?? 'kg',
+        'destination': m.body['destination'],
+        'recorded_at': _now(),
+        kPendingFlag: true,
+      }),
+    ];
+  }),
+
+  // An observation shows up on the animal's own Digital Twin, which is a
+  // single-record response with the list nested inside it.
+  _Rule('POST', '/observations', (m) {
+    final animalId = m.body['entity_id'] as String?;
+    if (m.body['entity_type'] != 'animal' || animalId == null) return const [];
+    return [
+      AppendRecord('/animals/$animalId', {
+        'id': m.localId,
+        'observation_type': m.body['observation_type'],
+        'quality': m.body['quality'],
+        'severity': m.body['severity'],
+        'notes': m.body['notes'],
+        'observed_at': _now(),
+        kPendingFlag: true,
+      }, listKey: 'recent_observations'),
+    ];
+  }),
+
   // The bell: marking read must survive being done offline, or the badge
   // comes back on the next launch and the farmer clears it twice.
   _Rule('POST', '/notifications/$_id/read', (m) {
+    return [MergeRecord('/notifications', m.ids[0], {'read_at': _now()}, listKey: 'notifications')];
+  }),
+  _Rule('POST', '/notifications/read-all', (m) {
     return [
-      MergeRecord('/notifications', m.ids[0], {'read_at': DateTime.now().toUtc().toIso8601String()},
-          listKey: 'notifications'),
+      PatchAll('/notifications', {'read_at': _now()}, listKey: 'notifications'),
+      PatchDocument('/notifications', const {'unread_count': 0}),
     ];
   }),
 
   // --- Management. Rarely done in the field, but queueing beats losing.
   ..._crud('/employees', remove: true),
+  // Replacing an employee's responsibilities rewrites the whole set.
+  _Rule('PUT', '/employees/$_id/permissions', (m) {
+    final granted = m.body['permissions'];
+    if (granted is! List) return const [];
+    return [MergeRecord('/employees', m.ids[0], {'permissions': granted})];
+  }),
+  // Turning a licensed module on or off, keyed by module_code.
+  _Rule('POST', '/modules/$_id/$_id', (m) {
+    final status = switch (m.ids[1]) { 'activate' => 'active', 'deactivate' => 'inactive', _ => null };
+    if (status == null) return const [];
+    return [MergeRecord('/modules', m.ids[0], {'status': status}, idField: 'module_code')];
+  }),
 
   // --- Mouneh production.
   ..._crud('/mouneh/products', update: false),
   ..._crud('/mouneh/raw-materials', update: false),
   _Rule('POST', '/mouneh/batches', (m) => [AppendRecord('/mouneh/batches', _newRecord(m, extra: {'status': 'planned'}))]),
   _Rule('POST', '/mouneh/sales', (m) => [AppendRecord('/mouneh/sales', _newRecord(m))]),
+  // Batch lifecycle: consuming inputs starts it, completing it finishes.
+  _Rule('POST', '/mouneh/batches/$_id/consume', (m) => [
+        MergeRecord('/mouneh/batches', m.ids[0], {'status': 'in_progress', 'started_at': _now()}),
+      ]),
+  _Rule('POST', '/mouneh/batches/$_id/complete', (m) => [
+        MergeRecord('/mouneh/batches', m.ids[0], {
+          'status': 'completed',
+          'completed_at': _now(),
+          if (m.body['actual_output_qty'] != null) 'actual_output_qty': m.body['actual_output_qty'],
+        }),
+      ]),
+  // A new recipe version becomes the product's active one.
+  _Rule('POST', '/mouneh/products/$_id/recipes', (m) => [
+        PatchDocument('/mouneh/products/${m.ids[0]}', {
+          'active_recipe': <String, dynamic>{'id': m.localId, ...m.body, 'status': 'active'},
+        }),
+      ]),
 
   // --- Farm visits.
   ..._crud('/visit-calendar', update: false),
@@ -146,6 +240,24 @@ final List<_Rule> _rules = [
   ..._crud('/visit-activities', update: false),
   ..._crud('/visitors', update: false),
   ..._crud('/visit-bookings', update: false),
+  // The booking status machine: confirm -> check-in -> complete, or off
+  // to cancelled/no-show/refunded. Each step stamps its own timestamp
+  // field, the same one the server sets.
+  _Rule('POST', '/visit-bookings/$_id/$_id', (m) {
+    const transitions = {
+      'confirm': ('confirmed', 'confirmed_at'),
+      'check-in': ('checked_in', 'checked_in_at'),
+      'complete': ('completed', 'completed_at'),
+      'cancel': ('cancelled', 'cancelled_at'),
+      'no-show': ('no_show', 'cancelled_at'),
+      'refund': ('refunded', 'refunded_at'),
+    };
+    final step = transitions[m.ids[1]];
+    if (step == null) return const [];
+    return [
+      MergeRecord('/visit-bookings', m.ids[0], {'status': step.$1, step.$2: _now()}),
+    ];
+  }),
   ..._crud('/visit-staff-roster', update: false),
   ..._crud('/visit-costs', update: false),
   ..._crud('/visit-retail-sales', update: false),
@@ -153,14 +265,17 @@ final List<_Rule> _rules = [
   ..._crud('/visitor-feedback', update: false),
 ];
 
-/// The local prediction for one queued write, or an empty list when there
-/// is nothing safe to predict.
+/// What one write does to the locally held data — the whole story in
+/// standalone mode, and a prediction of the server's answer when offline.
 ///
-/// Empty is a legitimate answer, not a gap: `POST /harvest` moves produce
-/// into inventory *and* advances a planting, and `PUT /employees/{id}/
-/// permissions` is re-derived server-side. Guessing those wrong would be
-/// worse than showing the queued item in the sync panel and letting the
-/// real answer arrive with the next refresh.
+/// An empty result is a legitimate answer, not a gap. Some writes have no
+/// cached list to change (`POST /mouneh/products/{id}/recipes` when that
+/// product's detail was never loaded), and some have effects the tablet
+/// should not guess at — the server-side half of a harvest also moves
+/// stock and advances a planting. Where a prediction would be a guess,
+/// this returns nothing and the real answer arrives with the next
+/// refresh; offline, the write still sits safely in the outbox either
+/// way.
 List<CacheEffect> effectsFor(String method, String path, Object? body, {required String localId}) {
   final map = body is Map<String, dynamic> ? body : const <String, dynamic>{};
   for (final rule in _rules) {
@@ -193,6 +308,12 @@ Future<void> applyCacheEffects(LocalStore store, List<CacheEffect> effects) asyn
 /// effect expects (in which case the cache is left untouched rather than
 /// corrupted).
 Object? _applyToBody(Object? body, CacheEffect effect) {
+  // A document effect targets the record itself, not a list inside it.
+  if (effect is PatchDocument) {
+    if (body is! Map<String, dynamic>) return null;
+    return <String, dynamic>{...body, ...effect.patch, kPendingFlag: true};
+  }
+
   final listKey = effect.listKey;
   if (listKey != null) {
     if (body is! Map<String, dynamic>) return null;
@@ -211,18 +332,23 @@ List<dynamic>? _applyToList(List<dynamic> list, CacheEffect effect) {
     case AppendRecord(:final record):
       // Newest first: every list in this app is read that way round.
       return [record, ...list];
-    case RemoveRecord(:final id):
+    case RemoveRecord(:final id, :final idField):
       return [
         for (final entry in list)
-          if (!(entry is Map && entry['id'] == id)) entry,
+          if (!(entry is Map && entry[idField] == id)) entry,
       ];
-    case MergeRecord(:final id, :final patch):
+    case MergeRecord(:final id, :final patch, :final idField):
       return [
         for (final entry in list)
-          if (entry is Map<String, dynamic> && entry['id'] == id)
+          if (entry is Map<String, dynamic> && entry[idField] == id)
             <String, dynamic>{...entry, ...patch, kPendingFlag: true}
           else
             entry,
+      ];
+    case PatchAll(:final patch):
+      return [
+        for (final entry in list)
+          if (entry is Map<String, dynamic>) <String, dynamic>{...entry, ...patch} else entry,
       ];
     case AdjustNumber(:final id, :final field, :final delta):
       return [
@@ -232,5 +358,7 @@ List<dynamic>? _applyToList(List<dynamic> list, CacheEffect effect) {
           else
             entry,
       ];
+    case PatchDocument():
+      return null; // handled in _applyToBody
   }
 }

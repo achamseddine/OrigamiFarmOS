@@ -199,7 +199,56 @@ def seed_demo_data(db: Session) -> None:
     ]
     for fid, name, crop, stage, yield_kg, harvest_date in fields:
         db.add(models.Field(id=fid, farm_id=FARM_ID, name=name, crop_type=crop, stage=stage,
-                             est_yield_kg=yield_kg, expected_harvest_date=harvest_date))
+                             est_yield_kg=yield_kg, expected_harvest_date=harvest_date,
+                             field_code=fid.replace("field-", "F-").upper(),
+                             location_label="Bekaa Valley — home block",
+                             soil_type="clay_loam", irrigation_method="drip", status="active"))
+
+    # ------------------------------------------------- Crops and plantings
+    # Crop *types* are farm data, never a hard-coded list (tech spec §16) —
+    # these are the ones this farm happens to grow, added the same way an
+    # employee would add a new one from the Agriculture screen.
+    crops = [
+        ("crop-tomato", "Tomatoes", "vegetable", 95),
+        ("crop-zucchini", "Zucchini", "vegetable", 55),
+        ("crop-cucumber", "Cucumbers", "vegetable", 60),
+        ("crop-basil", "Basil", "herb", 40),
+        ("crop-orange", "Oranges", "tree", 300),
+    ]
+    for crop_id, name, category, cycle_days in crops:
+        db.add(models.Crop(id=crop_id, farm_id=FARM_ID, name=name, category=category,
+                            default_cycle_days=cycle_days))
+
+    # (field, crop, variety, area, planted days ago, harvest in days, expected kg, stage)
+    plantings = [
+        ("field-2", "crop-tomato", "Roma", 1.2, 70, 1, 420, "ripening"),
+        ("field-3", "crop-zucchini", "Black Beauty", 0.8, 40, 3, 310, "flowering"),
+        ("field-4", "crop-cucumber", "Beit Alpha", 0.9, 30, 5, 280, "growing"),
+        ("field-herb", "crop-basil", "Genovese", 0.15, 35, 0, 65, "mature"),
+        ("field-orchard", "crop-orange", "Valencia", 3.5, 300, 28, 1200, "growing"),
+    ]
+    for field_id, crop_id, variety, area, planted_ago, harvest_in, expected_kg, stage in plantings:
+        db.add(models.CropPlanting(
+            id=new_id(), farm_id=FARM_ID, field_id=field_id, crop_id=crop_id, variety=variety,
+            planted_area=area, area_unit="dunum", planted_date=_days_ago(planted_ago),
+            expected_harvest_date=_in_hours(24 * harvest_in), expected_yield_kg=expected_kg,
+            stage=stage, status="active", created_by="user-rami",
+        ))
+
+    # A week of picking, so the harvest trend and produce inventory have
+    # something real behind them rather than an empty chart.
+    harvests = [
+        ("field-2", "Tomatoes", 96, 6, 1),
+        ("field-2", "Tomatoes", 112, 4, 3),
+        ("field-3", "Zucchini", 54, 3, 2),
+        ("field-4", "Cucumbers", 61, 5, 4),
+        ("field-herb", "Basil", 12, 1, 1),
+        ("field-2", "Tomatoes", 104, 7, 6),
+    ]
+    for field_id, product, quantity, waste, days_ago in harvests:
+        db.add(models.HarvestRecord(id=new_id(), field_id=field_id, product_name=product,
+                                     quantity=quantity, unit="kg", waste_qty=waste,
+                                     destination="inventory", recorded_at=_days_ago(days_ago, hour=7)))
 
     # --------------------------------------------------------- Inventory
     items = [
@@ -246,6 +295,31 @@ def seed_demo_data(db: Session) -> None:
     expenses = [("feed", 1680), ("medicine", 720), ("labor", 1150), ("fuel", 420), ("other", 260)]
     for category, amount in expenses:
         db.add(models.Expense(id=new_id(), farm_id=FARM_ID, category=category, amount=amount, incurred_at=_days_ago(0, hour=8)))
+
+    # ----------------------------------------------------------- Audit log
+    # A few real-looking entries so Audit History opens onto something —
+    # same shape `write_audit_log` produces, including the before/after
+    # values a manager actually reads (tech spec §23).
+    audits = [
+        ("user-rami", "animal.updated", "animal", "cow-744", perms.ANIMALS,
+         "Moved Cow 744 to the isolation pen",
+         {"location_label": {"from": "Barn A", "to": "Isolation Pen"}}, 2),
+        ("user-vet-1", "treatment.created", "treatment", "treat-744", perms.ANIMAL_HEALTH,
+         "Recorded a mastitis treatment for Cow 744",
+         {"status": {"from": "under_observation", "to": "under_treatment"}}, 2),
+        ("user-worker-1", "harvest.recorded", "field", "field-2", perms.PRODUCE_HARVEST,
+         "Recorded 112 kg of tomatoes from Field 2",
+         {"quantity": {"from": None, "to": 112.0}}, 3),
+        ("user-rami", "employee.permissions_updated", "user", "user-worker-1", perms.EMPLOYEES,
+         "Granted Karim Youssef edit access to Feed & Nutrition",
+         {"feed_nutrition.can_edit": {"from": False, "to": True}}, 5),
+    ]
+    for user_id, action, entity_type, entity_id, module_code, summary, changes, days in audits:
+        db.add(models.AuditLog(
+            id=new_id(), farm_id=FARM_ID, user_id=user_id, action=action,
+            entity_type=entity_type, entity_id=entity_id, timestamp=_days_ago(days, hour=10),
+            module_code=module_code, summary=summary, changes_json=changes, device="Tablet 1",
+        ))
 
     db.flush()
     seed_mouneh_demo_data(db, FARM_ID)

@@ -71,8 +71,8 @@ class TestCropTypes:
         assert created["id"] in {c["id"] for c in listed}
 
     def test_duplicate_crop_name_is_rejected(self, client: TestClient):
-        _make_crop(client, "Zucchini")
-        r = client.post("/api/v1/crops", json={"name": "Zucchini"}, headers=_headers(client))
+        _make_crop(client, "Test Squash")
+        r = client.post("/api/v1/crops", json={"name": "Test Squash"}, headers=_headers(client))
         assert r.status_code == 409
 
     def test_archiving_a_crop_hides_it_without_deleting_it(self, client: TestClient):
@@ -85,9 +85,9 @@ class TestCropTypes:
         assert crop["id"] in {c["id"] for c in with_inactive}
 
     def test_readding_an_archived_crop_reactivates_it(self, client: TestClient):
-        crop = _make_crop(client, "Basil")
+        crop = _make_crop(client, "Test Thyme")
         client.delete(f"/api/v1/crops/{crop['id']}", headers=_headers(client))
-        r = client.post("/api/v1/crops", json={"name": "Basil"}, headers=_headers(client))
+        r = client.post("/api/v1/crops", json={"name": "Test Thyme"}, headers=_headers(client))
         assert r.status_code == 201
         assert r.json()["id"] == crop["id"]
 
@@ -132,7 +132,7 @@ class TestDailyHarvest:
         """Tech spec §17 — the numbers on the Produce screen must be stock
         that exists, not an estimate someone typed."""
         field = _make_field(client, "Field 2")
-        crop = _make_crop(client, "Tomatoes")
+        crop = _make_crop(client, "Test Peppers")
         r = client.post(
             "/api/v1/harvest",
             json={
@@ -152,7 +152,7 @@ class TestDailyHarvest:
         items = client.get(
             "/api/v1/feed/items", params={"farm_id": "farm-origami"}, headers=_headers(client)
         ).json()
-        tomato = next(i for i in items if i["name"] == "Tomatoes")
+        tomato = next(i for i in items if i["name"] == "Test Peppers")
         assert tomato["current_qty"] == 168
 
     def test_sellable_defaults_to_total_minus_waste(self, client: TestClient):

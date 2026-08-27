@@ -55,6 +55,25 @@ To run the tablet app, see `mobile/flutter_app/README.md` (requires the
 Flutter SDK, which was not available while building this MVP — see that
 README's "Verification status" section).
 
+## Running the tablet app with no server
+
+There is no API deployment or production database yet, so the tablet app
+also ships a complete farm inside it. Sign in as **`ali` / `ali123`** and
+every section has real data behind it — animals, fields and crops, milk
+and eggs, feed, Mouneh production, visits and bookings, staff, tasks and
+finance — and anything added is saved on the device and still there after
+a restart.
+
+The bundled dataset is generated, not hand-written: `python -m
+app.export_demo_snapshot` seeds a throwaway database with the backend's
+own demo data, starts the real API in-process, and records the genuine
+response of every endpoint the tablet reads. It is therefore correct by
+construction rather than fixture JSON that drifts from the schema.
+
+Entering any other credentials still authenticates against a real
+deployment exactly as before. See `mobile/flutter_app/README.md` for the
+full mechanism.
+
 ## Working offline
 
 "Farm operations cannot stop because internet connectivity is

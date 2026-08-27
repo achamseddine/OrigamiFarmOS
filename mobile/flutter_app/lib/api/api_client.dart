@@ -74,6 +74,16 @@ class ApiClient {
 
   late final ConnectionMonitor monitor;
 
+  /// Standalone mode: there is no server at all, and the tablet's own
+  /// database *is* the farm. Reads come from it, writes edit it in place,
+  /// and nothing is queued — a queue implies something to send to.
+  ///
+  /// This is the same storage and the same code path as offline mode; the
+  /// difference is only that there is no server to reconcile with, so the
+  /// sync machinery stands down instead of counting up work that will
+  /// never be sent.
+  bool standalone = false;
+
   /// True when this tablet has working local storage. False in the
   /// `flutter test` VM and on a desktop debug run, where the client
   /// simply behaves as an online-only client.
@@ -127,6 +137,8 @@ class ApiClient {
 
     final key = LocalStore.cacheKey(path, query);
 
+    if (standalone) return _readLocal(store, path, query, key);
+
     if (monitor.offline) {
       final cached = await store.readCache(key);
       if (cached != null) return cached.body;
@@ -149,6 +161,59 @@ class ApiClient {
       "This hasn't been downloaded to the tablet yet, and the farm server can't be reached. "
       'Connect to the farm network once and it will be available offline afterwards.';
 
+  /// A read in standalone mode, where the local store is the only source
+  /// of truth and must always answer.
+  ///
+  /// Falls back from the exact request to the same path without its
+  /// query, because a filtered view — `/priorities?module=animals` — is a
+  /// narrowing of a list the snapshot already holds, and returning the
+  /// unfiltered list is far better than an error. The screens filter
+  /// client-side anyway. An unknown path answers empty rather than
+  /// throwing: a section with no data should look empty, not broken.
+  Future<dynamic> _readLocal(LocalStore store, String path, Map<String, dynamic>? query, String key) async {
+    final exact = await store.readCache(key);
+    if (exact != null) return exact.body;
+
+    if (query != null && query.isNotEmpty) {
+      final base = await store.readCache(LocalStore.cacheKey(path, null));
+      if (base != null) return base.body;
+    }
+
+    // Any sibling response for this path — how a list written by a
+    // different query variant is still found.
+    for (final candidate in await store.cacheKeysForPath(path)) {
+      final cached = await store.readCache(candidate);
+      if (cached != null) return cached.body;
+    }
+
+    // A detail request for a record created on this tablet: the snapshot
+    // has no `/animals/{new-id}` response, but the animal itself is in
+    // the `/animals` list. Without this, adding an animal and then
+    // opening it would fail — the one path a demo user is most likely to
+    // walk. Screens null-guard the extra nested lists a real detail
+    // response carries.
+    final detail = await _detailFromCollection(store, path);
+    if (detail != null) return detail;
+
+    return const <dynamic>[];
+  }
+
+  Future<Map<String, dynamic>?> _detailFromCollection(LocalStore store, String path) async {
+    final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+    if (segments.length < 2) return null;
+    final id = segments.removeLast();
+    final collection = '/${segments.join('/')}';
+
+    for (final key in await store.cacheKeysForPath(collection)) {
+      final body = (await store.readCache(key))?.body;
+      if (body is! List) continue;
+      for (final entry in body) {
+        if (entry is Map<String, dynamic> && entry['id'] == id) return entry;
+      }
+    }
+    return null;
+  }
+
   // ------------------------------------------------------------------
   // Writes
   // ------------------------------------------------------------------
@@ -167,6 +232,8 @@ class ApiClient {
   Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query}) async {
     final store = _store;
     if (store == null || !store.available) return _send(method, path, body: body, query: query);
+
+    if (standalone) return _writeLocal(store, method, path, body);
 
     // One key per logical write, used for both the direct attempt and the
     // queued replay — see [LocalStore.enqueue].
@@ -208,6 +275,19 @@ class ApiClient {
     // otherwise they record it a second time thinking it was lost.
     await applyCacheEffects(store, effectsFor(method, path, body, localId: localId));
     return {'queued': true, kPendingFlag: true, 'id': localId};
+  }
+
+  /// A write in standalone mode: the local data *is* the farm, so the
+  /// change is applied to it and that is the whole story — no outbox, no
+  /// pending marker, nothing waiting to be sent.
+  Future<dynamic> _writeLocal(LocalStore store, String method, String path, Object? body) async {
+    final localId = newUuid();
+    final effects = effectsFor(method, path, body, localId: localId);
+    await applyCacheEffects(store, effects);
+    // Give back something shaped like the record the server would have
+    // returned, so a caller that reads the response still works.
+    final created = body is Map<String, dynamic> ? {'id': localId, ...body} : {'id': localId};
+    return created;
   }
 
   /// Replays one queued write. Used by the sync controller; the

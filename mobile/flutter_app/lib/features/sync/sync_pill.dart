@@ -5,6 +5,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../auth/session_controller.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../sync/sync_controller.dart';
 import 'sync_panel.dart';
@@ -21,6 +22,11 @@ class SyncPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A standalone tablet has no server to be in or out of contact with,
+    // so a sync indicator would be answering a question nobody asked.
+    // What matters there is the opposite: say the data is local.
+    if (context.watch<SessionController>().standalone) return const _StandalonePill();
+
     final sync = context.watch<SyncController>();
     if (sync.badge == SyncBadge.disabled) return const SizedBox.shrink();
 
@@ -114,6 +120,82 @@ _Look _lookFor(BuildContext context, SyncController sync) {
         spinning: false,
       );
   }
+}
+
+/// Says plainly that this tablet is running on its own bundled farm.
+///
+/// Nobody should record a morning's work believing it is reaching an
+/// office that does not exist, so this is always visible in standalone
+/// mode. Tapping it explains what that means and offers a reset.
+class _StandalonePill extends StatelessWidget {
+  const _StandalonePill();
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: context.t('demoModeTooltip'),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(FarmRadii.pill),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showDemoSheet(context),
+          child: Container(
+            height: kFarmTouchTarget,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: FarmColors.tint(FarmColors.gold, 0.18),
+              border: Border.all(color: FarmColors.gold.withOpacity(0.55)),
+              borderRadius: BorderRadius.circular(FarmRadii.pill),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.storage_outlined, size: 17, color: FarmColors.ink),
+                const SizedBox(width: 7),
+                Text(
+                  context.t('demoMode'),
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: FarmColors.ink),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showDemoSheet(BuildContext context) async {
+  final session = context.read<SessionController>();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(dialogContext.t('demoMode')),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(dialogContext.t('demoModeExplainer'), style: FarmTypography.textTheme.bodyMedium),
+          const SizedBox(height: FarmSpacing.md),
+          Text(dialogContext.t('demoResetExplainer'), style: FarmTypography.textTheme.bodySmall),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: Text(dialogContext.t('close'))),
+        OutlinedButton(
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(dialogContext);
+            final label = dialogContext.t('demoDataReset');
+            Navigator.of(dialogContext).pop();
+            final ok = await session.resetDemoData();
+            if (ok) messenger.showSnackBar(SnackBar(content: Text(label)));
+          },
+          child: Text(dialogContext.t('resetDemoData')),
+        ),
+      ],
+    ),
+  );
 }
 
 /// A full-width strip under the top bar, shown only while the tablet is

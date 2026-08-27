@@ -541,6 +541,16 @@ class FarmStrings {
     'outboxFeedback': 'Visitor feedback',
     'outboxVisitor': 'Visitor',
     'outboxModuleLicense': 'Module licence',
+    'demoMode': 'Demo Farm',
+    'demoModeTooltip': 'This tablet is running on its own data, with no farm server.',
+    'demoModeExplainer': 'This build carries a whole farm inside it. Everything you add — animals, harvests, bookings, tasks — is saved on this tablet and stays here. There is no farm server behind it yet, so nothing is sent anywhere and nothing is shared with another device.',
+    'demoResetExplainer': 'Resetting puts the farm back exactly as it shipped and permanently deletes everything entered since.',
+    'resetDemoData': 'Reset demo data',
+    'demoDataReset': 'The demo farm has been reset.',
+    'demoLoginExplainer': 'No farm server yet? This build ships with a full farm on the tablet. Sign in as ali / ali123 to open it.',
+    'openDemoFarm': 'Open the demo farm',
+    'dataSource': 'Data',
+    'dataSourceThisTablet': 'This tablet — demo farm, no server',
     'otherUserQueueNote': 'more records were saved by a different sign-in on this tablet. They will be sent when that person signs in again.',
   };
 
@@ -1072,6 +1082,16 @@ class FarmStrings {
     'outboxFeedback': 'تقييم زائر',
     'outboxVisitor': 'زائر',
     'outboxModuleLicense': 'ترخيص وحدة',
+    'demoMode': 'مزرعة تجريبية',
+    'demoModeTooltip': 'يعمل هذا الجهاز على بياناته الخاصة، بدون خادم للمزرعة.',
+    'demoModeExplainer': 'تتضمن هذه النسخة مزرعة كاملة داخلها. كل ما تضيفه — حيوانات، حصاد، حجوزات، مهام — يُحفظ على هذا الجهاز ويبقى هنا. لا يوجد خادم للمزرعة بعد، لذلك لا يُرسل شيء ولا يُشارك مع جهاز آخر.',
+    'demoResetExplainer': 'تعيد الاستعادة المزرعة إلى حالتها الأصلية وتحذف نهائياً كل ما أُدخل بعد ذلك.',
+    'resetDemoData': 'استعادة البيانات التجريبية',
+    'demoDataReset': 'تمت استعادة المزرعة التجريبية.',
+    'demoLoginExplainer': 'لا يوجد خادم للمزرعة بعد؟ تتضمن هذه النسخة مزرعة كاملة على الجهاز. سجّل الدخول بـ ali / ali123 لفتحها.',
+    'openDemoFarm': 'افتح المزرعة التجريبية',
+    'dataSource': 'البيانات',
+    'dataSourceThisTablet': 'هذا الجهاز — مزرعة تجريبية، بدون خادم',
     'otherUserQueueNote': 'سجلات إضافية حُفظت بتسجيل دخول آخر على هذا الجهاز. ستُرسل عند تسجيل ذلك الشخص للدخول مجدداً.',
   };
 

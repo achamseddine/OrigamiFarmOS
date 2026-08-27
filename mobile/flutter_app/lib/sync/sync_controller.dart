@@ -42,7 +42,10 @@ class SyncController extends ChangeNotifier {
 
   LocalStore? get _store => _api.store;
 
-  bool get enabled => _api.offlineCapable;
+  /// False in standalone mode: the tablet's own database is the farm, so
+  /// there is nothing to sync *to*. A queue and a "3 waiting" badge would
+  /// be describing work that does not exist.
+  bool get enabled => _api.offlineCapable && !_api.standalone;
   bool get online => _api.monitor.online;
 
   int pendingCount = 0;
@@ -76,7 +79,7 @@ class SyncController extends ChangeNotifier {
 
   Future<void> start() async {
     final store = _store;
-    if (store == null || !store.available) return;
+    if (store == null || !store.available || !enabled) return;
     final raw = await store.meta(LocalStore.metaLastSync);
     lastSyncAt = raw == null ? null : DateTime.tryParse(raw);
     await refreshCounts();

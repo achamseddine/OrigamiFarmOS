@@ -208,6 +208,22 @@ caught and fixed by the test suite during development — see git history.
 - **Mouneh & Farm Product Processing module (tech spec v0.5):** license-gated per farm by a super user (`api/v1/modules.py`); a manager can define any product type through the Product Builder (no code changes — `POST /mouneh/products`); recipes (raw materials + packaging + labor + optional overhead costs) are versioned, never mutated in place; `POST /mouneh/cost-preview` and batch creation compute planned unit cost via the pure `app/mouneh/costing.py` engine; completing a batch consumes remaining raw-material stock and creates finished-goods stock at a frozen unit cost; sales deduct from that stock and compute profit against the batch's actual (not recomputed) cost; the dashboard aggregates cost, sales, remaining stock and a continue/slow-mover/review-pricing recommendation per product. Makdous is seeded purely as example data (`app/mouneh/seed.py`) — the module has no hard-coded product types anywhere.
 - **Farm Visits & Agri-Tourism module (tech spec v0.6):** license-gated the same way, reusing the same `module_licenses` table; opening days are a configurable per-weekday calendar, never hard-coded (RULE-VIS-003); packages and activities (Horse Ride, Cheese Making Workshop are seed examples only — RULE-VIS-010) are created dynamically; a booking's status machine (draft → confirmed → checked_in → completed/cancelled/no_show → refunded) is enforced by `app/visits/analytics.py::validate_status_transition`; session guest capacity is checked at confirm time and activity-slot capacity + animal-welfare daily limits are checked at booking time (RULE-VIS-002/004); a ride/animal-interaction activity requires a handler with the matching role already rostered on the session before it can be confirmed (RULE-VIS-005); a Farm Shop / Visitor POS sale deducts either plain inventory or Mouneh finished-goods stock and posts a core `Sale` row so it shows up in Sales & Finance (RULE-VIS-006); every analytics formula in tech spec §9 (visitor revenue, direct visit cost, gross margin, revenue/visitor, activity utilization, retail conversion, average basket value, package profitability) is recomputed from granular components rather than trusted off a booking's stored total, specifically to avoid double-counting activity revenue.
 
+## The tablet's bundled demo farm
+
+`python -m app.export_demo_snapshot` produces the dataset the standalone
+tablet build ships with. It seeds a throwaway SQLite database with
+`app/seed.py`'s demo farm, starts this API in-process with `TestClient`,
+signs in as the demo account, and records the real response of every
+endpoint the mobile app reads into
+`mobile/flutter_app/assets/demo/snapshot.json`.
+
+Generating it from the running API rather than writing fixtures by hand
+is the point: the dataset cannot drift from the schema, because it *is*
+the schema's output. If an endpoint changes shape, re-running the export
+is the whole update. The script exits non-zero and names any endpoint
+that did not return 200, so a gap shows up at build time rather than as
+an empty screen on a tablet.
+
 ## Offline writes
 
 Farm workers record data in fields with no coverage, so the tablet queues

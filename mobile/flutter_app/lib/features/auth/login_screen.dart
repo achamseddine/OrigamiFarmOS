@@ -7,14 +7,24 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/bekaa_backdrop.dart';
+import '../../data/local/demo_mode.dart';
 
-/// The landing page: a single login, once, **and it needs the farm
-/// network**. There is no way to verify a password or issue a token
-/// without reaching the server, so this one screen is the app's online
-/// requirement. Everything behind it then works offline: the session,
-/// the permissions and the farm data are cached, and [SessionController]
-/// restores them at launch — so a worker heading out to a field sees this
-/// screen once per install and never again until they sign out.
+/// The landing page: a single login, once.
+///
+/// Two ways in. Against a real deployment, signing in needs the farm
+/// network — there is no way to verify a password or issue a token
+/// without reaching the server — and that is the app's only online
+/// requirement; everything behind it then works offline from the cached
+/// session, permissions and farm data.
+///
+/// The second way exists because there is no deployment yet: this build
+/// ships a whole farm inside it, and the demo account opens it with no
+/// server at all. That path is advertised on this screen rather than
+/// hidden, so nobody is left at a login they cannot get past.
+///
+/// Either way [SessionController] restores the session at launch, so a
+/// worker sees this screen once per install and never again until they
+/// sign out.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -42,6 +52,14 @@ class _LoginScreenState extends State<LoginScreen> {
     final ok = await session.login(email: _email.text, password: _password.text, serverUrl: _showServerField ? _serverUrl.text : null);
     if (!mounted || ok) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(session.error ?? 'Could not sign in.')));
+  }
+
+  /// Fills in the demo account and signs straight in, so nobody has to
+  /// find the credentials in a README to open the app.
+  Future<void> _useDemo() async {
+    _email.text = DemoMode.username;
+    _password.text = DemoMode.password;
+    await _submit();
   }
 
   @override
@@ -92,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 showServerField: _showServerField,
                 busy: session.busy,
                 needsNetwork: session.needsFirstOnlineLogin,
+                onUseDemo: _useDemo,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onToggleServerField: () => setState(() => _showServerField = !_showServerField),
                 onSubmit: _submit,
@@ -130,6 +149,7 @@ class _LoginForm extends StatelessWidget {
     required this.showServerField,
     required this.busy,
     required this.needsNetwork,
+    required this.onUseDemo,
     required this.onToggleObscure,
     required this.onToggleServerField,
     required this.onSubmit,
@@ -145,6 +165,8 @@ class _LoginForm extends StatelessWidget {
   /// The last attempt couldn't reach the server at all. Say that plainly
   /// — a worker retyping a correct password is the failure mode here.
   final bool needsNetwork;
+
+  final Future<void> Function() onUseDemo;
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleServerField;
   final Future<void> Function() onSubmit;
@@ -212,6 +234,38 @@ class _LoginForm extends StatelessWidget {
               suffixIcon: IconButton(icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined), onPressed: onToggleObscure),
             ),
             onSubmitted: (_) => onSubmit(),
+          ),
+          const SizedBox(height: FarmSpacing.md),
+          // This build ships a whole farm on the tablet, so it can be
+          // opened and used with no server at all. Saying so beats
+          // leaving someone at a login screen they cannot get past.
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: FarmColors.tint(FarmColors.gold, 0.14),
+              border: Border.all(color: FarmColors.gold.withOpacity(0.5)),
+              borderRadius: BorderRadius.circular(FarmRadii.sm),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.storage_outlined, size: 17, color: FarmColors.ink),
+                  const SizedBox(width: 8),
+                  Text(context.t('demoMode'), style: FarmTypography.textTheme.titleSmall),
+                ]),
+                const SizedBox(height: 6),
+                Text(context.t('demoLoginExplainer'), style: FarmTypography.textTheme.bodySmall),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: FilledButton.tonal(
+                    onPressed: busy ? null : onUseDemo,
+                    child: Text(context.t('openDemoFarm')),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 8),
           TextButton(
