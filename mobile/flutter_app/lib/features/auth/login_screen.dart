@@ -8,11 +8,13 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/bekaa_backdrop.dart';
 
-/// The landing page: a single login, once. There is no demo mode and no
-/// offline cache — every screen behind this one is empty until the
-/// backend confirms who's signed in, and [SessionController] then keeps
-/// that session alive across restarts so this screen is only seen once
-/// per install (until an explicit log-out).
+/// The landing page: a single login, once, **and it needs the farm
+/// network**. There is no way to verify a password or issue a token
+/// without reaching the server, so this one screen is the app's online
+/// requirement. Everything behind it then works offline: the session,
+/// the permissions and the farm data are cached, and [SessionController]
+/// restores them at launch — so a worker heading out to a field sees this
+/// screen once per install and never again until they sign out.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -89,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscure: _obscure,
                 showServerField: _showServerField,
                 busy: session.busy,
+                needsNetwork: session.needsFirstOnlineLogin,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onToggleServerField: () => setState(() => _showServerField = !_showServerField),
                 onSubmit: _submit,
@@ -126,6 +129,7 @@ class _LoginForm extends StatelessWidget {
     required this.obscure,
     required this.showServerField,
     required this.busy,
+    required this.needsNetwork,
     required this.onToggleObscure,
     required this.onToggleServerField,
     required this.onSubmit,
@@ -137,6 +141,10 @@ class _LoginForm extends StatelessWidget {
   final bool obscure;
   final bool showServerField;
   final bool busy;
+
+  /// The last attempt couldn't reach the server at all. Say that plainly
+  /// — a worker retyping a correct password is the failure mode here.
+  final bool needsNetwork;
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleServerField;
   final Future<void> Function() onSubmit;
@@ -167,6 +175,27 @@ class _LoginForm extends StatelessWidget {
           Text(context.t('startMyDay'), style: FarmTypography.display(size: 26)),
           const SizedBox(height: 4),
           Text(context.t('startMyDaySubtitle'), style: FarmTypography.textTheme.bodyMedium),
+          if (needsNetwork) ...[
+            const SizedBox(height: FarmSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: FarmColors.tint(FarmColors.warning, 0.12),
+                border: Border.all(color: FarmColors.warning.withOpacity(0.4)),
+                borderRadius: BorderRadius.circular(FarmRadii.sm),
+              ),
+              child: Row(children: [
+                const Icon(Icons.cloud_off, size: 18, color: FarmColors.warning),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    context.t('firstLoginNeedsInternet'),
+                    style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.ink),
+                  ),
+                ),
+              ]),
+            ),
+          ],
           const SizedBox(height: FarmSpacing.lg),
           TextField(
             controller: email,

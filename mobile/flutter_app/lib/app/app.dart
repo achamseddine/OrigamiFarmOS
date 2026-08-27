@@ -5,6 +5,7 @@ import '../auth/session_controller.dart';
 import '../core/i18n/locale_controller.dart';
 import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
+import '../data/local/local_store.dart';
 import '../domain/entities/user_profile.dart';
 import '../features/auth/login_screen.dart';
 import '../providers/access_provider.dart';
@@ -19,22 +20,27 @@ import '../providers/recommendations_provider.dart';
 import '../providers/sales_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../providers/visits_provider.dart';
+import '../sync/sync_controller.dart';
 import 'app_navigator.dart';
 import 'nav_config.dart';
 
 class FarmOSApp extends StatelessWidget {
-  const FarmOSApp({super.key});
+  const FarmOSApp({super.key, this.store});
+
+  /// The tablet's offline store. Null in widget tests, where there is no
+  /// SQLite platform channel — the app then runs online-only.
+  final LocalStore? store;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
-        ChangeNotifierProvider(create: (_) => SessionController()..restore()),
+        ChangeNotifierProvider(create: (_) => SessionController(store: store)..restore()),
       ],
-      child: Consumer<LocaleController>(
-        builder: (context, locale, _) {
-          return MaterialApp(
+      child: Consumer2<LocaleController, SessionController>(
+        builder: (context, locale, session, _) {
+          final app = MaterialApp(
             title: 'Origami FarmOS',
             debugShowCheckedModeBanner: false,
             theme: FarmTheme.light,
@@ -45,40 +51,33 @@ class FarmOSApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: const _RootRouter(),
+            home: switch (session.status) {
+              SessionStatus.checking => const Scaffold(body: Center(child: CircularProgressIndicator())),
+              SessionStatus.loggedOut => const LoginScreen(),
+              SessionStatus.loggedIn => _DataLoader(user: session.user!),
+            },
           );
+          if (session.status != SessionStatus.loggedIn) return app;
+          // The farm providers wrap the MaterialApp, not its `home`.
+          // MaterialApp owns the Navigator, and a pushed route or dialog
+          // is a *sibling* of `home` — so anything provided below it is
+          // invisible to the Digital Twin screen, the notification panel
+          // and every form opened with showDialog. Above it, they see
+          // everything.
+          return _FarmScope(key: ValueKey(session.user!.id), session: session, child: app);
         },
       ),
     );
   }
 }
 
-/// One login, then straight to work. [SessionController.restore] runs once
-/// at startup, so a returning user goes to their dashboard without seeing
-/// this screen at all.
-class _RootRouter extends StatelessWidget {
-  const _RootRouter();
-
-  @override
-  Widget build(BuildContext context) {
-    final session = context.watch<SessionController>();
-    switch (session.status) {
-      case SessionStatus.checking:
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
-      case SessionStatus.loggedOut:
-        return const LoginScreen();
-      case SessionStatus.loggedIn:
-        return _AuthenticatedApp(key: ValueKey(session.user!.id), session: session);
-    }
-  }
-}
-
 /// Everything behind the login — one provider tree per signed-in account.
 /// Keyed on the user's id so handing the tablet to a colleague rebuilds
 /// the tree rather than leaving the previous account's data behind it.
-class _AuthenticatedApp extends StatelessWidget {
-  const _AuthenticatedApp({super.key, required this.session});
+class _FarmScope extends StatelessWidget {
+  const _FarmScope({super.key, required this.session, required this.child});
   final SessionController session;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -87,6 +86,7 @@ class _AuthenticatedApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AppNavigator()),
+        ChangeNotifierProvider(create: (_) => SyncController(api: api)),
         ChangeNotifierProvider(create: (_) => AccessProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => NotificationsProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => EmployeesProvider(apiClient: api)),
@@ -100,7 +100,7 @@ class _AuthenticatedApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MounehProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => VisitsProvider(apiClient: api)),
       ],
-      child: _DataLoader(user: user),
+      child: child,
     );
   }
 }
@@ -119,12 +119,54 @@ class _DataLoader extends StatefulWidget {
   State<_DataLoader> createState() => _DataLoaderState();
 }
 
-class _DataLoaderState extends State<_DataLoader> {
-  late final Future<void> _boot = _load();
+class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
+  late final Future<void> _boot = _startup();
 
-  Future<void> _load() async {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Picking the tablet back up is the most likely moment for it to be
+  /// back in range — check there and then rather than waiting out the
+  /// backoff timer.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    final sync = context.read<SyncController>();
+    if (!sync.enabled) return;
+    if (sync.online) {
+      sync.syncNow();
+    } else {
+      context.read<SessionController>().apiClient.monitor.checkNow();
+    }
+  }
+
+  Future<void> _startup() async {
+    final sync = context.read<SyncController>();
+    // Once the queue drains, throw away the local predictions and take the
+    // server's version: real IDs, server-computed totals, fresh signals.
+    sync.onSynced = _refreshAll;
+    await _refreshAll();
+    if (!mounted) return;
+    await sync.start();
+  }
+
+  Future<void> _refreshAll() async {
     final access = context.read<AccessProvider>();
-    await access.load();
+    try {
+      await access.load();
+    } catch (_) {
+      // Offline with nothing cached yet: the shell renders its empty
+      // state rather than a crash, and the sync pill explains why.
+    }
     if (!mounted) return;
 
     // A failed module load must not take the whole app down with it — a

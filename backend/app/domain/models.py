@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -511,3 +511,31 @@ class AuditLog(Base):
     summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
     changes_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     device: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
+class IdempotencyRecord(Base):
+    """One completed write, remembered by the key the tablet sent with it.
+
+    A tablet that records milk in a field queues the request and replays
+    it when it gets back in range. If the first attempt actually reached
+    the server and only the *response* was lost — a dropped connection at
+    the gate, a tablet that slept mid-request — the replay would record
+    the same milk twice. Storing the original response against the key
+    means the replay is answered with what the server said the first time
+    instead of writing anything.
+
+    Scoped by user as well as key: two tablets cannot collide, and a
+    replayed key can never return another account's response body.
+    """
+
+    __tablename__ = "idempotency_records"
+    __table_args__ = (UniqueConstraint("idempotency_key", "user_id", name="uq_idempotency_key_user"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    idempotency_key: Mapped[str] = mapped_column(String(100), index=True)
+    user_id: Mapped[str] = mapped_column(String(36))
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(300))
+    status_code: Mapped[int] = mapped_column(Integer)
+    response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

@@ -13,6 +13,8 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../sync/sync_controller.dart';
+import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
 
@@ -425,7 +427,13 @@ class _AnimalCard extends StatelessWidget {
                     if (animal.weightKg != null && animal.milkTodayL == null)
                       Text('${animal.weightKg!.toStringAsFixed(0)} kg', style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
                     const SizedBox(height: 6),
-                    StatusPill(label: statusLabel, level: level, dense: true),
+                    Row(children: [
+                      StatusPill(label: statusLabel, level: level, dense: true),
+                      if (context.watch<SyncController>().isPending(animal.id)) ...[
+                        const SizedBox(width: 6),
+                        const PendingChip(),
+                      ],
+                    ]),
                   ],
                 ),
               ),

@@ -1,5 +1,5 @@
 name: farmos
-description: "Origami FarmOS — always-online, tablet-first farm operating system."
+description: "Origami FarmOS — offline-capable, tablet-first farm operating system."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -17,6 +17,11 @@ dependencies:
   flutter_svg: ^2.0.10+1
   http: ^1.2.2
   shared_preferences: ^2.2.3
+
+  # On-device cache + outbox, so a tablet taken out to a field keeps
+  # working and the records it collects reach the server on the way back.
+  sqflite: ^2.3.3
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:

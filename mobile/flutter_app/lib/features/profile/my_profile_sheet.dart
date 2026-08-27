@@ -10,6 +10,7 @@ import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
+import '../../sync/sync_controller.dart';
 
 enum ProfileTab { profile, responsibilities }
 
@@ -107,6 +108,7 @@ class _ProfileDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
+    final sync = context.watch<SyncController>();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -117,10 +119,18 @@ class _ProfileDetails extends StatelessWidget {
         if (user.department != null) _row(context, 'department', user.department as String),
         _row(context, 'language', context.watch<LocaleController>().locale.languageCode == 'ar' ? 'العربية' : 'English'),
         const Divider(height: 24, color: FarmColors.border),
-        // Replaces the old "Sync Status" row: this build talks to the
-        // server directly, so what matters is which server, not a queue.
         _row(context, 'server', session.baseUrl),
         _row(context, 'accessLevel', access.isFullAccess ? context.t('fullFarmAccess') : context.t('moduleBasedAccess')),
+        if (sync.enabled)
+          _row(
+            context,
+            'syncStatus',
+            sync.online
+                ? (sync.hasPending
+                    ? '${context.t('synced')} · ${sync.pendingCount} ${context.t('waitingToSync')}'
+                    : context.t('synced'))
+                : '${context.t('offline')} · ${sync.pendingCount} ${context.t('waitingToSync')}',
+          ),
       ],
     );
   }

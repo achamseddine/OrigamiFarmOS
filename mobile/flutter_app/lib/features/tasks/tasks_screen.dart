@@ -9,7 +9,9 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/entities/user_profile.dart';
+import '../../features/sync/sync_pill.dart';
 import '../../providers/tasks_provider.dart';
+import '../../sync/sync_controller.dart';
 
 /// Tasks list + assignment (tech spec §6 nav table: "Assign, complete, and
 /// follow up"). A farm manager sees every task on the farm, can create one
@@ -227,7 +229,18 @@ class _TaskTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(task.title, style: FarmTypography.textTheme.titleSmall?.copyWith(decoration: done ? TextDecoration.lineThrough : null)),
+              Row(children: [
+                Flexible(
+                  child: Text(
+                    task.title,
+                    style: FarmTypography.textTheme.titleSmall?.copyWith(decoration: done ? TextDecoration.lineThrough : null),
+                  ),
+                ),
+                if (context.watch<SyncController>().isPending(task.id)) ...[
+                  const SizedBox(width: 8),
+                  const PendingChip(),
+                ],
+              ]),
               Text(
                 user.isManager && assigneeName != null ? '${task.category} · $assigneeName' : task.category,
                 style: FarmTypography.textTheme.bodySmall,

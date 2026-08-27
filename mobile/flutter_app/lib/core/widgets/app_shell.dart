@@ -5,6 +5,7 @@ import 'top_bar.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../../app/app_navigator.dart';
+import '../../features/sync/sync_pill.dart';
 
 /// Tablet-first application shell: persistent left nav rail + top bar +
 /// scrollable content canvas (tech spec component-spec.md "AppShell").
@@ -45,6 +46,9 @@ class AppShell extends StatelessWidget {
                 children: [
                   const TopBar(),
                   const Divider(height: 1, color: FarmColors.border),
+                  // Only visible while the tablet is out of contact with
+                  // the farm server; collapses to nothing otherwise.
+                  const OfflineBanner(),
                   Expanded(
                     child: Padding(
                       padding: EdgeInsets.symmetric(

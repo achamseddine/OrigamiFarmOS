@@ -12,6 +12,7 @@ import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
+import '../../sync/sync_controller.dart';
 import 'my_profile_sheet.dart';
 
 /// The avatar in the top bar and the menu behind it (tech spec §2).
@@ -113,7 +114,7 @@ class UserMenuButton extends StatelessWidget {
   void _handle(BuildContext context, String value, AppNavigator navigator) {
     switch (value) {
       case 'logout':
-        context.read<SessionController>().logout();
+        _signOut(context);
       case 'profile':
         showMyProfileSheet(context);
       case 'responsibilities':
@@ -132,6 +133,42 @@ class UserMenuButton extends StatelessWidget {
       case 'settings':
         navigator.goToModule(FarmModule.settings);
     }
+  }
+
+  /// Signing out with a morning's field work still on the tablet is the
+  /// one way a worker could lose data here, so it is the one place that
+  /// stops and asks. Their queue is kept either way — it is scoped to
+  /// them and syncs when they sign back in — but they should know.
+  Future<void> _signOut(BuildContext context) async {
+    final session = context.read<SessionController>();
+    final sync = context.read<SyncController>();
+
+    if (sync.enabled && sync.online && sync.hasPending) {
+      await sync.syncNow();
+    }
+    await sync.refreshCounts();
+    if (!context.mounted) return;
+
+    if (sync.hasPending) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(dialogContext.t('unsyncedSignOutTitle')),
+          content: Text(
+            '${sync.pendingCount} ${dialogContext.t('waitingToSync')}.\n\n${dialogContext.t('unsyncedSignOutBody')}',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: Text(dialogContext.t('cancel'))),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(dialogContext.t('signOutAnyway')),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    await session.logout();
   }
 
   void _showLanguageDialog(BuildContext context) {

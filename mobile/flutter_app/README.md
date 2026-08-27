@@ -1,15 +1,20 @@
 # Origami FarmOS — Tablet App (Flutter)
 
-Always-online, tablet-first farm operating system for Origami Farms
-(Bekaa Valley, Lebanon). See the repo root `CONSTITUTION.md` and
-`product/MVP_SCOPE.md` for the product principles this app follows, and
+Tablet-first farm operating system for Origami Farms (Bekaa Valley,
+Lebanon). See the repo root `CONSTITUTION.md` and `product/MVP_SCOPE.md`
+for the product principles this app follows, and
 `product/TRACEABILITY.md` for a requirement-by-requirement map into this
 codebase.
 
-This is an operational app, not a demo. There is no demo mode, no sample
-dataset, and no local cache: every screen reads and writes the real
-FastAPI backend, and what a given person sees is decided by the module
-responsibilities their farm manager gave them.
+This is an operational app, not a demo. There is no demo mode and no
+sample dataset: every screen reads and writes the real FastAPI backend,
+and what a given person sees is decided by the module responsibilities
+their farm manager gave them.
+
+**Online the first time, then usable in the field.** Signing in needs the
+farm network; after that the tablet keeps working with no signal, and
+everything recorded out there is sent automatically when it comes back
+into range — see "Working offline" below.
 
 ## Run it
 
@@ -158,6 +163,64 @@ read it:
 - **Employees** — create staff accounts, edit them, and set their module
   responsibilities in a permission matrix.
 
+## Working offline
+
+Farm workers collect data in fields with no coverage and reach the office
+hours later, so the tablet is built to keep working the whole time and
+reconcile on its own afterwards.
+
+**Signing in needs the network.** There is no way to verify a password or
+issue a token offline, so the login screen is the app's one online
+requirement. It is also the only one: after a successful sign-in the
+token, the user profile and the permission set are all cached, and later
+launches restore the session from that cache.
+
+**Reads** come from the server when it is reachable and every response is
+cached as it arrives (`data/local/local_store.dart`, keyed by the request
+itself, so a new endpoint is cached the day it is added). When the server
+can't be reached, the cached answer is served.
+
+**Writes** go straight through when the server is reachable. When it
+isn't, the HTTP request itself is queued in an outbox and the cached
+lists are updated locally, so the record the worker just entered appears
+immediately with a **Not synced** chip against it. Storing the request
+rather than a translated "event" is what makes this general: every
+endpoint the app calls works offline without a matching branch on the
+server.
+
+**Reconnecting syncs by itself.** Reachability is judged from actual
+request outcomes plus a backing-off health ping — never from the WiFi
+radio, which happily reports "connected" on an access point with no route
+to the farm server. On the offline → online edge the queue is replayed in
+the order it was recorded, and every provider then reloads so the farmer
+sees server truth rather than the local prediction.
+
+Two details that stop the obvious ways this goes wrong:
+
+- **A replayed write can't record the work twice.** Each queued request
+  carries an `Idempotency-Key`, reused from the attempt that failed. If
+  the original actually committed and only its response was lost, the
+  server returns that original response instead of writing again
+  (`backend/app/core/idempotency.py`).
+- **Records created offline get real IDs on the way up.** A field created
+  in a dead spot gets a temporary ID; a crop planted in it ten minutes
+  later refers to that ID. As the queue drains, the server's real IDs are
+  substituted into everything still waiting.
+
+The **sync pill** in the top bar is never hidden while anything is
+waiting, and an offline strip sits under it while the tablet is out of
+contact. Tapping either opens the sync panel: what is queued, when the
+last sync was, a manual **Sync now**, and anything the server rejected —
+shown with the server's own words and kept until a person retries or
+deliberately discards it. Signing out with unsent records asks first.
+
+The queue is scoped to the user who recorded it, so a tablet shared
+between shifts never replays one worker's entries under another's token.
+
+On a device without working SQLite (the `flutter test` VM, a desktop
+debug run) the store reports itself unavailable and the app behaves
+exactly as an online-only client.
+
 ## Audit trail
 
 Every employee, permission, animal, field, crop, planting and harvest
@@ -168,10 +231,10 @@ the record that changed.
 
 ## What's simplified
 
-- **The app is online-only.** There is no local cache and no offline write
-  queue: the offline-first SQLite pipeline earlier builds carried was
-  removed in favour of talking to the real backend directly. A tablet with
-  no connection cannot currently record work — see "Known gaps" below.
+- **A screen never visited online has nothing to show offline.** The
+  cache is filled by use: whatever the tablet loaded while connected is
+  what it can serve in a field. Opening a module for the very first time
+  out of range shows an explanatory empty state, not data.
 - **No bundled Fraunces/Inter/Noto Sans Arabic font files.** Typography
   uses the platform serif/UI-font fallback tier the brand guideline
   specifies for exactly this case — see `core/theme/typography.dart`.

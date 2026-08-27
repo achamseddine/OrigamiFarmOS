@@ -40,9 +40,13 @@ def client(db_session):
             db.close()
 
     app.dependency_overrides[get_db] = _override_get_db
+    # The idempotency middleware runs outside the dependency graph and
+    # opens its own session, so point it at this test's database too.
+    app.state.idempotency_session_factory = session_factory
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    app.state.idempotency_session_factory = None
 
 
 def login(client: TestClient, email: str = "rami@origami.farm", password: str = "farmos123") -> str:

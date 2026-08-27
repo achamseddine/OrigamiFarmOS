@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'locale_controller.dart';
 
 /// Lightweight EN/AR string table.
 ///
@@ -479,6 +477,71 @@ class FarmStrings {
     'enterHarvestedAmount': 'Enter how much was harvested.',
     'harvestRecorded': 'Harvest recorded — stock updated.',
     'cropOptionalHelper': 'Optional if the field already has a crop.',
+    // --- Offline & sync (a tablet taken to a field, and what it is holding).
+    'syncStatus': 'Sync Status',
+    'syncing': 'Syncing…',
+    'syncingTooltip': 'Sending your saved records to the farm server.',
+    'synced': 'Synced',
+    'syncedTooltip': 'Everything on this tablet has reached the farm server.',
+    'offline': 'Offline',
+    'offlineTooltip': "The farm server can't be reached. You can keep working — everything you record is saved here and sent automatically when you're back in range.",
+    'syncNow': 'Sync now',
+    'waitingToSync': 'waiting to sync',
+    'syncNeedsAttention': 'Needs attention',
+    'notSynced': 'Not synced',
+    'lastSynced': 'Last synced',
+    'neverSynced': 'Not synced yet',
+    'details': 'Details',
+    'workingOffline': 'Working offline',
+    'workingOfflineNothingQueued': "Working offline — you can keep recording, and it will sync on its own when the farm network is back.",
+    'syncExplainerOnline': 'Connected to the farm server. Anything you record goes straight through.',
+    'syncExplainerOffline': "No connection to the farm server. Everything you record is kept on this tablet and sent automatically as soon as you're back in range.",
+    'nothingWaiting': 'Nothing waiting',
+    'everythingUpToDate': 'Every record on this tablet has reached the server.',
+    'nothingWaitingOffline': "You haven't recorded anything since going offline.",
+    'serverRejected': 'The server would not accept this record.',
+    'retry': 'Retry',
+    'discard': 'Discard',
+    'discardRecord': 'Discard this record?',
+    'discardRecordExplainer': 'This record was never sent to the farm server. Discarding it deletes it for good — it cannot be recovered.',
+    'unsyncedSignOutTitle': 'Records not sent yet',
+    'unsyncedSignOutBody': 'Some records on this tablet have not reached the farm server. They are kept safely and will be sent the next time you sign in with a connection. Sign out anyway?',
+    'signOutAnyway': 'Sign out anyway',
+    'firstLoginNeedsInternet': 'Connect to the farm network to sign in the first time. After that this tablet works offline.',
+    'restoredOfflineNotice': 'Opened offline — showing the farm as it was at your last connection.',
+    'offlineNotDownloaded': 'Not downloaded to this tablet yet.',
+    // What a queued write is about, in the sync panel.
+    'outboxChange': 'Change',
+    'outboxTask': 'Task',
+    'outboxAnimal': 'Animal',
+    'outboxObservation': 'Observation',
+    'outboxTreatment': 'Treatment',
+    'outboxMilkRecord': 'Milk record',
+    'outboxEggRecord': 'Egg record',
+    'outboxHarvest': 'Harvest',
+    'outboxField': 'Field',
+    'outboxCrop': 'Crop',
+    'outboxPlanting': 'Planting',
+    'outboxFeedMovement': 'Feed movement',
+    'outboxDecision': 'Decision',
+    'outboxNotificationRead': 'Notification read',
+    'outboxEmployee': 'Employee',
+    'outboxMounehProduct': 'Mouneh product',
+    'outboxRawMaterial': 'Raw material',
+    'outboxMounehBatch': 'Production batch',
+    'outboxSale': 'Sale',
+    'outboxBooking': 'Booking',
+    'outboxVisitSession': 'Visit session',
+    'outboxOpeningDay': 'Opening day',
+    'outboxPackage': 'Visit package',
+    'outboxActivity': 'Activity',
+    'outboxRoster': 'Staff roster',
+    'outboxVisitCost': 'Visit cost',
+    'outboxIncident': 'Incident',
+    'outboxFeedback': 'Visitor feedback',
+    'outboxVisitor': 'Visitor',
+    'outboxModuleLicense': 'Module licence',
+    'otherUserQueueNote': 'more records were saved by a different sign-in on this tablet. They will be sent when that person signs in again.',
   };
 
   static const Map<String, String> _ar = {
@@ -946,11 +1009,83 @@ class FarmStrings {
     'enterHarvestedAmount': 'أدخل الكمية المحصودة.',
     'harvestRecorded': 'تم تسجيل الحصاد — حُدّث المخزون.',
     'cropOptionalHelper': 'اختياري إذا كان للحقل محصول مسجّل.',
+    // --- وضع عدم الاتصال والمزامنة
+    'syncStatus': 'حالة المزامنة',
+    'syncing': 'جارٍ المزامنة…',
+    'syncingTooltip': 'يتم إرسال سجلاتك المحفوظة إلى خادم المزرعة.',
+    'synced': 'تمت المزامنة',
+    'syncedTooltip': 'كل ما على هذا الجهاز وصل إلى خادم المزرعة.',
+    'offline': 'غير متصل',
+    'offlineTooltip': 'تعذّر الوصول إلى خادم المزرعة. يمكنك متابعة العمل — كل ما تسجّله يُحفظ هنا ويُرسل تلقائياً عند عودة الاتصال.',
+    'syncNow': 'مزامنة الآن',
+    'waitingToSync': 'بانتظار المزامنة',
+    'syncNeedsAttention': 'يحتاج إلى مراجعة',
+    'notSynced': 'لم تتم المزامنة',
+    'lastSynced': 'آخر مزامنة',
+    'neverSynced': 'لم تتم المزامنة بعد',
+    'details': 'التفاصيل',
+    'workingOffline': 'العمل بدون اتصال',
+    'workingOfflineNothingQueued': 'العمل بدون اتصال — تابع التسجيل وستتم المزامنة تلقائياً عند عودة شبكة المزرعة.',
+    'syncExplainerOnline': 'متصل بخادم المزرعة. كل ما تسجّله يُرسل مباشرة.',
+    'syncExplainerOffline': 'لا يوجد اتصال بخادم المزرعة. كل ما تسجّله يُحفظ على هذا الجهاز ويُرسل تلقائياً فور عودة الاتصال.',
+    'nothingWaiting': 'لا شيء بالانتظار',
+    'everythingUpToDate': 'كل سجل على هذا الجهاز وصل إلى الخادم.',
+    'nothingWaitingOffline': 'لم تسجّل شيئاً منذ انقطاع الاتصال.',
+    'serverRejected': 'لم يقبل الخادم هذا السجل.',
+    'retry': 'إعادة المحاولة',
+    'discard': 'حذف',
+    'discardRecord': 'حذف هذا السجل؟',
+    'discardRecordExplainer': 'لم يُرسل هذا السجل إلى خادم المزرعة. حذفه نهائي ولا يمكن استرجاعه.',
+    'unsyncedSignOutTitle': 'سجلات لم تُرسل بعد',
+    'unsyncedSignOutBody': 'بعض السجلات على هذا الجهاز لم تصل إلى خادم المزرعة. هي محفوظة بأمان وستُرسل عند تسجيل الدخول التالي مع وجود اتصال. تسجيل الخروج على أي حال؟',
+    'signOutAnyway': 'تسجيل الخروج',
+    'firstLoginNeedsInternet': 'اتصل بشبكة المزرعة لتسجيل الدخول أول مرة. بعد ذلك يعمل هذا الجهاز بدون إنترنت.',
+    'restoredOfflineNotice': 'فُتح بدون اتصال — تُعرض المزرعة كما كانت عند آخر اتصال.',
+    'offlineNotDownloaded': 'لم يُحمّل على هذا الجهاز بعد.',
+    'outboxChange': 'تغيير',
+    'outboxTask': 'مهمة',
+    'outboxAnimal': 'حيوان',
+    'outboxObservation': 'ملاحظة',
+    'outboxTreatment': 'علاج',
+    'outboxMilkRecord': 'سجل حليب',
+    'outboxEggRecord': 'سجل بيض',
+    'outboxHarvest': 'حصاد',
+    'outboxField': 'حقل',
+    'outboxCrop': 'محصول',
+    'outboxPlanting': 'زراعة',
+    'outboxFeedMovement': 'حركة علف',
+    'outboxDecision': 'قرار',
+    'outboxNotificationRead': 'قراءة إشعار',
+    'outboxEmployee': 'موظف',
+    'outboxMounehProduct': 'منتج مونة',
+    'outboxRawMaterial': 'مادة خام',
+    'outboxMounehBatch': 'دفعة إنتاج',
+    'outboxSale': 'عملية بيع',
+    'outboxBooking': 'حجز',
+    'outboxVisitSession': 'جلسة زيارة',
+    'outboxOpeningDay': 'يوم فتح',
+    'outboxPackage': 'باقة زيارة',
+    'outboxActivity': 'نشاط',
+    'outboxRoster': 'جدول الموظفين',
+    'outboxVisitCost': 'تكلفة زيارة',
+    'outboxIncident': 'حادثة',
+    'outboxFeedback': 'تقييم زائر',
+    'outboxVisitor': 'زائر',
+    'outboxModuleLicense': 'ترخيص وحدة',
+    'otherUserQueueNote': 'سجلات إضافية حُفظت بتسجيل دخول آخر على هذا الجهاز. ستُرسل عند تسجيل ذلك الشخص للدخول مجدداً.',
   };
 
+  /// Reads the locale from [Localizations] — which `MaterialApp` is
+  /// already driving from `LocaleController` — rather than watching the
+  /// controller directly.
+  ///
+  /// Two reasons. Changing the app's locale rebuilds everything under
+  /// `Localizations` anyway, so the EN/AR toggle stays instant; and this
+  /// works from a tap handler, where `context.watch` asserts. Composing a
+  /// snackbar message after a save is a legitimate caller, and this app
+  /// does it in dozens of places.
   static String of(BuildContext context, String key) {
-    final locale = context.watch<LocaleController>().locale;
-    final table = locale.languageCode == 'ar' ? _ar : _en;
+    final table = Localizations.localeOf(context).languageCode == 'ar' ? _ar : _en;
     return table[key] ?? _en[key] ?? key;
   }
 }

@@ -33,6 +33,7 @@ from app.api.v1 import (
     visits,
 )
 from app.core.config import get_settings
+from app.core.idempotency import IdempotencyMiddleware
 from app.db.base import Base, engine
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
@@ -67,6 +68,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Writes a tablet queued while offline are replayed when it gets back in
+# range. If the original attempt already committed and only its response
+# was lost, the replay must return that response rather than record the
+# work twice — see app/core/idempotency.py.
+app.add_middleware(IdempotencyMiddleware)
 
 
 @app.get("/", tags=["meta"])

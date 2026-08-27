@@ -6,6 +6,7 @@ import '../i18n/strings.dart';
 import '../../auth/session_controller.dart';
 import '../../features/notifications/notification_panel.dart';
 import '../../features/profile/profile_menu.dart';
+import '../../features/sync/sync_pill.dart';
 import '../../providers/notifications_provider.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
@@ -30,6 +31,8 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          const SyncPill(),
+          const SizedBox(width: FarmSpacing.md),
           _LanguageToggle(locale: locale),
           const SizedBox(width: FarmSpacing.md),
           _NotificationBell(count: unread),
