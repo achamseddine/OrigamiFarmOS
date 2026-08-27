@@ -119,11 +119,15 @@ DATABASE_URL=sqlite:///./ci.db pytest -q   # DATABASE_URL only affects the FastA
                                             # (see tests/conftest.py) regardless.
 ```
 
-149 tests, all passing as of this build: 16 pure unit tests for the
+232 tests, all passing as of this build: 16 pure unit tests for the
 recommendation engine (`tests/test_recommendations.py`, no DB/HTTP
-involved) and 34 API tests (`tests/test_api.py`) covering auth, RBAC,
+involved) and the API tests in `tests/test_api.py` covering auth, RBAC,
 every validation rule, the recommendation lifecycle (generate → decide →
-survives refresh), sync push idempotency, and both report endpoints —
+survives refresh) and both report endpoints — plus
+`tests/test_permissions_and_employees.py`,
+`tests/test_agriculture_and_signals.py` and `tests/test_idempotency.py`
+for the permission model, the operational write endpoints and offline
+replay protection —
 plus 41 tests for the Mouneh & Farm Product Processing module (21 pure
 costing-engine unit tests in `tests/test_mouneh_costing.py` and 20 API
 tests in `tests/test_mouneh_api.py`) — plus 58 tests for the Farm Visits
@@ -204,10 +208,36 @@ caught and fixed by the test suite during development — see git history.
 - **Mouneh & Farm Product Processing module (tech spec v0.5):** license-gated per farm by a super user (`api/v1/modules.py`); a manager can define any product type through the Product Builder (no code changes — `POST /mouneh/products`); recipes (raw materials + packaging + labor + optional overhead costs) are versioned, never mutated in place; `POST /mouneh/cost-preview` and batch creation compute planned unit cost via the pure `app/mouneh/costing.py` engine; completing a batch consumes remaining raw-material stock and creates finished-goods stock at a frozen unit cost; sales deduct from that stock and compute profit against the batch's actual (not recomputed) cost; the dashboard aggregates cost, sales, remaining stock and a continue/slow-mover/review-pricing recommendation per product. Makdous is seeded purely as example data (`app/mouneh/seed.py`) — the module has no hard-coded product types anywhere.
 - **Farm Visits & Agri-Tourism module (tech spec v0.6):** license-gated the same way, reusing the same `module_licenses` table; opening days are a configurable per-weekday calendar, never hard-coded (RULE-VIS-003); packages and activities (Horse Ride, Cheese Making Workshop are seed examples only — RULE-VIS-010) are created dynamically; a booking's status machine (draft → confirmed → checked_in → completed/cancelled/no_show → refunded) is enforced by `app/visits/analytics.py::validate_status_transition`; session guest capacity is checked at confirm time and activity-slot capacity + animal-welfare daily limits are checked at booking time (RULE-VIS-002/004); a ride/animal-interaction activity requires a handler with the matching role already rostered on the session before it can be confirmed (RULE-VIS-005); a Farm Shop / Visitor POS sale deducts either plain inventory or Mouneh finished-goods stock and posts a core `Sale` row so it shows up in Sales & Finance (RULE-VIS-006); every analytics formula in tech spec §9 (visitor revenue, direct visit cost, gross margin, revenue/visitor, activity utilization, retail conversion, average basket value, package profitability) is recomputed from granular components rather than trusted off a booking's stored total, specifically to avoid double-counting activity revenue.
 
+## Offline writes
+
+Farm workers record data in fields with no coverage, so the tablet queues
+what it cannot send and replays it later. That makes one server-side
+guarantee necessary: **a replayed write must not record the work twice.**
+
+Every queued request carries an `Idempotency-Key`, reused from the
+attempt that failed. `app/core/idempotency.py` stores the first
+successful response against that key and answers any later request
+carrying it with the stored response, without touching the database. This
+covers the case the tablet cannot distinguish on its own — the request
+arrived and committed, but the response was lost on the way back.
+
+Three deliberate choices:
+
+- **Middleware, not a per-endpoint dependency**, so it holds for every
+  write a tablet can queue, present and future, with no opt-in to forget.
+- **Only 2xx responses are remembered.** A replay of something the server
+  rejected gets a fresh attempt — the missing permission may have been
+  granted since the tablet gave up.
+- **Keyed per (key, user).** Two tablets cannot collide, and a replayed
+  key can never return another account's response body.
+
+`tests/test_idempotency.py` covers the replay, a second genuine write
+with a different key, writes with no key at all, rejected writes staying
+retryable, and the per-user scoping.
+
 ## What's mocked / simplified
 
-- **Sync push reconciliation is partial.** `POST /sync/push` durably records every item (event + `sync_queue` row, idempotent via `idempotency_key`) and materializes the write types the mobile app's `FarmWriteService` already produces (task status, milk records, feed transactions) back into their domain tables. Less common event types are accepted and event-logged but not yet replayed into a domain-table write — see the docstring on `api/v1/sync.py::push`. Adding a new entity type follows the same pattern as the three already there.
-- **Conflict resolution UI does not exist.** `SyncItemResult.status` distinguishes `accepted`/`duplicate`/`rejected`, satisfying REQ-SYNC-004's "conflicts must be visible", but there's no manager-facing conflict review screen yet (tracked as pilot-hardening work, tech spec milestone M9).
+- **`POST /sync/push` is legacy and no longer used by the tablet.** It came from an event-log design where the app translated each write into an event the server had to know how to replay, which meant every new write type needed a matching branch in `api/v1/sync.py::push`. The tablet now queues the HTTP request itself and replays it, so any endpoint works offline with no server-side counterpart — see "Offline writes" above. The endpoint is kept (with its tests) because nothing depends on removing it, but new work should not extend it.
 - **No refresh-token flow.** `POST /auth/login` issues a single long-lived (8h default) access token; a refresh-token endpoint is straightforward follow-on work.
 - **No media/photo upload endpoint.** Matches the mobile app's `PhotoSlot` being a placeholder-only widget in this build.
 - **`GET /animals` search is a simple `ILIKE`**, not a full-text index — fine at demo/pilot scale, would want a proper index before commercial scale.

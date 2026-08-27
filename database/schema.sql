@@ -425,6 +425,25 @@ CREATE TABLE sync_queue (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Replay protection for writes queued on an offline tablet. A tablet
+-- that loses the farm network re-sends the write when it comes back; if
+-- the first attempt actually committed and only its response was lost,
+-- the replay must return that response rather than record the milking a
+-- second time. Keyed per (key, user) so two tablets can never collide
+-- and a replayed key can never hand back another account's response.
+CREATE TABLE idempotency_records (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key   TEXT NOT NULL,
+    user_id           UUID NOT NULL,
+    method            TEXT NOT NULL,
+    path              TEXT NOT NULL,
+    status_code       INTEGER NOT NULL,
+    response_body     TEXT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (idempotency_key, user_id)
+);
+CREATE INDEX idx_idempotency_records_key ON idempotency_records(idempotency_key);
+
 CREATE TABLE audit_log (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     farm_id        UUID NOT NULL REFERENCES farms(id),
