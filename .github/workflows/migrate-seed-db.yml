@@ -12,6 +12,13 @@ name: Migrate & seed the production database
 # reads that secret at run time; it is never logged (GitHub Actions
 # automatically masks a secret's value in the log output).
 #
+# Put the whole connection string in the secret, including any options —
+# for an Azure Postgres Flexible Server that means ending it with
+# `?sslmode=require`, since the server refuses unencrypted connections.
+# Keep the options *inside* the secret rather than appending them in a
+# step: GitHub masks the exact secret value, and a string built from it
+# would no longer match the mask and could surface in a log.
+#
 # The target database must also allow inbound connections from GitHub's
 # hosted-runner IP ranges — an Azure Postgres Flexible Server blocks all
 # public access by default, so its "Networking" settings need either
@@ -44,6 +51,39 @@ jobs:
           python-version: "3.11"
 
       - run: pip install -r requirements.txt
+
+      # Turns the two likely setup failures — a missing secret and a
+      # database that won't accept the runner — into a sentence instead of
+      # a psycopg2 traceback. Prints nothing derived from the secret.
+      - name: Check the database is reachable
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          url = os.environ.get("DATABASE_URL", "")
+          if not url:
+              sys.exit(
+                  "PROD_DATABASE_URL is not set. Add it under Settings -> Secrets and "
+                  "variables -> Actions -> New repository secret, then re-run."
+              )
+          if url.startswith("sqlite"):
+              sys.exit("PROD_DATABASE_URL points at SQLite. This workflow is for the real database.")
+          import sqlalchemy
+          try:
+              with sqlalchemy.create_engine(url, connect_args={"connect_timeout": 15}).connect() as c:
+                  version = c.exec_driver_sql("select version()").scalar()
+              print("Connected:", str(version).split(" on ")[0])
+          except Exception as exc:
+              kind = type(exc).__name__
+              hint = (
+                  "The server did not accept the connection. On an Azure Postgres Flexible "
+                  "Server the usual causes are (a) the firewall not allowing GitHub's runner "
+                  "IPs — turn on 'Allow public access from any Azure service' or add a rule — "
+                  "and (b) a connection string without '?sslmode=require'."
+              )
+              sys.exit(f"Could not connect ({kind}). {hint}")
+          PY
 
       - name: Run Alembic migrations
         if: ${{ inputs.action == 'migrate_and_seed' || inputs.action == 'migrate_only' }}
