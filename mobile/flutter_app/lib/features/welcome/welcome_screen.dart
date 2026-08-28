@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -11,6 +12,7 @@ import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/top_bar.dart';
 import '../../data/demo/demo_data.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../providers/recommendations_provider.dart';
 
 /// Screen 1 — Welcome / Start My Day (tech spec §7 & §8: greeting,
 /// practical subline, Start My Day / View Demo Farm, Bekaa Valley imagery,
@@ -202,7 +204,7 @@ class _BriefingPreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priorities = [
-      for (final r in DemoData.recommendations.take(4)) r,
+      for (final r in context.watch<RecommendationsProvider>().recommendations.take(4)) r,
     ];
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.lg),

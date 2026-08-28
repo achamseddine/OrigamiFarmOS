@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/demo/demo_data.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/local_repository.dart';
 import '../domain/entities/animal.dart';
 import '../sync/sync_queue_controller.dart';
 
@@ -9,17 +11,44 @@ import '../sync/sync_queue_controller.dart';
 /// to SQLite + the event log + the sync queue, then update this in-memory
 /// projection so every screen reflects the change immediately — the same
 /// "save locally, update UI, sync later" flow described in tech spec §10.
+///
+/// The initial list renders instantly from [DemoData] (so the UI never
+/// shows an empty screen while SQLite opens) and is swapped for the real
+/// local cache — demo-seeded or server-synced, see
+/// `data/repositories/bootstrap_repository.dart` — a moment later via
+/// [reload].
 class AnimalsProvider extends ChangeNotifier {
-  AnimalsProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
-      : _writeService = writeService,
+  AnimalsProvider({
+    required FarmWriteService writeService,
+    required SyncQueueController syncQueue,
+    LocalRepository? localRepository,
+  })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _animals = List.of(DemoData.animals);
+        _localRepository = localRepository ?? LocalRepository(),
+        _animals = List.of(DemoData.animals) {
+    unawaited(reload());
+  }
 
   final FarmWriteService _writeService;
   final SyncQueueController _syncQueue;
+  final LocalRepository _localRepository;
   List<Animal> _animals;
 
   List<Animal> get animals => List.unmodifiable(_animals);
+
+  /// Re-reads the local SQLite cache (demo-seeded, or server-synced after
+  /// `BootstrapRepository.run()`) and replaces the in-memory list with it.
+  Future<void> reload() async {
+    try {
+      final loaded = await _localRepository.loadAnimals();
+      if (loaded.isNotEmpty) {
+        _animals = loaded;
+        notifyListeners();
+      }
+    } catch (_) {
+      // SQLite unavailable on this platform/target — keep the demo list.
+    }
+  }
 
   Animal byId(String id) => _animals.firstWhere((a) => a.id == id, orElse: () => _animals.first);
 

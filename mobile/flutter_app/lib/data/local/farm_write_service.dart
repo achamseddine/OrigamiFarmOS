@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import '../remote/session_manager.dart';
 import 'database.dart';
 
 class WriteResult {
@@ -17,16 +18,23 @@ class WriteResult {
 /// Every public method here is one CONSTITUTION.md-mandated "important
 /// change" and therefore always writes both the domain row *and* an
 /// [FarmEvent] row in the same transaction — never one without the other.
+/// The queued payload for each is a complete, ready-to-POST request body
+/// for the matching OrigamiFarmServer endpoint (field names match
+/// ../../../../../OrigamiFarmServer/docs/FARMOS_API.md exactly) — see
+/// `sync/sync_engine.dart`, the only reader of `sync_queue.payload_json`.
 class FarmWriteService {
-  FarmWriteService({FarmDatabase? db, String farmId = 'farm-origami', String userId = 'user-rami'})
+  FarmWriteService({FarmDatabase? db, SessionManager? session})
       : _db = db ?? FarmDatabase.instance,
-        _farmId = farmId,
-        _userId = userId;
+        _session = session;
 
   final FarmDatabase _db;
-  final String _farmId;
-  final String _userId;
+  final SessionManager? _session;
   static const _uuid = Uuid();
+
+  /// Demo mode (no signed-in session) keeps working exactly as before,
+  /// against the same fixed demo farm/user this app has always used.
+  String get _farmId => _session?.farmId ?? 'farm-origami';
+  String get _userId => _session?.userId ?? 'user-rami';
 
   Future<Database> get _database => _db.database;
 
@@ -101,12 +109,27 @@ class FarmWriteService {
         'notes': notes,
         'verified': 0,
       });
+      // Complete POST /observations body (ObservationCreate) — everything
+      // the server needs, not just what's interesting for the event log.
       await _writeEventAndQueue(
         txn,
         entityType: entityType,
         entityId: entityId,
         eventType: 'observation_recorded',
-        payload: {'observationType': observationType, 'valueNumeric': valueNumeric, 'valueText': valueText},
+        payload: {
+          'farm_id': _farmId,
+          'entity_type': entityType,
+          'entity_id': entityId,
+          'observation_type': observationType,
+          'quality': quality,
+          'observer_id': observerId,
+          'value_numeric': valueNumeric,
+          'value_text': valueText,
+          'unit': unit,
+          'severity': severity,
+          'observed_at': now,
+          'notes': notes,
+        },
       );
     });
     return const WriteResult.ok();
@@ -133,6 +156,7 @@ class FarmWriteService {
     final db = await _database;
     final id = _uuid.v4();
     final now = DateTime.now().toIso8601String();
+    final recordedByUser = recordedBy ?? _userId;
     await db.transaction((txn) async {
       await txn.insert('milk_records', {
         'id': id,
@@ -142,14 +166,23 @@ class FarmWriteService {
         'quality_status': 'normal',
         'destination': destination,
         'recorded_at': now,
-        'recorded_by': recordedBy ?? _userId,
+        'recorded_by': recordedByUser,
       });
+      // Complete POST /production/milk body (MilkRecordCreate). The server
+      // spells "sold" as its own `destination` value the same way.
       await _writeEventAndQueue(
         txn,
         entityType: 'animal',
         entityId: animalId,
         eventType: 'milk_recorded',
-        payload: {'session': session, 'liters': liters, 'destination': destination},
+        payload: {
+          'animal_id': animalId,
+          'session': session,
+          'liters': liters,
+          'destination': destination,
+          'quality_status': 'normal',
+          'recorded_at': now,
+        },
       );
     });
     return const WriteResult.ok();
@@ -194,12 +227,21 @@ class FarmWriteService {
         'created_at': now,
       });
       await txn.update('inventory_items', {'current_qty': newQty}, where: 'id = ?', whereArgs: [itemId]);
+      // Complete POST /feed/transactions body (FeedTransactionCreate).
       await _writeEventAndQueue(
         txn,
         entityType: 'inventory_item',
         entityId: itemId,
         eventType: 'feed_transaction',
-        payload: {'direction': direction, 'quantity': quantity, 'reason': reason},
+        payload: {
+          'item_id': itemId,
+          'direction': direction,
+          'quantity': quantity,
+          'reason': reason,
+          'linked_entity_type': linkedEntityType,
+          'linked_entity_id': linkedEntityId,
+          'allow_negative': allowNegative,
+        },
       );
       return const WriteResult.ok();
     });
@@ -250,12 +292,24 @@ class FarmWriteService {
           whereArgs: [entityId],
         );
       }
+      // Complete POST /health/treatments body (TreatmentCreate).
       await _writeEventAndQueue(
         txn,
         entityType: entityType,
         entityId: entityId,
         eventType: 'treatment_recorded',
-        payload: {'medication': medication, 'withdrawalUntil': withdrawalUntil?.toIso8601String()},
+        payload: {
+          'entity_type': entityType,
+          'entity_id': entityId,
+          'diagnosis': diagnosis,
+          'medication': medication,
+          'dose': dose,
+          'route': route,
+          'responsible_user_id': responsibleUserId,
+          'start_at': now.toIso8601String(),
+          'withdrawal_until': withdrawalUntil?.toIso8601String(),
+          'notes': notes,
+        },
       );
     });
     return const WriteResult.ok();
@@ -269,12 +323,13 @@ class FarmWriteService {
     await db.transaction((txn) async {
       await txn.update('animals', {'location': newLocation, 'updated_at': DateTime.now().toIso8601String()},
           where: 'id = ?', whereArgs: [animalId]);
+      // Complete PATCH /animals/{id} body (AnimalMove).
       await _writeEventAndQueue(
         txn,
         entityType: 'animal',
         entityId: animalId,
         eventType: 'animal_moved',
-        payload: {'newLocation': newLocation},
+        payload: {'location_label': newLocation},
       );
     });
     return const WriteResult.ok();
@@ -286,6 +341,7 @@ class FarmWriteService {
     final db = await _database;
     await db.transaction((txn) async {
       await txn.update('tasks', {'status': status}, where: 'id = ?', whereArgs: [taskId]);
+      // Complete PATCH /tasks/{id} body (TaskUpdate).
       await _writeEventAndQueue(
         txn,
         entityType: 'task',

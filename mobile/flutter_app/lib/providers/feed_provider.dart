@@ -1,20 +1,43 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/demo/demo_data.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/local_repository.dart';
 import '../domain/entities/inventory.dart';
 import '../sync/sync_queue_controller.dart';
 
 class FeedProvider extends ChangeNotifier {
-  FeedProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
-      : _writeService = writeService,
+  FeedProvider({
+    required FarmWriteService writeService,
+    required SyncQueueController syncQueue,
+    LocalRepository? localRepository,
+  })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _items = List.of(DemoData.feedInventory);
+        _localRepository = localRepository ?? LocalRepository(),
+        _items = List.of(DemoData.feedInventory) {
+    unawaited(reload());
+  }
 
   final FarmWriteService _writeService;
   final SyncQueueController _syncQueue;
+  final LocalRepository _localRepository;
   List<InventoryItem> _items;
 
   List<InventoryItem> get items => List.unmodifiable(_items);
+
+  /// Re-reads the local SQLite cache (demo-seeded, or server-synced) and
+  /// replaces the in-memory list with it — see `AnimalsProvider.reload`.
+  Future<void> reload() async {
+    try {
+      final loaded = await _localRepository.loadFeedItems();
+      if (loaded.isNotEmpty) {
+        _items = loaded;
+        notifyListeners();
+      }
+    } catch (_) {
+      // SQLite unavailable on this platform/target — keep the demo list.
+    }
+  }
 
   Future<WriteResult> recordDistribution({
     required String itemId,

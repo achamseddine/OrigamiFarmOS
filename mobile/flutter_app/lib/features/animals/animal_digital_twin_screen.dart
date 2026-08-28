@@ -10,10 +10,10 @@ import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/top_bar.dart';
-import '../../data/demo/demo_data.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/recommendations_provider.dart';
 import 'animal_quick_actions.dart';
 
 /// Screen 4 — Animal Digital Twin. Pushed as a focused full-screen route
@@ -372,7 +372,9 @@ class _InsightsColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rec = DemoData.recommendations
+    final rec = context
+        .watch<RecommendationsProvider>()
+        .recommendations
         .where((r) => r.entityLabel.contains(animal.name) || r.entityLabel.contains(animal.tag))
         .toList();
     return Column(

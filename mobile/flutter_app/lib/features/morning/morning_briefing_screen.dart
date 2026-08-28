@@ -13,6 +13,7 @@ import '../../core/widgets/status_pill.dart';
 import '../../data/demo/demo_data.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../domain/entities/task.dart';
+import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
@@ -23,7 +24,8 @@ class MorningBriefingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final openAlerts = DemoData.recommendations
+    final recommendations = context.watch<RecommendationsProvider>().recommendations;
+    final openAlerts = recommendations
         .where((r) => r.priority == RecommendationPriority.high || r.priority == RecommendationPriority.medium)
         .length;
 
@@ -130,11 +132,12 @@ class _KpiStrip extends StatelessWidget {
 class _PrioritiesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final recommendations = context.watch<RecommendationsProvider>().recommendations;
     return SectionCard(
       title: context.t('todaysPriorities'),
       child: Column(
         children: [
-          for (final rec in DemoData.recommendations.take(4)) ...[
+          for (final rec in recommendations.take(4)) ...[
             AlertCard(
               icon: _iconFor(rec.category),
               title: rec.title,
