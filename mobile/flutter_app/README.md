@@ -70,13 +70,49 @@ lib/
   data/
     demo/demo_data.dart           Rich Option C demo dataset (all 10 screens' data)
     local/                        SQLite schema (database.dart), FarmWriteService (validated
-                                   writes + event log + sync queue), DemoSeed (seed loader)
+                                   writes + event log + sync queue), DemoSeed (seed loader),
+                                   LocalRepository (farm-scoped reads + purge),
+                                   entity_mappers.dart (server JSON <-> entity <-> row)
+    remote/                       ApiClient, FarmosApi (one method per server endpoint),
+                                   SessionManager (token/farm/base URL), ApiException
+    repositories/                 BootstrapRepository — pulls a farm's data into SQLite
+    sync/sync_engine.dart         Replays queued offline writes against the server
   providers/                      ChangeNotifier controllers: AnimalsProvider, FeedProvider,
-                                   TasksProvider — call FarmWriteService + SyncQueueController
-  sync/sync_queue_controller.dart Sync status simulation (see "What's mocked" below)
+                                   TasksProvider, FinanceProvider, RecommendationsProvider
+  sync/sync_queue_controller.dart UI-facing sync status wrapper around SyncEngine
   features/                       One folder per screen (welcome, morning, animals, feed,
                                    production, health, produce, finance, tasks, settings)
 ```
+
+### Farm data isolation (one tablet, one farm's data)
+
+The server is the real security boundary — Postgres row-level security
+plus a `farm_id` check on every request, see OrigamiFarmServer's
+`TENANCY.md`. But this app *caches* a farm's rows locally for offline use,
+and a tablet can be handed between farms or signed out and back in as
+someone else, so the same rule is enforced on-device too:
+
+- **`SessionManager.activeFarmId`** is the single answer to "whose data may
+  this device touch right now" — the signed-in farm, or the demo farm when
+  signed out. Demo mode is treated as just another farm id, so there is no
+  unscoped code path.
+- **Every local read is scoped to it** (`LocalRepository`) — a farm never
+  sees another's cached rows, which matters most offline, where there's no
+  server round trip to correct a stale list.
+- **Every sync push is scoped to it** (`SyncEngine`). This one is a
+  security boundary, not a nicety: a push carries whatever token is in the
+  session now, so flushing a *different* farm's queued rows would file one
+  farmer's observations and stock movements into another farmer's records.
+  Other farms' rows stay queued for when that farm signs back in.
+- **Signing out, or signing in as a different farm, purges the previous
+  farm's rows and unsent queue** from the device
+  (`LocalRepository.purgeFarmData`). The shipped demo dataset is never
+  purged.
+
+`test/data/tenant_isolation_test.dart` and
+`test/data/sync_engine_isolation_test.dart` cover all of the above against
+the real SQLite engine (in-memory) and a mock HTTP client that captures
+what would actually be sent.
 
 ## What's complete
 
@@ -112,16 +148,20 @@ lib/
   the next milestone; the repository/provider pattern already in place
   (`AnimalsProvider`, `FeedProvider`, `TasksProvider`) is the template to
   extend.
-- **Sync is simulated, not networked.** `sync/sync_queue_controller.dart`
-  models queue depth, status transitions, and a debug offline toggle so
-  the offline-first UX is demonstrable end-to-end, but it does not call
-  the FastAPI backend's `/sync/push` / `/sync/pull` endpoints yet. The
-  local write pipeline (SQLite + event log + sync-queue table) is real
-  and ready for a networked sync worker to be added on top.
-- **No login screen / role switching in the UI.** The app assumes a
-  single manager session (matching the "first user is the farm manager"
-  framing); backend RBAC (owner/manager/worker/veterinarian/accountant) is
-  fully implemented and tested but not yet surfaced as a mobile login flow.
+- **Sync push is real; pull is not.** `data/sync/sync_engine.dart` replays
+  queued offline writes against the live OrigamiFarmServer (one HTTP call
+  per queued row, `Idempotency-Key` per row, retry/backoff, farm-scoped —
+  see "Farm data isolation" above). Pulling *down* incremental server-side
+  changes is still limited to `BootstrapRepository`'s full refresh of
+  animals/feed items/tasks on sign-in; there's no incremental
+  `/sync/pull`-style delta yet, so a change made on another device shows
+  up on next bootstrap rather than continuously.
+- **Sign-in exists, role switching in the UI does not.** Settings → Server
+  connection signs in against the server's own tablet login and switches
+  the app from demo mode to that farm's real data. The server enforces
+  role permissions (owner/manager/worker/veterinarian/accountant) on every
+  request, but the app doesn't yet grey out actions a given role can't
+  perform — it surfaces the server's refusal instead of pre-empting it.
 - **No bundled Fraunces/Inter/Noto Sans Arabic font files.** Typography
   uses the platform serif/UI-font fallback tier the brand guideline
   specifies for exactly this case — see `core/theme/typography.dart` for
@@ -142,13 +182,21 @@ ship as in-app backgrounds (§19, §24 anti-patterns table).
 
 ## Verification status
 
-- **Not run**: `flutter pub get` / `flutter analyze` / `flutter test` /
-  `flutter run` — no Flutter SDK was available in the environment this was
-  built in. Every file was written and cross-checked by hand (import
-  resolution, const-context correctness, `num`-vs-`double` clamp() return
-  types, enum-switch exhaustiveness, generic type inference on
-  `Database.transaction<T>()`), but this is not a substitute for a real
-  build. Run `flutter pub get && flutter analyze` first after cloning.
+- **Run and passing** (Flutter 3.47.2 / Dart 3.13.2): `flutter pub get`,
+  `flutter analyze` (0 errors; the remaining items are pre-existing
+  `withOpacity`/deprecation infos), `flutter test`, and `flutter build web`.
+- **Two pre-existing widget-test failures** in `test/widget_test.dart`
+  (`Welcome screen shows...`, `Start My Day navigates...`). These predate
+  the networking/data-engine work — confirmed by stashing those changes
+  and re-running against the untouched baseline — and look like a
+  flutter_test compatibility issue with this SDK version rather than an
+  app regression. Everything else passes.
+- **No live server was available** in the environment this was built in,
+  so the HTTP layer is proven by unit tests against a mock client
+  (`test/data/`), not by a real round trip. Field names follow
+  OrigamiFarmServer's `docs/FARMOS_API.md`; enum *value* spellings are
+  matched case/separator-insensitively with safe fallbacks because that
+  doc pins field names but not every enum's exact spelling.
 - **`sqflite`/`shared_preferences` calls fail gracefully with no platform
   channel** (e.g. certain CI/desktop test targets): `_RootRouter._start()`
   and `LocaleController._restore()` both catch and fall back rather than

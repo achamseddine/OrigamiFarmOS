@@ -21,10 +21,10 @@ class AnimalsProvider extends ChangeNotifier {
   AnimalsProvider({
     required FarmWriteService writeService,
     required SyncQueueController syncQueue,
-    LocalRepository? localRepository,
+    required LocalRepository localRepository,
   })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _localRepository = localRepository ?? LocalRepository(),
+        _localRepository = localRepository,
         _animals = List.of(DemoData.animals) {
     unawaited(reload());
   }

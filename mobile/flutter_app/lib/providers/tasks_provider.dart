@@ -13,10 +13,10 @@ class TasksProvider extends ChangeNotifier {
   TasksProvider({
     required FarmWriteService writeService,
     required SyncQueueController syncQueue,
-    LocalRepository? localRepository,
+    required LocalRepository localRepository,
   })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _localRepository = localRepository ?? LocalRepository(),
+        _localRepository = localRepository,
         _tasks = List.of(DemoData.todaysTasks) {
     unawaited(reload());
   }

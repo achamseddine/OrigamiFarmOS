@@ -26,6 +26,10 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  # Runs the real SQLite engine in unit tests (in-memory, no platform
+  # channel) so the farm-scoping tests in test/data/ exercise actual
+  # queries rather than a mock — see test/data/tenant_isolation_test.dart.
+  sqflite_common_ffi: ^2.3.3
 
 flutter:
   uses-material-design: true

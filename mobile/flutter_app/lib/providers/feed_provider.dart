@@ -10,10 +10,10 @@ class FeedProvider extends ChangeNotifier {
   FeedProvider({
     required FarmWriteService writeService,
     required SyncQueueController syncQueue,
-    LocalRepository? localRepository,
+    required LocalRepository localRepository,
   })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _localRepository = localRepository ?? LocalRepository(),
+        _localRepository = localRepository,
         _items = List.of(DemoData.feedInventory) {
     unawaited(reload());
   }

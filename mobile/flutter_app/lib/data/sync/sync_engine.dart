@@ -39,38 +39,70 @@ class SyncEngine {
   /// the farm instead — see settings_screen.dart's sync section.
   static const int maxRetries = 5;
 
+  /// Pending writes **for the farm currently signed in** — see the farm
+  /// scoping note on [flushPending]. A queued row belonging to a farm
+  /// nobody is signed into isn't this session's business and isn't
+  /// counted, so the top bar's pending badge reflects only what this
+  /// farmer can actually get uploaded.
   Future<int> countPending() async {
     final db = await _db.database;
     final rows = await db.rawQuery(
-      "SELECT COUNT(*) AS c FROM sync_queue WHERE status IN ('pending', 'error')",
+      '''
+      SELECT COUNT(*) AS c
+      FROM sync_queue q
+      JOIN events e ON e.id = q.local_event_id
+      WHERE q.status IN ('pending', 'error') AND e.farm_id = ?
+      ''',
+      [_session.activeFarmId],
     );
     return Sqflite.firstIntValue(rows) ?? 0;
   }
 
-  /// Pushes every pending row it can. Demo mode (no signed-in session) has
-  /// no server to push to, so queued rows there are marked synced
-  /// immediately — matching this build's demo UX everywhere else, where
-  /// "offline-first" writes always succeed locally with no visible wait.
+  /// Pushes every pending row it can **for the farm currently signed in**.
+  ///
+  /// The farm filter is a security boundary, not a nicety: a push carries
+  /// whatever bearer token is in the session now, and the server writes it
+  /// into *that* token's farm. Flushing another farm's queued rows — left
+  /// on a shared tablet by a previous session that went offline before
+  /// syncing — would silently file one farmer's observations, treatments
+  /// and stock movements into another farmer's records. Rows for other
+  /// farms are simply left queued; they upload when that farm signs back
+  /// in, or vanish when their farm's data is purged (see
+  /// `LocalRepository.purgeFarmData`).
+  ///
+  /// Demo mode (no signed-in session) has no server to push to, so demo
+  /// rows are marked synced immediately — matching this build's demo UX
+  /// everywhere else, where "offline-first" writes always succeed locally
+  /// with no visible wait. That, too, only touches the demo farm's own
+  /// rows: a real farm's unsynced work is never discarded just because
+  /// someone signed out.
   Future<SyncFlushResult> flushPending() async {
     final db = await _db.database;
+    final farmId = _session.activeFarmId;
 
     if (!_session.isLoggedIn) {
-      final count = await db.update(
-        'sync_queue',
-        {'status': 'synced'},
-        where: "status IN ('pending', 'error')",
+      final count = await db.rawUpdate(
+        '''
+        UPDATE sync_queue SET status = 'synced'
+        WHERE status IN ('pending', 'error')
+          AND local_event_id IN (SELECT id FROM events WHERE farm_id = ?)
+        ''',
+        [farmId],
       );
       return SyncFlushResult(pushed: count, failed: 0, wentOffline: false);
     }
 
-    final rows = await db.rawQuery('''
+    final rows = await db.rawQuery(
+      '''
       SELECT q.id AS q_id, q.entity_type, q.entity_id, q.payload_json, q.retry_count,
              e.event_type AS event_type
       FROM sync_queue q
-      LEFT JOIN events e ON e.id = q.local_event_id
-      WHERE q.status IN ('pending', 'error')
+      JOIN events e ON e.id = q.local_event_id
+      WHERE q.status IN ('pending', 'error') AND e.farm_id = ?
       ORDER BY q.created_at ASC
-    ''');
+      ''',
+      [farmId],
+    );
 
     var pushed = 0;
     var failed = 0;

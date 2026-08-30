@@ -26,6 +26,13 @@ class SessionManager extends ChangeNotifier {
   String _baseUrl = AppConfig.defaultApiBaseUrl;
   bool _loaded = false;
 
+  /// The farm every local row is written under and read back by when
+  /// nobody is signed in — the demo dataset's own farm (see
+  /// `data/demo/demo_data.dart` and `data/local/demo_seed.dart`). Demo mode
+  /// is treated as just another farm id rather than "no farm", so the same
+  /// scoping rules apply to it and there is no unscoped code path.
+  static const String demoFarmId = 'farm-origami';
+
   String? get token => _token;
   String? get farmId => _farmId;
   String? get userId => _userId;
@@ -34,6 +41,14 @@ class SessionManager extends ChangeNotifier {
   String get baseUrl => _baseUrl;
   bool get loaded => _loaded;
   bool get isLoggedIn => _token != null && _farmId != null;
+
+  /// The farm whose data this device may currently read and write.
+  ///
+  /// Every local SQLite read/write and every sync push is scoped to this,
+  /// so one farmer's data can never surface for another on a shared
+  /// tablet: signed in, it's their own farm; signed out, it's the demo
+  /// farm and nothing else.
+  String get activeFarmId => _farmId ?? demoFarmId;
 
   /// Reads any previously-saved session. Safe to call once at startup
   /// before the first frame that needs [isLoggedIn] — see `app/app.dart`.

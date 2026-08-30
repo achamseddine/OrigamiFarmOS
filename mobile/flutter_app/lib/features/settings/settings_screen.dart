@@ -7,6 +7,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../data/demo/demo_data.dart';
+import '../../data/local/local_repository.dart';
 import '../../data/remote/api_exception.dart';
 import '../../data/remote/farmos_api.dart';
 import '../../data/remote/session_manager.dart';
@@ -58,11 +59,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final session = context.read<SessionManager>();
     final api = context.read<FarmosApi>();
     final bootstrapRepository = context.read<BootstrapRepository>();
+    final localRepository = context.read<LocalRepository>();
     final animalsProvider = context.read<AnimalsProvider>();
     final feedProvider = context.read<FeedProvider>();
     final tasksProvider = context.read<TasksProvider>();
     final financeProvider = context.read<FinanceProvider>();
     final recommendationsProvider = context.read<RecommendationsProvider>();
+    // Whoever was signed in before this attempt, if anyone — used below to
+    // clear their data off the tablet if a *different* farm signs in.
+    final previousFarmId = session.farmId;
 
     setState(() {
       _signingIn = true;
@@ -77,13 +82,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Stash the token first so the GET /auth/me call below carries it.
       await session.saveSession(token: token, farmId: '', userId: '', displayName: '', role: '');
       final me = await api.me();
+      final newFarmId = me['farm_id'] as String? ?? '';
       await session.saveSession(
         token: token,
-        farmId: me['farm_id'] as String? ?? '',
+        farmId: newFarmId,
         userId: me['id'] as String? ?? '',
         displayName: me['name'] as String? ?? '',
         role: me['role'] as String? ?? '',
       );
+
+      // A different farm is taking over this tablet — clear the previous
+      // one's cached rows and unsent queue rather than letting two farms'
+      // data sit side by side in one database.
+      if (previousFarmId != null && previousFarmId.isNotEmpty && previousFarmId != newFarmId) {
+        await localRepository.purgeFarmData(previousFarmId);
+      }
 
       final result = await bootstrapRepository.run();
       if (!mounted) return;
@@ -106,8 +119,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _signOut() async {
-    await context.read<SessionManager>().signOut();
-    setState(() => _statusMessage = 'Signed out — back to demo mode.');
+    final session = context.read<SessionManager>();
+    final localRepository = context.read<LocalRepository>();
+    final animalsProvider = context.read<AnimalsProvider>();
+    final feedProvider = context.read<FeedProvider>();
+    final tasksProvider = context.read<TasksProvider>();
+
+    // Purge before clearing the session — purgeFarmData needs to know
+    // which farm's rows to remove, and after signOut() that's gone.
+    // Anything still queued for this farm goes with it: it can't be
+    // uploaded without this farmer's token, and leaving it on a shared
+    // tablet is exactly what we don't want.
+    final farmId = session.farmId;
+    if (farmId != null) await localRepository.purgeFarmData(farmId);
+    await session.signOut();
+
+    // Re-read so the screens fall back to the demo farm immediately
+    // rather than showing the signed-out farm's rows until next launch.
+    await Future.wait([animalsProvider.reload(), feedProvider.reload(), tasksProvider.reload()]);
+    if (!mounted) return;
+    setState(() => _statusMessage = 'Signed out — this farm\'s data has been removed from '
+        'this tablet, and it is back in demo mode.');
   }
 
   @override

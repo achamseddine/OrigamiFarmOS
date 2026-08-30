@@ -6,6 +6,7 @@ import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
 import '../data/local/demo_seed.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/local_repository.dart';
 import '../data/remote/api_client.dart';
 import '../data/remote/farmos_api.dart';
 import '../data/remote/session_manager.dart';
@@ -40,6 +41,9 @@ class FarmOSApp extends StatelessWidget {
     final syncEngine = SyncEngine(session: session, api: api);
     final bootstrapRepository = BootstrapRepository(session: session, api: api);
     final writeService = FarmWriteService(session: session);
+    // Every local read goes through this one session-scoped repository, so
+    // no screen can accidentally read another farm's cached rows.
+    final localRepository = LocalRepository(session: session);
 
     return MultiProvider(
       providers: [
@@ -47,12 +51,14 @@ class FarmOSApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: session),
         Provider<FarmosApi>.value(value: api),
         Provider<BootstrapRepository>.value(value: bootstrapRepository),
+        Provider<LocalRepository>.value(value: localRepository),
         ChangeNotifierProvider(create: (_) => SyncQueueController(engine: syncEngine)),
         Provider<FarmWriteService>.value(value: writeService),
         ChangeNotifierProxyProvider<SyncQueueController, TasksProvider>(
           create: (context) => TasksProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),
@@ -60,6 +66,7 @@ class FarmOSApp extends StatelessWidget {
           create: (context) => AnimalsProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),
@@ -67,6 +74,7 @@ class FarmOSApp extends StatelessWidget {
           create: (context) => FeedProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),

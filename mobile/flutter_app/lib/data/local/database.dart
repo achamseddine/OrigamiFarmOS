@@ -12,7 +12,24 @@ class FarmDatabase {
   FarmDatabase._();
   static final FarmDatabase instance = FarmDatabase._();
 
+  /// Test-only: wraps an already-open [Database] (e.g. an in-memory one
+  /// from `sqflite_common_ffi`) so repositories can be exercised against
+  /// the real SQLite engine without a platform channel or the app's
+  /// on-device file. See `createSchema` for building the tables in it.
+  FarmDatabase.forTesting(Database db) : _db = db;
+
   Database? _db;
+
+  /// Test-only: applies this class's own schema to [db], so a test
+  /// database is built from exactly the same DDL the app ships rather
+  /// than a hand-copied duplicate that could drift out of sync.
+  static Future<void> createSchema(Database db) async {
+    final batch = db.batch();
+    for (final stmt in _createStatements) {
+      batch.execute(stmt);
+    }
+    await batch.commit(noResult: true);
+  }
 
   Future<Database> get database async {
     if (_db != null) return _db!;
