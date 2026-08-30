@@ -1,52 +1,47 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../data/sync/sync_engine.dart';
 
 enum SyncStatus { synced, syncing, offline, error }
 
-class SyncQueueEntry {
-  SyncQueueEntry({
-    required this.id,
-    required this.entityType,
-    required this.entityId,
-    required this.operation,
-    required this.queuedAt,
-  });
-
-  final String id;
-  final String entityType;
-  final String entityId;
-  final String operation;
-  final DateTime queuedAt;
-}
-
-/// Simulates the tablet's offline-first sync queue described in tech spec
-/// §10/§11 (event → sync_queue item → background push when online). The
-/// local SQLite writer (see `data/local`) is the real, durable part of this
-/// pipeline; this controller only models the *transport* side (what the
-/// FastAPI `/sync/push` and `/sync/pull` endpoints will eventually do) so
-/// the UI can show REQ-SYNC-002 ("sync status visible in the top bar") end
-/// to end without requiring a live backend connection from the tablet.
+/// UI-facing wrapper around [SyncEngine] — the real push half of the
+/// offline-first pipeline (tech spec §10/§11: event → sync_queue item →
+/// background push when online). The local SQLite writer
+/// (`data/local/farm_write_service.dart`) is the durable part of this
+/// pipeline; this controller drives [SyncEngine] and exposes REQ-SYNC-002
+/// ("sync status visible in the top bar") — see `core/widgets/top_bar.dart`.
 class SyncQueueController extends ChangeNotifier {
+  SyncQueueController({required SyncEngine engine}) : _engine = engine {
+    unawaited(refreshPendingCount());
+  }
+
+  final SyncEngine _engine;
   SyncStatus _status = SyncStatus.synced;
   bool _online = true;
-  DateTime? _lastSyncedAt = DateTime.now();
-  final List<SyncQueueEntry> _queue = [];
+  DateTime? _lastSyncedAt;
+  int _pendingCount = 0;
   Timer? _flushTimer;
+  bool _flushing = false;
 
   SyncStatus get status => _status;
   bool get online => _online;
-  int get pendingCount => _queue.length;
+  int get pendingCount => _pendingCount;
   DateTime? get lastSyncedAt => _lastSyncedAt;
-  List<SyncQueueEntry> get queue => List.unmodifiable(_queue);
 
+  Future<void> refreshPendingCount() async {
+    _pendingCount = await _engine.countPending();
+    if (_pendingCount == 0 && _status != SyncStatus.offline) {
+      _status = SyncStatus.synced;
+    }
+    notifyListeners();
+  }
+
+  /// Called by a provider right after a local write adds a new
+  /// `sync_queue` row — refreshes the pending count and, if online,
+  /// triggers a background push shortly after (debounced so several quick
+  /// writes in a row only cause one flush).
   void enqueue({required String entityType, required String entityId, required String operation}) {
-    _queue.add(SyncQueueEntry(
-      id: '${DateTime.now().microsecondsSinceEpoch}',
-      entityType: entityType,
-      entityId: entityId,
-      operation: operation,
-      queuedAt: DateTime.now(),
-    ));
+    unawaited(refreshPendingCount());
     _status = _online ? SyncStatus.syncing : SyncStatus.offline;
     notifyListeners();
     if (_online) _scheduleFlush();
@@ -54,15 +49,29 @@ class SyncQueueController extends ChangeNotifier {
 
   void _scheduleFlush() {
     _flushTimer?.cancel();
-    _flushTimer = Timer(const Duration(seconds: 2), _flush);
+    _flushTimer = Timer(const Duration(seconds: 2), () => unawaited(_flush()));
   }
 
-  void _flush() {
-    if (!_online || _queue.isEmpty) return;
-    _queue.clear();
-    _status = SyncStatus.synced;
-    _lastSyncedAt = DateTime.now();
+  Future<void> _flush() async {
+    if (!_online || _flushing) return;
+    _flushing = true;
+    _status = SyncStatus.syncing;
     notifyListeners();
+    try {
+      final result = await _engine.flushPending();
+      _pendingCount = await _engine.countPending();
+      if (result.wentOffline) {
+        _status = SyncStatus.offline;
+      } else if (_pendingCount > 0) {
+        _status = SyncStatus.error;
+      } else {
+        _status = SyncStatus.synced;
+        _lastSyncedAt = DateTime.now();
+      }
+    } finally {
+      _flushing = false;
+      notifyListeners();
+    }
   }
 
   /// Demo/testing hook: simulate airplane mode (tech spec §20 "Offline
@@ -72,21 +81,15 @@ class SyncQueueController extends ChangeNotifier {
     _online = value;
     if (!value) {
       _status = SyncStatus.offline;
-    } else if (_queue.isNotEmpty) {
-      _status = SyncStatus.syncing;
-      _scheduleFlush();
+      notifyListeners();
     } else {
-      _status = SyncStatus.synced;
+      unawaited(_flush());
     }
-    notifyListeners();
   }
 
   Future<void> syncNow() async {
     if (!_online) return;
-    _status = SyncStatus.syncing;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 600));
-    _flush();
+    await _flush();
   }
 
   @override

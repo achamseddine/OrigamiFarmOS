@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../data/demo/demo_data.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/local_repository.dart';
 import '../domain/entities/task.dart';
 import '../sync/sync_queue_controller.dart';
 
@@ -8,17 +10,38 @@ import '../sync/sync_queue_controller.dart';
 /// updates SQLite, writes an event, and queues a sync item (tech spec
 /// milestone M5 "core actions write events").
 class TasksProvider extends ChangeNotifier {
-  TasksProvider({required FarmWriteService writeService, required SyncQueueController syncQueue})
-      : _writeService = writeService,
+  TasksProvider({
+    required FarmWriteService writeService,
+    required SyncQueueController syncQueue,
+    required LocalRepository localRepository,
+  })  : _writeService = writeService,
         _syncQueue = syncQueue,
-        _tasks = List.of(DemoData.todaysTasks);
+        _localRepository = localRepository,
+        _tasks = List.of(DemoData.todaysTasks) {
+    unawaited(reload());
+  }
 
   final FarmWriteService _writeService;
   final SyncQueueController _syncQueue;
+  final LocalRepository _localRepository;
   List<FarmTask> _tasks;
 
   List<FarmTask> get tasks => List.unmodifiable(_tasks);
   int get openCount => _tasks.where((t) => t.status != TaskStatus.done).length;
+
+  /// Re-reads the local SQLite cache (demo-seeded, or server-synced) and
+  /// replaces the in-memory list with it — see `AnimalsProvider.reload`.
+  Future<void> reload() async {
+    try {
+      final loaded = await _localRepository.loadTasks();
+      if (loaded.isNotEmpty) {
+        _tasks = loaded;
+        notifyListeners();
+      }
+    } catch (_) {
+      // SQLite unavailable on this platform/target — keep the demo list.
+    }
+  }
 
   Future<void> toggle(String taskId) async {
     final index = _tasks.indexWhere((t) => t.id == taskId);

@@ -6,6 +6,12 @@ import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
 import '../data/local/demo_seed.dart';
 import '../data/local/farm_write_service.dart';
+import '../data/local/local_repository.dart';
+import '../data/remote/api_client.dart';
+import '../data/remote/farmos_api.dart';
+import '../data/remote/session_manager.dart';
+import '../data/repositories/bootstrap_repository.dart';
+import '../data/sync/sync_engine.dart';
 import '../features/animals/animal_status_screen.dart';
 import '../features/feed/feed_inventory_screen.dart';
 import '../features/finance/sales_finance_screen.dart';
@@ -19,6 +25,8 @@ import '../features/settings/settings_screen.dart';
 import '../features/welcome/welcome_screen.dart';
 import '../providers/animals_provider.dart';
 import '../providers/feed_provider.dart';
+import '../providers/finance_provider.dart';
+import '../providers/recommendations_provider.dart';
 import '../providers/tasks_provider.dart';
 import '../sync/sync_queue_controller.dart';
 
@@ -27,17 +35,30 @@ class FarmOSApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final writeService = FarmWriteService();
+    final session = SessionManager();
+    final apiClient = ApiClient(session);
+    final api = FarmosApi(apiClient);
+    final syncEngine = SyncEngine(session: session, api: api);
+    final bootstrapRepository = BootstrapRepository(session: session, api: api);
+    final writeService = FarmWriteService(session: session);
+    // Every local read goes through this one session-scoped repository, so
+    // no screen can accidentally read another farm's cached rows.
+    final localRepository = LocalRepository(session: session);
 
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
-        ChangeNotifierProvider(create: (_) => SyncQueueController()),
+        ChangeNotifierProvider.value(value: session),
+        Provider<FarmosApi>.value(value: api),
+        Provider<BootstrapRepository>.value(value: bootstrapRepository),
+        Provider<LocalRepository>.value(value: localRepository),
+        ChangeNotifierProvider(create: (_) => SyncQueueController(engine: syncEngine)),
         Provider<FarmWriteService>.value(value: writeService),
         ChangeNotifierProxyProvider<SyncQueueController, TasksProvider>(
           create: (context) => TasksProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),
@@ -45,6 +66,7 @@ class FarmOSApp extends StatelessWidget {
           create: (context) => AnimalsProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),
@@ -52,9 +74,12 @@ class FarmOSApp extends StatelessWidget {
           create: (context) => FeedProvider(
             writeService: writeService,
             syncQueue: context.read<SyncQueueController>(),
+            localRepository: localRepository,
           ),
           update: (context, sync, previous) => previous!,
         ),
+        ChangeNotifierProvider(create: (_) => FinanceProvider(session: session, api: api)),
+        ChangeNotifierProvider(create: (_) => RecommendationsProvider(session: session, api: api)),
       ],
       child: Consumer<LocaleController>(
         builder: (context, locale, _) {
@@ -89,6 +114,17 @@ class _RootRouterState extends State<_RootRouter> {
   bool _seeding = false;
 
   Future<void> _start() async {
+    // Captured up front — never read `context` again after an `await` in
+    // this method (a `mounted` check doesn't make a later `context.read`
+    // safe, only a `State` field reference does).
+    final session = context.read<SessionManager>();
+    final bootstrapRepository = context.read<BootstrapRepository>();
+    final animalsProvider = context.read<AnimalsProvider>();
+    final feedProvider = context.read<FeedProvider>();
+    final tasksProvider = context.read<TasksProvider>();
+    final financeProvider = context.read<FinanceProvider>();
+    final recommendationsProvider = context.read<RecommendationsProvider>();
+
     setState(() => _seeding = true);
     try {
       await DemoSeed.ensureSeeded();
@@ -97,6 +133,21 @@ class _RootRouterState extends State<_RootRouter> {
       // screens still render from the in-memory demo dataset if the
       // platform's SQLite plugin is unavailable (e.g. certain CI/desktop
       // test targets), matching the mock-data-first milestone (M3).
+    }
+
+    await session.load();
+    // A farm that has signed in before (Settings → Server connection) gets
+    // its real data pulled down and cached over the demo seed; a farm that
+    // hasn't stays in demo mode with exactly today's behavior. The two
+    // read-only providers (finance, recommendations) already tried once in
+    // their own constructor, before `session.load()` above resolved — this
+    // is the real attempt.
+    if (session.isLoggedIn) {
+      final result = await bootstrapRepository.run();
+      if (result.success) {
+        await Future.wait([animalsProvider.reload(), feedProvider.reload(), tasksProvider.reload()]);
+      }
+      await Future.wait([financeProvider.refresh(), recommendationsProvider.refresh()]);
     }
     if (!mounted) return;
     setState(() {

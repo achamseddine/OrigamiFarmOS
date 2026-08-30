@@ -7,8 +7,8 @@ import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../data/demo/demo_data.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
 
 class HealthIntelligenceScreen extends StatefulWidget {
@@ -20,14 +20,16 @@ class HealthIntelligenceScreen extends StatefulWidget {
 
 class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
   int _tab = 0;
-  late String _selectedId = DemoData.featuredRecommendation.id;
+  String? _selectedId;
 
   @override
   Widget build(BuildContext context) {
-    final alerts = DemoData.recommendations.where((r) => r.category == RecommendationCategory.health).toList();
-    final selected = alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
+    final recommendations = context.watch<RecommendationsProvider>().recommendations;
+    final alerts = recommendations.where((r) => r.category == RecommendationCategory.health).toList();
+    final selected =
+        alerts.isEmpty ? null : alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
     final tasksProvider = context.watch<TasksProvider>();
-    final taskCreated = tasksProvider.tasks.any((t) => t.sourceId == selected.id);
+    final taskCreated = selected != null && tasksProvider.tasks.any((t) => t.sourceId == selected.id);
 
     return SingleChildScrollView(
       child: Column(
@@ -49,7 +51,16 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
             ],
           ),
           const Divider(height: 24, color: FarmColors.border),
-          if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
+          if (_tab != 0)
+            _PlaceholderTab(tab: _tab)
+          else if (selected == null)
+            const SectionCard(
+              child: SizedBox(
+                height: 160,
+                child: Center(child: Text('No health alerts right now.')),
+              ),
+            )
+          else ...[
             LayoutBuilder(builder: (context, c) {
               final wide = c.maxWidth > kTabletBreakpoint;
               final list = SectionCard(

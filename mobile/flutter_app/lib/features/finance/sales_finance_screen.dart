@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -9,14 +10,16 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../data/demo/demo_data.dart';
 import '../../domain/entities/finance.dart';
+import '../../providers/finance_provider.dart';
 
 class SalesFinanceScreen extends StatelessWidget {
   const SalesFinanceScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final sales = DemoData.salesToday;
-    final expenses = DemoData.expensesToday;
+    final finance = context.watch<FinanceProvider>();
+    final sales = finance.salesToday;
+    final expenses = finance.expensesToday;
     final revenue = sales.fold<double>(0, (s, x) => s + x.amountUsd);
     final expenseTotal = expenses.fold<double>(0, (s, x) => s + x.amountUsd);
     final margin = revenue - expenseTotal;
