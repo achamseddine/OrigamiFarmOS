@@ -297,11 +297,17 @@ class _MoreSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width > kTabletLandscapeMin ? 5 : (width > kTabletBreakpoint ? 4 : 2);
+    final columns = width > kTabletBreakpoint ? 4 : 2;
 
     return SafeArea(
       top: false,
-      child: Container(
+      // Capped and scrollable for the same reason as the record sheet:
+      // ten tiles across a full 1366 tablet ran off the bottom edge.
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kFarmModalMaxWidth),
+          child: SingleChildScrollView(
+            child: Container(
         margin: const EdgeInsets.all(FarmSpacing.md),
         padding: const EdgeInsets.fromLTRB(
             FarmSpacing.lg, FarmSpacing.md, FarmSpacing.lg, FarmSpacing.lg),
@@ -373,6 +379,9 @@ class _MoreSheet extends StatelessWidget {
               ],
             ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );

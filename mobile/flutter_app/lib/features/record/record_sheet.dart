@@ -148,7 +148,15 @@ class _RecordSheet extends StatelessWidget {
 
     return SafeArea(
       top: false,
-      child: Container(
+      // `component_spec.md`: a modal caps at ~820 logical px on a large
+      // tablet. Without this the sheet spanned 1334px on a landscape
+      // tablet, which made every tile a 324px square and pushed the
+      // second row off the bottom of the screen.
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kFarmModalMaxWidth),
+          child: SingleChildScrollView(
+            child: Container(
         margin: const EdgeInsets.all(FarmSpacing.md),
         padding: const EdgeInsets.fromLTRB(
             FarmSpacing.md, FarmSpacing.sm, FarmSpacing.md, FarmSpacing.lg),
@@ -192,6 +200,9 @@ class _RecordSheet extends StatelessWidget {
               ],
             ),
           ],
+        ),
+            ),
+          ),
         ),
       ),
     );

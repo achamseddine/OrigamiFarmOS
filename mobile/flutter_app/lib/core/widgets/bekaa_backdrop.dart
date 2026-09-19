@@ -46,10 +46,20 @@ class BekaaBackdrop extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        SvgPicture.asset(
-          scene.asset,
-          fit: BoxFit.cover,
+        // fitWidth, not cover. The scenes are wide (1600x900); on the
+        // sign-in screen's tall half-panel `cover` zooms until only a
+        // slice of hillside is left and the farm, the cedar and the
+        // ridge line are all outside the frame. Fitting the width keeps
+        // the whole valley and crops the sky instead, which is the part
+        // with nothing in it.
+        Align(
           alignment: Alignment.bottomCenter,
+          child: SvgPicture.asset(
+            scene.asset,
+            fit: BoxFit.fitWidth,
+            width: double.infinity,
+            alignment: Alignment.bottomCenter,
+          ),
         ),
         if (drift > 0)
           CustomPaint(painter: _WeatherPainter(drift: drift), size: Size.infinite),

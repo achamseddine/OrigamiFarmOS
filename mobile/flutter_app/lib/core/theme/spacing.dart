@@ -64,6 +64,11 @@ const double kFarmTouchTarget = 48;
 /// is pressed with a glove on, in a barn, by someone not looking closely.
 const double kFarmPrimaryTarget = 52;
 
+/// How wide a modal is allowed to get, from the asset pack's
+/// `component_spec.md`. A sheet that spans a whole landscape tablet is
+/// not a sheet, it is a second screen.
+const double kFarmModalMaxWidth = 820;
+
 /// Tablet layout breakpoints.
 const double kTabletBreakpoint = 900;
 const double kTabletLandscapeMin = 1024;
