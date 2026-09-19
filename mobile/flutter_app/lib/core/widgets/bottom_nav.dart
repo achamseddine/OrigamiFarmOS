@@ -13,11 +13,17 @@ import '../theme/typography.dart';
 /// its destinations along the bottom edge, where a thumb reaches them
 /// while the device is held in two hands.
 ///
-/// This app has up to thirteen destinations and a bar holds four, so the
-/// rest live behind **More**, which opens a sheet. Which four are on the
-/// bar is not a fixed list: the entries arriving here are already
-/// filtered by what this person may open (see `app/nav_config.dart`), so
-/// a worker with three modules gets three tabs and no More at all.
+/// The shape is fixed, from the v1 redesign review: two destinations, the
+/// record button, the profile, and More — the same five places on every
+/// tablet, so "المزيد is bottom-left" is a thing a person learns once.
+///
+/// What the two destination slots *contain* is not fixed, and cannot be.
+/// The entries arriving here are already filtered by what this person may
+/// open (see `app/nav_config.dart`), so the slots take Morning and
+/// Animals when they are among them — which for almost everyone they are
+/// — and otherwise fall back to the first destinations this person
+/// actually has. A tab nobody is allowed to open is a tab that answers a
+/// tap with a 403, and no amount of consistency is worth that.
 const double kBottomNavHeight = 88;
 
 /// How far the centre action lifts above the bar.
@@ -31,6 +37,7 @@ class BottomNav extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelect,
     this.onAction,
+    this.onProfile,
   });
 
   /// Every destination this person may open, in nav order.
@@ -38,26 +45,35 @@ class BottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelect;
 
-  /// The centre button. Null hides it and the bar becomes plain tabs.
+  /// The centre button. Null hides it.
   final VoidCallback? onAction;
 
-  /// The four that get a tab of their own. Everything else goes to More.
-  static const int _primaryCount = 4;
+  /// The profile tab. Null hides it.
+  final VoidCallback? onProfile;
 
-  bool get _needsMore => entries.length > _primaryCount;
+  /// The two destinations the review puts on the bar, by label key, in
+  /// preference order.
+  static const List<String> _preferred = ['navMorningBriefing', 'navAnimals'];
+  static const int _slots = 2;
 
+  /// Which entries get a tab of their own.
   List<int> get _primary {
-    // With a More button the bar shows three, plus More, plus the centre
-    // action; without one it shows up to four.
-    final room = _needsMore ? _primaryCount - 1 : _primaryCount;
-    final indices = <int>[for (var i = 0; i < entries.length && i < room; i++) i];
+    final chosen = <int>[];
+    for (final key in _preferred) {
+      final i = entries.indexWhere((e) => e.labelKey == key);
+      if (i != -1 && !chosen.contains(i)) chosen.add(i);
+      if (chosen.length == _slots) break;
+    }
+    for (var i = 0; i < entries.length && chosen.length < _slots; i++) {
+      if (!chosen.contains(i)) chosen.add(i);
+    }
     // Whatever is open must be visible on the bar, even when it lives in
     // the More sheet — otherwise nothing is highlighted and the person
     // cannot tell where they are.
-    if (!indices.contains(selectedIndex) && selectedIndex < entries.length) {
-      if (indices.isNotEmpty) indices[indices.length - 1] = selectedIndex;
+    if (!chosen.contains(selectedIndex) && selectedIndex < entries.length && chosen.isNotEmpty) {
+      chosen[chosen.length - 1] = selectedIndex;
     }
-    return indices;
+    return chosen;
   }
 
   Future<void> _openMore(BuildContext context, List<int> hidden) async {
@@ -83,30 +99,28 @@ class BottomNav extends StatelessWidget {
     ];
     final moreIsActive = hidden.contains(selectedIndex);
 
-    final slots = <Widget>[];
-    final half = (primary.length / 2).ceil();
-    for (var i = 0; i < primary.length; i++) {
-      if (onAction != null && i == half) {
-        slots.add(_ActionSlot(onTap: onAction!));
-      }
-      final index = primary[i];
-      slots.add(_Tab(
-        entry: entries[index],
-        selected: index == selectedIndex,
-        onTap: () => onSelect(index),
-      ));
-    }
-    if (onAction != null && half >= primary.length) {
-      slots.add(_ActionSlot(onTap: onAction!));
-    }
-    if (_needsMore) {
-      slots.add(_Tab(
-        entry: NavEntry(FarmIcon.inventory, 'navMore'),
-        selected: moreIsActive,
-        icon: Icons.grid_view_rounded,
-        onTap: () => _openMore(context, hidden),
-      ));
-    }
+    final slots = <Widget>[
+      for (final index in primary)
+        _Tab(
+          entry: entries[index],
+          selected: index == selectedIndex,
+          onTap: () => onSelect(index),
+        ),
+      if (onAction != null) _ActionSlot(onTap: onAction!),
+      if (onProfile != null)
+        _Tab(
+          entry: const NavEntry(FarmIcon.report, 'navProfile'),
+          selected: false,
+          onTap: onProfile!,
+        ),
+      if (hidden.isNotEmpty)
+        _Tab(
+          entry: const NavEntry(FarmIcon.inventory, 'navMore'),
+          selected: moreIsActive,
+          icon: Icons.grid_view_rounded,
+          onTap: () => _openMore(context, hidden),
+        ),
+    ];
 
     return Container(
       height: kBottomNavHeight + MediaQuery.paddingOf(context).bottom,

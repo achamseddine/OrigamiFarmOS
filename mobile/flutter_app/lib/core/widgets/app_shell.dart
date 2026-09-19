@@ -9,6 +9,7 @@ import '../../app/app_navigator.dart';
 import '../../features/record/record_sheet.dart';
 import '../../features/sync/sync_pill.dart';
 import '../../providers/access_provider.dart';
+import '../../features/profile/my_profile_sheet.dart';
 
 /// Tablet application shell: content canvas over a bottom tab bar.
 ///
@@ -81,6 +82,10 @@ class AppShell extends StatelessWidget {
         // anything — a button that can only fail is worse than no button
         // (see [showRecordSheet]).
         onAction: canRecord ? () => showRecordSheet(context) : null,
+        // The review gives the profile a slot of its own rather than
+        // leaving it only on the small avatar in the corner. It opens the
+        // same sheet that avatar's "ملفي" opens — one place, two doors.
+        onProfile: () => showMyProfileSheet(context),
       ),
     );
   }
