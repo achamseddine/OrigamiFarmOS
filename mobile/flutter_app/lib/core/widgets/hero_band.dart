@@ -1,0 +1,181 @@
+import 'package:flutter/material.dart';
+import 'app_icon.dart';
+import 'bekaa_backdrop.dart';
+import '../theme/colors.dart';
+import '../theme/spacing.dart';
+import '../theme/typography.dart';
+
+/// The band of valley that opens a screen, with the screen's name on it.
+///
+/// From the v1 redesign review, where every screen starts on the
+/// landscape rather than on a heading floating in space. The artwork is
+/// the painted valley rather than a photograph: the tech spec forbids
+/// shipping the mockup PNGs as in-app backgrounds (§19, §24), and vector
+/// geometry costs nothing to ship and scales to any tablet.
+///
+/// It bleeds past the page gutter on purpose. The shell pads its content,
+/// and a hero that stops short of the screen edges reads as a picture
+/// pasted into a document instead of the top of a screen — so the band
+/// measures the window itself and draws to both edges, then pads its own
+/// text back to the gutter.
+class HeroBand extends StatelessWidget {
+  const HeroBand({
+    super.key,
+    required this.title,
+    this.subtitle,
+    this.icon,
+    this.actions = const [],
+    this.height = 170,
+  });
+
+  final String title;
+  final String? subtitle;
+
+  /// Drawn beside the title, at the size a screen title deserves.
+  final FarmIcon? icon;
+
+  /// Buttons for this screen — "add an animal", "download a report".
+  /// They sit at the far edge on a wide tablet and under the title when
+  /// there is no room for that.
+  final List<Widget> actions;
+
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= kTabletBreakpoint;
+    final gutter = wide ? FarmSpacing.lg : FarmSpacing.md;
+
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: FarmTypography.display(size: wide ? 34 : 26),
+              ),
+            ),
+            if (icon != null) ...[
+              const SizedBox(width: 12),
+              AppIcon(icon!, size: wide ? 32 : 26, color: FarmColors.cedar),
+            ],
+          ],
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            subtitle!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: FarmTypography.textTheme.bodyMedium?.copyWith(color: FarmColors.muted),
+          ),
+        ],
+      ],
+    );
+
+    return SizedBox(
+      height: height,
+      child: OverflowBox(
+        maxWidth: screenWidth,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: screenWidth,
+          height: height,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const BekaaBackdrop(),
+              // The valley is scenery, not content — this keeps it well
+              // behind the words without washing it out to nothing.
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      FarmColors.stone.withOpacity(0.88),
+                      FarmColors.stone.withOpacity(0.55),
+                      FarmColors.stone.withOpacity(0.92),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: gutter, vertical: FarmSpacing.md),
+                child: wide
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(child: heading),
+                          if (actions.isNotEmpty) ...[
+                            const SizedBox(width: FarmSpacing.md),
+                            Wrap(spacing: FarmSpacing.sm, runSpacing: FarmSpacing.sm, children: actions),
+                          ],
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          heading,
+                          if (actions.isNotEmpty) ...[
+                            const SizedBox(height: FarmSpacing.md),
+                            Wrap(spacing: FarmSpacing.sm, runSpacing: FarmSpacing.sm, children: actions),
+                          ],
+                        ],
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The small filled/outlined pair the review puts on a hero band.
+class HeroAction extends StatelessWidget {
+  const HeroAction({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.primary = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(FarmRadii.sm));
+    if (primary) {
+      return FilledButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 20),
+        label: Text(label),
+        style: FilledButton.styleFrom(shape: shape, minimumSize: const Size(0, 52)),
+      );
+    }
+    return FilledButton.tonalIcon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20),
+      label: Text(label),
+      style: FilledButton.styleFrom(
+        shape: shape,
+        minimumSize: const Size(0, 52),
+        backgroundColor: FarmColors.card,
+        foregroundColor: FarmColors.ink,
+      ),
+    );
+  }
+}

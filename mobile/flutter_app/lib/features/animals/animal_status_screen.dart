@@ -17,6 +17,7 @@ import '../../sync/sync_controller.dart';
 import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
+import '../../core/widgets/hero_band.dart';
 
 class AnimalStatusScreen extends StatefulWidget {
   const AnimalStatusScreen({super.key});
@@ -51,34 +52,26 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.t('animalStatusTitle'), style: FarmTypography.display(size: 28)),
-                    const SizedBox(height: 2),
-                    Text(context.t('animalStatusSubtitle'), style: FarmTypography.textTheme.bodyMedium),
-                  ],
-                ),
-              ),
+          HeroBand(
+            title: context.t('animalStatusTitle'),
+            subtitle: context.t('animalStatusSubtitle'),
+            icon: FarmIcon.cow,
+            actions: [
               // Tech spec §12: the Animals screen must not be read-only for
               // whoever looks after the animals.
               if (context.watch<AccessProvider>().canCreate(FarmModule.animals))
-                FilledButton.icon(
+                HeroAction(
+                  primary: true,
+                  icon: Icons.add,
+                  label: context.t('addAnimal'),
                   onPressed: () => showAnimalForm(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(context.t('addAnimal')),
                 ),
-              if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export)) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
+              if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export))
+                HeroAction(
+                  icon: Icons.file_download_outlined,
+                  label: context.t('exportReport'),
                   onPressed: () {},
-                  icon: const Icon(Icons.file_download_outlined, size: 18),
-                  label: Text(context.t('exportReport')),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: FarmSpacing.md),

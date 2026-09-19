@@ -11,6 +11,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/inventory.dart';
 import '../../providers/feed_provider.dart';
+import '../../core/widgets/hero_band.dart';
 
 class FeedInventoryScreen extends StatelessWidget {
   const FeedInventoryScreen({super.key});
@@ -26,9 +27,11 @@ class FeedInventoryScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('feedInventoryTitle'), style: FarmTypography.display(size: 28)),
-          const SizedBox(height: 2),
-          Text(context.t('feedInventorySubtitle'), style: FarmTypography.textTheme.bodyMedium),
+          HeroBand(
+            title: context.t('feedInventoryTitle'),
+            subtitle: context.t('feedInventorySubtitle'),
+            icon: FarmIcon.feedBag,
+          ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 700 ? 3 : 2;

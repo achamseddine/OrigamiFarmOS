@@ -22,6 +22,7 @@ import '../../providers/tasks_provider.dart';
 import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
 import '../priorities/priority_card.dart';
+import '../../core/widgets/hero_band.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
 /// (tech spec §2 "Morning first: default route after login is Morning
@@ -88,15 +89,13 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const AppIcon(FarmIcon.sun, size: 24, color: FarmColors.gold),
-              const SizedBox(width: 8),
-              Text('${context.t('goodMorning')}, $managerName', style: FarmTypography.display(size: 26)),
-            ],
+          HeroBand(
+            title: managerName.isEmpty
+                ? context.t('goodMorning')
+                : '${context.t('goodMorning')}، $managerName',
+            subtitle: context.t('morningSubline'),
+            icon: FarmIcon.sun,
           ),
-          const SizedBox(height: 2),
-          Text(context.t('morningSubline'), style: FarmTypography.textTheme.bodyMedium),
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
@@ -151,19 +150,56 @@ class _KpiStrip extends StatelessWidget {
     return LayoutBuilder(builder: (context, constraints) {
       final perRow = constraints.maxWidth > 1100 ? 6 : (constraints.maxWidth > 720 ? 3 : 2);
       final cardWidth = (constraints.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
+      // Each roundel is the colour of its subject, not of its mood, so
+      // the strip is findable by colour before it is read — the milk
+      // tile is the same blue as the milk tab and the milk sheet.
+      final navigator = context.read<AppNavigator>();
       final cards = [
-        KpiCard(icon: FarmIcon.cow, label: context.t('kpiAnimals'), value: '$animals'),
-        KpiCard(icon: FarmIcon.milkBottle, label: context.t('kpiMilkToday'), value: milkToday.toStringAsFixed(0), unit: context.t('liters')),
-        KpiCard(icon: FarmIcon.egg, label: context.t('kpiEggsToday'), value: '$eggsToday'),
-        KpiCard(icon: FarmIcon.leaf, label: context.t('kpiActiveCrops'), value: '$activeFields'),
+        KpiCard(
+          icon: FarmIcon.cow,
+          label: context.t('kpiAnimals'),
+          value: '$animals',
+          accent: FarmColors.cedar,
+          onTap: () => navigator.goToModule(FarmModule.animals),
+        ),
+        KpiCard(
+          icon: FarmIcon.milkBottle,
+          label: context.t('kpiMilkToday'),
+          value: milkToday.toStringAsFixed(0),
+          unit: context.t('liters'),
+          accent: FarmColors.milkBlue,
+          onTap: () => navigator.goToModule(FarmModule.milkProduction),
+        ),
+        KpiCard(
+          icon: FarmIcon.egg,
+          label: context.t('kpiEggsToday'),
+          value: '$eggsToday',
+          accent: FarmColors.gold,
+          onTap: () => navigator.goToModule(FarmModule.eggProduction),
+        ),
+        KpiCard(
+          icon: FarmIcon.leaf,
+          label: context.t('kpiActiveCrops'),
+          value: '$activeFields',
+          accent: FarmColors.olive,
+          onTap: () => navigator.goToModule(FarmModule.agriculture),
+        ),
         KpiCard(
           icon: FarmIcon.warning,
           label: context.t('kpiOpenAlerts'),
           value: '$openAlerts',
+          accent: FarmColors.danger,
           tint: openAlerts > 0 ? FarmColors.danger : null,
           caption: openAlerts > 0 ? context.t('needsAttention') : null,
         ),
-        KpiCard(icon: FarmIcon.task, label: context.t('kpiTasksDue'), value: '$tasksDue', caption: context.t('today')),
+        KpiCard(
+          icon: FarmIcon.task,
+          label: context.t('kpiTasksDue'),
+          value: '$tasksDue',
+          caption: context.t('today'),
+          accent: FarmColors.cedar2,
+          onTap: () => navigator.goToModule(FarmModule.tasks),
+        ),
       ];
       return Wrap(
         spacing: FarmSpacing.md,

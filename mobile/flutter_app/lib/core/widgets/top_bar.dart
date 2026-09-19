@@ -9,6 +9,8 @@ import '../../features/sync/sync_pill.dart';
 import '../../providers/notifications_provider.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../theme/typography.dart';
 
 /// Sync state, the notification bell, and the signed-in user's menu.
 ///
@@ -33,8 +35,22 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 6, FarmSpacing.lg, 2),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          // The mark at the reading edge, the way the review has it: the
+          // one fixed thing on a screen whose content changes with every
+          // tab, so somebody glancing at a tablet across a yard knows
+          // what they are looking at.
+          SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: 34, height: 34),
+          const SizedBox(width: 10),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Origami', style: FarmTypography.display(size: 15, color: FarmColors.ink)),
+              Text('FarmOS', style: FarmTypography.display(size: 13, color: FarmColors.olive)),
+            ],
+          ),
+          const Spacer(),
           const SyncPill(),
           const SizedBox(width: FarmSpacing.md),
           _NotificationBell(count: unread),
