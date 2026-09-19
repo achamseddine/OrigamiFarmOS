@@ -262,7 +262,12 @@ class _FoldedSquarePainter extends CustomPainter {
       old.face != face || old.under != under || old.radius != radius || old.fold != fold;
 }
 
-/// Everything that did not fit on the bar, as a grid you can hit.
+/// Everything that did not fit on the bar, as a grid of subjects.
+///
+/// Built to the v1 redesign review: a big tinted roundel per
+/// destination, its name, and one line saying what is behind it. The
+/// line matters more than it looks — "المونة" alone is a word, "المونة /
+/// المخزون والمواد" is a place you know whether you need.
 class _MoreSheet extends StatelessWidget {
   const _MoreSheet({
     required this.entries,
@@ -277,14 +282,14 @@ class _MoreSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width > kTabletBreakpoint ? 5 : 3;
+    final columns = width > kTabletLandscapeMin ? 5 : (width > kTabletBreakpoint ? 4 : 2);
 
     return SafeArea(
       top: false,
       child: Container(
         margin: const EdgeInsets.all(FarmSpacing.md),
         padding: const EdgeInsets.fromLTRB(
-            FarmSpacing.md, FarmSpacing.sm, FarmSpacing.md, FarmSpacing.lg),
+            FarmSpacing.lg, FarmSpacing.md, FarmSpacing.lg, FarmSpacing.lg),
         decoration: BoxDecoration(
           color: FarmColors.card,
           borderRadius: BorderRadius.circular(FarmRadii.lg),
@@ -305,17 +310,44 @@ class _MoreSheet extends StatelessWidget {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: FarmSpacing.sm),
-              child: Text('More', style: FarmTypography.textTheme.titleLarge),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(context.t('navMore'), style: FarmTypography.display(size: 24)),
+                          const SizedBox(width: 10),
+                          const AppIcon(FarmIcon.leaf, size: 22, color: FarmColors.olive),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        context.t('moreSheetSubtitle'),
+                        style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                  tooltip: context.t('close'),
+                  style: IconButton.styleFrom(backgroundColor: FarmColors.stone),
+                ),
+              ],
             ),
+            const SizedBox(height: FarmSpacing.md),
             GridView.count(
               crossAxisCount: columns,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: FarmSpacing.sm,
-              crossAxisSpacing: FarmSpacing.sm,
-              childAspectRatio: 1.15,
+              mainAxisSpacing: FarmSpacing.md,
+              crossAxisSpacing: FarmSpacing.md,
+              childAspectRatio: 0.98,
               children: [
                 for (final index in indices)
                   _MoreTile(
@@ -348,22 +380,34 @@ class _MoreTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(FarmRadii.sm),
         child: Padding(
-          padding: const EdgeInsets.all(FarmSpacing.sm),
+          padding: const EdgeInsets.all(FarmSpacing.md),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AppIcon(entry.icon, size: 25, color: selected ? FarmColors.cedar : FarmColors.ink),
-              const SizedBox(height: 10),
+              Container(
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  color: FarmColors.tint(entry.accent, 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(child: AppIcon(entry.icon, size: 30, color: entry.accent)),
+              ),
+              const SizedBox(height: 14),
               Text(
                 context.t(entry.labelKey),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? FarmColors.cedar : FarmColors.ink,
-                ),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: FarmColors.ink),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                context.t('${entry.labelKey}Sub'),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted),
               ),
             ],
           ),

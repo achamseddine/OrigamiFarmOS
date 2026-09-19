@@ -35,12 +35,19 @@ class RecordAction {
   const RecordAction({
     required this.icon,
     required this.labelKey,
+    required this.accent,
     required this.modules,
     required this.open,
   });
 
   final FarmIcon icon;
   final String labelKey;
+
+  /// Tints the roundel behind the icon. The colour is the thing being
+  /// recorded, not its urgency — milk is the pale blue it is everywhere
+  /// else in the app, a treatment is the red of the medicine cabinet —
+  /// so the grid can be read by shape and colour before the labels are.
+  final Color accent;
 
   /// Holding *any* of these, with permission to create in it, shows the
   /// tile. The server re-checks on the write either way.
@@ -53,48 +60,56 @@ final List<RecordAction> _actions = [
   RecordAction(
     icon: FarmIcon.milkBottle,
     labelKey: 'milk',
+    accent: FarmColors.milkBlue,
     modules: [FarmModule.milkProduction],
     open: _recordMilk,
   ),
   RecordAction(
     icon: FarmIcon.egg,
     labelKey: 'eggs',
+    accent: FarmColors.gold,
     modules: [FarmModule.eggProduction],
     open: _recordEggs,
   ),
   RecordAction(
     icon: FarmIcon.harvestBasket,
     labelKey: 'harvest',
+    accent: FarmColors.olive,
     modules: [FarmModule.produceHarvest, FarmModule.agriculture],
     open: (context) async => showHarvestForm(context),
   ),
   RecordAction(
     icon: FarmIcon.feedBag,
     labelKey: 'feed',
+    accent: FarmColors.cedar2,
     modules: [FarmModule.feedNutrition, FarmModule.inventory],
     open: _recordFeed,
   ),
   RecordAction(
     icon: FarmIcon.eye,
     labelKey: 'observe',
+    accent: FarmColors.muted,
     modules: [FarmModule.animalHealth, FarmModule.animals],
     open: _recordObservation,
   ),
   RecordAction(
     icon: FarmIcon.syringe,
     labelKey: 'treat',
+    accent: FarmColors.danger,
     modules: [FarmModule.animalHealth],
     open: _recordTreatment,
   ),
   RecordAction(
     icon: FarmIcon.task,
     labelKey: 'newTask',
+    accent: FarmColors.cedar,
     modules: [FarmModule.tasks],
     open: _newTask,
   ),
   RecordAction(
     icon: FarmIcon.cow,
     labelKey: 'addAnimal',
+    accent: FarmColors.gold,
     modules: [FarmModule.animals],
     open: (context) async => showAnimalForm(context),
   ),
@@ -129,7 +144,7 @@ class _RecordSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final columns = width > kTabletBreakpoint ? 4 : 3;
+    final columns = width > kTabletBreakpoint ? 4 : 2;
 
     return SafeArea(
       top: false,
@@ -158,16 +173,16 @@ class _RecordSheet extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: FarmSpacing.sm),
-              child: Text(context.t('recordWhat'), style: FarmTypography.textTheme.titleLarge),
+              padding: const EdgeInsetsDirectional.only(start: 4, bottom: FarmSpacing.md),
+              child: Text(context.t('recordWhat'), style: FarmTypography.display(size: 24)),
             ),
             GridView.count(
               crossAxisCount: columns,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              mainAxisSpacing: FarmSpacing.sm,
-              crossAxisSpacing: FarmSpacing.sm,
-              childAspectRatio: 1.15,
+              mainAxisSpacing: FarmSpacing.md,
+              crossAxisSpacing: FarmSpacing.md,
+              childAspectRatio: 1.05,
               children: [
                 for (final action in actions)
                   _RecordTile(
@@ -202,14 +217,22 @@ class _RecordTile extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              AppIcon(action.icon, size: 26, color: FarmColors.cedar),
-              const SizedBox(height: 10),
+              Container(
+                width: 58,
+                height: 58,
+                decoration: BoxDecoration(
+                  color: FarmColors.tint(action.accent, 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(child: AppIcon(action.icon, size: 28, color: action.accent)),
+              ),
+              const SizedBox(height: 12),
               Text(
                 context.t(action.labelKey),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: FarmColors.ink),
+                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: FarmColors.ink),
               ),
             ],
           ),

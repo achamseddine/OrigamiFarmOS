@@ -69,6 +69,16 @@ class FarmColors {
 
   static const Color success = Color(0xFF2F6B4F);
 
+  // --- subject colours -------------------------------------------------
+  //
+  // Not severity. These say *what a thing is* so a grid of roundels can
+  // be read by colour before the labels are: milk is always this blue,
+  // medicine always this lilac, wherever they appear. Both are muted
+  // enough to sit beside cedar and gold without shouting, and neither is
+  // ever used to mean "good" or "wrong".
+  static const Color milkBlue = Color(0xFF3E7FA6);
+  static const Color lilac = Color(0xFF7A5EA6);
+
   // Status colors (animal / recommendation status chips)
   static const Color statusHealthy = Color(0xFF2F6B4F);
   static const Color statusWatch = Color(0xFFA67A2B);

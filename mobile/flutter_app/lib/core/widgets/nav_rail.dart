@@ -10,9 +10,14 @@ import '../theme/typography.dart';
 /// `app/nav_config.dart` from their actual module permissions, so this is
 /// only what a row looks like — never who may see it.
 class NavEntry {
-  const NavEntry(this.icon, this.labelKey);
+  const NavEntry(this.icon, this.labelKey, {this.accent = FarmColors.cedar});
   final FarmIcon icon;
   final String labelKey;
+
+  /// Tints this destination's roundel in the More sheet. It names the
+  /// subject — milk is blue wherever milk appears — so the grid is
+  /// findable by colour, not only by reading ten labels.
+  final Color accent;
 }
 
 /// Left navigation rail (tech spec §7 / component-spec.md "SidebarNav").
