@@ -37,7 +37,12 @@ List<double> _milkBySessionByDay(List<MilkRecord> records, String session, {int 
   return buckets;
 }
 
-List<String> _last7DayLabels() => [for (var i = 6; i >= 0; i--) i == 0 ? 'Today' : (i == 1 ? 'Yesterday' : 'D-$i')];
+List<String> _last7DayLabels(BuildContext context) => [
+  for (var i = 6; i >= 0; i--)
+    i == 0
+        ? context.t('today')
+        : (i == 1 ? context.t('yesterday') : context.t('daysAgoShort').replaceFirst('{n}', '$i')),
+];
 
 class _Producer {
   const _Producer({required this.name, required this.breed, required this.liters});
@@ -125,7 +130,7 @@ class MilkProductionScreen extends StatelessWidget {
                 bars: [
                   for (var i = 0; i < 7; i++)
                     BarGroup(
-                      label: _last7DayLabels()[i],
+                      label: _last7DayLabels(context)[i],
                       segments: [morningByDay[i], eveningByDay[i]],
                     ),
                 ],
@@ -139,7 +144,7 @@ class MilkProductionScreen extends StatelessWidget {
               child: Column(
                 children: [
                   if (producers.isEmpty)
-                    Text('No milk recorded today yet.', style: FarmTypography.textTheme.bodySmall)
+                    Text(context.t('noMilkToday'), style: FarmTypography.textTheme.bodySmall)
                   else
                     for (var i = 0; i < producers.length; i++) ...[
                       _ProducerRow(rank: i + 1, producer: producers[i]),
@@ -151,7 +156,7 @@ class MilkProductionScreen extends StatelessWidget {
             );
             final withdrawal = SectionCard(
               child: underWithdrawal.isEmpty
-                  ? Text('No animals are currently under withdrawal.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noneUnderWithdrawal'), style: FarmTypography.textTheme.bodySmall)
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -210,7 +215,7 @@ class MilkProductionScreen extends StatelessWidget {
               title: context.t('milkDestinationToday'),
               trailing: context.t('viewDestinationDetails'),
               child: destSum == 0
-                  ? Text('No milk recorded today yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noMilkToday'), style: FarmTypography.textTheme.bodySmall)
                   : Row(children: [
                       Expanded(child: _DestinationTile(icon: FarmIcon.milkBottle, label: context.t('stored'), value: '${storedL.toStringAsFixed(0)} L', pct: '${destPct(storedL).toStringAsFixed(0)}%')),
                       Expanded(child: _DestinationTile(icon: FarmIcon.tractor, label: context.t('sold'), value: '${soldL.toStringAsFixed(0)} L', pct: '${destPct(soldL).toStringAsFixed(0)}%')),
@@ -278,7 +283,7 @@ class _SessionTile extends StatelessWidget {
           Text(sub, style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
           const SizedBox(height: 8),
           StatusPill(
-            label: value > 0 ? context.t('completed') : 'No entries yet',
+            label: value > 0 ? context.t('completed') : context.t('noEntriesYet'),
             level: value > 0 ? FarmStatusLevel.good : FarmStatusLevel.neutral,
             dense: true,
           ),

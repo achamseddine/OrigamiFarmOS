@@ -116,7 +116,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
             final herdCard = SectionCard(
               title: context.t('herdFlockSummary'),
               child: herdGroups.isEmpty
-                  ? Text('No animals recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noAnimalsYet'), style: FarmTypography.textTheme.bodySmall)
                   : Column(
                       children: [
                         for (final g in herdGroups) ...[
@@ -137,7 +137,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Center(
                         child: Text(
-                          animals.isEmpty ? 'No animals recorded yet.' : 'No animals match the selected filters.',
+                          animals.isEmpty ? context.t('noAnimalsYet') : context.t('nothingMatchesFilters'),
                           style: FarmTypography.textTheme.bodySmall,
                         ),
                       ),

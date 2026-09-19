@@ -11,6 +11,7 @@ import '../../providers/access_provider.dart';
 import '../../providers/notifications_provider.dart';
 import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
+import '../../core/widgets/directional_icon.dart';
 
 /// The notification panel behind the bell (tech spec §3).
 ///
@@ -260,7 +261,7 @@ class _NotificationRow extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, size: 18, color: FarmColors.muted),
+            const ForwardChevron(size: 18, color: FarmColors.muted),
           ],
         ),
       ),

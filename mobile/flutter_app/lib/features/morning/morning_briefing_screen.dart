@@ -66,7 +66,7 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
       });
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'Could not load the morning briefing.');
+      setState(() => _error = context.t('briefingLoadFailed'));
     }
   }
 
@@ -74,7 +74,7 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
   Widget build(BuildContext context) {
     final briefing = _briefing;
     if (briefing == null) {
-      return Center(child: Text(_error ?? 'Loading…', style: FarmTypography.textTheme.bodyMedium));
+      return Center(child: Text(_error ?? context.t('loading'), style: FarmTypography.textTheme.bodyMedium));
     }
 
     final kpis = Map<String, dynamic>.from(briefing['kpis'] as Map? ?? {});
@@ -255,7 +255,7 @@ class _AnimalAlertsCard extends StatelessWidget {
       trailing: context.t('viewAll'),
       onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.animalHealth),
       child: animalAlerts.isEmpty
-          ? Text('No animal alerts right now.', style: FarmTypography.textTheme.bodySmall)
+          ? Text(context.t('noAnimalAlerts'), style: FarmTypography.textTheme.bodySmall)
           : Column(
               children: [
                 for (var i = 0; i < animalAlerts.length; i++) ...[
@@ -291,12 +291,12 @@ class _FeedWarningsCard extends StatelessWidget {
       trailing: context.t('manageFeed'),
       onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.feedNutrition),
       child: items.isEmpty
-          ? Text('No feed warnings right now.', style: FarmTypography.textTheme.bodySmall)
+          ? Text(context.t('noFeedWarnings'), style: FarmTypography.textTheme.bodySmall)
           : AlertCard(
               icon: FarmIcon.feedBag,
-              title: 'Low feed: ${items.first.name}',
+              title: '${context.t('lowFeed')}: ${items.first.name}',
               level: items.first.status == StockStatus.critical ? FarmStatusLevel.alert : FarmStatusLevel.watch,
-              evidence: ['${items.first.currentQty.toStringAsFixed(1)} ${items.first.unit} remaining', 'Reorder recommended'],
+              evidence: ['${items.first.currentQty.toStringAsFixed(1)} ${items.first.unit} remaining', context.t('reorderRecommended')],
               onTap: () => EntityRouter.openEntityOrExplain(context, 'inventory_item', items.first.id),
             ),
     );
@@ -378,7 +378,7 @@ class _TasksCard extends StatelessWidget {
       title: context.t('todaysTasks'),
       trailing: context.t('viewAll'),
       child: tasks.isEmpty
-          ? Text('No tasks yet.', style: FarmTypography.textTheme.bodySmall)
+          ? Text(context.t('noTasksYet'), style: FarmTypography.textTheme.bodySmall)
           : Column(
               children: [
                 for (final task in tasks) ...[
@@ -459,7 +459,7 @@ class _TimelineCard extends StatelessWidget {
     return SectionCard(
       title: context.t('todaysTimeline'),
       child: shown.isEmpty
-          ? Text('No tasks scheduled for today.', style: FarmTypography.textTheme.bodySmall)
+          ? Text(context.t('noTasksToday'), style: FarmTypography.textTheme.bodySmall)
           : SizedBox(
               height: 84,
               child: Row(

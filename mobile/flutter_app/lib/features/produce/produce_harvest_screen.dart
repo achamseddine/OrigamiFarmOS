@@ -44,7 +44,12 @@ List<double> _weeklyYieldKg(List<HarvestRecord> records) {
   return buckets;
 }
 
-List<String> _last7DaysLabels() => [for (var i = 6; i >= 0; i--) i == 0 ? 'Today' : (i == 1 ? 'Yesterday' : 'D-$i')];
+List<String> _last7DaysLabels(BuildContext context) => [
+  for (var i = 6; i >= 0; i--)
+    i == 0
+        ? context.t('today')
+        : (i == 1 ? context.t('yesterday') : context.t('daysAgoShort').replaceFirst('{n}', '$i')),
+];
 
 class ProduceHarvestScreen extends StatelessWidget {
   const ProduceHarvestScreen({super.key});
@@ -73,7 +78,7 @@ class ProduceHarvestScreen extends StatelessWidget {
 
     final weeklyYield = _weeklyYieldKg(harvestRecords);
     final kgThisWeek = weeklyYield.fold<double>(0, (a, b) => a + b);
-    final weeklyLabels = _last7DaysLabels();
+    final weeklyLabels = _last7DaysLabels(context);
 
     final produceStock = feed.items.where((i) => _isProduceCategory(i.category)).toList();
     final recentHarvests = [...harvestRecords]..sort((a, b) => b.recordedAt.compareTo(a.recordedAt));
@@ -120,7 +125,7 @@ class ProduceHarvestScreen extends StatelessWidget {
               KpiCard(icon: FarmIcon.leaf, label: context.t('activeFields'), value: '${fields.length}'),
               KpiCard(icon: FarmIcon.harvestBasket, label: context.t('harvestReady'), value: '$harvestReady', unit: context.t('fields')),
               KpiCard(icon: FarmIcon.scale, label: context.t('kgThisWeek'), value: kgThisWeek.toStringAsFixed(0), unit: 'kg'),
-              KpiCard(icon: FarmIcon.inventory, label: 'Harvest Records', value: '${harvestRecords.length}'),
+              KpiCard(icon: FarmIcon.inventory, label: context.t('harvestRecords'), value: '${harvestRecords.length}'),
             ];
             return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
           }),
@@ -131,13 +136,13 @@ class ProduceHarvestScreen extends StatelessWidget {
               title: context.t('fieldOverview'),
               trailing: context.t('viewAllFields'),
               child: fields.isEmpty
-                  ? Text('No fields recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noFieldsYet'), style: FarmTypography.textTheme.bodySmall)
                   : Column(children: [for (final f in fields) ...[_FieldRow(field: f), const Divider(height: 18, color: FarmColors.border)]]),
             );
             final calendar = SectionCard(
               title: context.t('harvestCalendar'),
               child: fields.isEmpty
-                  ? Text('No fields recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noFieldsYet'), style: FarmTypography.textTheme.bodySmall)
                   : Column(children: [for (final f in fields) _CalendarRow(field: f)]),
             );
             if (!wide) return Column(children: [overview, const SizedBox(height: FarmSpacing.md), calendar]);
@@ -153,7 +158,7 @@ class ProduceHarvestScreen extends StatelessWidget {
           SectionCard(
             title: context.t('weeklyYield'),
             child: harvestRecords.isEmpty
-                ? Text('No harvest recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                ? Text(context.t('noHarvestYet'), style: FarmTypography.textTheme.bodySmall)
                 : BarTrendChart(
                     bars: [for (var i = 0; i < weeklyYield.length; i++) BarGroup(label: weeklyLabels[i], segments: [weeklyYield[i]])],
                     segmentColors: const [FarmColors.olive],
@@ -167,7 +172,7 @@ class ProduceHarvestScreen extends StatelessWidget {
               title: context.t('inventoryOverview'),
               trailing: context.t('viewAllInventory'),
               child: produceStock.isEmpty
-                  ? Text('No produce inventory recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noProduceInventory'), style: FarmTypography.textTheme.bodySmall)
                   : _ProduceGrid(
                       items: [for (final item in produceStock) {'name': item.name, 'qty': _fmtQty(item.currentQty), 'unit': item.unit}],
                       subLabelKey: 'inStorage',
@@ -177,7 +182,7 @@ class ProduceHarvestScreen extends StatelessWidget {
               title: context.t('readyForSale'),
               trailing: context.t('viewSalesOrders'),
               child: recentTop.isEmpty
-                  ? Text('No recent harvests recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noRecentHarvests'), style: FarmTypography.textTheme.bodySmall)
                   : _ProduceGrid(
                       items: [for (final r in recentTop) {'name': r.productName, 'qty': _fmtQty(r.quantity), 'unit': r.unit}],
                       subLabelKey: 'ready',

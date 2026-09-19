@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
     // read a sentence that names a server build.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(session.error ?? 'Could not sign in.'),
+        content: Text(session.error ?? context.t('couldNotSignIn')),
         duration: const Duration(seconds: 10),
       ),
     );
@@ -293,7 +293,7 @@ class _LoginForm extends StatelessWidget {
           const SizedBox(height: 8),
           TextButton(
             onPressed: onToggleServerField,
-            child: Text(showServerField ? 'Hide server address' : 'Connecting to a different server?'),
+            child: Text(showServerField ? context.t('hideServerAddress') : context.t('differentServer')),
           ),
           if (showServerField) ...[
             TextField(
@@ -307,7 +307,7 @@ class _LoginForm extends StatelessWidget {
               textCapitalization: TextCapitalization.none,
               autocorrect: false,
               enableSuggestions: false,
-              decoration: const InputDecoration(labelText: 'Server address', hintText: 'https://your-backend-host/api/v1'),
+              decoration: InputDecoration(labelText: context.t('serverAddress'), hintText: 'https://your-backend-host/api/v1'),
             ),
             const SizedBox(height: 8),
           ],

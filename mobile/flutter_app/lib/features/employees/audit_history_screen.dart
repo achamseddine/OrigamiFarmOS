@@ -10,6 +10,7 @@ import '../../domain/entities/notification.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/employees_provider.dart';
 import '../navigation/entity_router.dart';
+import '../../core/widgets/directional_icon.dart';
 
 /// Audit History (tech spec §23) — who changed what, when, and from what
 /// to what. Each entry links to the record it changed, so "Maya changed
@@ -67,7 +68,7 @@ class _AuditHistoryScreenState extends State<AuditHistoryScreen> {
               Row(children: [
                 TextButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.chevron_left),
+                  icon: const BackChevron(),
                   label: Text(context.t('back')),
                 ),
                 const Spacer(),

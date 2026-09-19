@@ -9,6 +9,7 @@ import '../../domain/entities/notification.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/notifications_provider.dart';
 import 'priority_card.dart';
+import '../../core/widgets/directional_icon.dart';
 
 /// The full Today's Priorities view behind "Expand" (tech spec §5).
 ///
@@ -88,7 +89,7 @@ class _PrioritiesScreenState extends State<PrioritiesScreen> {
               Row(children: [
                 TextButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.chevron_left),
+                  icon: const BackChevron(),
                   label: Text(context.t('back')),
                 ),
                 const Spacer(),

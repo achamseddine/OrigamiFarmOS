@@ -16,6 +16,7 @@ import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
 import '../produce/agriculture_forms.dart';
+import '../../core/widgets/directional_icon.dart';
 
 /// What the centre button on the bottom bar opens: "what do you want to
 /// record?".
@@ -314,7 +315,7 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
                             '${animal.species.label} • ${animal.groupName ?? animal.location}',
                             style: FarmTypography.textTheme.bodySmall,
                           ),
-                          trailing: const Icon(Icons.chevron_right, size: 18, color: FarmColors.muted),
+                          trailing: const ForwardChevron(size: 18, color: FarmColors.muted),
                           onTap: () => Navigator.pop(context, animal),
                         );
                       },

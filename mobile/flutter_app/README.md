@@ -94,7 +94,7 @@ lib/
   auth/session_controller.dart    One-time login, token persistence, silent re-validation
   core/
     theme/                        Brand tokens (colors, typography, spacing/radii/shadows)
-    i18n/                         EN/AR string table (462 keys, both complete) + LocaleController
+    i18n/                         AR/EN string table (both complete; Arabic is the default) + LocaleController
     widgets/                      AppShell, NavRail, TopBar, KpiCard, AlertCard, SectionCard,
                                    StatusPill, FarmDataTable, PhotoSlot, BekaaBackdrop,
                                    charts/ (LineTrendChart, BarTrendChart)

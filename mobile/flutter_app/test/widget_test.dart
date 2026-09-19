@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmos/app/app.dart';
+import 'package:farmos/core/i18n/strings.dart';
 import 'package:farmos/data/local/cache_effects.dart';
 import 'package:farmos/data/local/demo_mode.dart';
 import 'package:farmos/data/local/local_store.dart';
@@ -27,8 +28,20 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
 
+    // Arabic, because nothing was stored: the tablet belongs to a farm
+    // worker, and it opens in their language without anyone setting it.
+    expect(find.text(FarmStrings.arabic('startMyDay')), findsWidgets);
+    expect(find.text(FarmStrings.arabic('todaysPriorities')), findsNothing);
+  });
+
+  testWidgets('a stored English preference still wins', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'farmos.locale': 'en'});
+
+    await tester.pumpWidget(const FarmOSApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
     expect(find.text('Start My Day'), findsWidgets);
-    expect(find.text("Today's Priorities"), findsNothing);
   });
 
   group('cache keys', () {

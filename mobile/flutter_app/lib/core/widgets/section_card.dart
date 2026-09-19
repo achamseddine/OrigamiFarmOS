@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'directional_icon.dart';
 
 /// The grouped panel every screen is built from.
 ///
@@ -74,7 +75,7 @@ class SectionCard extends StatelessWidget {
                                 ?.copyWith(color: FarmColors.cedar2),
                           ),
                           const SizedBox(width: 2),
-                          const Icon(Icons.chevron_right, size: 16, color: FarmColors.cedar2),
+                          const ForwardChevron(size: 16, color: FarmColors.cedar2),
                         ],
                       ),
                     ),

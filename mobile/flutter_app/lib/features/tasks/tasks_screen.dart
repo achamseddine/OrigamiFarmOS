@@ -38,20 +38,20 @@ class TasksScreen extends StatelessWidget {
           Text(context.t('navTasks'), style: FarmTypography.display(size: 28)),
           const SizedBox(height: 2),
           Text(
-            user.isManager ? 'Review, create and assign tasks for the team.' : 'Your tasks — tap one to mark it done.',
+            user.isManager ? context.t('tasksSubtitleManager') : context.t('tasksSubtitleWorker'),
             style: FarmTypography.textTheme.bodyMedium,
           ),
           const SizedBox(height: FarmSpacing.md),
           _NewTaskForm(user: user, roster: provider.roster),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Open (${open.length})',
-            child: Column(children: [for (final t in open) _TaskTile(task: t, user: user, roster: provider.roster), if (open.isEmpty) const _EmptyState(label: 'Nothing open — great work!')]),
+            title: '${context.t('openTasks')} (${open.length})',
+            child: Column(children: [for (final t in open) _TaskTile(task: t, user: user, roster: provider.roster), if (open.isEmpty) _EmptyState(label: context.t('nothingOpen'))]),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Completed (${done.length})',
-            child: Column(children: [for (final t in done) _TaskTile(task: t, user: user, roster: provider.roster), if (done.isEmpty) const _EmptyState(label: 'No tasks completed yet.')]),
+            title: '${context.t('completedTasks')} (${done.length})',
+            child: Column(children: [for (final t in done) _TaskTile(task: t, user: user, roster: provider.roster), if (done.isEmpty) _EmptyState(label: context.t('noTasksCompleted'))]),
           ),
         ],
       ),
@@ -86,7 +86,7 @@ class _NewTaskFormState extends State<_NewTaskForm> {
 
   Future<void> _submit() async {
     if (_title.text.trim().isEmpty) {
-      setState(() => _error = 'Give the task a title.');
+      setState(() => _error = context.t('taskTitleRequired'));
       return;
     }
     setState(() {
@@ -118,14 +118,14 @@ class _NewTaskFormState extends State<_NewTaskForm> {
   @override
   Widget build(BuildContext context) {
     return SectionCard(
-      title: 'New Task',
+      title: context.t('newTask'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            Expanded(flex: 2, child: TextField(controller: _title, decoration: const InputDecoration(labelText: 'Title'))),
+            Expanded(flex: 2, child: TextField(controller: _title, decoration: InputDecoration(labelText: context.t('taskTitle')))),
             const SizedBox(width: 12),
-            Expanded(flex: 2, child: TextField(controller: _description, decoration: const InputDecoration(labelText: 'Description (optional)'))),
+            Expanded(flex: 2, child: TextField(controller: _description, decoration: InputDecoration(labelText: context.t('notes')))),
           ]),
           const SizedBox(height: 12),
           Row(children: [
@@ -133,9 +133,9 @@ class _NewTaskFormState extends State<_NewTaskForm> {
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   value: _assignedTo,
-                  decoration: const InputDecoration(labelText: 'Assign to'),
+                  decoration: InputDecoration(labelText: context.t('assignTo')),
                   items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text('Myself')),
+                    DropdownMenuItem<String?>(value: null, child: Text(context.t('myself'))),
                     for (final u in widget.roster.where((u) => u.id != widget.user.id)) DropdownMenuItem<String?>(value: u.id, child: Text('${u.name}${u.department != null ? ' · ${u.department}' : ''}')),
                   ],
                   onChanged: (v) => setState(() => _assignedTo = v),
@@ -146,8 +146,8 @@ class _NewTaskFormState extends State<_NewTaskForm> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: _priority,
-                decoration: const InputDecoration(labelText: 'Priority'),
-                items: const [DropdownMenuItem(value: 'high', child: Text('High')), DropdownMenuItem(value: 'medium', child: Text('Medium')), DropdownMenuItem(value: 'low', child: Text('Low'))],
+                decoration: InputDecoration(labelText: context.t('priority')),
+                items: [DropdownMenuItem(value: 'high', child: Text(context.t('high'))), DropdownMenuItem(value: 'medium', child: Text(context.t('medium'))), DropdownMenuItem(value: 'low', child: Text(context.t('low')))],
                 onChanged: (v) => setState(() => _priority = v ?? _priority),
               ),
             ),
@@ -161,13 +161,13 @@ class _NewTaskFormState extends State<_NewTaskForm> {
                   final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_dueAt ?? now));
                   setState(() => _dueAt = DateTime(picked.year, picked.month, picked.day, time?.hour ?? 17, time?.minute ?? 0));
                 },
-                child: Text(_dueAt == null ? 'Due date' : '${_dueAt!.day}/${_dueAt!.month} ${TimeOfDay.fromDateTime(_dueAt!).format(context)}'),
+                child: Text(_dueAt == null ? context.t('dueDate') : '${_dueAt!.day}/${_dueAt!.month} ${TimeOfDay.fromDateTime(_dueAt!).format(context)}'),
               ),
             ),
             const SizedBox(width: 12),
             FilledButton(
               onPressed: _saving ? null : _submit,
-              child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
+              child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('add')),
             ),
           ]),
           if (_error != null) ...[
@@ -254,7 +254,7 @@ class _TaskTile extends StatelessWidget {
         if (user.isManager) ...[
           const SizedBox(width: 6),
           PopupMenuButton<String>(
-            tooltip: 'Reassign',
+            tooltip: context.t('reassign'),
             icon: const Icon(Icons.more_vert, size: 18, color: FarmColors.muted),
             onSelected: (value) {
               if (value == 'delete') {
@@ -264,9 +264,9 @@ class _TaskTile extends StatelessWidget {
               }
             },
             itemBuilder: (context) => [
-              for (final u in roster) PopupMenuItem(value: u.id, child: Text('Assign to ${u.name}')),
+              for (final u in roster) PopupMenuItem(value: u.id, child: Text(context.t('assignToName').replaceFirst('{name}', u.name))),
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'delete', child: Text('Delete task')),
+              PopupMenuItem(value: 'delete', child: Text(context.t('deleteTask'))),
             ],
           ),
         ],

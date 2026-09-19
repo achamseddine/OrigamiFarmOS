@@ -4,6 +4,7 @@ import 'status_pill.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'directional_icon.dart';
 
 /// Alert / recommendation row: priority pill, icon roundel, title, evidence
 /// lines, optional chevron. Used for animal alerts, feed warnings, harvest
@@ -98,7 +99,7 @@ class AlertCard extends StatelessWidget {
               ],
               if (onTap != null) ...[
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, size: 18, color: FarmColors.muted),
+                const ForwardChevron(size: 18, color: FarmColors.muted),
               ],
             ],
           ),

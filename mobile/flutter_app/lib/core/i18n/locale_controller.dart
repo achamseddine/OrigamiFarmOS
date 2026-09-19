@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Persists and broadcasts the manager's EN/AR choice.
+/// Persists and broadcasts the EN/AR choice.
 ///
-/// Tech spec REQ (i18n): "Language toggle: EN/AR toggle persists user
-/// preference." Arabic renders RTL automatically because [Locale('ar')] is
-/// handed to [MaterialApp], and Flutter's GlobalWidgetsLocalizations resolves
-/// `ar` to [TextDirection.rtl].
+/// **Arabic is the default.** The people who hold this tablet all day are
+/// farm workers, not the owner — they read Arabic, many of them read it
+/// slowly, and none of them should have to find a language setting before
+/// the app makes sense. English is the second language here, not the
+/// first: a tablet that boots into English is unusable to the person it
+/// was bought for.
+///
+/// Arabic renders RTL automatically because [Locale('ar')] is handed to
+/// [MaterialApp], and Flutter's GlobalWidgetsLocalizations resolves `ar`
+/// to [TextDirection.rtl].
 class LocaleController extends ChangeNotifier {
   LocaleController() {
     _restore();
@@ -14,7 +20,7 @@ class LocaleController extends ChangeNotifier {
 
   static const _prefsKey = 'farmos.locale';
 
-  Locale _locale = const Locale('en');
+  Locale _locale = const Locale('ar');
   Locale get locale => _locale;
   bool get isArabic => _locale.languageCode == 'ar';
 
@@ -22,13 +28,17 @@ class LocaleController extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(_prefsKey);
-      if (saved == 'ar') {
-        _locale = const Locale('ar');
+      // Only an explicit switch to English moves it off the default, so a
+      // tablet with no stored preference — a fresh one, or one whose
+      // storage is unreadable — still opens in Arabic.
+      if (saved == 'en') {
+        _locale = const Locale('en');
         notifyListeners();
       }
     } catch (_) {
-      // Preferences unavailable (e.g. first cold start with no storage yet).
-      // Default to English; this is not a fatal path for an offline-first app.
+      // Preferences unavailable (e.g. first cold start with no storage
+      // yet). Arabic stands; this is not a fatal path for an
+      // offline-first app.
     }
   }
 

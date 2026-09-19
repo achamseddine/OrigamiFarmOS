@@ -15,6 +15,7 @@ import '../../domain/entities/production_records.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/production_provider.dart';
 import 'animal_quick_actions.dart';
+import '../../core/widgets/directional_icon.dart';
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -93,7 +94,7 @@ class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
                 children: [
                   TextButton.icon(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.chevron_left),
+                    icon: const BackChevron(),
                     label: Text(context.t('backToHerd')),
                   ),
                   const Spacer(),

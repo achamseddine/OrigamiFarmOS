@@ -44,11 +44,17 @@ class FeedInventoryScreen extends StatelessWidget {
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
             final table = SectionCard(
-              title: 'All Feed',
+              title: context.t('allFeed'),
               child: items.isEmpty
-                  ? Text('No inventory recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noInventoryYet'), style: FarmTypography.textTheme.bodySmall)
                   : FarmDataTable(
-                      columns: const ['Feed Item', 'Quantity', 'Reorder Level', 'Supplier', 'Status'],
+                      columns: [
+                        context.t('feedItem'),
+                        context.t('quantity'),
+                        context.t('reorderLevel'),
+                        context.t('supplier'),
+                        context.t('status'),
+                      ],
                       columnFlex: const [3, 2, 2, 2, 2],
                       rows: [
                         for (final item in items)
@@ -84,7 +90,7 @@ class FeedInventoryScreen extends StatelessWidget {
                   ],
                   if (lowStock.isEmpty)
                     Text(
-                      items.isEmpty ? 'No inventory recorded yet.' : 'All feed items are above their reorder level.',
+                      items.isEmpty ? context.t('noInventoryYet') : context.t('aboveReorderLevel'),
                       style: FarmTypography.textTheme.bodySmall,
                     ),
                 ],

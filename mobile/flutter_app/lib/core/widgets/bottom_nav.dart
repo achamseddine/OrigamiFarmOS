@@ -103,7 +103,6 @@ class BottomNav extends StatelessWidget {
       slots.add(_Tab(
         entry: NavEntry(FarmIcon.inventory, 'navMore'),
         selected: moreIsActive,
-        fallbackLabel: 'More',
         icon: Icons.grid_view_rounded,
         onTap: () => _openMore(context, hidden),
       ));
@@ -137,7 +136,6 @@ class _Tab extends StatelessWidget {
     required this.entry,
     required this.selected,
     required this.onTap,
-    this.fallbackLabel,
     this.icon,
   });
 
@@ -145,18 +143,14 @@ class _Tab extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  /// Used by More, which is not a real destination and has no i18n key of
-  /// its own in older string tables.
-  final String? fallbackLabel;
+  /// More overrides the brand icon with a Material grid glyph; every real
+  /// destination draws its own.
   final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
     final color = selected ? FarmColors.cedar : FarmColors.muted;
-    var label = fallbackLabel ?? '';
-    if (fallbackLabel == null) {
-      label = context.t(entry.labelKey);
-    }
+    final label = context.t(entry.labelKey);
 
     return InkWell(
       onTap: onTap,

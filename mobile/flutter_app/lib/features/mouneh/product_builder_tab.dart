@@ -7,6 +7,7 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/mouneh.dart';
 import '../../providers/mouneh_provider.dart';
+import '../../core/widgets/directional_icon.dart';
 
 /// Product Builder Wizard (tech spec v0.5 §6, screen 2): create ANY
 /// value-added farm product — Makdous, Labneh, Kishk, Jam, or a custom
@@ -249,7 +250,7 @@ class _StepIndicator extends StatelessWidget {
             label: '${i + 1}. ${_labels[i]}',
             level: i == step ? FarmStatusLevel.info : (i < step ? FarmStatusLevel.good : FarmStatusLevel.neutral),
           ),
-          if (i != _labels.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.chevron_right, size: 16, color: FarmColors.muted)),
+          if (i != _labels.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardChevron(size: 16, color: FarmColors.muted)),
         ],
       ],
     );

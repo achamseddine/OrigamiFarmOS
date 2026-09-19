@@ -13,6 +13,7 @@ import '../../providers/notifications_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../navigation/entity_router.dart';
 import '../notifications/notification_panel.dart' show priorityLevel, priorityColor;
+import '../../core/widgets/directional_icon.dart';
 
 /// One Today's Priorities card (tech spec §4).
 ///
@@ -140,7 +141,7 @@ class PriorityCard extends StatelessWidget {
               else
                 const Padding(
                   padding: EdgeInsets.only(top: 8),
-                  child: Icon(Icons.chevron_right, size: 18, color: FarmColors.muted),
+                  child: ForwardChevron(size: 18, color: FarmColors.muted),
                 ),
             ],
           ),

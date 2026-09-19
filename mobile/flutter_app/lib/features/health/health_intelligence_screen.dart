@@ -10,6 +10,7 @@ import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/recommendation.dart';
 import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
+import '../../core/widgets/directional_icon.dart';
 
 class HealthIntelligenceScreen extends StatefulWidget {
   const HealthIntelligenceScreen({super.key});
@@ -54,7 +55,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
               SectionCard(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('No active health alerts.', style: FarmTypography.textTheme.bodyMedium)),
+                  child: Center(child: Text(context.t('noHealthAlerts'), style: FarmTypography.textTheme.bodyMedium)),
                 ),
               )
             else
@@ -88,9 +89,9 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
               child: LayoutBuilder(builder: (context, c) {
                 final wide = c.maxWidth > 640;
                 final steps = [
-                  _ChainStep(icon: FarmIcon.eye, title: context.t('observationStep'), body: '1 Observation', bullets: const ['Raw data from sensors, logs, field observations.']),
+                  _ChainStep(icon: FarmIcon.eye, title: context.t('observationStep'), body: '1 Observation', bullets: [context.t('observationStepBody')]),
                   _ChainStep(icon: FarmIcon.chartLine, title: context.t('knowledgeStep'), body: 'Knowledge', bullets: const ['AI models + farm history turn data into insight.']),
-                  _ChainStep(icon: FarmIcon.check, title: context.t('recommendationStep'), body: 'Recommendation', bullets: const ['Explainable, actionable next steps.']),
+                  _ChainStep(icon: FarmIcon.check, title: context.t('recommendationStep'), body: 'Recommendation', bullets: [context.t('recommendationStepBody')]),
                 ];
                 if (!wide) {
                   return Column(children: [for (final s in steps) ...[s, const SizedBox(height: 8)]]);
@@ -98,7 +99,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
                 return Row(children: [
                   for (var i = 0; i < steps.length; i++) ...[
                     Expanded(child: steps[i]),
-                    if (i != steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.arrow_forward, color: FarmColors.muted)),
+                    if (i != steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardArrow(color: FarmColors.muted)),
                   ],
                 ]);
               }),
@@ -111,7 +112,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
                 const Icon(Icons.verified_outlined, color: FarmColors.cedar2, size: 18),
                 const SizedBox(width: 10),
                 Expanded(child: Text(context.t('evidenceFooter'), style: FarmTypography.textTheme.bodySmall)),
-                TextButton(onPressed: () {}, child: const Text('Learn more about our models')),
+                TextButton(onPressed: () {}, child: Text(context.t('learnMoreModels'))),
               ]),
             ),
           ],
@@ -332,13 +333,15 @@ class _DetailCard extends StatelessWidget {
                       : () {
                           context.read<TasksProvider>().addFromRecommendation(
                                 title: '${rec.title} — ${rec.entityLabel}',
+                                // Stays English: the server stores this
+                                // category, nobody reads it on screen.
                                 category: 'From recommendation',
                                 sourceId: rec.id,
                               );
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('createTask'))));
                         },
                   icon: Icon(taskCreated ? Icons.check : Icons.add_task, size: 16),
-                  label: Text(taskCreated ? 'Task created' : context.t('createTask')),
+                  label: Text(taskCreated ? context.t('taskCreated') : context.t('createTask')),
                 ),
               ],
             ),

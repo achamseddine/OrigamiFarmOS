@@ -93,7 +93,7 @@ class EggProductionScreen extends StatelessWidget {
               KpiCard(icon: FarmIcon.egg, label: context.t('eggsToday'), value: '$eggsToday'),
               KpiCard(icon: FarmIcon.egg, label: context.t('sellableEggs'), value: '$sellableToday', caption: '${sellablePct.toStringAsFixed(1)}% ${context.t('ofTotal')}'),
               KpiCard(icon: FarmIcon.warning, label: context.t('brokenEggs'), value: '$brokenToday', caption: '${brokenPct.toStringAsFixed(1)}% ${context.t('ofTotal')}', tint: brokenToday > 0 ? FarmColors.warning : null),
-              KpiCard(icon: FarmIcon.heart, label: context.t('flocksActive'), value: '$activeFlocks', caption: activeFlocks == 0 ? 'No flocks reporting yet' : null, tint: activeFlocks == 0 ? null : FarmColors.success),
+              KpiCard(icon: FarmIcon.heart, label: context.t('flocksActive'), value: '$activeFlocks', caption: activeFlocks == 0 ? context.t('noFlocksYet') : null, tint: activeFlocks == 0 ? null : FarmColors.success),
               KpiCard(
                 icon: FarmIcon.chartLine,
                 label: context.t('productionVsLastWeek'),
@@ -135,7 +135,7 @@ class EggProductionScreen extends StatelessWidget {
               child: LineTrendChart(
                 values: thisWeek,
                 secondaryValues: lastWeek,
-                labels: const ['7 days ago', 'Today'],
+                labels: [context.t('sevenDaysAgo'), context.t('today')],
                 height: 210,
                 color: FarmColors.olive,
               ),
@@ -144,7 +144,7 @@ class EggProductionScreen extends StatelessWidget {
               title: context.t('inventoryAllocation'),
               subtitle: context.t('today'),
               child: eggsToday == 0
-                  ? Text('No eggs recorded today.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('noEggsToday'), style: FarmTypography.textTheme.bodySmall)
                   : Column(
                       children: [
                         _AllocationRow(label: context.t('sellableEggs'), value: sellableToday, pct: sellablePct, icon: FarmIcon.egg),
@@ -184,9 +184,9 @@ class _FlockCard extends StatelessWidget {
       AnimalHealthStatus.underTreatment => FarmStatusLevel.alert,
     };
     final statusLabel = switch (group.status) {
-      AnimalHealthStatus.healthy => 'Healthy',
-      AnimalHealthStatus.underObservation => 'Watch',
-      AnimalHealthStatus.underTreatment => 'Alert',
+      AnimalHealthStatus.healthy => context.t('healthy'),
+      AnimalHealthStatus.underObservation => context.t('watchShort'),
+      AnimalHealthStatus.underTreatment => context.t('alertShort'),
     };
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.md),
@@ -202,7 +202,7 @@ class _FlockCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(group.label, style: FarmTypography.textTheme.titleSmall),
-                  StatusPill(label: group.count == 0 ? 'No birds' : statusLabel, level: group.count == 0 ? FarmStatusLevel.neutral : level, dense: true),
+                  StatusPill(label: group.count == 0 ? context.t('noBirds') : statusLabel, level: group.count == 0 ? FarmStatusLevel.neutral : level, dense: true),
                 ],
               ),
             ),
@@ -245,7 +245,7 @@ class _WeeklyInsightCard extends StatelessWidget {
               Text(context.t('keyInsight'), style: FarmTypography.textTheme.labelMedium),
             ]),
             const SizedBox(height: 8),
-            Text('No egg production recorded yet.', style: FarmTypography.textTheme.bodySmall),
+            Text(context.t('noEggProductionYet'), style: FarmTypography.textTheme.bodySmall),
           ],
         ),
       );
@@ -268,12 +268,12 @@ class _WeeklyInsightCard extends StatelessWidget {
             Text(context.t('keyInsight'), style: FarmTypography.textTheme.labelMedium?.copyWith(color: accent)),
           ]),
           const SizedBox(height: 8),
-          Text(down ? 'Egg production down' : 'Egg production up', style: FarmTypography.textTheme.bodyMedium),
+          Text(down ? context.t('eggProductionDown') : context.t('eggProductionUp'), style: FarmTypography.textTheme.bodyMedium),
           Text('${pctChange.abs().toStringAsFixed(0)}%', style: FarmTypography.display(size: 34, color: accent)),
           Text(context.t('vsLastWeek'), style: FarmTypography.textTheme.bodySmall),
           const SizedBox(height: 8),
           Text(
-            down ? 'Review flock feed, water, and living conditions across all poultry.' : 'Great job! Keep up current feeding and care routines.',
+            down ? context.t('eggDownAdvice') : context.t('eggUpAdvice'),
             style: FarmTypography.textTheme.bodySmall,
           ),
         ],

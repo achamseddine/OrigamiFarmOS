@@ -72,18 +72,18 @@ class _ObserveDialogState extends State<_ObserveDialog> {
             ),
             DropdownButtonFormField<String>(
               value: _type,
-              decoration: const InputDecoration(labelText: 'Observation type'),
+              decoration: InputDecoration(labelText: context.t('observationType')),
               items: [for (final t in _observationTypes) DropdownMenuItem(value: t, child: Text(_observationLabel(t)))],
               onChanged: (v) => setState(() => _type = v ?? _type),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _severity,
-              decoration: const InputDecoration(labelText: 'Severity'),
-              items: const [
-                DropdownMenuItem(value: 'mild', child: Text('Mild')),
-                DropdownMenuItem(value: 'moderate', child: Text('Moderate')),
-                DropdownMenuItem(value: 'severe', child: Text('Severe')),
+              decoration: InputDecoration(labelText: context.t('severity')),
+              items: [
+                DropdownMenuItem(value: 'mild', child: Text(context.t('sevMild'))),
+                DropdownMenuItem(value: 'moderate', child: Text(context.t('sevModerate'))),
+                DropdownMenuItem(value: 'severe', child: Text(context.t('sevSevere'))),
               ],
               onChanged: (v) => setState(() => _severity = v ?? _severity),
             ),
@@ -188,10 +188,10 @@ class _MilkDialogState extends State<_MilkDialog> {
               ),
             DropdownButtonFormField<String>(
               value: _session,
-              decoration: const InputDecoration(labelText: 'Session'),
-              items: const [
-                DropdownMenuItem(value: 'morning', child: Text('Morning')),
-                DropdownMenuItem(value: 'evening', child: Text('Evening')),
+              decoration: InputDecoration(labelText: context.t('session')),
+              items: [
+                DropdownMenuItem(value: 'morning', child: Text(context.t('sessionMorning'))),
+                DropdownMenuItem(value: 'evening', child: Text(context.t('sessionEvening'))),
               ],
               onChanged: (v) => setState(() => _session = v ?? _session),
             ),
@@ -204,7 +204,7 @@ class _MilkDialogState extends State<_MilkDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _destination,
-              decoration: const InputDecoration(labelText: 'Destination'),
+              decoration: InputDecoration(labelText: context.t('destination')),
               items: [
                 DropdownMenuItem(value: 'stored', child: Text(context.t('stored'))),
                 DropdownMenuItem(

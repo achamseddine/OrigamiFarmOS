@@ -106,7 +106,7 @@ See `mobile/flutter_app/README.md` for the full mechanism.
 The tablet app is operational rather than a demo: no demo mode, no
 sample dataset, and what a given person sees is decided by the module
 responsibilities their farm manager gave them. All screens are
-implemented in Flutter with the full brand theme and EN/AR + RTL
+implemented in Flutter with the full brand theme and Arabic-first AR/EN + RTL
 support. The FastAPI backend implements every endpoint from the tech
 spec, a flexible per-user/per-module permission model enforced on every
 request, a rule-based recommendation engine (6 rules, unit tested and
