@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_icon.dart';
-import '../i18n/locale_controller.dart';
 import '../i18n/strings.dart';
 import '../../auth/session_controller.dart';
 import '../../features/notifications/notification_panel.dart';
@@ -11,85 +10,37 @@ import '../../providers/notifications_provider.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 
-/// EN/AR toggle, the notification bell, and the signed-in user's menu
-/// (tech spec §7). Both the bell and the avatar open real panels — the
-/// dead ornaments they used to be are gone.
+/// Sync state, the notification bell, and the signed-in user's menu.
+///
+/// The EN/AR toggle used to sit here too. A row of utility controls
+/// pinned to the top-right corner is a *website* header, and it was a
+/// large part of why this tablet read as one — so the strip now carries
+/// only what changes on its own and is worth a glance from across a
+/// barn. Language is a preference, it changes about once, and it lives
+/// with the other preferences on Settings, which is a destination like
+/// any other.
 class TopBar extends StatelessWidget implements PreferredSizeWidget {
   const TopBar({super.key});
 
   @override
-  Size get preferredSize => const Size.fromHeight(64);
+  Size get preferredSize => const Size.fromHeight(60);
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleController>();
     final session = context.watch<SessionController>();
     final unread = context.watch<NotificationsProvider>().unreadCount;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: FarmSpacing.lg, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 6, FarmSpacing.lg, 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           const SyncPill(),
           const SizedBox(width: FarmSpacing.md),
-          _LanguageToggle(locale: locale),
-          const SizedBox(width: FarmSpacing.md),
           _NotificationBell(count: unread),
           const SizedBox(width: FarmSpacing.md),
           UserMenuButton(session: session),
         ],
-      ),
-    );
-  }
-}
-
-class _LanguageToggle extends StatelessWidget {
-  const _LanguageToggle({required this.locale});
-  final LocaleController locale;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: kFarmTouchTarget,
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      decoration: BoxDecoration(
-        color: FarmColors.card,
-        border: Border.all(color: FarmColors.border),
-        borderRadius: BorderRadius.circular(FarmRadii.pill),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _langButton(context, 'EN', const Locale('en')),
-          Container(width: 1, height: 20, color: FarmColors.border),
-          _langButton(context, 'AR', const Locale('ar')),
-        ],
-      ),
-    );
-  }
-
-  Widget _langButton(BuildContext context, String label, Locale value) {
-    final selected = locale.locale == value;
-    return InkWell(
-      onTap: () => locale.setLocale(value),
-      borderRadius: BorderRadius.circular(FarmRadii.pill),
-      child: Container(
-        width: 48,
-        height: kFarmTouchTarget - 8,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? FarmColors.cedar : Colors.transparent,
-          borderRadius: BorderRadius.circular(FarmRadii.pill),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 12.5,
-            color: selected ? FarmColors.white : FarmColors.muted,
-          ),
-        ),
       ),
     );
   }

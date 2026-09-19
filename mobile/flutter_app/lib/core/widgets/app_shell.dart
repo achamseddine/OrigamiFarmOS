@@ -1,16 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'nav_rail.dart';
+import 'bottom_nav.dart';
+import 'nav_rail.dart' show NavEntry;
 import 'top_bar.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../../app/app_navigator.dart';
 import '../../features/sync/sync_pill.dart';
 
-/// Tablet-first application shell: persistent left nav rail + top bar +
-/// scrollable content canvas (tech spec component-spec.md "AppShell").
-/// Target width 1024–1366px landscape; below [kTabletBreakpoint] the rail
-/// collapses to icon-only so the shell still degrades gracefully.
+/// Tablet application shell: content canvas over a bottom tab bar.
+///
+/// This used to be a 232px left nav rail of text labels with a utility
+/// cluster pinned to the top-right corner — EN/AR, a bell, an avatar.
+/// Both are web patterns, and together they made a farm tablet read as a
+/// browser dashboard rather than an app.
+///
+/// What replaced them:
+///   - Destinations moved to the bottom edge, where a thumb reaches them
+///     while the tablet is held in two hands (see [BottomNav]). Anything
+///     past the fourth lives behind More.
+///   - The top strip keeps only what changes by itself and matters at a
+///     glance: sync state, and the person signed in. Language lives in
+///     Settings, which is a destination like any other.
+///
+/// [NavRail] is still in the tree for reference but nothing mounts it.
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.entries, required this.screens});
 
@@ -32,40 +45,38 @@ class AppShell extends StatelessWidget {
     return Scaffold(
       backgroundColor: FarmColors.stone,
       body: SafeArea(
-        child: Row(
+        bottom: false,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            NavRail(
-              entries: entries,
-              selectedIndex: index,
-              compact: compact,
-              onSelect: navigator.select,
-            ),
+            const TopBar(),
+            // Only visible while the tablet is out of contact with the
+            // farm server; collapses to nothing otherwise.
+            const OfflineBanner(),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const TopBar(),
-                  const Divider(height: 1, color: FarmColors.border),
-                  // Only visible while the tablet is out of contact with
-                  // the farm server; collapses to nothing otherwise.
-                  const OfflineBanner(),
-                  Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: compact ? FarmSpacing.md : FarmSpacing.xl,
-                        vertical: FarmSpacing.md,
-                      ),
-                      child: IndexedStack(
-                        index: index,
-                        children: screens,
-                      ),
-                    ),
-                  ),
-                ],
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? FarmSpacing.md : FarmSpacing.lg,
+                  vertical: FarmSpacing.sm,
+                ),
+                child: IndexedStack(
+                  index: index,
+                  children: screens,
+                ),
               ),
             ),
           ],
         ),
+      ),
+      bottomNavigationBar: BottomNav(
+        entries: entries,
+        selectedIndex: index,
+        onSelect: navigator.select,
+        // The centre "record" button from the design is deliberately not
+        // wired yet: what it should open (a milking entry, a new task, a
+        // chooser) is a product decision, and a button that guesses is
+        // worse than one that waits. Pass a callback here to turn it on.
+        onAction: null,
       ),
     );
   }

@@ -1,35 +1,96 @@
 import 'package:flutter/material.dart';
 
-/// Origami FarmOS Option C brand palette.
-/// Source of truth: design-system/tokens.json
+/// Origami FarmOS palette — paper, ink, and one seal.
+///
+/// The names are unchanged on purpose: every screen already reads
+/// `FarmColors.cedar`, `FarmColors.gold` and the rest, so swapping the
+/// values restyles the whole product without touching a single screen.
+/// What each name *means* has shifted, and that is deliberate:
+///
+///   - The ground was a dusty beige (#F7F3EA) and is now near-white
+///     paper. The old palette read heavy because of the ground and the
+///     card fills, not because of the green.
+///   - Mustard, rust and brick are gone. One bold colour is left —
+///     persimmon, the seal — spent only on what is actually urgent. When
+///     you see it, something wants you.
+///   - Buttons and the selected tab stay dark enough for white text to
+///     survive a tablet held up in July sunlight (>4.5:1).
+///
+/// Status is never carried by colour alone; see `StatusPill`, which pairs
+/// every tint with an icon and a label.
 class FarmColors {
   FarmColors._();
 
-  static const Color cedar = Color(0xFF0B3D2E);
-  static const Color cedar2 = Color(0xFF145C3D);
-  static const Color olive = Color(0xFF1F7A4D);
-  static const Color gold = Color(0xFFD6A84F);
-  static const Color wheat = Color(0xFFF0D79A);
-  static const Color stone = Color(0xFFF7F3EA);
-  static const Color sand = Color(0xFFE8DEC9);
-  static const Color clay = Color(0xFFB76E47);
-  static const Color ink = Color(0xFF071814);
-  static const Color muted = Color(0xFF65756D);
-  static const Color mist = Color(0xFFEAF1EC);
-  static const Color danger = Color(0xFFA63C35);
-  static const Color warning = Color(0xFFD9822B);
-  static const Color success = Color(0xFF1F7A4D);
+  // --- paper and ink ---------------------------------------------------
+  /// The page. Warm near-white, not beige.
+  static const Color stone = Color(0xFFF7F5F0);
+
+  /// A raised sheet: grouped lists, tiles, the tab bar.
+  static const Color card = Color(0xFFFFFFFF);
+
+  /// Every rule in the product is this, one pixel, and nothing heavier.
+  static const Color border = Color(0xFFE3DFD7);
+
+  /// A slightly deeper paper, for a segmented-control track or an inset.
+  static const Color sand = Color(0xFFE8E4DA);
+
+  static const Color ink = Color(0xFF1F2320);
+  static const Color muted = Color(0xFF656A65);
   static const Color white = Color(0xFFFFFFFF);
-  static const Color card = Color(0xFFFFFDF7);
-  static const Color border = Color(0xFFE7DEC9);
+
+  // --- the farm --------------------------------------------------------
+  /// Primary. Nav selection, primary buttons, the brand mark.
+  static const Color cedar = Color(0xFF2F6B4F);
+
+  /// The underside of a folded corner — see [FarmFold].
+  static const Color cedarFold = Color(0xFF245640);
+
+  /// Links and quiet accents.
+  static const Color cedar2 = Color(0xFF35795A);
+  static const Color olive = Color(0xFF35795A);
+
+  /// A pale wash of the primary, for icon roundels and tints.
+  static const Color mist = Color(0xFFE9EFEA);
+
+  // --- the seal --------------------------------------------------------
+  /// Persimmon. The one bold colour, and the only one that means "now".
+  static const Color clay = Color(0xFFC2543C);
+  static const Color danger = Color(0xFFC2543C);
+
+  /// Persimmon dark enough to read as small text on paper.
+  static const Color dangerInk = Color(0xFFA8432D);
+  static const Color dangerPale = Color(0xFFF6E6E1);
+
+  // --- watch -----------------------------------------------------------
+  static const Color gold = Color(0xFFA67A2B);
+  static const Color warning = Color(0xFFA67A2B);
+  static const Color warningInk = Color(0xFF8A6320);
+  static const Color wheat = Color(0xFFF4ECDC);
+
+  static const Color success = Color(0xFF2F6B4F);
 
   // Status colors (animal / recommendation status chips)
-  static const Color statusHealthy = Color(0xFF1F7A4D);
-  static const Color statusWatch = Color(0xFFD9822B);
-  static const Color statusAlert = Color(0xFFA63C35);
-  static const Color statusOffline = Color(0xFF8A7A5B);
+  static const Color statusHealthy = Color(0xFF2F6B4F);
+  static const Color statusWatch = Color(0xFFA67A2B);
+  static const Color statusAlert = Color(0xFFC2543C);
+  static const Color statusOffline = Color(0xFF8A8F89);
 
   /// Soft tint backgrounds for status pills / icon roundels.
   static Color tint(Color c, [double opacity = 0.14]) =>
       Color.alphaBlend(c.withOpacity(opacity), card);
+}
+
+/// The origami cue: a corner folded back, showing the paper's underside.
+///
+/// Used in exactly three places — the brand mark, the selected tab, and
+/// the primary button — and nowhere else. A fold on every surface stops
+/// being a fold and becomes a texture.
+class FarmFold {
+  FarmFold._();
+
+  /// How far the corner is turned back, in logical pixels.
+  static const double size = 14;
+
+  /// The same fold on a small mark (a 40-44px square).
+  static const double sizeSmall = 12;
 }
