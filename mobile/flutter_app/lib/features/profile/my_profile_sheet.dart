@@ -189,7 +189,9 @@ class _Responsibilities extends StatelessWidget {
               for (final module in access.catalog)
                 StatusPill(
                   label: module.label(language),
-                  level: module.licensedActive ? FarmStatusLevel.good : FarmStatusLevel.neutral,
+                  // Every module is included, so every pill reads the
+                  // same. It used to dim the ones the farm had not bought.
+                  level: FarmStatusLevel.good,
                   dense: true,
                 ),
             ],

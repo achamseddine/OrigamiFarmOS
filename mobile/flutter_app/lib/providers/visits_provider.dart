@@ -47,7 +47,8 @@ class VisitsProvider extends ChangeNotifier {
 
   final ApiClient _api;
 
-  ModuleLicense _license = const ModuleLicense(moduleCode: kVisitsModuleCode, status: 'inactive');
+  // Included, like every other module — see MounehProvider.
+  ModuleLicense _license = const ModuleLicense(moduleCode: kVisitsModuleCode, status: 'active');
   List<VisitOpeningCalendarDay> _calendarDays = [];
   List<VisitSession> _sessions = [];
   List<VisitPackage> _packages = [];
@@ -99,11 +100,16 @@ class VisitsProvider extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      final statusJson = await _api.get('/modules/visits/status') as Map<String, dynamic>;
-      _license = ModuleLicense(moduleCode: kVisitsModuleCode, status: statusJson['status'] as String? ?? 'inactive');
-      if (!isActive) {
-        _clearData();
-        return;
+      try {
+        final statusJson = await _api.get('/modules/visits/status') as Map<String, dynamic>;
+        _license = ModuleLicense(
+          moduleCode: kVisitsModuleCode,
+          status: statusJson['status'] as String? ?? 'active',
+        );
+      } catch (_) {
+        // Keep the default: included. This endpoint reporting anything
+        // else, or nothing at all, is not a reason to shut a farm out of
+        // a module their subscription covers.
       }
 
       final results = await Future.wait([
@@ -151,29 +157,13 @@ class VisitsProvider extends ChangeNotifier {
     }
   }
 
-  void _clearData() {
-    _calendarDays = [];
-    _sessions = [];
-    _packages = [];
-    _activities = [];
-    _visitors = [];
-    _bookings = [];
-    _staffRoster = [];
-    _costs = [];
-    _retailSales = [];
-    _feedback = [];
-    _incidents = [];
-  }
-
   // -------------------------------------------------------------- License
-  /// Module activation itself is super-user only on the backend
-  /// (RULE-VIS-001) — this call only succeeds for that role.
-  Future<WriteResult> setModuleActive(bool active) async {
-    final action = active ? 'activate' : 'deactivate';
-    final result = await _api.write(() => _api.post('/modules/$kVisitsModuleCode/$action'));
-    if (result.success) await load();
-    return result;
-  }
+  // setModuleActive is gone. It posted to /modules/{code}/activate or
+  // /deactivate, which is how a super user used to buy or drop this
+  // add-on for their farm. One subscription covers every module, so there
+  // is nothing to buy and, more to the point, nothing to drop: leaving a
+  // "deactivate" call in reach would let a farm switch off a module they
+  // are paying for, against a server that no longer honours it.
 
   // ------------------------------------------------------- Opening calendar
   /// RULE-VIS-003: opening days are configurable per farm, never hard-coded.

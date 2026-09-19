@@ -60,7 +60,9 @@ class _MounehModuleScreenState extends State<MounehModuleScreen> {
               ),
             ),
             StatusPill(
-              label: provider.isActive ? 'Module Active' : 'Module Inactive',
+              // Included, not bought: this used to say Active/Inactive,
+              // when it was an add-on a farm turned on for itself.
+              label: provider.isActive ? 'Included' : 'Unavailable',
               level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
             ),
           ],
@@ -145,11 +147,14 @@ class _LockedState extends StatelessWidget {
             child: const Center(child: AppIcon(FarmIcon.inventory, size: 28, color: FarmColors.muted)),
           ),
           const SizedBox(height: FarmSpacing.md),
-          Text('The Mouneh module is not active for this farm', style: FarmTypography.textTheme.titleMedium),
+          Text('Mouneh is not loading right now', style: FarmTypography.textTheme.titleMedium),
           const SizedBox(height: 6),
           Text(
-            'A super user can activate it from Settings → Modules.',
+            'It is included in your subscription, so this is a connection or a server '
+            'problem rather than something you need to buy. Try again once the tablet '
+            'is back on the farm network.',
             style: FarmTypography.textTheme.bodySmall,
+            textAlign: TextAlign.center,
           ),
         ],
       ),

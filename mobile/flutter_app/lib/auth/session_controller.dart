@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
+import '../app/build_info.dart';
+import '../app/install_id.dart';
 import '../data/local/demo_mode.dart';
 import '../data/local/local_store.dart';
 import '../domain/entities/user_profile.dart';
@@ -147,8 +149,20 @@ class SessionController extends ChangeNotifier {
 
       // Never queued: a sign-in that "succeeded" offline would hand out a
       // session nobody authenticated.
-      final json =
-          await apiClient.authenticate('/auth/login', body: {'email': email.trim(), 'password': password}) as Map<String, dynamic>;
+      //
+      // The three extra fields put this tablet on its farm's device list,
+      // which is how an operator sees it at all now that tablets are not
+      // paired. All optional, server-side and here: a sign-in must not
+      // depend on them, so a device with no readable preferences simply
+      // sends nothing and is not listed.
+      final install = await installId();
+      final json = await apiClient.authenticate('/auth/login', body: {
+        'email': email.trim(),
+        'password': password,
+        if (install != null) 'installation_id': install,
+        if (install != null) 'device_name': 'Origami tablet',
+        if (install != null) 'app_version': kAppVersion,
+      }) as Map<String, dynamic>;
 
       // Checked rather than cast. A server that answers 200 without one
       // of these fields is running a build this app does not match — a

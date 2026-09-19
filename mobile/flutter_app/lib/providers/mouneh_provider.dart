@@ -14,7 +14,10 @@ class MounehProvider extends ChangeNotifier {
 
   final ApiClient _api;
 
-  ModuleLicense _license = const ModuleLicense(moduleCode: kMounehModuleCode, status: 'inactive');
+  // Mouneh is part of the one subscription, so it starts active rather
+  // than waiting to be told it was bought. The field survives because the
+  // screen still shows it and the server still reports it.
+  ModuleLicense _license = const ModuleLicense(moduleCode: kMounehModuleCode, status: 'active');
   List<MounehProduct> _products = [];
   List<RawMaterial> _rawMaterials = [];
   final Map<String, MounehRecipe> _recipes = {}; // productId -> active recipe
@@ -42,13 +45,21 @@ class MounehProvider extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
-      final licenses = await _api.get('/modules') as List<dynamic>;
-      final mine = licenses.cast<Map<String, dynamic>>().where((m) => m['module_code'] == kMounehModuleCode).firstOrNull;
-      _license = mine != null ? ModuleLicense.fromJson(mine) : const ModuleLicense(moduleCode: kMounehModuleCode, status: 'inactive');
-      if (!_license.isActive) {
-        loading = false;
-        notifyListeners();
-        return;
+      // /modules is no longer asked whether this farm may open Mouneh —
+      // every farm may. It is still read, because it is what the screen's
+      // status pill shows, but a farm worker gets a 403 from it (it is
+      // owner/manager-only) and that must not be what decides whether
+      // their Mouneh screen loads. So: best effort, then load the data
+      // either way.
+      try {
+        final licenses = await _api.get('/modules') as List<dynamic>;
+        final mine = licenses
+            .cast<Map<String, dynamic>>()
+            .where((m) => m['module_code'] == kMounehModuleCode)
+            .firstOrNull;
+        if (mine != null) _license = ModuleLicense.fromJson(mine);
+      } catch (_) {
+        // Keep the default: included.
       }
 
       final results = await Future.wait([
@@ -77,15 +88,12 @@ class MounehProvider extends ChangeNotifier {
   }
 
   // -------------------------------------------------------------- License
-  /// Module activation itself is super-user only on the backend
-  /// (RULE-MOU-001) — this call only succeeds for that role; a
-  /// manager/employee's attempt surfaces the 403 as [WriteResult.error].
-  Future<WriteResult> setModuleActive(bool active) async {
-    final action = active ? 'activate' : 'deactivate';
-    final result = await _api.write(() => _api.post('/modules/$kMounehModuleCode/$action'));
-    if (result.success) await load();
-    return result;
-  }
+  // setModuleActive is gone. It posted to /modules/{code}/activate or
+  // /deactivate, which is how a super user used to buy or drop this
+  // add-on for their farm. One subscription covers every module, so there
+  // is nothing to buy and, more to the point, nothing to drop: leaving a
+  // "deactivate" call in reach would let a farm switch off a module they
+  // are paying for, against a server that no longer honours it.
 
   // ------------------------------------------------------------- Products
   Future<WriteResult> createProduct({

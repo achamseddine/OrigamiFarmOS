@@ -213,10 +213,9 @@ class _ModuleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final assigned = permission != null;
-    final unlicensed = !module.licensedActive;
 
     return Opacity(
-      opacity: unlicensed ? 0.55 : 1,
+      opacity: 1,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),
@@ -231,9 +230,10 @@ class _ModuleRow extends StatelessWidget {
             Row(children: [
               Switch(
                 value: assigned,
-                // A module the farm has not licensed cannot be assigned —
-                // the grant would be dead weight until it is bought.
-                onChanged: unlicensed ? null : onToggleModule,
+                // Every module can be assigned. This used to be disabled
+                // for one the farm had not bought, which no longer
+                // happens: the subscription covers all of them.
+                onChanged: onToggleModule,
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -241,8 +241,6 @@ class _ModuleRow extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(module.label(language), style: FarmTypography.textTheme.titleSmall),
-                    if (unlicensed)
-                      Text(context.t('moduleNotLicensed'), style: const TextStyle(fontSize: 10.5, color: FarmColors.muted)),
                   ],
                 ),
               ),

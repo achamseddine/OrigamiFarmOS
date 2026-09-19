@@ -19,10 +19,15 @@ class AccessProvider extends ChangeNotifier {
   UserAccess get access => _access;
   List<ModuleCatalogEntry> get catalog => List.unmodifiable(_catalog);
 
-  /// Modules this farm has licensed and this user holds — what the
-  /// navigation is built from.
+  /// Modules this user holds — what the navigation is built from.
+  ///
+  /// This used to also require the farm to have licensed the module.
+  /// Origami is one subscription covering every module now, so that half
+  /// of the test could only ever pass — and worse, a tablet still holding
+  /// a catalog it cached under the old model would keep hiding screens
+  /// the farm had paid for until it managed to fetch a fresh one.
   List<ModuleCatalogEntry> get availableModules =>
-      _catalog.where((m) => m.licensedActive && _access.canView(m.code)).toList();
+      _catalog.where((m) => _access.canView(m.code)).toList();
 
   ModuleCatalogEntry? moduleByCode(String code) {
     for (final m in _catalog) {
@@ -33,13 +38,10 @@ class AccessProvider extends ChangeNotifier {
 
   String moduleLabel(String code, String languageCode) => moduleByCode(code)?.label(languageCode) ?? code.replaceAll('_', ' ');
 
-  /// True when the farm has licensed the module *and* the user holds it —
-  /// the Mouneh and Visits add-ons need both.
-  bool isModuleAvailable(String code) {
-    final entry = moduleByCode(code);
-    if (entry != null && !entry.licensedActive) return false;
-    return _access.canView(code);
-  }
+  /// True when this user holds the module. Nothing else: every farm has
+  /// every module, including what used to be the Mouneh and Visits paid
+  /// add-ons.
+  bool isModuleAvailable(String code) => _access.canView(code);
 
   bool can(String moduleCode, String action) => _access.can(moduleCode, action);
   bool canView(String moduleCode) => _access.canView(moduleCode);

@@ -8,9 +8,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../providers/mouneh_provider.dart';
 import '../../providers/tasks_provider.dart';
-import '../../providers/visits_provider.dart';
 
 /// Farm configuration (tech spec §6 nav table: "Users, roles, languages,
 /// currency, thresholds"). Farm-wide sections (Modules, Roster) are
@@ -149,67 +147,70 @@ class _RosterCard extends StatelessWidget {
   }
 }
 
+/// What this farm's subscription includes.
+///
+/// This card used to be two switches. Mouneh and Farm Visits were sold
+/// separately, and a super user turned them on per farm; everything else
+/// in the app was simply there. Origami is one subscription covering the
+/// whole product now, so there is nothing to switch — and a toggle for a
+/// decision nobody can make reads as a decision somebody made.
 class _ModulesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final mouneh = context.watch<MounehProvider>();
-    final visits = context.watch<VisitsProvider>();
     return SectionCard(
       title: 'Modules',
-      subtitle: 'License-controlled add-ons — activated per farm by a super user',
+      subtitle: 'Every module is included in your subscription',
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Text('Mouneh & Farm Product Processing', style: FarmTypography.textTheme.titleSmall),
-                      const SizedBox(width: 8),
-                      StatusPill(label: mouneh.isActive ? 'Active' : 'Inactive', level: mouneh.isActive ? FarmStatusLevel.good : FarmStatusLevel.neutral, dense: true),
-                    ]),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Makdous, Labneh, Kishk, Jam or any custom product — recipes, batches, finished-goods stock and profitability.',
-                      style: FarmTypography.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              Switch(value: mouneh.isActive, onChanged: (v) => mouneh.setModuleActive(v)),
-            ],
+          _IncludedModule(
+            title: 'Mouneh & Farm Product Processing',
+            detail:
+                'Makdous, Labneh, Kishk, Jam or any custom product — recipes, batches, '
+                'finished-goods stock and profitability.',
           ),
-          const SizedBox(height: 6),
-          Text('REQ-MOU-001: module activation is a super-user action — this toggle only succeeds when your account is one.', style: FarmTypography.textTheme.bodySmall),
           const Divider(height: 24, color: FarmColors.border),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(children: [
-                      Text('Farm Visits & Agri-Tourism', style: FarmTypography.textTheme.titleSmall),
-                      const SizedBox(width: 8),
-                      StatusPill(label: visits.isActive ? 'Active' : 'Inactive', level: visits.isActive ? FarmStatusLevel.good : FarmStatusLevel.neutral, dense: true),
-                    ]),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Bookings, activities, visitor check-in, farm-shop POS and visit profitability — only shown once licensed.',
-                      style: FarmTypography.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              Switch(value: visits.isActive, onChanged: (v) => visits.setModuleActive(v)),
-            ],
+          _IncludedModule(
+            title: 'Farm Visits & Agri-Tourism',
+            detail:
+                'Bookings, activities, visitor check-in, farm-shop POS and visit '
+                'profitability.',
           ),
           const SizedBox(height: 6),
-          Text('RULE-VIS-001: module activation is a super-user action — this toggle only succeeds when your account is one.', style: FarmTypography.textTheme.bodySmall),
+          Text(
+            'What each person on your farm can open is set on the Employees screen, not here.',
+            style: FarmTypography.textTheme.bodySmall,
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _IncludedModule extends StatelessWidget {
+  _IncludedModule({required this.title, required this.detail});
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text(title, style: FarmTypography.textTheme.titleSmall)),
+                const SizedBox(width: 8),
+                const StatusPill(label: 'Included', level: FarmStatusLevel.good, dense: true),
+              ]),
+              const SizedBox(height: 2),
+              Text(detail, style: FarmTypography.textTheme.bodySmall),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

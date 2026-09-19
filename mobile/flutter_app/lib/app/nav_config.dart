@@ -73,9 +73,9 @@ typedef NavPlan = ({List<NavEntry> entries, List<Widget> screens, Map<String, in
 ///
 /// An employee responsible only for Animals gets Morning, Animals, Tasks
 /// and Settings; add Agriculture to the same person and Produce appears
-/// too. A farm manager holds every module, so they see everything. A
-/// licensed-but-unlicensed module (Mouneh, Visits) is hidden even from a
-/// manager, because the farm has not bought it.
+/// too. A farm manager holds every module, so they see everything —
+/// including Mouneh and Farm Visits, which used to be hidden until the
+/// farm bought them and are now part of the one subscription.
 NavPlan buildNavForAccess(AccessProvider access) {
   final entries = <NavEntry>[];
   final screens = <Widget>[];
@@ -95,7 +95,7 @@ NavPlan buildNavForAccess(AccessProvider access) {
     }
   }
 
-  // A user whose farm has licensed nothing they hold would otherwise face
-  // an empty shell; Settings is alwaysVisible precisely to prevent that.
+  // A user who has been given no modules at all would otherwise face an
+  // empty shell; Settings is alwaysVisible precisely to prevent that.
   return (entries: entries, screens: screens, moduleIndex: moduleIndex);
 }
