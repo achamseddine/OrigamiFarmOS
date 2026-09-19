@@ -9,9 +9,9 @@ import '../theme/typography.dart';
 ///
 /// From the v1 redesign review, where every screen starts on the
 /// landscape rather than on a heading floating in space. The artwork is
-/// the painted valley rather than a photograph: the tech spec forbids
-/// shipping the mockup PNGs as in-app backgrounds (§19, §24), and vector
-/// geometry costs nothing to ship and scales to any tablet.
+/// the pack's `bekaa_header_panorama` — a text-free vector scene drawn
+/// for exactly this, which is why it is a shallow wide one rather than
+/// the sign-in screen's full landscape.
 ///
 /// It bleeds past the page gutter on purpose. The shell pads its content,
 /// and a hero that stops short of the screen edges reads as a picture
@@ -91,7 +91,7 @@ class HeroBand extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              const BekaaBackdrop(),
+              const BekaaBackdrop(scene: BekaaScene.panorama),
               // The valley is scenery, not content — this keeps it well
               // behind the words without washing it out to nothing.
               DecoratedBox(

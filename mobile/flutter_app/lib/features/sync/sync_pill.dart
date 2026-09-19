@@ -144,8 +144,8 @@ class _StandalonePill extends StatelessWidget {
             height: kFarmTouchTarget,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: FarmColors.tint(FarmColors.gold, 0.18),
-              border: Border.all(color: FarmColors.gold.withOpacity(0.55)),
+              color: FarmColors.tint(FarmColors.warning, 0.18),
+              border: Border.all(color: FarmColors.warning.withOpacity(0.55)),
               borderRadius: BorderRadius.circular(FarmRadii.pill),
             ),
             child: Row(

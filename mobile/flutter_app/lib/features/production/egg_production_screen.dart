@@ -255,7 +255,7 @@ class _WeeklyInsightCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.md),
       decoration: BoxDecoration(
-        color: FarmColors.tint(down ? FarmColors.gold : FarmColors.success, 0.2),
+        color: FarmColors.tint(down ? FarmColors.warning : FarmColors.success, 0.2),
         borderRadius: BorderRadius.circular(FarmRadii.md),
         border: Border.all(color: accent.withOpacity(0.4)),
       ),

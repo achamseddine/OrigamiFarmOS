@@ -61,13 +61,33 @@ class FarmColors {
   static const Color dangerInk = Color(0xFFA8432D);
   static const Color dangerPale = Color(0xFFF6E6E1);
 
+  // --- brand gold ------------------------------------------------------
+  //
+  // The v1 asset pack splits these two, and they had been one colour
+  // here. Gold is the *brand* accent — the sun on the sign-in card, the
+  // rule under the headline, the egg roundel — and it is brighter than
+  // anything that means "be careful". Warning is the semantic one and
+  // keeps the darker value, because a caution colour has to hold its own
+  // as small text on paper in outdoor light.
+  static const Color gold = Color(0xFFD6A84F);
+
   // --- watch -----------------------------------------------------------
-  static const Color gold = Color(0xFFA67A2B);
   static const Color warning = Color(0xFFA67A2B);
   static const Color warningInk = Color(0xFF8A6320);
   static const Color wheat = Color(0xFFF4ECDC);
 
   static const Color success = Color(0xFF2F6B4F);
+
+  /// The deepest cedar in the pack — the cedar tree in the artwork, and
+  /// text that has to hold on a cedar fill.
+  static const Color cedarDark = Color(0xFF174936);
+
+  /// One step off paper. Used where a surface needs to recede without
+  /// becoming a bordered box.
+  static const Color surfaceSoft = Color(0xFFF1F0EA);
+
+  /// Near-black from the pack, for scrims rather than for text.
+  static const Color black = Color(0xFF0D1713);
 
   // --- subject colours -------------------------------------------------
   //
@@ -78,6 +98,11 @@ class FarmColors {
   // ever used to mean "good" or "wrong".
   static const Color milkBlue = Color(0xFF3E7FA6);
   static const Color lilac = Color(0xFF7A5EA6);
+
+  /// The pale fills the pack pairs with them, for roundels behind those
+  /// two icons — exact values rather than a computed tint.
+  static const Color skyBluePale = Color(0xFFDFF1F7);
+  static const Color purplePale = Color(0xFFEDE5F7);
 
   // Status colors (animal / recommendation status chips)
   static const Color statusHealthy = Color(0xFF2F6B4F);

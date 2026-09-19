@@ -144,7 +144,7 @@ class _EmployeeCard extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: employee.active ? FarmColors.gold : FarmColors.mist,
+                color: employee.active ? FarmColors.cedar : FarmColors.mist,
                 shape: BoxShape.circle,
               ),
               child: Center(

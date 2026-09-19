@@ -18,9 +18,9 @@ class FarmRadii {
 
   static const double xs = 8;
   static const double sm = 12;
-  static const double md = 20;
+  static const double md = 18;
   static const double lg = 24;
-  static const double xl = 32;
+  static const double xl = 30;
   static const double pill = 999;
 
   static BorderRadius get card => BorderRadius.circular(md);
@@ -30,26 +30,29 @@ class FarmRadii {
 class FarmShadows {
   FarmShadows._();
 
-  /// Deliberately empty.
+  /// The pack's card elevation: `0 8px 28px rgba(31,35,32,.06)`.
   ///
-  /// Every panel used to carry a 28px drop shadow *and* a border, on a
-  /// beige ground. Eleven of those on one screen is a large part of why
-  /// the tablet read as a web dashboard: a shadow says "this floats above
-  /// the page", and nothing on a farm screen floats. A grouped list on
-  /// paper needs its own white fill and nothing else — the fill against
-  /// the warm ground is already the whole separation.
-  ///
-  /// Kept as a token rather than deleted so every call site still
-  /// compiles, and so putting elevation back anywhere is one edit here
-  /// instead of a hunt through the screens.
-  static List<BoxShadow> get card => const [];
+  /// This was empty for a while, and for a good reason — every panel used
+  /// to carry a 28px shadow *and* a border on a beige ground, eleven to a
+  /// screen, and that is a large part of why the tablet read as a web
+  /// dashboard. The asset pack puts a shadow back but at six percent,
+  /// which is a different thing entirely: it separates a white card from
+  /// white-ish paper without claiming the card floats.
+  static List<BoxShadow> get card => [
+        BoxShadow(
+          color: const Color(0xFF1F2320).withOpacity(0.06),
+          blurRadius: 28,
+          offset: const Offset(0, 8),
+        ),
+      ];
 
-  /// The one thing that really is above the page: a sheet or a dialog.
+  /// The pack's modal elevation: `0 28px 80px rgba(13,23,19,.22)`. A
+  /// sheet or a dialog really is above the page, and says so.
   static List<BoxShadow> get elevated => [
         BoxShadow(
-          color: FarmColors.ink.withOpacity(0.13),
-          blurRadius: 40,
-          offset: const Offset(0, 14),
+          color: FarmColors.black.withOpacity(0.22),
+          blurRadius: 80,
+          offset: const Offset(0, 28),
         ),
       ];
 }

@@ -310,7 +310,7 @@ class _TreatDialogState extends State<_TreatDialog> {
             Container(
               padding: const EdgeInsets.all(10),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.gold, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
               child: Text(context.t('diagnosisLocked'), style: FarmTypography.textTheme.bodySmall),
             ),
             TextField(controller: _diagnosis, decoration: const InputDecoration(labelText: 'Diagnosis')),

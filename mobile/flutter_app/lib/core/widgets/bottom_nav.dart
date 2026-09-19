@@ -6,6 +6,13 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
+/// Bar height, from the asset pack's tablet tokens.
+const double kBottomNavHeight = 92;
+
+/// How far the centre action lifts above the bar.
+const double _kActionLift = 22;
+const double _kActionSize = 62;
+
 /// Bottom tab bar (replaces the left nav rail).
 ///
 /// The rail was a 232px sidebar of text labels, which is a *web* pattern —
@@ -24,12 +31,6 @@ import '../theme/typography.dart';
 /// — and otherwise fall back to the first destinations this person
 /// actually has. A tab nobody is allowed to open is a tab that answers a
 /// tap with a 403, and no amount of consistency is worth that.
-const double kBottomNavHeight = 88;
-
-/// How far the centre action lifts above the bar.
-const double _kActionLift = 22;
-const double _kActionSize = 62;
-
 class BottomNav extends StatelessWidget {
   const BottomNav({
     super.key,

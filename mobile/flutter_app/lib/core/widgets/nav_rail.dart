@@ -122,7 +122,7 @@ class NavRail extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const BekaaBackdrop(),
+                      const BekaaBackdrop(scene: BekaaScene.panorama),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
