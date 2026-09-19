@@ -7,10 +7,14 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/bekaa_backdrop.dart';
+import '../../core/widgets/directional_icon.dart';
 import '../../data/local/demo_mode.dart';
 
-/// The landing page: a single login, once.
+/// The landing screen, built to the Option C mockup: the valley along the
+/// bottom, the mark and the name at full size above it, a greeting, and
+/// two large choices.
 ///
 /// Two ways in. Against a real deployment, signing in needs the farm
 /// network — there is no way to verify a password or issue a token
@@ -20,12 +24,17 @@ import '../../data/local/demo_mode.dart';
 ///
 /// The second way exists because there is no deployment yet: this build
 /// ships a whole farm inside it, and the demo account opens it with no
-/// server at all. That path is advertised on this screen rather than
-/// hidden, so nobody is left at a login they cannot get past.
+/// server at all. That path is a button of its own here rather than a
+/// note in a box, so nobody is left at a login they cannot get past.
+///
+/// The mockup has no email or password on it, and that is not an
+/// oversight to paper over: at rest this screen offers two choices, and
+/// the credentials appear under "Start My Day" once that is the choice
+/// someone has made. It costs one extra tap on a screen a worker sees
+/// once per install, and it buys a first screen anyone can read.
 ///
 /// Either way [SessionController] restores the session at launch, so a
-/// worker sees this screen once per install and never again until they
-/// sign out.
+/// worker sees this screen once and never again until they sign out.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -37,8 +46,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   final _email = TextEditingController();
   final _password = TextEditingController();
   late final TextEditingController _serverUrl = TextEditingController(text: context.read<SessionController>().baseUrl);
+  final _passwordFocus = FocusNode();
+
+  bool _showSignIn = false;
   bool _showServerField = false;
   bool _obscure = true;
+
+  /// Which button started the attempt, so the spinner appears on the one
+  /// that was actually pressed rather than always on the first.
+  bool _demoPressed = false;
 
   /// Drives the clouds and the flock. Ninety seconds for one crossing:
   /// slow enough that it reads as weather rather than animation, and slow
@@ -54,7 +70,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _email.dispose();
     _password.dispose();
     _serverUrl.dispose();
+    _passwordFocus.dispose();
     super.dispose();
+  }
+
+  /// "Start My Day" does two jobs: it opens the sign-in fields the first
+  /// time, and submits them after that.
+  Future<void> _startMyDay() async {
+    if (!_showSignIn) {
+      setState(() => _showSignIn = true);
+      return;
+    }
+    setState(() => _demoPressed = false);
+    await _submit();
   }
 
   Future<void> _submit() async {
@@ -75,38 +103,33 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   /// Fills in the demo account and signs straight in, so nobody has to
   /// find the credentials in a README to open the app.
   Future<void> _useDemo() async {
+    setState(() => _demoPressed = true);
     _email.text = DemoMode.username;
     _password.text = DemoMode.password;
     await _submit();
+    if (mounted) setState(() => _demoPressed = false);
+  }
+
+  String _greetingKey() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'goodMorning';
+    if (hour < 17) return 'goodAfternoon';
+    return 'goodEvening';
   }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
 
-    final form = _LoginForm(
-      email: _email,
-      password: _password,
-      serverUrl: _serverUrl,
-      obscure: _obscure,
-      showServerField: _showServerField,
-      busy: session.busy,
-      needsNetwork: session.needsFirstOnlineLogin,
-      error: session.error,
-      onUseDemo: _useDemo,
-      onToggleObscure: () => setState(() => _obscure = !_obscure),
-      onToggleServerField: () => setState(() => _showServerField = !_showServerField),
-      onSubmit: _submit,
-    );
-
     return Scaffold(
       backgroundColor: FarmColors.stone,
       body: Stack(
         children: [
-          // The valley runs edge to edge behind everything, rather than
-          // sitting in a box beside the form. A boxed illustration next to
-          // a centred white card on a flat ground is the shape of a web
-          // sign-in page; a tablet app opens on a place.
+          // The valley, edge to edge and alive, with the paper washing
+          // down over its top half so everything above it stays readable.
+          // This is the mockup's photograph, painted as vector geometry —
+          // the tech spec is explicit that the mockup PNGs must never ship
+          // as in-app backgrounds (§19, §24).
           Positioned.fill(
             child: RepaintBoundary(
               child: AnimatedBuilder(
@@ -115,68 +138,112 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
               ),
             ),
           ),
-          // Keeps the card's edges and the brand text readable over
-          // whatever the painting is doing underneath them.
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [FarmColors.stone.withOpacity(0.10), FarmColors.stone.withOpacity(0.55)],
+                  stops: const [0, 0.38, 0.62, 1],
+                  colors: [
+                    FarmColors.stone,
+                    FarmColors.stone.withOpacity(0.96),
+                    FarmColors.stone.withOpacity(0.35),
+                    FarmColors.stone.withOpacity(0.05),
+                  ],
                 ),
               ),
             ),
           ),
           SafeArea(
             child: LayoutBuilder(builder: (context, constraints) {
-              final stacked = constraints.maxWidth < kTabletBreakpoint;
-              final short = constraints.maxHeight < 560;
-
-              // Every layout scrolls. The landscape one used to be a bare
-              // Row inside a Center: on a tablet held sideways the form is
-              // taller than the space, so the password field and the
-              // button were simply off-screen with no way to reach them —
-              // you had to turn the tablet upright to sign in.
-              // Centre the content while there is room for it, and let it
-              // scroll the moment there isn't — including while the
-              // keyboard is up, which is exactly when there isn't.
-              final gutter = stacked ? FarmSpacing.lg : FarmSpacing.xl;
-              final room = (constraints.maxHeight - gutter * 2).clamp(0.0, double.infinity);
-              Widget scrollable(Widget child) => SingleChildScrollView(
-                    padding: EdgeInsets.all(gutter),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: room),
-                      child: Center(child: child),
-                    ),
-                  );
-
-              if (stacked) {
-                return scrollable(
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _Brand(compact: true),
-                        const SizedBox(height: FarmSpacing.lg),
-                        form,
-                      ],
-                    ),
+              final wide = constraints.maxWidth >= kTabletBreakpoint;
+              final gutter = wide ? FarmSpacing.xxl : FarmSpacing.lg;
+              // Centre while there is room, scroll the moment there isn't
+              // — which is every landscape tablet with the keyboard up.
+              // This screen used to be a bare Row inside a Center with no
+              // scrollable anywhere, so in landscape the password field
+              // and the button sat off the bottom edge, unreachable.
+              return SingleChildScrollView(
+                padding: EdgeInsets.symmetric(horizontal: gutter, vertical: FarmSpacing.lg),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: (constraints.maxHeight - FarmSpacing.lg * 2).clamp(0.0, double.infinity),
                   ),
-                );
-              }
-
-              return scrollable(
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1040),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(flex: 4, child: _Brand(compact: short)),
-                      const SizedBox(width: FarmSpacing.xxl),
-                      Expanded(flex: 5, child: form),
-                    ],
+                  child: Align(
+                    // Start-aligned on a wide screen, the way the mockup
+                    // sets it; centred when the screen is too narrow for
+                    // that to look deliberate.
+                    alignment: wide ? AlignmentDirectional.centerStart : Alignment.center,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const _Brand(),
+                          const SizedBox(height: FarmSpacing.xl),
+                          Row(
+                            children: [
+                              const AppIcon(FarmIcon.sun, size: 30, color: FarmColors.gold),
+                              const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  context.t(_greetingKey()),
+                                  style: FarmTypography.display(size: 30),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(context.t('welcomeSubline'), style: FarmTypography.textTheme.bodyLarge),
+                          if (session.needsFirstOnlineLogin) ...[
+                            const SizedBox(height: FarmSpacing.md),
+                            const _Notice(icon: Icons.cloud_off, messageKey: 'firstLoginNeedsInternet'),
+                          ],
+                          const SizedBox(height: FarmSpacing.xl),
+                          _BigButton(
+                            icon: FarmIcon.sun,
+                            label: context.t('startMyDay'),
+                            primary: true,
+                            busy: session.busy && !_demoPressed,
+                            onPressed: session.busy ? null : _startMyDay,
+                          ),
+                          const SizedBox(height: 14),
+                          _BigButton(
+                            icon: FarmIcon.barn,
+                            label: context.t('viewDemoFarm'),
+                            primary: false,
+                            busy: session.busy && _demoPressed,
+                            onPressed: session.busy ? null : _useDemo,
+                          ),
+                          if (_showSignIn) ...[
+                            const SizedBox(height: FarmSpacing.lg),
+                            _SignInFields(
+                              email: _email,
+                              password: _password,
+                              passwordFocus: _passwordFocus,
+                              serverUrl: _serverUrl,
+                              obscure: _obscure,
+                              showServerField: _showServerField,
+                              error: session.error,
+                              busy: session.busy,
+                              onToggleObscure: () => setState(() => _obscure = !_obscure),
+                              onToggleServerField: () => setState(() => _showServerField = !_showServerField),
+                              onSubmit: _submit,
+                            ),
+                          ],
+                          const SizedBox(height: FarmSpacing.lg),
+                          // Which build is on this tablet. Before sign-in,
+                          // because that is when somebody is asking whether
+                          // the new APK actually landed.
+                          Text(
+                            'App $kAppVersion',
+                            style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -188,54 +255,104 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 }
 
-/// The mark, the name and where this farm is — sitting straight on the
-/// valley rather than inside a panel.
+/// The mark and the name, stacked as the mockup draws them and at the
+/// size it draws them — this is the first thing the screen says.
 class _Brand extends StatelessWidget {
-  const _Brand({required this.compact});
-
-  final bool compact;
+  const _Brand();
 
   @override
   Widget build(BuildContext context) {
-    final markSize = compact ? 56.0 : 88.0;
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: markSize, height: markSize),
-        SizedBox(height: compact ? 12 : FarmSpacing.lg),
-        RichText(
-          textAlign: compact ? TextAlign.center : TextAlign.start,
-          text: TextSpan(
-            style: FarmTypography.display(size: compact ? 34 : 52),
-            children: const [
-              TextSpan(text: 'Origami ', style: TextStyle(color: FarmColors.cedar)),
-              TextSpan(text: 'FarmOS', style: TextStyle(color: FarmColors.olive)),
+        SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: 86, height: 86),
+        const SizedBox(width: 18),
+        Flexible(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Origami', style: FarmTypography.display(size: 46, color: FarmColors.cedar)),
+              Text('FarmOS', style: FarmTypography.display(size: 38, color: FarmColors.olive)),
             ],
           ),
-        ),
-        const SizedBox(height: FarmSpacing.sm),
-        Text(
-          context.t('farmLocationLine'),
-          textAlign: compact ? TextAlign.center : TextAlign.start,
-          style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.muted),
         ),
       ],
     );
   }
 }
 
-class _LoginForm extends StatelessWidget {
-  const _LoginForm({
+/// A full-width choice: icon, label, and the arrow that says it opens
+/// something. Sixty-eight pixels tall because this is pressed with a
+/// working hand, sometimes gloved, often without looking closely.
+class _BigButton extends StatelessWidget {
+  const _BigButton({
+    required this.icon,
+    required this.label,
+    required this.primary,
+    required this.onPressed,
+    this.busy = false,
+  });
+
+  final FarmIcon icon;
+  final String label;
+  final bool primary;
+  final VoidCallback? onPressed;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = primary ? FarmColors.cedar : FarmColors.card;
+    final ink = primary ? FarmColors.white : FarmColors.ink;
+    final accent = primary ? FarmColors.white : FarmColors.cedar;
+
+    return Material(
+      color: fill,
+      borderRadius: BorderRadius.circular(FarmRadii.sm),
+      elevation: 0,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(FarmRadii.sm),
+        child: Container(
+          height: 68,
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: Row(
+            children: [
+              if (busy)
+                SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2.4, color: accent))
+              else
+                AppIcon(icon, size: 26, color: accent),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700, color: ink),
+                ),
+              ),
+              ForwardChevron(size: 24, color: primary ? FarmColors.white : FarmColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Email, password, and the things that only matter when a sign-in is
+/// going wrong. Hidden until "Start My Day" is the chosen path.
+class _SignInFields extends StatelessWidget {
+  const _SignInFields({
     required this.email,
     required this.password,
+    required this.passwordFocus,
     required this.serverUrl,
     required this.obscure,
     required this.showServerField,
-    required this.busy,
-    required this.needsNetwork,
     required this.error,
-    required this.onUseDemo,
+    required this.busy,
     required this.onToggleObscure,
     required this.onToggleServerField,
     required this.onSubmit,
@@ -243,16 +360,12 @@ class _LoginForm extends StatelessWidget {
 
   final TextEditingController email;
   final TextEditingController password;
+  final FocusNode passwordFocus;
   final TextEditingController serverUrl;
   final bool obscure;
   final bool showServerField;
-  final bool busy;
 
-  /// The last attempt couldn't reach the server at all. Say that plainly
-  /// — a worker retyping a correct password is the failure mode here.
-  final bool needsNetwork;
-
-  /// Why the last attempt failed, shown on the form and left there.
+  /// Why the last attempt failed, shown here and left there.
   ///
   /// This used to be a SnackBar and nothing else: four seconds at the
   /// bottom of a tablet, gone before anyone could read it, photograph it
@@ -261,8 +374,7 @@ class _LoginForm extends StatelessWidget {
   /// now, and it is selectable so the text can be sent to whoever can act
   /// on it.
   final String? error;
-
-  final Future<void> Function() onUseDemo;
+  final bool busy;
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleServerField;
   final Future<void> Function() onSubmit;
@@ -270,59 +382,36 @@ class _LoginForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(FarmSpacing.xl),
-      // The one panel in the product that really does float above the page,
-      // so it keeps its elevation — but not the outline on top of it.
-      decoration: BoxDecoration(color: FarmColors.card, borderRadius: FarmRadii.panel, boxShadow: FarmShadows.elevated),
+      padding: const EdgeInsets.all(FarmSpacing.lg),
+      decoration: BoxDecoration(
+        color: FarmColors.card,
+        borderRadius: FarmRadii.panel,
+        boxShadow: FarmShadows.elevated,
+      ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // The mark and the name live on the valley beside this card now,
-          // so the card opens on the one thing it is for.
-          Text(context.t('startMyDay'), style: FarmTypography.display(size: 30)),
-          const SizedBox(height: 6),
-          Text(context.t('startMyDaySubtitle'), style: FarmTypography.textTheme.bodyMedium),
-          if (needsNetwork) ...[
-            const SizedBox(height: FarmSpacing.md),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: FarmColors.tint(FarmColors.warning, 0.12),
-                border: Border.all(color: FarmColors.warning.withOpacity(0.4)),
-                borderRadius: BorderRadius.circular(FarmRadii.sm),
-              ),
-              child: Row(children: [
-                const Icon(Icons.cloud_off, size: 18, color: FarmColors.warning),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    context.t('firstLoginNeedsInternet'),
-                    style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.ink),
-                  ),
-                ),
-              ]),
-            ),
-          ],
-          const SizedBox(height: FarmSpacing.lg),
-          // Tall fields with a leading icon. Two reasons, and neither is
-          // decoration: this is tapped with a working hand, sometimes with
-          // a glove on; and an icon tells someone who reads slowly which
-          // box is which before they have finished reading the label.
+          Text(context.t('signInWithPassword'), style: FarmTypography.textTheme.titleLarge),
+          const SizedBox(height: FarmSpacing.md),
+          // A leading icon on each field: someone who reads slowly knows
+          // which box is which before finishing the label.
           TextField(
             controller: email,
+            autofocus: true,
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
             style: const TextStyle(fontSize: 17),
             decoration: InputDecoration(
               labelText: context.t('email'),
               prefixIcon: const Icon(Icons.person_outline, size: 24),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             ),
-            onSubmitted: (_) => onSubmit(),
+            onSubmitted: (_) => passwordFocus.requestFocus(),
           ),
           const SizedBox(height: 14),
           TextField(
             controller: password,
+            focusNode: passwordFocus,
             obscureText: obscure,
             style: const TextStyle(fontSize: 17),
             decoration: InputDecoration(
@@ -337,63 +426,6 @@ class _LoginForm extends StatelessWidget {
             ),
             onSubmitted: (_) => onSubmit(),
           ),
-          const SizedBox(height: FarmSpacing.md),
-          // This build ships a whole farm on the tablet, so it can be
-          // opened and used with no server at all. Saying so beats
-          // leaving someone at a login screen they cannot get past.
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: FarmColors.tint(FarmColors.gold, 0.14),
-              border: Border.all(color: FarmColors.gold.withOpacity(0.5)),
-              borderRadius: BorderRadius.circular(FarmRadii.sm),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  const Icon(Icons.storage_outlined, size: 17, color: FarmColors.ink),
-                  const SizedBox(width: 8),
-                  Text(context.t('demoMode'), style: FarmTypography.textTheme.titleSmall),
-                ]),
-                const SizedBox(height: 6),
-                Text(context.t('demoLoginExplainer'), style: FarmTypography.textTheme.bodySmall),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: FilledButton.tonal(
-                    onPressed: busy ? null : onUseDemo,
-                    child: Text(context.t('openDemoFarm')),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: onToggleServerField,
-            child: Text(showServerField ? context.t('hideServerAddress') : context.t('differentServer')),
-          ),
-          if (showServerField) ...[
-            TextField(
-              controller: serverUrl,
-              // A URL, not prose. Without these Android's keyboard
-              // capitalises the first word and autocorrects the rest, so
-              // a typed address becomes ".../API/v1/" — and since paths
-              // are case-sensitive, every request then 404s against a
-              // server that is working perfectly.
-              keyboardType: TextInputType.url,
-              textCapitalization: TextCapitalization.none,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(labelText: context.t('serverAddress'), hintText: 'https://your-backend-host/api/v1'),
-            ),
-            const SizedBox(height: 8),
-          ],
-          // Directly above the button that produced it, and it stays
-          // until the next attempt. Selectable on purpose: the useful
-          // thing to do with a sign-in error is send its exact words to
-          // somebody who can act on them.
           if (error != null && !busy) ...[
             const SizedBox(height: FarmSpacing.md),
             Container(
@@ -411,24 +443,54 @@ class _LoginForm extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: FarmSpacing.md),
-          SizedBox(
-            width: double.infinity,
-            height: 60,
-            child: FilledButton(
-              onPressed: busy ? null : () => onSubmit(),
-              child: busy
-                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(context.t('startMyDay'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: onToggleServerField,
+            child: Text(showServerField ? context.t('hideServerAddress') : context.t('differentServer')),
           ),
-          // Which build is on this tablet. Before sign-in, because that is
-          // when somebody is asking whether the new APK actually landed.
-          const SizedBox(height: FarmSpacing.md),
-          Center(
+          if (showServerField)
+            TextField(
+              controller: serverUrl,
+              // A URL, not prose. Without these Android's keyboard
+              // capitalises the first word and autocorrects the rest, so
+              // a typed address becomes ".../API/v1/" — and since paths
+              // are case-sensitive, every request then 404s against a
+              // server that is working perfectly.
+              keyboardType: TextInputType.url,
+              textCapitalization: TextCapitalization.none,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: InputDecoration(labelText: context.t('serverAddress'), hintText: 'https://your-backend-host/api/v1'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A tinted band for something the person needs to know before they try.
+class _Notice extends StatelessWidget {
+  const _Notice({required this.icon, required this.messageKey});
+
+  final IconData icon;
+  final String messageKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: FarmColors.tint(FarmColors.warning, 0.14),
+        borderRadius: BorderRadius.circular(FarmRadii.sm),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: FarmColors.warningInk),
+          const SizedBox(width: 12),
+          Expanded(
             child: Text(
-              'App $kAppVersion',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).hintColor),
+              context.t(messageKey),
+              style: FarmTypography.textTheme.bodyMedium?.copyWith(color: FarmColors.ink),
             ),
           ),
         ],
