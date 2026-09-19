@@ -6,7 +6,9 @@ import 'top_bar.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../../app/app_navigator.dart';
+import '../../features/record/record_sheet.dart';
 import '../../features/sync/sync_pill.dart';
+import '../../providers/access_provider.dart';
 
 /// Tablet application shell: content canvas over a bottom tab bar.
 ///
@@ -41,6 +43,7 @@ class AppShell extends StatelessWidget {
     // notification or a priority card can drive navigation too.
     final navigator = context.watch<AppNavigator>();
     final index = navigator.selectedIndex.clamp(0, screens.isEmpty ? 0 : screens.length - 1);
+    final canRecord = recordActionsFor(context.watch<AccessProvider>()).isNotEmpty;
 
     return Scaffold(
       backgroundColor: FarmColors.stone,
@@ -72,11 +75,12 @@ class AppShell extends StatelessWidget {
         entries: entries,
         selectedIndex: index,
         onSelect: navigator.select,
-        // The centre "record" button from the design is deliberately not
-        // wired yet: what it should open (a milking entry, a new task, a
-        // chooser) is a product decision, and a button that guesses is
-        // worse than one that waits. Pass a callback here to turn it on.
-        onAction: null,
+        // The centre button asks what to record rather than guessing at
+        // one form, because the answer differs by who is holding the
+        // tablet. It disappears entirely for someone who may not create
+        // anything — a button that can only fail is worse than no button
+        // (see [showRecordSheet]).
+        onAction: canRecord ? () => showRecordSheet(context) : null,
       ),
     );
   }

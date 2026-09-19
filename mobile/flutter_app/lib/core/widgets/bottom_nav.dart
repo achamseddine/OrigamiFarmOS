@@ -199,7 +199,7 @@ class _ActionSlot extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: Semantics(
         button: true,
-        label: 'Record',
+        label: context.t('record'),
         child: GestureDetector(
           onTap: onTap,
           child: SizedBox(
