@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import '../../app/build_info.dart';
 import '../../auth/session_controller.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
@@ -273,7 +274,19 @@ class _LoginForm extends StatelessWidget {
             child: Text(showServerField ? 'Hide server address' : 'Connecting to a different server?'),
           ),
           if (showServerField) ...[
-            TextField(controller: serverUrl, decoration: const InputDecoration(labelText: 'Server address', hintText: 'https://your-backend-host/api/v1')),
+            TextField(
+              controller: serverUrl,
+              // A URL, not prose. Without these Android's keyboard
+              // capitalises the first word and autocorrects the rest, so
+              // a typed address becomes ".../API/v1/" — and since paths
+              // are case-sensitive, every request then 404s against a
+              // server that is working perfectly.
+              keyboardType: TextInputType.url,
+              textCapitalization: TextCapitalization.none,
+              autocorrect: false,
+              enableSuggestions: false,
+              decoration: const InputDecoration(labelText: 'Server address', hintText: 'https://your-backend-host/api/v1'),
+            ),
             const SizedBox(height: 8),
           ],
           const SizedBox(height: FarmSpacing.md),
@@ -284,6 +297,15 @@ class _LoginForm extends StatelessWidget {
               child: busy
                   ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : Text(context.t('startMyDay')),
+            ),
+          ),
+          // Which build is on this tablet. Before sign-in, because that is
+          // when somebody is asking whether the new APK actually landed.
+          const SizedBox(height: FarmSpacing.md),
+          Center(
+            child: Text(
+              'App $kAppVersion',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).hintColor),
             ),
           ),
         ],

@@ -149,8 +149,27 @@ class SessionController extends ChangeNotifier {
       // session nobody authenticated.
       final json =
           await apiClient.authenticate('/auth/login', body: {'email': email.trim(), 'password': password}) as Map<String, dynamic>;
-      apiClient.token = json['access_token'] as String;
-      final profile = json['user'] as Map<String, dynamic>;
+
+      // Checked rather than cast. A server that answers 200 without one
+      // of these fields is running a build this app does not match — a
+      // deployment problem, not a sign-in failure, and it has to say so.
+      // `json['user'] as Map<String, dynamic>` on a missing field throws
+      // a TypeError, which the ApiException handler below does not catch,
+      // so the button went dead with a clean 200 in the server log and
+      // nothing anywhere to read. That cost about a week.
+      final token = json['access_token'];
+      if (token is! String || token.isEmpty) {
+        error = 'Signed in, but the server sent no token. It may be running an older build.';
+        return false;
+      }
+      final profile = json['user'];
+      if (profile is! Map<String, dynamic>) {
+        error = 'Signed in, but the server sent no user profile — it is running a build older '
+            'than this app. Check ${apiClient.baseUrl}/health for its version.';
+        return false;
+      }
+
+      apiClient.token = token;
       user = UserProfile.fromJson(profile);
       final prefs = await _prefs();
       await prefs?.setString(_tokenPrefsKey, apiClient.token!);
@@ -167,6 +186,14 @@ class SessionController extends ChangeNotifier {
           ? "Signing in needs the farm network. Connect once and the tablet will work offline afterwards."
           : e.message;
       needsFirstOnlineLogin = e.isOffline;
+      return false;
+    } catch (e) {
+      // Anything that is not an ApiException — a malformed response, a
+      // type error, a bug in here. Previously these escaped this method
+      // entirely and the screen simply did nothing, which is the hardest
+      // failure there is to report or diagnose. A sign-in that does not
+      // work must always say something, even if all it can say is this.
+      error = 'Sign-in failed unexpectedly: $e';
       return false;
     } finally {
       busy = false;

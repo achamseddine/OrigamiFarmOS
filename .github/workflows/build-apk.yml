@@ -59,7 +59,15 @@ jobs:
       # APK build does.
       - run: flutter test
 
-      - run: flutter build apk --${{ inputs.build-mode || 'release' }}
+      # APP_VERSION reaches lib/app/build_info.dart and is printed under
+      # the sign-in button, so which APK is on a given tablet is
+      # answerable by looking at it rather than by remembering what was
+      # sideloaded last. The server reports its own build the same way at
+      # GET /health; between the two, "no change, same behaviour" can be
+      # checked instead of guessed.
+      - run: |
+          flutter build apk --${{ inputs.build-mode || 'release' }} \
+            --dart-define=APP_VERSION="$(git rev-parse --short HEAD)"
 
       - uses: actions/upload-artifact@v4
         with:
