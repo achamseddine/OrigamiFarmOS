@@ -52,7 +52,15 @@ class _LoginScreenState extends State<LoginScreen> {
     final session = context.read<SessionController>();
     final ok = await session.login(email: _email.text, password: _password.text, serverUrl: _showServerField ? _serverUrl.text : null);
     if (!mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(session.error ?? 'Could not sign in.')));
+    // The form shows this too, and keeps it. The SnackBar is the nudge
+    // that something happened; ten seconds because four is not enough to
+    // read a sentence that names a server build.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(session.error ?? 'Could not sign in.'),
+        duration: const Duration(seconds: 10),
+      ),
+    );
   }
 
   /// Fills in the demo account and signs straight in, so nobody has to
@@ -111,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 showServerField: _showServerField,
                 busy: session.busy,
                 needsNetwork: session.needsFirstOnlineLogin,
+                error: session.error,
                 onUseDemo: _useDemo,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onToggleServerField: () => setState(() => _showServerField = !_showServerField),
@@ -150,6 +159,7 @@ class _LoginForm extends StatelessWidget {
     required this.showServerField,
     required this.busy,
     required this.needsNetwork,
+    required this.error,
     required this.onUseDemo,
     required this.onToggleObscure,
     required this.onToggleServerField,
@@ -166,6 +176,16 @@ class _LoginForm extends StatelessWidget {
   /// The last attempt couldn't reach the server at all. Say that plainly
   /// — a worker retyping a correct password is the failure mode here.
   final bool needsNetwork;
+
+  /// Why the last attempt failed, shown on the form and left there.
+  ///
+  /// This used to be a SnackBar and nothing else: four seconds at the
+  /// bottom of a tablet, gone before anyone could read it, photograph it
+  /// or copy it. Someone debugging a sign-in would swear no error was
+  /// shown at all — and be right, in every way that matters. It stays put
+  /// now, and it is selectable so the text can be sent to whoever can act
+  /// on it.
+  final String? error;
 
   final Future<void> Function() onUseDemo;
   final VoidCallback onToggleObscure;
@@ -288,6 +308,27 @@ class _LoginForm extends StatelessWidget {
               decoration: const InputDecoration(labelText: 'Server address', hintText: 'https://your-backend-host/api/v1'),
             ),
             const SizedBox(height: 8),
+          ],
+          // Directly above the button that produced it, and it stays
+          // until the next attempt. Selectable on purpose: the useful
+          // thing to do with a sign-in error is send its exact words to
+          // somebody who can act on them.
+          if (error != null && !busy) ...[
+            const SizedBox(height: FarmSpacing.md),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(FarmSpacing.md),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                error!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onErrorContainer,
+                    ),
+              ),
+            ),
           ],
           const SizedBox(height: FarmSpacing.md),
           SizedBox(
