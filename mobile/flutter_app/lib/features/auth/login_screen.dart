@@ -45,8 +45,21 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _email = TextEditingController();
   final _password = TextEditingController();
-  late final TextEditingController _serverUrl = TextEditingController(text: context.read<SessionController>().baseUrl);
   final _passwordFocus = FocusNode();
+
+  /// Built in [initState], not as a `late final` initialiser.
+  ///
+  /// A `late final` field is created on first *access*, and the only
+  /// thing that touches this one is the server-address box — which is
+  /// now behind two taps and usually never opened. So on most runs the
+  /// first access was `dispose()`, which ran the initialiser, which
+  /// called `context.read` on an element that was already deactivated.
+  /// Flutter asserts on exactly that, and it is right to: the answer
+  /// read out of a half-torn-down tree is not trustworthy.
+  late final TextEditingController _serverUrl;
+
+  /// Same reason, and the usual place for one anyway.
+  late final AnimationController _sky;
 
   bool _showSignIn = false;
   bool _showServerField = false;
@@ -56,13 +69,15 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   /// that was actually pressed rather than always on the first.
   bool _demoPressed = false;
 
-  /// Drives the clouds and the flock. Ninety seconds for one crossing:
-  /// slow enough that it reads as weather rather than animation, and slow
-  /// enough that nobody filling in a password is competing with it.
-  late final AnimationController _sky = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 90),
-  )..repeat();
+  @override
+  void initState() {
+    super.initState();
+    _serverUrl = TextEditingController(text: context.read<SessionController>().baseUrl);
+    // Drives the clouds and the flock. Ninety seconds for one crossing:
+    // slow enough that it reads as weather rather than animation, and
+    // slow enough that nobody filling in a password competes with it.
+    _sky = AnimationController(vsync: this, duration: const Duration(seconds: 90))..repeat();
+  }
 
   @override
   void dispose() {
