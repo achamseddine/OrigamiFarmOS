@@ -1,4 +1,22 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Signing in, syncing, and every API call need this, and a release
+         build gets it from here or not at all: Flutter injects INTERNET
+         into the debug and profile manifests for hot reload, so a missing
+         declaration here works perfectly on a developer's machine and
+         fails on every installed APK. It fails invisibly too — the socket
+         is refused inside the process, so the request never reaches the
+         network, the server logs nothing, and the app can only report
+         that it could not reach the server. Chrome on the same tablet
+         works throughout, because the permission is per-app.
+
+         The app is still usable offline afterwards; this is what makes
+         the first sign-in, and every later sync, possible at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Lets the app tell "no signal" apart from "server is down" rather
+         than treating every failure as the latter. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
         android:label="Origami FarmOS"
         android:name="${applicationName}"
