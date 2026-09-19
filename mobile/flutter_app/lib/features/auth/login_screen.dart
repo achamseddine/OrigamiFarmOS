@@ -33,15 +33,24 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final _email = TextEditingController();
   final _password = TextEditingController();
   late final TextEditingController _serverUrl = TextEditingController(text: context.read<SessionController>().baseUrl);
   bool _showServerField = false;
   bool _obscure = true;
 
+  /// Drives the clouds and the flock. Ninety seconds for one crossing:
+  /// slow enough that it reads as weather rather than animation, and slow
+  /// enough that nobody filling in a password is competing with it.
+  late final AnimationController _sky = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 90),
+  )..repeat();
+
   @override
   void dispose() {
+    _sky.dispose();
     _email.dispose();
     _password.dispose();
     _serverUrl.dispose();
@@ -75,77 +84,143 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
 
+    final form = _LoginForm(
+      email: _email,
+      password: _password,
+      serverUrl: _serverUrl,
+      obscure: _obscure,
+      showServerField: _showServerField,
+      busy: session.busy,
+      needsNetwork: session.needsFirstOnlineLogin,
+      error: session.error,
+      onUseDemo: _useDemo,
+      onToggleObscure: () => setState(() => _obscure = !_obscure),
+      onToggleServerField: () => setState(() => _showServerField = !_showServerField),
+      onSubmit: _submit,
+    );
+
     return Scaffold(
       backgroundColor: FarmColors.stone,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 920),
+      body: Stack(
+        children: [
+          // The valley runs edge to edge behind everything, rather than
+          // sitting in a box beside the form. A boxed illustration next to
+          // a centred white card on a flat ground is the shape of a web
+          // sign-in page; a tablet app opens on a place.
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: AnimatedBuilder(
+                animation: _sky,
+                builder: (context, _) => BekaaBackdrop(drift: _sky.value),
+              ),
+            ),
+          ),
+          // Keeps the card's edges and the brand text readable over
+          // whatever the painting is doing underneath them.
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [FarmColors.stone.withOpacity(0.10), FarmColors.stone.withOpacity(0.55)],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
             child: LayoutBuilder(builder: (context, constraints) {
               final stacked = constraints.maxWidth < kTabletBreakpoint;
-              final illustration = ClipRRect(
-                borderRadius: FarmRadii.panel,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    const BekaaBackdrop(),
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [FarmColors.stone.withOpacity(0.15), FarmColors.stone.withOpacity(0.85)],
-                        ),
-                      ),
+              final short = constraints.maxHeight < 560;
+
+              // Every layout scrolls. The landscape one used to be a bare
+              // Row inside a Center: on a tablet held sideways the form is
+              // taller than the space, so the password field and the
+              // button were simply off-screen with no way to reach them —
+              // you had to turn the tablet upright to sign in.
+              // Centre the content while there is room for it, and let it
+              // scroll the moment there isn't — including while the
+              // keyboard is up, which is exactly when there isn't.
+              final gutter = stacked ? FarmSpacing.lg : FarmSpacing.xl;
+              final room = (constraints.maxHeight - gutter * 2).clamp(0.0, double.infinity);
+              Widget scrollable(Widget child) => SingleChildScrollView(
+                    padding: EdgeInsets.all(gutter),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minHeight: room),
+                      child: Center(child: child),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(FarmSpacing.lg),
-                      child: Align(
-                        alignment: Alignment.bottomLeft,
-                        child: Text(
-                          'Origami Farms — Bekaa Valley, Lebanon',
-                          style: FarmTypography.textTheme.bodyMedium?.copyWith(color: FarmColors.ink, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-              final form = _LoginForm(
-                email: _email,
-                password: _password,
-                serverUrl: _serverUrl,
-                obscure: _obscure,
-                showServerField: _showServerField,
-                busy: session.busy,
-                needsNetwork: session.needsFirstOnlineLogin,
-                error: session.error,
-                onUseDemo: _useDemo,
-                onToggleObscure: () => setState(() => _obscure = !_obscure),
-                onToggleServerField: () => setState(() => _showServerField = !_showServerField),
-                onSubmit: _submit,
-              );
+                  );
+
               if (stacked) {
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(FarmSpacing.lg),
-                  child: Column(children: [SizedBox(height: 220, child: illustration), const SizedBox(height: FarmSpacing.lg), form]),
+                return scrollable(
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _Brand(compact: true),
+                        const SizedBox(height: FarmSpacing.lg),
+                        form,
+                      ],
+                    ),
+                  ),
                 );
               }
-              return Padding(
-                padding: const EdgeInsets.all(FarmSpacing.xl),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(flex: 5, child: illustration),
-                    const SizedBox(width: FarmSpacing.xl),
-                    Expanded(flex: 5, child: Center(child: form)),
-                  ],
+
+              return scrollable(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1040),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(flex: 4, child: _Brand(compact: short)),
+                      const SizedBox(width: FarmSpacing.xxl),
+                      Expanded(flex: 5, child: form),
+                    ],
+                  ),
                 ),
               );
             }),
           ),
-        ),
+        ],
       ),
+    );
+  }
+}
+
+/// The mark, the name and where this farm is — sitting straight on the
+/// valley rather than inside a panel.
+class _Brand extends StatelessWidget {
+  const _Brand({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final markSize = compact ? 56.0 : 88.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: markSize, height: markSize),
+        SizedBox(height: compact ? 12 : FarmSpacing.lg),
+        RichText(
+          textAlign: compact ? TextAlign.center : TextAlign.start,
+          text: TextSpan(
+            style: FarmTypography.display(size: compact ? 34 : 52),
+            children: const [
+              TextSpan(text: 'Origami ', style: TextStyle(color: FarmColors.cedar)),
+              TextSpan(text: 'FarmOS', style: TextStyle(color: FarmColors.olive)),
+            ],
+          ),
+        ),
+        const SizedBox(height: FarmSpacing.sm),
+        Text(
+          context.t('farmLocationLine'),
+          textAlign: compact ? TextAlign.center : TextAlign.start,
+          style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.muted),
+        ),
+      ],
     );
   }
 }
@@ -203,22 +278,10 @@ class _LoginForm extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: 36, height: 36),
-            const SizedBox(width: 10),
-            RichText(
-              text: TextSpan(
-                style: FarmTypography.textTheme.titleLarge,
-                children: const [
-                  TextSpan(text: 'Origami ', style: TextStyle(color: FarmColors.cedar)),
-                  TextSpan(text: 'FarmOS', style: TextStyle(color: FarmColors.olive)),
-                ],
-              ),
-            ),
-          ]),
-          const SizedBox(height: FarmSpacing.lg),
-          Text(context.t('startMyDay'), style: FarmTypography.display(size: 26)),
-          const SizedBox(height: 4),
+          // The mark and the name live on the valley beside this card now,
+          // so the card opens on the one thing it is for.
+          Text(context.t('startMyDay'), style: FarmTypography.display(size: 30)),
+          const SizedBox(height: 6),
           Text(context.t('startMyDaySubtitle'), style: FarmTypography.textTheme.bodyMedium),
           if (needsNetwork) ...[
             const SizedBox(height: FarmSpacing.md),
@@ -242,19 +305,35 @@ class _LoginForm extends StatelessWidget {
             ),
           ],
           const SizedBox(height: FarmSpacing.lg),
+          // Tall fields with a leading icon. Two reasons, and neither is
+          // decoration: this is tapped with a working hand, sometimes with
+          // a glove on; and an icon tells someone who reads slowly which
+          // box is which before they have finished reading the label.
           TextField(
             controller: email,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email'),
+            style: const TextStyle(fontSize: 17),
+            decoration: InputDecoration(
+              labelText: context.t('email'),
+              prefixIcon: const Icon(Icons.person_outline, size: 24),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            ),
             onSubmitted: (_) => onSubmit(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           TextField(
             controller: password,
             obscureText: obscure,
+            style: const TextStyle(fontSize: 17),
             decoration: InputDecoration(
-              labelText: 'Password',
-              suffixIcon: IconButton(icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined), onPressed: onToggleObscure),
+              labelText: context.t('password'),
+              prefixIcon: const Icon(Icons.lock_outline, size: 24),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              suffixIcon: IconButton(
+                iconSize: 24,
+                icon: Icon(obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                onPressed: onToggleObscure,
+              ),
             ),
             onSubmitted: (_) => onSubmit(),
           ),
@@ -335,11 +414,12 @@ class _LoginForm extends StatelessWidget {
           const SizedBox(height: FarmSpacing.md),
           SizedBox(
             width: double.infinity,
+            height: 60,
             child: FilledButton(
               onPressed: busy ? null : () => onSubmit(),
               child: busy
-                  ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Text(context.t('startMyDay')),
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Text(context.t('startMyDay'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             ),
           ),
           // Which build is on this tablet. Before sign-in, because that is
