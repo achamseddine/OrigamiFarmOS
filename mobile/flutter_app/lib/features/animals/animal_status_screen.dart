@@ -271,7 +271,8 @@ class _FilterChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: selected ? FarmColors.cedar : FarmColors.card,
+      // Fill carries selection; the outline is gone.
+      color: selected ? FarmColors.cedar : FarmColors.sand,
       borderRadius: BorderRadius.circular(FarmRadii.pill),
       child: InkWell(
         onTap: onTap,
@@ -280,10 +281,6 @@ class _FilterChip extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 40),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(FarmRadii.pill),
-            border: Border.all(color: selected ? FarmColors.cedar : FarmColors.border),
-          ),
           child: Text(
             label,
             style: TextStyle(
@@ -374,8 +371,11 @@ class _AnimalCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: FarmRadii.card,
-        child: Container(
-          decoration: BoxDecoration(borderRadius: FarmRadii.card, border: Border.all(color: FarmColors.border)),
+        // The card has no outline any more, so the photo has to meet the
+        // card's own corners exactly — a clip does that, where the old
+        // border was hiding the seam.
+        child: ClipRRect(
+          borderRadius: FarmRadii.card,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

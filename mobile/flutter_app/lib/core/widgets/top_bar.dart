@@ -69,9 +69,10 @@ class _NotificationBell extends StatelessWidget {
               Container(
                 width: kFarmTouchTarget,
                 height: kFarmTouchTarget,
-                decoration: BoxDecoration(
-                  color: FarmColors.card,
-                  border: Border.all(color: FarmColors.border),
+                // Sand rather than white-with-a-border: the bar sits on
+                // paper, so a filled disc separates itself without a line.
+                decoration: const BoxDecoration(
+                  color: FarmColors.sand,
                   shape: BoxShape.circle,
                 ),
                 child: const Center(child: AppIcon(FarmIcon.bell, size: 18, color: FarmColors.ink)),

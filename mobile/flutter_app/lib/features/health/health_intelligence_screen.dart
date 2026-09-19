@@ -196,17 +196,15 @@ class _AlertRow extends StatelessWidget {
       RecommendationPriority.info => context.t('priorityInfo').toUpperCase(),
     };
     return Material(
-      color: selected ? FarmColors.tint(FarmColors.danger, 0.06) : FarmColors.card,
+      // The selected recommendation takes a wash of the alert colour; the
+      // rest take the page's paper. No outlines either way.
+      color: selected ? FarmColors.tint(FarmColors.danger, 0.12) : FarmColors.stone,
       borderRadius: BorderRadius.circular(FarmRadii.sm),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(FarmRadii.sm),
         child: Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(FarmRadii.sm),
-            border: Border.all(color: selected ? FarmColors.danger.withOpacity(0.4) : FarmColors.border),
-          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -360,7 +358,7 @@ class _EvidenceTile extends StatelessWidget {
     final concerning = evidence.trendDown == true;
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.border)),
+      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.sm)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

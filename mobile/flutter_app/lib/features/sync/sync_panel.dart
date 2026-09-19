@@ -221,8 +221,9 @@ class _QueuedRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.sm),
       decoration: BoxDecoration(
-        color: FarmColors.card,
-        border: Border.all(color: failed ? FarmColors.danger.withOpacity(0.4) : FarmColors.border),
+        // A failed item washes red; a queued one takes paper. The row no
+        // longer needs an outline to sit apart from the sheet.
+        color: failed ? FarmColors.tint(FarmColors.danger, 0.10) : FarmColors.stone,
         borderRadius: BorderRadius.circular(FarmRadii.sm),
       ),
       child: Column(

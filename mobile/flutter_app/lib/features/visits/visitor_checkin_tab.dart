@@ -148,7 +148,7 @@ class _FeedbackFormState extends State<_FeedbackForm> {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(border: Border.all(color: FarmColors.border), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.sm)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

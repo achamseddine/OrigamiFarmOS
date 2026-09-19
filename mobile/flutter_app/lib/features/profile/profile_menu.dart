@@ -77,8 +77,7 @@ class UserMenuButton extends StatelessWidget {
           padding: const EdgeInsets.only(left: 2, right: 4),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(FarmRadii.pill),
-            border: Border.all(color: FarmColors.border),
-            color: FarmColors.card,
+            color: FarmColors.sand,
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

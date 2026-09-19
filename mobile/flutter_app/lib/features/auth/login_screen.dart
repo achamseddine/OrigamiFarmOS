@@ -196,7 +196,9 @@ class _LoginForm extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.xl),
-      decoration: BoxDecoration(color: FarmColors.card, borderRadius: FarmRadii.panel, border: Border.all(color: FarmColors.border), boxShadow: FarmShadows.elevated),
+      // The one panel in the product that really does float above the page,
+      // so it keeps its elevation — but not the outline on top of it.
+      decoration: BoxDecoration(color: FarmColors.card, borderRadius: FarmRadii.panel, boxShadow: FarmShadows.elevated),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

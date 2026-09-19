@@ -43,10 +43,10 @@ class FarmTheme {
         color: FarmColors.card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: FarmRadii.card,
-          side: const BorderSide(color: FarmColors.border, width: 1),
-        ),
+        // Borderless, like SectionCard: white on warm paper is the whole
+        // separation, so a Material Card dropped into a screen matches the
+        // panels around it instead of wearing an outline they no longer have.
+        shape: RoundedRectangleBorder(borderRadius: FarmRadii.card),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: FarmColors.mist,

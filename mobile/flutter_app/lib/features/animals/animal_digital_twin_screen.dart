@@ -378,7 +378,7 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: FarmColors.card,
+      color: FarmColors.stone,
       borderRadius: BorderRadius.circular(FarmRadii.sm),
       child: InkWell(
         onTap: action.onTap,
@@ -386,7 +386,6 @@ class _ActionButton extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: kFarmTouchTarget),
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.border)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

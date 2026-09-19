@@ -220,9 +220,11 @@ class _ModuleRow extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: assigned ? FarmColors.tint(FarmColors.cedar, 0.05) : Colors.transparent,
+          // Assigned modules take a cedar wash, the rest the page's paper.
+          // The switch already says which is which; an outline on both
+          // was saying it a third time.
+          color: assigned ? FarmColors.tint(FarmColors.cedar, 0.10) : FarmColors.stone,
           borderRadius: BorderRadius.circular(FarmRadii.sm),
-          border: Border.all(color: assigned ? FarmColors.cedar.withOpacity(0.4) : FarmColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

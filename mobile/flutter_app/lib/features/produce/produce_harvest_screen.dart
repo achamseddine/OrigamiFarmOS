@@ -328,7 +328,7 @@ class _ProduceGrid extends StatelessWidget {
             Container(
               width: w,
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.border)),
+              decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.sm)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

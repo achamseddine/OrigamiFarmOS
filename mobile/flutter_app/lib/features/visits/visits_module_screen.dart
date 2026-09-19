@@ -117,17 +117,17 @@ class _TabBar extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: Material(
-                color: i == selected ? FarmColors.cedar : FarmColors.card,
+                // Selection is carried by the fill alone: cedar when
+                // chosen, sand when not. The outline every tab used to
+                // wear said "tappable" a second time and made the strip
+                // read as a row of web buttons.
+                color: i == selected ? FarmColors.cedar : FarmColors.sand,
                 borderRadius: BorderRadius.circular(FarmRadii.pill),
                 child: InkWell(
                   onTap: () => onSelect(i),
                   borderRadius: BorderRadius.circular(FarmRadii.pill),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(FarmRadii.pill),
-                      border: Border.all(color: i == selected ? FarmColors.cedar : FarmColors.border),
-                    ),
                     child: Text(
                       kVisitsTabLabels[i],
                       style: FarmTypography.textTheme.labelMedium?.copyWith(color: i == selected ? FarmColors.white : FarmColors.ink),

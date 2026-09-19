@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
-import '../theme/spacing.dart';
 
 /// Status is never color-only (tech spec §18 accessibility rule): every pill
 /// carries an icon and a label alongside its tint.
@@ -58,9 +57,12 @@ class StatusPill extends StatelessWidget {
         horizontal: dense ? 8 : 12,
         vertical: dense ? 4 : 7,
       ),
+      // A folded paper tag, not a web chip: the fully-round pill was the
+      // shape that read most like a browser badge. A small radius keeps the
+      // tag legible at a glance and matches the buttons.
       decoration: BoxDecoration(
         color: FarmColors.tint(color, 0.14),
-        borderRadius: BorderRadius.circular(FarmRadii.pill),
+        borderRadius: BorderRadius.circular(dense ? 5 : 6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

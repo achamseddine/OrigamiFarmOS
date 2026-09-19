@@ -52,33 +52,31 @@ class PriorityCard extends StatelessWidget {
     final accent = priorityColor(priority.priority);
     final icon = _iconForModule[priority.moduleCode] ?? FarmIcon.warning;
 
+    // Paper fill inside the white panel this sits in, like every other row
+    // in the product. The card used to carry a border on three sides plus
+    // a 3px accent rail on the fourth — but the roundel below is already
+    // tinted with that same accent and the row ends in a status pill, so
+    // the rail was the third telling of one fact. Urgency reads from the
+    // roundel and the pill; the row is allowed to be a row.
     return Material(
-      color: FarmColors.card,
-      borderRadius: BorderRadius.circular(FarmRadii.md),
+      color: FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.sm + 2),
       child: InkWell(
         onTap: () => EntityRouter.openEntityOrExplain(context, priority.entityType, priority.entityId),
-        borderRadius: BorderRadius.circular(FarmRadii.md),
+        borderRadius: BorderRadius.circular(FarmRadii.sm + 2),
         child: Container(
-          padding: EdgeInsets.all(dense ? 10 : FarmSpacing.md),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(FarmRadii.md),
-            // A colour-coded leading edge, so urgency reads at a glance
-            // across the room without having to read the pill.
-            border: Border(
-              top: const BorderSide(color: FarmColors.border),
-              right: const BorderSide(color: FarmColors.border),
-              bottom: const BorderSide(color: FarmColors.border),
-              left: BorderSide(color: accent, width: 3),
-            ),
-          ),
+          padding: EdgeInsets.all(dense ? 12 : FarmSpacing.md),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(color: FarmColors.tint(accent, 0.14), shape: BoxShape.circle),
-                child: Center(child: AppIcon(icon, size: 17, color: accent)),
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: FarmColors.tint(accent, 0.18),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(child: AppIcon(icon, size: 18, color: accent)),
               ),
               const SizedBox(width: 10),
               Expanded(

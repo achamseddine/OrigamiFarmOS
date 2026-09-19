@@ -115,9 +115,10 @@ class _CalendarDayRowState extends State<_CalendarDayRow> {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        border: Border.all(color: FarmColors.border),
         borderRadius: BorderRadius.circular(FarmRadii.sm),
-        color: isOpen ? FarmColors.tint(FarmColors.success, 0.06) : FarmColors.card,
+        // Open days carry a wash of the success colour; closed days take
+        // the page's paper. The fill is the whole signal — no outline.
+        color: isOpen ? FarmColors.tint(FarmColors.success, 0.10) : FarmColors.stone,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

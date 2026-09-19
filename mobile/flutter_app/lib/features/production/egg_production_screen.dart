@@ -190,7 +190,7 @@ class _FlockCard extends StatelessWidget {
     };
     return Container(
       padding: const EdgeInsets.all(FarmSpacing.md),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.md), border: Border.all(color: FarmColors.border)),
+      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -235,7 +235,6 @@ class _WeeklyInsightCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: FarmColors.tint(FarmColors.muted, 0.12),
           borderRadius: BorderRadius.circular(FarmRadii.md),
-          border: Border.all(color: FarmColors.border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

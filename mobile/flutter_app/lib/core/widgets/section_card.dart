@@ -3,8 +3,14 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
-/// Generic rounded card wrapper used by every panel so radius / shadow /
-/// padding stay consistent across the 10 screens.
+/// The grouped panel every screen is built from.
+///
+/// It used to carry a 1px border *and* a 28px drop shadow, on a beige
+/// ground. Both are gone: white on warm paper is already the whole
+/// separation, and a shadow claims the panel floats above the page, which
+/// on a farm tablet nothing does. What is left is fill, radius and
+/// padding — which is what a grouped list looks like on a tablet, and is
+/// the single edit that restyles all thirty screens that use this.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,
@@ -31,7 +37,6 @@ class SectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: FarmColors.card,
         borderRadius: FarmRadii.card,
-        border: Border.all(color: FarmColors.border),
         boxShadow: elevated ? FarmShadows.elevated : FarmShadows.card,
       ),
       padding: padding,
