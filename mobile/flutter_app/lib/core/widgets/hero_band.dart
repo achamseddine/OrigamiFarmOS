@@ -25,6 +25,7 @@ class HeroBand extends StatelessWidget {
     this.subtitle,
     this.icon,
     this.actions = const [],
+    this.trailing,
     this.height = 170,
   });
 
@@ -38,6 +39,12 @@ class HeroBand extends StatelessWidget {
   /// They sit at the far edge on a wide tablet and under the title when
   /// there is no room for that.
   final List<Widget> actions;
+
+  /// Anything else that belongs on the band but is not a button — the
+  /// morning screen's motto, a module's status pill, a harvest reminder.
+  /// Shown at the far edge on a wide tablet, dropped on a narrow one,
+  /// because it is never the thing the screen is for.
+  final Widget? trailing;
 
   final double height;
 
@@ -117,6 +124,10 @@ class HeroBand extends StatelessWidget {
                           if (actions.isNotEmpty) ...[
                             const SizedBox(width: FarmSpacing.md),
                             Wrap(spacing: FarmSpacing.sm, runSpacing: FarmSpacing.sm, children: actions),
+                          ],
+                          if (trailing != null) ...[
+                            const SizedBox(width: FarmSpacing.lg),
+                            trailing!,
                           ],
                         ],
                       )

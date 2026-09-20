@@ -12,3 +12,9 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# The one deliberate exception: the shared *debug* signing key, so that
+# every CI build carries the same signer and installs over the last one.
+# It holds no secret (standard "android"/"androiddebugkey" credentials).
+# See signing/README.md. A store upload key must never be committed.
+!signing/debug.keystore

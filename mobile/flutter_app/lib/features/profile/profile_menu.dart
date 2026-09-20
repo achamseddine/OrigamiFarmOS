@@ -9,7 +9,6 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
-import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
 import '../../sync/sync_controller.dart';
@@ -219,17 +218,41 @@ class _SignedInHeader extends StatelessWidget {
         if (user?.email != null)
           Text(user.email as String, style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
         const SizedBox(height: 6),
-        Row(children: [
-          StatusPill(label: role.replaceAll('_', ' '), level: FarmStatusLevel.info, dense: true),
-          const SizedBox(width: 6),
-          Text(
-            access.isFullAccess
+        // Two chips, each with its own icon, per the pack's profile
+        // header: who this person is on the farm, and how much of it they
+        // look after. Same shape as the status pills so they read as tags.
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          _HeaderChip(icon: FarmIcon.people, label: role.replaceAll('_', ' ')),
+          _HeaderChip(
+            icon: FarmIcon.inventory,
+            label: access.isFullAccess
                 ? context.t('allModules')
                 : '$moduleCount ${context.t(moduleCount == 1 ? 'moduleSingular' : 'modulePlural')}',
-            style: const TextStyle(fontSize: 11, color: FarmColors.muted),
           ),
         ]),
       ],
+    );
+  }
+}
+
+class _HeaderChip extends StatelessWidget {
+  const _HeaderChip({required this.icon, required this.label});
+  final FarmIcon icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: FarmColors.tint(FarmColors.cedar2, 0.14),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        AppIcon(icon, size: 12, color: FarmColors.cedar2),
+        const SizedBox(width: 5),
+        Text(label, style: const TextStyle(color: FarmColors.cedar2, fontWeight: FontWeight.w700, fontSize: 11)),
+      ]),
     );
   }
 }

@@ -30,10 +30,28 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Android refuses to install an APK over an app signed with a
+        // different certificate. The stock debug key lives in
+        // ~/.android/debug.keystore and is generated on first use, so a
+        // fresh CI runner minted a *new* key on every build — each APK then
+        // silently refused to install over the previous one, and tablets
+        // kept running old builds that looked freshly updated. This key is
+        // committed (see ../signing/README.md) so every build, on CI or a
+        // laptop, carries the same signer and updates in place.
+        getByName("debug") {
+            storeFile = file("../signing/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Sideload builds are signed with the committed debug key. A
+            // Play Store release needs its own upload key — never this one.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

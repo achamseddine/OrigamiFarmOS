@@ -81,6 +81,18 @@ class InventoryTransaction {
         'linked_entity_type': linkedEntityType,
         'linked_entity_id': linkedEntityId,
       };
+
+  /// Backend `InventoryMovementOut` shape (`GET /feed/transactions`).
+  factory InventoryTransaction.fromJson(Map<String, dynamic> json) => InventoryTransaction(
+        id: json['id'] as String,
+        itemId: json['inventory_item_id'] as String,
+        direction: json['direction'] as String,
+        quantity: (json['quantity'] as num).toDouble(),
+        reason: json['reason'] as String? ?? '',
+        createdAt: DateTime.parse(json['occurred_at'] as String),
+        linkedEntityType: json['linked_entity_type'] as String?,
+        linkedEntityId: json['linked_entity_id'] as String?,
+      );
 }
 
 class FeedingPlanLine {

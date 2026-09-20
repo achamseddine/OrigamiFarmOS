@@ -38,6 +38,30 @@ import '../../core/widgets/hero_band.dart';
 /// weekly-weather widget had no real backend source and is gone entirely;
 /// the fixed "Today's Timeline" schedule is now built from the briefing's
 /// own (real, farm-specific) `tasks` list sorted by due time.
+/// The farm's line, at the far end of the morning band — the one place
+/// in the app the brand speaks in its own voice, from the pack's hero
+/// mock-up. It is two lines because the first is the name of the thing
+/// and the second is what it does.
+class _Motto extends StatelessWidget {
+  const _Motto();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(context.t('heroMotto1'), style: FarmTypography.display(size: 24).copyWith(color: FarmColors.cedar)),
+        const SizedBox(height: 2),
+        Text(
+          context.t('heroMotto2'),
+          style: FarmTypography.textTheme.bodyMedium?.copyWith(color: FarmColors.cedar2, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
 class MorningBriefingScreen extends StatefulWidget {
   const MorningBriefingScreen({super.key});
 
@@ -95,6 +119,7 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
                 : '${context.t('goodMorning')}، $managerName',
             subtitle: context.t('morningSubline'),
             icon: FarmIcon.sun,
+            trailing: const _Motto(),
           ),
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),

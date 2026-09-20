@@ -33,11 +33,23 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
   @override
   Widget build(BuildContext context) {
     final animals = context.watch<AnimalsProvider>().animals;
-    final filtered = animals.where((a) {
+    final matching = animals.where((a) {
       final speciesOk = _speciesFilter == null || a.species == _speciesFilter;
       final healthOk = _healthFilter == null || a.status == _healthFilter;
       return speciesOk && healthOk;
     }).toList();
+    // Whoever needs looking at comes first — under treatment, then under
+    // observation, then everyone else — and within each group the order
+    // the farm keeps them in. The grid is titled accordingly: it is not
+    // "recent animals", it is the animals to go and see.
+    final filtered = [
+      for (final status in const [
+        AnimalHealthStatus.underTreatment,
+        AnimalHealthStatus.underObservation,
+        AnimalHealthStatus.healthy,
+      ])
+        ...matching.where((a) => a.status == status),
+    ];
 
     final total = animals.length;
     final healthyCount = animals.where((a) => a.status == AnimalHealthStatus.healthy).length;
@@ -124,7 +136,8 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                     ),
             );
             final animalsGrid = SectionCard(
-              title: context.t('recentAnimals'),
+              title: context.t('priorityAnimals'),
+              subtitle: context.t('priorityAnimalsSub'),
               child: filtered.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 24),

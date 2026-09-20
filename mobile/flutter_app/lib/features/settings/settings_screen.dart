@@ -6,6 +6,8 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../providers/tasks_provider.dart';
@@ -52,7 +54,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('navSettings'), style: FarmTypography.display(size: 28)),
+          HeroBand(
+            title: context.t('navSettings'),
+            subtitle: context.t('settingsSubtitle'),
+            icon: FarmIcon.settings,
+          ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
             title: 'My account',

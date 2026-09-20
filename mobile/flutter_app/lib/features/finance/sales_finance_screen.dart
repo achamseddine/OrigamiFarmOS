@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/charts/line_trend_chart.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../providers/sales_provider.dart';
@@ -44,17 +45,13 @@ class SalesFinanceScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Row(children: [
-                  const AppIcon(FarmIcon.sun, size: 22, color: FarmColors.gold),
-                  const SizedBox(width: 8),
-                  Text(context.t('dailySummaryTitle'), style: FarmTypography.display(size: 26)),
-                ]),
-              ),
-              OutlinedButton.icon(onPressed: () {}, icon: const Icon(Icons.bar_chart, size: 16), label: Text(context.t('compareWithYesterday'))),
-            ],
+          // The "compare with yesterday" button that used to sit here did
+          // nothing when tapped; the seven-day profit chart below is the
+          // comparison, so the dead control is gone rather than moved.
+          HeroBand(
+            title: context.t('dailySummaryTitle'),
+            subtitle: context.t('salesSubtitle'),
+            icon: FarmIcon.coins,
           ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {

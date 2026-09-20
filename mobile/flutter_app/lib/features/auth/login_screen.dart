@@ -553,7 +553,7 @@ class _SignInCard extends StatelessWidget {
           Align(
             alignment: AlignmentDirectional.centerEnd,
             child: Text(
-              'App $kAppVersion',
+              kAppStamp,
               style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted),
             ),
           ),

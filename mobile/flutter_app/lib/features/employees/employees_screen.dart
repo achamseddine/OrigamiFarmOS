@@ -5,6 +5,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
@@ -53,35 +54,26 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.t('employeesAndResponsibilities'), style: FarmTypography.display(size: 28)),
-                    const SizedBox(height: 2),
-                    Text(context.t('employeesSubtitle'), style: FarmTypography.textTheme.bodyMedium),
-                  ],
-                ),
-              ),
+          HeroBand(
+            title: context.t('employeesAndResponsibilities'),
+            subtitle: context.t('employeesSubtitle'),
+            icon: FarmIcon.people,
+            actions: [
               if (canViewAudit)
-                OutlinedButton.icon(
+                HeroAction(
+                  icon: Icons.history,
+                  label: context.t('auditHistory'),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AuditHistoryScreen()),
                   ),
-                  icon: const Icon(Icons.history, size: 17),
-                  label: Text(context.t('auditHistory')),
                 ),
-              if (canCreate) ...[
-                const SizedBox(width: 8),
-                FilledButton.icon(
+              if (canCreate)
+                HeroAction(
+                  primary: true,
+                  icon: Icons.add,
+                  label: context.t('addEmployee'),
                   onPressed: () => showEmployeeForm(context),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(context.t('addEmployee')),
                 ),
-              ],
             ],
           ),
           const SizedBox(height: FarmSpacing.md),

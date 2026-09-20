@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/charts/line_trend_chart.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
@@ -82,9 +83,11 @@ class EggProductionScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('eggProductionTitle'), style: FarmTypography.display(size: 28)),
-          const SizedBox(height: 2),
-          Text(context.t('eggProductionSubtitle'), style: FarmTypography.textTheme.bodyMedium),
+          HeroBand(
+            title: context.t('eggProductionTitle'),
+            subtitle: context.t('eggProductionSubtitle'),
+            icon: FarmIcon.egg,
+          ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 1100 ? 5 : (c.maxWidth > 700 ? 3 : 2);

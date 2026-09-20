@@ -10,11 +10,11 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
-import '../../providers/feed_provider.dart';
 import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
+import '../feed/feed_movement_dialog.dart';
 import '../produce/agriculture_forms.dart';
 import '../../core/widgets/directional_icon.dart';
 
@@ -513,127 +513,11 @@ class _EggDialogState extends State<_EggDialog> {
   }
 }
 
-Future<void> _recordFeed(BuildContext context) {
-  return showDialog<void>(context: context, builder: (_) => const _FeedOutDialog());
-}
-
-class _FeedOutDialog extends StatefulWidget {
-  const _FeedOutDialog();
-
-  @override
-  State<_FeedOutDialog> createState() => _FeedOutDialogState();
-}
-
-class _FeedOutDialogState extends State<_FeedOutDialog> {
-  String? _itemId;
-  String _reason = 'feeding';
-  final _quantity = TextEditingController();
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _quantity.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = context.watch<FeedProvider>().items;
-    if (items.isEmpty) {
-      return AlertDialog(
-        title: Text(context.t('feed')),
-        content: Text(context.t('noFeedItems'), style: FarmTypography.textTheme.bodyMedium),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('close'))),
-        ],
-      );
-    }
-    final selected = _itemId ?? items.first.id;
-
-    return AlertDialog(
-      title: Text(context.t('feed')),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String>(
-              value: selected,
-              decoration: InputDecoration(labelText: context.t('feedItem')),
-              items: [
-                for (final item in items)
-                  DropdownMenuItem(
-                    value: item.id,
-                    child: Text('${item.name} — ${item.currentQty.toStringAsFixed(0)} ${item.unit}'),
-                  ),
-              ],
-              onChanged: (v) => setState(() => _itemId = v ?? selected),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _quantity,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: '${context.t('quantity')} (kg)'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _reason,
-              decoration: InputDecoration(labelText: context.t('reason')),
-              items: [
-                DropdownMenuItem(value: 'feeding', child: Text(context.t('reasonFeeding'))),
-                DropdownMenuItem(value: 'waste', child: Text(context.t('reasonWaste'))),
-                DropdownMenuItem(value: 'transfer', child: Text(context.t('reasonTransfer'))),
-              ],
-              onChanged: (v) => setState(() => _reason = v ?? _reason),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(
-          onPressed: _saving ? null : () => _submit(selected),
-          child: _saving
-              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(context.t('save')),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _submit(String itemId) async {
-    final quantity = double.tryParse(_quantity.text.trim());
-    if (quantity == null || quantity <= 0) {
-      setState(() => _error = context.t('valueMustBePositive'));
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final result = await context.read<FeedProvider>().recordDistribution(
-          itemId: itemId,
-          quantityKg: quantity,
-          reason: _reason,
-        );
-    if (!mounted) return;
-    if (result.success) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
-    } else {
-      setState(() {
-        _saving = false;
-        _error = result.error;
-      });
-    }
-  }
-}
+/// The centre button's "feed" tile means feed that was *used* — that is
+/// the thing a worker records in the moment. Feed that arrived is entered
+/// from the feed screen, where the delivery is being checked in anyway.
+Future<void> _recordFeed(BuildContext context) =>
+    showFeedMovementDialog(context, direction: FeedMovementDirection.outbound);
 
 Future<void> _newTask(BuildContext context) {
   return showDialog<void>(context: context, builder: (_) => const _TaskDialog());

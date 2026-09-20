@@ -5,6 +5,8 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/task.dart';
@@ -35,11 +37,10 @@ class TasksScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('navTasks'), style: FarmTypography.display(size: 28)),
-          const SizedBox(height: 2),
-          Text(
-            user.isManager ? context.t('tasksSubtitleManager') : context.t('tasksSubtitleWorker'),
-            style: FarmTypography.textTheme.bodyMedium,
+          HeroBand(
+            title: context.t('navTasks'),
+            subtitle: user.isManager ? context.t('tasksSubtitleManager') : context.t('tasksSubtitleWorker'),
+            icon: FarmIcon.task,
           ),
           const SizedBox(height: FarmSpacing.md),
           _NewTaskForm(user: user, roster: provider.roster),

@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/charts/bar_trend_chart.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
@@ -51,6 +52,31 @@ List<String> _last7DaysLabels(BuildContext context) => [
         : (i == 1 ? context.t('yesterday') : context.t('daysAgoShort').replaceFirst('{n}', '$i')),
 ];
 
+/// The "ready soon" note on the hero band. A field whose harvest date is
+/// within two days is the one thing on this screen that cannot wait.
+class _HarvestReminder extends StatelessWidget {
+  const _HarvestReminder({required this.field});
+  final Field field;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = context
+        .t('harvestSoon')
+        .replaceAll('{crop}', field.cropType ?? context.t('harvest'))
+        .replaceAll('{field}', field.name);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 300),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.notifications_active_outlined, color: FarmColors.warning, size: 18),
+        const SizedBox(width: 8),
+        Flexible(child: Text(text, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
+      ]),
+    );
+  }
+}
+
 class ProduceHarvestScreen extends StatelessWidget {
   const ProduceHarvestScreen({super.key});
 
@@ -88,30 +114,11 @@ class ProduceHarvestScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.t('produceHarvestTitle'), style: FarmTypography.display(size: 28)),
-                    const SizedBox(height: 2),
-                    Text(context.t('produceHarvestSubtitle'), style: FarmTypography.textTheme.bodyMedium),
-                  ],
-                ),
-              ),
-              if (upcoming != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.14), borderRadius: BorderRadius.circular(FarmRadii.sm)),
-                  child: Row(children: [
-                    const Icon(Icons.notifications_active_outlined, color: FarmColors.warning, size: 18),
-                    const SizedBox(width: 8),
-                    Text('Reminder: ${upcoming.cropType ?? 'Crop'} in ${upcoming.name} ready for harvest soon.', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-            ],
+          HeroBand(
+            title: context.t('produceHarvestTitle'),
+            subtitle: context.t('produceHarvestSubtitle'),
+            icon: FarmIcon.leaf,
+            trailing: upcoming == null ? null : _HarvestReminder(field: upcoming),
           ),
           const SizedBox(height: FarmSpacing.md),
           // Tech spec §14: the agriculture employee's actions, each shown

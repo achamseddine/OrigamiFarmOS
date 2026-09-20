@@ -65,8 +65,17 @@ jobs:
       # sideloaded last. The server reports its own build the same way at
       # GET /health; between the two, "no change, same behaviour" can be
       # checked instead of guessed.
+      #
+      # The run number becomes the Android versionCode (and the visible
+      # "0.1.N" build name). It only ever goes up, so Android treats each
+      # build as an upgrade of the last one; with versionCode pinned at 1
+      # every APK looked like the same app version and a tablet could
+      # keep an old build while appearing to have been updated.
       - run: |
           flutter build apk --${{ inputs.build-mode || 'release' }} \
+            --build-number=${{ github.run_number }} \
+            --build-name=0.1.${{ github.run_number }} \
+            --dart-define=APP_BUILD="0.1.${{ github.run_number }}" \
             --dart-define=APP_VERSION="$(git rev-parse --short HEAD)"
 
       - uses: actions/upload-artifact@v4
@@ -86,9 +95,19 @@ jobs:
           tag_name: tablet-apk-latest
           name: "Tablet APK (latest automated build)"
           body: |
-            Automated build from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
-            Signed with the Flutter debug keystore — fine for sideloading onto a test
-            tablet, not for Play Store distribution. This release is overwritten by
-            every run of the "Build tablet APK" workflow.
+            **Build 0.1.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+
+            The sign-in screen of this build shows `App 0.1.${{ github.run_number }} · <commit>` under
+            the button. If a tablet shows a different number after installing, the
+            install did not take.
+
+            Signed with the committed debug key (`android/signing/debug.keystore`), so
+            builds from here on install over each other in place. **If the tablet has a
+            build from before that key existed, uninstall the app once first** — Android
+            refuses to replace an app signed with a different key and says "App not
+            installed". Every build after that updates without uninstalling.
+
+            Fine for sideloading onto a test tablet, not for Play Store distribution.
+            This release is overwritten by every run of the "Build tablet APK" workflow.
           prerelease: true
           files: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk

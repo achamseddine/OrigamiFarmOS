@@ -5,6 +5,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/recommendation.dart';
@@ -34,9 +35,11 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('healthIntelligenceTitle'), style: FarmTypography.display(size: 28)),
-          const SizedBox(height: 2),
-          Text(context.t('healthIntelligenceSubtitle'), style: FarmTypography.textTheme.bodyMedium),
+          HeroBand(
+            title: context.t('healthIntelligenceTitle'),
+            subtitle: context.t('healthIntelligenceSubtitle'),
+            icon: FarmIcon.stethoscope,
+          ),
           const SizedBox(height: FarmSpacing.md),
           Row(
             children: [

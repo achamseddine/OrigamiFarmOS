@@ -170,7 +170,7 @@ class FarmStrings {
     'ofFemales': 'of females',
     'acrossSpecies': 'Across 5 species',
     'herdFlockSummary': 'Herd / Flock Summary',
-    'recentAnimals': 'Recent Animals',
+    'recentAnimals': 'Animals to look at',
     'exportReport': 'Export Report',
     'viewAllGroups': 'View all groups',
     'backToHerd': 'Back to Herd',
@@ -672,6 +672,31 @@ class FarmStrings {
     'priority': 'Priority',
     'dueDate': 'Due date',
     'noDueDate': 'No due date',
+    // Hero band motto (v1 asset pack, morning screen)
+    'heroMotto1': 'Our land',
+    'heroMotto2': 'grows a better tomorrow',
+    // Feed screen, per the pack's screen build map
+    'addFeed': 'Add feed',
+    'recordPurchase': 'Feed arrived',
+    'recordDistribution': 'Feed used',
+    'searchFeed': 'Search feed',
+    'allCategories': 'All',
+    'recentMovements': 'Recent movements',
+    'noMovementsYet': 'Nothing has moved in or out yet.',
+    'movementIn': 'Added',
+    'movementOut': 'Used',
+    'reasonPurchase': 'Bought',
+    'reportsNotYet': 'Reports are not ready in this version yet.',
+    'movementFor': 'For',
+    // Animals screen: the grid leads with whoever needs looking at
+    'priorityAnimals': 'Animals to look at',
+    'priorityAnimalsSub': 'Anyone under observation or treatment comes first.',
+    // Module status, shown on the Mouneh / Visits hero band
+    'moduleIncluded': 'Included',
+    'moduleUnavailable': 'Not loading',
+    'harvestSoon': '{crop} in {field} is ready for harvest soon.',
+    'settingsSubtitle': 'Your account, the farm, and the language.',
+    'salesSubtitle': 'What came in and what went out today.',
   };
 
   static const Map<String, String> _ar = {
@@ -833,7 +858,7 @@ class FarmStrings {
     'ofFemales': 'من الإناث',
     'acrossSpecies': 'من ٥ أنواع',
     'herdFlockSummary': 'ملخّص القطيع',
-    'recentAnimals': 'آخر الحيوانات',
+    'recentAnimals': 'أهم الحيوانات',
     'exportReport': 'نزّل تقرير',
     'viewAllGroups': 'شوف كل المجموعات',
     'backToHerd': 'رجوع عالقطيع',
@@ -1332,6 +1357,31 @@ class FarmStrings {
     'priority': 'قدّيش مستعجل',
     'dueDate': 'لإيمتى',
     'noDueDate': 'بلا موعد',
+    // Hero band motto (v1 asset pack, morning screen)
+    'heroMotto1': 'أرضنا',
+    'heroMotto2': 'تنتج مستقبلاً أفضل',
+    // Feed screen, per the pack's screen build map
+    'addFeed': 'ضيف علف',
+    'recordPurchase': 'وصل علف',
+    'recordDistribution': 'انصرف علف',
+    'searchFeed': 'دوّر على علف',
+    'allCategories': 'الكل',
+    'recentMovements': 'آخر الحركات',
+    'noMovementsYet': 'ما في شي دخل أو طلع بعد.',
+    'movementIn': 'إضافة',
+    'movementOut': 'استهلاك',
+    'reasonPurchase': 'شراء',
+    'reportsNotYet': 'التقارير مش جاهزة بهالنسخة بعد.',
+    'movementFor': 'لـ',
+    // Animals screen: the grid leads with whoever needs looking at
+    'priorityAnimals': 'أهم الحيوانات',
+    'priorityAnimalsSub': 'اللي تحت المراقبة أو العلاج بيجوا أول.',
+    // Module status, shown on the Mouneh / Visits hero band
+    'moduleIncluded': 'موجود',
+    'moduleUnavailable': 'مش عم يفتح',
+    'harvestSoon': '{crop} بـ{field} قرب يصير جاهز للقطاف.',
+    'settingsSubtitle': 'حسابك، والمزرعة، واللغة.',
+    'salesSubtitle': 'شو دخل وشو طلع اليوم.',
   };
 
   /// Reads the locale from [Localizations] — which `MaterialApp` is

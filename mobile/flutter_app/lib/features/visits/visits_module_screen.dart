@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../providers/visits_provider.dart';
 import 'activity_manager_tab.dart';
@@ -52,26 +54,16 @@ class _VisitsModuleScreenState extends State<VisitsModuleScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Farm Visits & Agri-Tourism', style: FarmTypography.display(size: 28)),
-                  const SizedBox(height: 2),
-                  Text('Open the farm on your own schedule — bookings, activities and visitor sales, costed automatically.', style: FarmTypography.textTheme.bodyMedium),
-                ],
-              ),
-            ),
-            StatusPill(
-              // Included, not bought: this used to say Active/Inactive,
-              // when it was an add-on a farm turned on for itself.
-              label: provider.isActive ? 'Included' : 'Unavailable',
-              level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
-            ),
-          ],
+        HeroBand(
+          title: context.t('navVisits'),
+          subtitle: context.t('navVisitsSub'),
+          icon: FarmIcon.calendar,
+          trailing: StatusPill(
+            // Included, not bought: this used to say Active/Inactive,
+            // when it was an add-on a farm turned on for itself.
+            label: context.t(provider.isActive ? 'moduleIncluded' : 'moduleUnavailable'),
+            level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
+          ),
         ),
         const SizedBox(height: FarmSpacing.md),
         if (!provider.isActive)
