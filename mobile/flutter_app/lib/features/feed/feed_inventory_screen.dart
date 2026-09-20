@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
@@ -82,13 +83,13 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
               if (canRecord)
                 HeroAction(
                   primary: true,
-                  icon: Icons.add,
+                  icon: FarmIconMap.add,
                   label: context.t('addFeed'),
                   onPressed: () => showFeedMovementDialog(context, direction: FeedMovementDirection.inbound),
                 ),
               if (canExport)
                 HeroAction(
-                  icon: Icons.file_download_outlined,
+                  icon: FarmIconMap.download,
                   label: context.t('exportReport'),
                   // There is no report endpoint yet. Saying so beats a
                   // button that does nothing.
@@ -147,7 +148,7 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
                             for (final item in visible)
                               [
                                 Row(children: [
-                                  AppIcon(_iconFor(item.category), size: 16, color: FarmColors.cedar),
+                                  AppIcon(FarmIconMap.feedCategory(item.category), size: 16, color: FarmColors.cedar),
                                   const SizedBox(width: 8),
                                   Flexible(child: Text(item.name, style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
                                 ]),
@@ -196,17 +197,6 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
         ],
       ),
     );
-  }
-}
-
-FarmIcon _iconFor(String category) {
-  switch (category) {
-    case 'Medicine':
-      return FarmIcon.medicine;
-    case 'Minerals':
-      return FarmIcon.inventory;
-    default:
-      return FarmIcon.feedBag;
   }
 }
 

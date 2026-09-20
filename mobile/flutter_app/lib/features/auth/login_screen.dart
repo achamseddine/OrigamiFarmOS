@@ -368,20 +368,11 @@ class _SignInCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SvgPicture.asset('assets/logo/origami-farmos-mark.svg', width: 46, height: 46),
-              const SizedBox(width: 12),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Origami', style: FarmTypography.display(size: 24, color: FarmColors.ink)),
-                  Text('FarmOS', style: FarmTypography.display(size: 20, color: FarmColors.olive)),
-                ],
-              ),
-            ],
+          // The pack's full logo, as the sign-in reference has it. Not
+          // mirrored for Arabic: a logo is a picture.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SvgPicture.asset('assets/branding/origami-farmos-logo.svg', height: 56, matchTextDirection: false),
           ),
           const SizedBox(height: FarmSpacing.xl),
           Row(

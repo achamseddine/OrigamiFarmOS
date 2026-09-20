@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paper, the app's own ground (design_tokens.json: color.paper). -->
+    <color name="ic_launcher_background">#F7F5F0</color>
+    <color name="splash_background">#F7F5F0</color>
+    <color name="splash_background_night">#0D1713</color>
+</resources>

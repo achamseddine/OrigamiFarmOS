@@ -52,6 +52,7 @@ class _MounehModuleScreenState extends State<MounehModuleScreen> {
           title: context.t('navMouneh'),
           subtitle: context.t('navMounehSub'),
           icon: FarmIcon.package,
+          scenery: false,
           trailing: StatusPill(
             // Included, not bought: this used to say Active/Inactive,
             // when it was an add-on a farm turned on for itself.

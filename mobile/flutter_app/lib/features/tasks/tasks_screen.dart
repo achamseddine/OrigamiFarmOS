@@ -41,6 +41,7 @@ class TasksScreen extends StatelessWidget {
             title: context.t('navTasks'),
             subtitle: user.isManager ? context.t('tasksSubtitleManager') : context.t('tasksSubtitleWorker'),
             icon: FarmIcon.task,
+            scenery: false,
           ),
           const SizedBox(height: FarmSpacing.md),
           _NewTaskForm(user: user, roster: provider.roster),

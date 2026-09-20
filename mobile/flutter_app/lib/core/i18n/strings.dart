@@ -697,12 +697,14 @@ class FarmStrings {
     'harvestSoon': '{crop} in {field} is ready for harvest soon.',
     'settingsSubtitle': 'Your account, the farm, and the language.',
     'salesSubtitle': 'What came in and what went out today.',
+    'aboutApp': 'About',
+    'aboutAppBody': 'Origami FarmOS for the farm tablet. The number above tells support which build you have.',
   };
 
   static const Map<String, String> _ar = {
     'appName': 'Origami FarmOS',
     'justNow': 'الآن',
-    'navMorningBriefing': 'الصبح',
+    'navMorningBriefing': 'الصباح',
     'navAnimals': 'الحيوانات',
     'navFeedInventory': 'العلف',
     'navMilk': 'الحليب',
@@ -1382,6 +1384,8 @@ class FarmStrings {
     'harvestSoon': '{crop} بـ{field} قرب يصير جاهز للقطاف.',
     'settingsSubtitle': 'حسابك، والمزرعة، واللغة.',
     'salesSubtitle': 'شو دخل وشو طلع اليوم.',
+    'aboutApp': 'عن التطبيق',
+    'aboutAppBody': 'Origami FarmOS لتابلت المزرعة. الرقم فوق بيقول للدعم أي نسخة عندك.',
   };
 
   /// Reads the locale from [Localizations] — which `MaterialApp` is

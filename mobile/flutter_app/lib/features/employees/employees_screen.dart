@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
@@ -58,10 +59,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             title: context.t('employeesAndResponsibilities'),
             subtitle: context.t('employeesSubtitle'),
             icon: FarmIcon.people,
+            scenery: false,
             actions: [
               if (canViewAudit)
                 HeroAction(
-                  icon: Icons.history,
+                  icon: FarmIconMap.history,
                   label: context.t('auditHistory'),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AuditHistoryScreen()),
@@ -70,7 +72,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
               if (canCreate)
                 HeroAction(
                   primary: true,
-                  icon: Icons.add,
+                  icon: FarmIconMap.add,
                   label: context.t('addEmployee'),
                   onPressed: () => showEmployeeForm(context),
                 ),

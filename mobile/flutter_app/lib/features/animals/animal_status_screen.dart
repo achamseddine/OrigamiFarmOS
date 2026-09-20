@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
@@ -74,15 +75,18 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
               if (context.watch<AccessProvider>().canCreate(FarmModule.animals))
                 HeroAction(
                   primary: true,
-                  icon: Icons.add,
+                  icon: FarmIconMap.add,
                   label: context.t('addAnimal'),
                   onPressed: () => showAnimalForm(context),
                 ),
               if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export))
                 HeroAction(
-                  icon: Icons.file_download_outlined,
+                  icon: FarmIconMap.download,
                   label: context.t('exportReport'),
-                  onPressed: () {},
+                  // No report endpoint yet; say so rather than do nothing.
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.t('reportsNotYet'))),
+                  ),
                 ),
             ],
           ),
@@ -313,7 +317,7 @@ class _HerdGroupRow extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: const BoxDecoration(color: FarmColors.mist, shape: BoxShape.circle),
-          child: Center(child: AppIcon(_iconForSpecies(group['species'] as String), size: 17, color: FarmColors.cedar)),
+          child: Center(child: AppIcon(FarmIconMap.speciesLabel(group['species'] as String), size: 17, color: FarmColors.cedar)),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -338,19 +342,6 @@ class _HerdGroupRow extends StatelessWidget {
         Text('${group['count']}', style: FarmTypography.textTheme.titleLarge),
       ],
     );
-  }
-
-  FarmIcon _iconForSpecies(String s) {
-    switch (s) {
-      case 'Cow':
-        return FarmIcon.cow;
-      case 'Sheep':
-        return FarmIcon.sheep;
-      case 'Goat':
-        return FarmIcon.goat;
-      default:
-        return FarmIcon.poultry;
-    }
   }
 }
 
@@ -392,7 +383,7 @@ class _AnimalCard extends StatelessWidget {
                     Positioned.fill(
                       child: PhotoSlot(
                         filePath: animal.photoPath,
-                        icon: _iconForSpecies(animal.species),
+                        icon: FarmIconMap.species(animal.species),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(FarmRadii.md - 1)),
                       ),
                     ),
@@ -454,25 +445,5 @@ class _AnimalCard extends StatelessWidget {
     if (score >= 80) return FarmColors.success;
     if (score >= 60) return FarmColors.warning;
     return FarmColors.danger;
-  }
-
-  FarmIcon _iconForSpecies(AnimalSpecies s) {
-    switch (s) {
-      case AnimalSpecies.cow:
-        return FarmIcon.cow;
-      case AnimalSpecies.goat:
-        return FarmIcon.goat;
-      case AnimalSpecies.sheep:
-        return FarmIcon.sheep;
-      case AnimalSpecies.horse:
-        return FarmIcon.horse;
-      case AnimalSpecies.layerHen:
-      case AnimalSpecies.turkey:
-        return FarmIcon.poultry;
-      case AnimalSpecies.other:
-        return FarmIcon.barn;
-      case AnimalSpecies.duck:
-        return FarmIcon.duck;
-    }
   }
 }

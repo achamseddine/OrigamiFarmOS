@@ -3,7 +3,7 @@
      Origami mark on paper (or on the pack's near-black at night). The
      mark is the pack's origami-farmos-mark.png, scaled per density. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/splash_background" />
+    <item android:drawable="@color/splash_background_night" />
     <item>
         <bitmap
             android:gravity="center"

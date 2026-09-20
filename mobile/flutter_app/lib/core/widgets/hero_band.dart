@@ -26,8 +26,21 @@ class HeroBand extends StatelessWidget {
     this.icon,
     this.actions = const [],
     this.trailing,
-    this.height = 170,
+    this.scenery = true,
+    this.height,
   });
+
+  /// Whether the valley is drawn behind the title.
+  ///
+  /// The pack is specific: the header panorama is for Morning, Animals
+  /// and *selected* top-level farm pages, used lightly, and should not
+  /// appear behind every screen. So the pages about the farm itself —
+  /// the animals, the milk, the eggs, the feed, the fields, their
+  /// health — keep it, and the pages about running the business (tasks,
+  /// sales, staff, settings, the two module hubs) take the same band in
+  /// plain paper. Same anatomy everywhere; the artwork only where it
+  /// means something.
+  final bool scenery;
 
   final String title;
   final String? subtitle;
@@ -46,10 +59,13 @@ class HeroBand extends StatelessWidget {
   /// because it is never the thing the screen is for.
   final Widget? trailing;
 
-  final double height;
+  /// Defaults to 170 with scenery, 128 without — a plain band has
+  /// nothing to show above the title.
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
+    final height = this.height ?? (scenery ? 170 : 128);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final wide = screenWidth >= kTabletBreakpoint;
     final gutter = wide ? FarmSpacing.lg : FarmSpacing.md;
@@ -98,22 +114,25 @@ class HeroBand extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              const BekaaBackdrop(scene: BekaaScene.panorama),
-              // The valley is scenery, not content — this keeps it well
-              // behind the words without washing it out to nothing.
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      FarmColors.stone.withOpacity(0.88),
-                      FarmColors.stone.withOpacity(0.55),
-                      FarmColors.stone.withOpacity(0.92),
-                    ],
+              if (scenery) ...[
+                const BekaaBackdrop(scene: BekaaScene.panorama),
+                // The valley is scenery, not content — this keeps it well
+                // behind the words without washing it out to nothing.
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        FarmColors.stone.withOpacity(0.88),
+                        FarmColors.stone.withOpacity(0.55),
+                        FarmColors.stone.withOpacity(0.92),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+              ] else
+                const DecoratedBox(decoration: BoxDecoration(color: FarmColors.surfaceSoft)),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: gutter, vertical: FarmSpacing.md),
                 child: wide
@@ -162,7 +181,10 @@ class HeroAction extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+
+  /// A pack icon — see `FarmIconMap` for the action constants (add,
+  /// download, history) rather than picking one per screen.
+  final FarmIcon icon;
   final VoidCallback? onPressed;
   final bool primary;
 
@@ -172,14 +194,14 @@ class HeroAction extends StatelessWidget {
     if (primary) {
       return FilledButton.icon(
         onPressed: onPressed,
-        icon: Icon(icon, size: 20),
+        icon: AppIcon(icon, size: 20, color: FarmColors.white),
         label: Text(label),
         style: FilledButton.styleFrom(shape: shape, minimumSize: const Size(0, 52)),
       );
     }
     return FilledButton.tonalIcon(
       onPressed: onPressed,
-      icon: Icon(icon, size: 20),
+      icon: AppIcon(icon, size: 20, color: FarmColors.ink),
       label: Text(label),
       style: FilledButton.styleFrom(
         shape: shape,

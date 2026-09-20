@@ -52,6 +52,7 @@ class SalesFinanceScreen extends StatelessWidget {
             title: context.t('dailySummaryTitle'),
             subtitle: context.t('salesSubtitle'),
             icon: FarmIcon.coins,
+            scenery: false,
           ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {

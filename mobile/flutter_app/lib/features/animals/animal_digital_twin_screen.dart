@@ -153,7 +153,7 @@ class _ProfileColumn extends StatelessWidget {
         const SizedBox(height: FarmSpacing.sm),
         AspectRatio(
           aspectRatio: 1.1,
-          child: PhotoSlot(filePath: animal.photoPath, icon: _iconForSpecies(animal.species), label: animal.species.label),
+          child: PhotoSlot(filePath: animal.photoPath, icon: FarmIconMap.species(animal.species), label: animal.species.label),
         ),
         const SizedBox(height: FarmSpacing.md),
         SectionCard(
@@ -203,16 +203,6 @@ class _ProfileColumn extends StatelessWidget {
     if (score >= 60) return FarmColors.warning;
     return FarmColors.danger;
   }
-
-  FarmIcon _iconForSpecies(AnimalSpecies s) => switch (s) {
-        AnimalSpecies.cow => FarmIcon.cow,
-        AnimalSpecies.goat => FarmIcon.goat,
-        AnimalSpecies.sheep => FarmIcon.sheep,
-        AnimalSpecies.horse => FarmIcon.horse,
-        AnimalSpecies.layerHen || AnimalSpecies.turkey => FarmIcon.poultry,
-        AnimalSpecies.duck => FarmIcon.duck,
-        AnimalSpecies.other => FarmIcon.barn,
-      };
 }
 
 class _QuickAction {

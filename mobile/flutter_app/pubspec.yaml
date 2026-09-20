@@ -32,8 +32,11 @@ flutter:
   uses-material-design: true
 
   assets:
+    # Pack `02_brand/logo`: the full logo (sign-in, header, About) and the
+    # mark (compact header; the launcher icon and splash are rendered from
+    # the same mark into android/app/src/main/res).
+    - assets/branding/
     - assets/icons/
-    - assets/logo/
     # Bekaa Valley vector scenery from the v1 UI asset pack — the
     # approved artwork behind the sign-in screen and every screen header.
     - assets/backgrounds/

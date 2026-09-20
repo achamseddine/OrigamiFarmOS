@@ -58,6 +58,7 @@ class _VisitsModuleScreenState extends State<VisitsModuleScreen> {
           title: context.t('navVisits'),
           subtitle: context.t('navVisitsSub'),
           icon: FarmIcon.calendar,
+          scenery: false,
           trailing: StatusPill(
             // Included, not bought: this used to say Active/Inactive,
             // when it was an add-on a farm turned on for itself.

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import '../../app/build_info.dart';
 import '../../auth/session_controller.dart';
 import '../../core/i18n/locale_controller.dart';
 import '../../core/i18n/strings.dart';
@@ -58,6 +60,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: context.t('navSettings'),
             subtitle: context.t('settingsSubtitle'),
             icon: FarmIcon.settings,
+            scenery: false,
+          ),
+          const SizedBox(height: FarmSpacing.md),
+          // About: the full logo and the build stamp, so "which version is
+          // on this tablet" is answerable from inside the app as well as
+          // from the sign-in screen.
+          SectionCard(
+            title: context.t('aboutApp'),
+            child: Row(children: [
+              SvgPicture.asset('assets/branding/origami-farmos-logo.svg', height: 44),
+              const SizedBox(width: FarmSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(kAppStamp, style: FarmTypography.textTheme.titleSmall),
+                    Text(context.t('aboutAppBody'), style: FarmTypography.textTheme.bodySmall),
+                  ],
+                ),
+              ),
+            ]),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(

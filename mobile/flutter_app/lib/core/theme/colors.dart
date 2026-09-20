@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 /// Origami FarmOS palette — paper, ink, and one seal.
 ///
+/// Values are the v1 asset pack's `06_design_tokens/design_tokens.json`
+/// (and its Dart twin, `08_flutter/origami_design_tokens.dart`). Where
+/// the pack's name differs from the one this codebase grew up with, both
+/// names exist and point at the one value, so either reads correctly.
+///
 /// The names are unchanged on purpose: every screen already reads
 /// `FarmColors.cedar`, `FarmColors.gold` and the rest, so swapping the
 /// values restyles the whole product without touching a single screen.
@@ -49,8 +54,15 @@ class FarmColors {
   static const Color cedar2 = Color(0xFF35795A);
   static const Color olive = Color(0xFF35795A);
 
+  /// The pack's name for the same value (`cedar_mid`), kept so code
+  /// written against `08_flutter/origami_design_tokens.dart` reads here.
+  static const Color cedarMid = Color(0xFF35795A);
+
   /// A pale wash of the primary, for icon roundels and tints.
   static const Color mist = Color(0xFFE9EFEA);
+
+  /// Pack name for [mist] (`cedar_pale`).
+  static const Color cedarPale = Color(0xFFE9EFEA);
 
   // --- the seal --------------------------------------------------------
   /// Persimmon. The one bold colour, and the only one that means "now".
@@ -75,6 +87,9 @@ class FarmColors {
   static const Color warning = Color(0xFFA67A2B);
   static const Color warningInk = Color(0xFF8A6320);
   static const Color wheat = Color(0xFFF4ECDC);
+
+  /// Pack name for [wheat] (`warning_pale`).
+  static const Color warningPale = Color(0xFFF4ECDC);
 
   static const Color success = Color(0xFF2F6B4F);
 
