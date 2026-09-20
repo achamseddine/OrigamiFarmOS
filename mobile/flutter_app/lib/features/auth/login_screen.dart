@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../../app/build_info.dart';
 import '../../auth/session_controller.dart';
@@ -9,6 +8,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/bekaa_backdrop.dart';
+import '../../core/widgets/brand_logo.dart';
 import '../../data/local/demo_mode.dart';
 
 /// The sign-in screen, built to the v1 redesign review: the valley filling
@@ -368,11 +368,10 @@ class _SignInCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The pack's full logo, as the sign-in reference has it. Not
-          // mirrored for Arabic: a logo is a picture.
-          Align(
+          // The brand lockup, as the sign-in reference has it.
+          const Align(
             alignment: AlignmentDirectional.centerStart,
-            child: SvgPicture.asset('assets/branding/origami-farmos-logo.svg', height: 56, matchTextDirection: false),
+            child: BrandLogo(height: 56),
           ),
           const SizedBox(height: FarmSpacing.xl),
           Row(

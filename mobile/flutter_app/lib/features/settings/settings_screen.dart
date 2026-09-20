@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import '../../app/build_info.dart';
 import '../../auth/session_controller.dart';
@@ -9,6 +8,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
@@ -69,7 +69,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SectionCard(
             title: context.t('aboutApp'),
             child: Row(children: [
-              SvgPicture.asset('assets/branding/origami-farmos-logo.svg', height: 44),
+              const BrandLogo(height: 44),
               const SizedBox(width: FarmSpacing.lg),
               Expanded(
                 child: Column(

@@ -9,7 +9,7 @@ import '../../features/sync/sync_pill.dart';
 import '../../providers/notifications_provider.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'brand_logo.dart';
 
 /// Sync state, the notification bell, and the signed-in user's menu.
 ///
@@ -44,9 +44,9 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
           // Neither is ever mirrored for Arabic — a brand mark is a
           // picture, not text (RTL guide).
           if (MediaQuery.sizeOf(context).width >= kTabletBreakpoint)
-            SvgPicture.asset('assets/branding/origami-farmos-logo.svg', height: 38, matchTextDirection: false)
+            const BrandLogo(height: 38)
           else
-            SvgPicture.asset('assets/branding/origami-farmos-mark.svg', width: 34, height: 34, matchTextDirection: false),
+            const BrandMark(size: 36),
           const Spacer(),
           const SyncPill(),
           const SizedBox(width: FarmSpacing.md),
