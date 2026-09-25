@@ -4,3 +4,12 @@
 /mobile/.pub/
 /mobile/android/.gradle/
 /mobile/android/app/build/
+
+# Node / backend
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
