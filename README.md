@@ -101,6 +101,29 @@ silently dropped.
 
 See `mobile/flutter_app/README.md` for the full mechanism.
 
+## One animal model for every species
+
+There is no `Cow` class and no `if species == "cow"` anywhere. Every
+animal is one `Animal` record; what the farm can do with it — milk it,
+record a pregnancy, count its eggs, book the farrier, which tag it must
+carry — is *resolved* from configuration: species → sex → life stage →
+management profile → a set of capability codes
+(`backend/app/services/capability_service.py`), with the biological
+invariants applied last so no rule can make a bull pregnant. Species,
+breeds, profiles and the rules are rows served by `GET /species` and
+`GET /species/{code}/configuration`, so adding a species is a
+configuration change, not a release — the test suite proves it by adding
+a camel with no code. Identifiers are typed rows on the animal (ear tag,
+RFID, microchip, leg band, passport…), retired rather than deleted; an
+ear tag is not mandatory any more.
+
+The tablet runs the same resolver on the device
+(`mobile/flutter_app/lib/livestock/capability_resolver.dart`) against the
+cached rules, so the Add Animal form shapes itself offline — a horse asks
+for a microchip, a hen for a leg band, neither for a pregnancy flag on a
+male — and can never disagree with the server. See
+`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md`.
+
 ## MVP Status
 
 The tablet app is operational rather than a demo: no demo mode, no
@@ -111,7 +134,7 @@ support. The FastAPI backend implements every endpoint from the tech
 spec, a flexible per-user/per-module permission model enforced on every
 request, a rule-based recommendation engine (6 rules, unit tested and
 wired end-to-end against real seeded data), and a full audit trail —
-232 backend tests pass. See `backend/README.md` and
+271 backend tests pass. See `backend/README.md` and
 `mobile/flutter_app/README.md` for the detailed "what's complete /
 what's simplified / what remains" breakdown, and
 `product/TRACEABILITY.md` for the full requirement map.

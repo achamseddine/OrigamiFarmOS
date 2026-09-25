@@ -166,10 +166,22 @@ day.
 Every module's responsible employee can actually run their area, not just
 read it:
 
-- **Animals** — Add Animal (the full §13 record: identity, provenance,
-  location, physical, health, production, and financial fields for anyone
-  who also holds Finance), full edit, plus the existing Observe / Treat /
-  Feed / Milk / Move quick actions on the Digital Twin.
+- **Animals** — Add Animal is built from the *resolved capabilities* of
+  the animal being registered, not from a species enum
+  (`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md`): the species list comes from
+  the catalog (`LivestockProvider`), choosing species → sex → life stage →
+  management profile runs the resolver on the device
+  (`lib/livestock/capability_resolver.dart`, the Dart twin of the server's)
+  against cached rules, and the result decides which identifier fields
+  appear and which are required (an ear tag for cattle, a microchip for a
+  horse, a leg band for a hen), whether *pregnant* / *lactating* are asked
+  at all, and what the farm calls a female of the species. It works with
+  no signal, and adding a species on the server adds it here with no app
+  update. The Digital Twin lists the animal's identifiers (add one, retire
+  one — never delete), its life stage and profile, and shows only the
+  sections and quick actions its capabilities allow: no milk card on a
+  hen, no pregnancy line on a bull. Full edit, plus Observe / Treat / Feed
+  / Milk / Move quick actions.
 - **Agriculture** — Add Field, Add Crop Type (crops are farm data; the
   platform ships no crop list), Record Planting, and **Record Harvest**,
   which splits the day's pick into sellable and waste and moves the
