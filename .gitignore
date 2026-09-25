@@ -1,3 +1,18 @@
+/mobile/build/
+/mobile/.dart_tool/
+/mobile/.pub-cache/
+/mobile/.pub/
+/mobile/android/.gradle/
+/mobile/android/app/build/
+
+# Node / backend
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
 # Flutter / Dart
 /mobile/flutter_app/build/
 /mobile/flutter_app/.dart_tool/

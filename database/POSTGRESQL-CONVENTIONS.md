@@ -1,0 +1,3 @@
+# PostgreSQL Implementation Conventions
+
+Database Baseline v1: PostgreSQL 16; UUID PKs; singular snake_case; timestamptz for event/system time; numeric(20,6) quantities; numeric(20,4) money plus currency; explicit UOM; FK deletion defaults RESTRICT/NO ACTION; referenced masters are retired rather than deleted; posted history is immutable and corrected by reversal/amendment; CHECK/UNIQUE/FK constraints enforce structural invariants; configurable taxonomies prefer governed reference data; JSONB is configuration/evidence, not core identity; projections are explicitly non-authoritative/rebuildable; migrations are reviewed and deterministic; farm isolation is server-enforced, with RLS requiring a later ADR.
