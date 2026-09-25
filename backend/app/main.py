@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
     agriculture,
@@ -17,6 +18,7 @@ from app.api.v1 import (
     employees,
     farms,
     feed,
+    feeding,
     health,
     livestock,
     modules,
@@ -35,7 +37,9 @@ from app.api.v1 import (
 )
 from app.core.config import get_settings
 from app.core.idempotency import IdempotencyMiddleware
+from app.services.feed_inventory_service import FeedError
 from app.db.base import Base, engine
+from app.domain import feed_models  # noqa: F401 - ensures the feed architecture's tables are registered on Base.metadata
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
@@ -100,6 +104,14 @@ app.include_router(sync.router, prefix=api_prefix)
 app.include_router(sales.router, prefix=api_prefix)
 app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
+app.include_router(feeding.router, prefix=api_prefix)
+
+
+@app.exception_handler(FeedError)
+async def _feed_error(_request, exc: FeedError):
+    """A feed-architecture rule refused the write. The message is written
+    for the farmer, so it goes out as `detail` like every other refusal."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 app.include_router(observations.router, prefix=api_prefix)
 app.include_router(tasks.router, prefix=api_prefix)
 app.include_router(feed.router, prefix=api_prefix)

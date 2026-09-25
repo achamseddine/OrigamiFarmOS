@@ -239,6 +239,12 @@ def update_group(
     changes = payload.model_dump(exclude_unset=True)
     for field, value in changes.items():
         setattr(group, field, value)
+    # A group that grew, changed stage or changed profile may fit a different
+    # feeding program — a review, never a silent reassignment (feed §10).
+    if {"count", "life_stage", "management_profile", "sex_composition"} & changes.keys():
+        from app.services import feeding_program_service
+
+        feeding_program_service.review_feeding(db, group.farm_id, "group", group, trigger="group_changed", user_id=current_user.id)
     write_audit_log(
         db, farm_id=group.farm_id, user_id=current_user.id, action="group_updated", entity_type="flock",
         entity_id=group.id, module_code=perms.ANIMALS, summary=f"{current_user.name} updated {group.name}",

@@ -60,6 +60,8 @@ class InventoryTransaction {
     required this.createdAt,
     this.linkedEntityType,
     this.linkedEntityId,
+    this.feedProductId,
+    this.lotId,
   });
 
   final String id;
@@ -70,6 +72,11 @@ class InventoryTransaction {
   final DateTime createdAt;
   final String? linkedEntityType;
   final String? linkedEntityId;
+
+  /// Set when the item is a feed product: every feed movement is drawn
+  /// from, or received into, one lot (generic feed architecture §3).
+  final String? feedProductId;
+  final String? lotId;
 
   Map<String, Object?> toMap() => {
         'id': id,
@@ -92,6 +99,8 @@ class InventoryTransaction {
         createdAt: DateTime.parse(json['occurred_at'] as String),
         linkedEntityType: json['linked_entity_type'] as String?,
         linkedEntityId: json['linked_entity_id'] as String?,
+        feedProductId: json['feed_product_id'] as String?,
+        lotId: json['lot_id'] as String?,
       );
 }
 

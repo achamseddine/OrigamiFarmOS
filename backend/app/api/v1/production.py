@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
-from app.services import capability_service
+from app.services import capability_service, feeding_program_service
 from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
@@ -98,6 +98,10 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         recorded_by=payload.recorded_by or current_user.id,
     )
     db.add(record)
+    db.flush()
+    # A yield that crosses a production band asks for a feeding review
+    # (feed architecture §11) — a task, never an automatic ration change.
+    feeding_program_service.review_after_milk(db, animal, user_id=current_user.id)
     write_event(
         db,
         farm_id=animal.farm_id,

@@ -124,6 +124,28 @@ for a microchip, a hen for a leg band, neither for a pregnancy flag on a
 male — and can never disagree with the server. See
 `docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md`.
 
+## One feed system for every species
+
+Feeding is built the same way. There is no dairy feed module and no
+poultry feed module: five generic concepts — feed product (what can be
+fed), formula and version (how a farm-made feed is meant to be mixed,
+immutable once a batch has used it), batch (what was actually mixed,
+from which lots, at what cost), feeding program and version (what a kind
+of animal should get, with applicability rules over species, sex, life
+stage, profile, reproductive and lactation state, production, weight and
+age), and feeding event (what was fed, from which lot) — over one stock
+ledger where lots are the only physical quantities and availability is
+net of quarantined, blocked, recalled, expired and reserved stock. The
+program resolver is explainable and never reassigns silently: a
+lifecycle change or a milk record crossing a band raises a review and
+opens one task, and a person assigns. Usage policies are enforced when a
+formula is composed, a batch is completed, a program is assigned and a
+feeding is recorded. Every lot is traceable both ways — a recall names
+every batch and every animal that ate from it — and days of cover,
+reorder recommendations with reasons and ledger-versus-count
+reconciliations come from the same records. See
+`docs/GENERIC-FEED-ARCHITECTURE.md`.
+
 ## MVP Status
 
 The tablet app is operational rather than a demo: no demo mode, no

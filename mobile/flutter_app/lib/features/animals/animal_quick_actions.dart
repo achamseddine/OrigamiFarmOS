@@ -7,7 +7,7 @@ import '../../core/theme/typography.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/observation.dart';
 import '../../providers/animals_provider.dart';
-import '../../providers/feed_provider.dart';
+import '../feed/feeding_event_dialog.dart';
 
 const _observationTypes = [
   'reduced_appetite',
@@ -434,94 +434,9 @@ class _MoveDialogState extends State<_MoveDialog> {
   }
 }
 
-Future<void> showFeedDialog(BuildContext context, Animal animal) {
-  return showDialog(context: context, builder: (context) => _FeedDialog(animal: animal));
-}
-
-class _FeedDialog extends StatefulWidget {
-  const _FeedDialog({required this.animal});
-  final Animal animal;
-
-  @override
-  State<_FeedDialog> createState() => _FeedDialogState();
-}
-
-class _FeedDialogState extends State<_FeedDialog> {
-  String? _itemId;
-  final _qty = TextEditingController(text: '2');
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _qty.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = context.watch<FeedProvider>().items;
-    _itemId ??= items.isNotEmpty ? items.first.id : null;
-    return AlertDialog(
-      title: Text('${context.t('feed')} — ${widget.animal.name} #${widget.animal.primaryId}'),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String>(
-              value: _itemId,
-              decoration: const InputDecoration(labelText: 'Feed item'),
-              items: [for (final i in items) DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.currentQty.toStringAsFixed(0)} ${i.unit})'))],
-              onChanged: (v) => setState(() => _itemId = v),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _qty,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Quantity (kg)'),
-            ),
-            if (_error != null) Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _submit() async {
-    final qty = double.tryParse(_qty.text.trim());
-    if (qty == null || qty <= 0 || _itemId == null) {
-      setState(() => _error = context.t('valueMustBePositive'));
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final result = await context.read<FeedProvider>().recordDistribution(
-          itemId: _itemId!,
-          quantityKg: qty,
-          reason: 'supplemental_feeding',
-          linkedEntityType: 'animal',
-          linkedEntityId: widget.animal.id,
-        );
-    if (!mounted) return;
-    if (result.success) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
-    } else {
-      setState(() {
-        _saving = false;
-        _error = result.error;
-      });
-    }
-  }
-}
+/// The Feed quick action opens the generic feeding dialog (generic feed
+/// architecture §2.6). The server issues the stock from the feed's lots
+/// and applies its usage policy, so the tablet no longer picks a raw
+/// inventory item and writes a bare movement against it.
+Future<void> showFeedDialog(BuildContext context, Animal animal) =>
+    showFeedingEventDialog(context, subjectType: 'animal', subjectId: animal.id, subjectName: animal.name);

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.security import hash_password
 from app.db.base import Base, get_db
 from app.domain import models
+from app.domain import feed_models
 from app.domain import livestock_models
 from app.domain import mouneh_models  # noqa: F401 - registers Mouneh tables
 from app.domain import visits_models  # noqa: F401 - registers Visits tables
@@ -149,6 +150,25 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/animals/{animal_id}/identifiers", None) for animal_id in animal_ids]
     paths += [(f"/animal-groups/{group_id}", None) for group_id in group_ids]
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]
+    # Generic feed architecture: the whole feed workspace, the plan and the
+    # feeding section of every animal and group profile.
+    feed_product_ids = [p.id for p in db.query(feed_models.FeedProduct).filter_by(farm_id=FARM_ID).all()]
+    formula_ids = [f.id for f in db.query(feed_models.FeedFormula).filter_by(farm_id=FARM_ID).all()]
+    batch_ids = [b.id for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all()]
+    lot_ids = [l.id for l in db.query(feed_models.FeedLot).filter_by(farm_id=FARM_ID).all()]
+    paths += [
+        ("/feed/transactions", {**farm, "days": 30}),
+        ("/feed-products", None), ("/feed-lots", None), ("/feed-formulas", None), ("/feed-batches", None), ("/feed-nutrients", None),
+        ("/feeding-programs", None), ("/feeding-plan/today", None), ("/feeding-events", {"days": 7}),
+        ("/feed-inventory/availability", None), ("/feed-inventory/days-of-cover", None), ("/feed-inventory/reorder-recommendations", None),
+        ("/feed-allocations", None), ("/feed-reorder-policies", None), ("/feed-reconciliations", None), ("/feed-costs", {"days": 30}),
+    ]
+    paths += [(f"/feed-products/{pid}", None) for pid in feed_product_ids]
+    paths += [(f"/feed-formulas/{fid}", None) for fid in formula_ids]
+    paths += [(f"/feed-batches/{bid}", None) for bid in batch_ids]
+    paths += [(f"/feed-lots/{lid}/trace", None) for lid in lot_ids]
+    paths += [(f"/livestock-subjects/{sid}/feeding-plan", None) for sid in animal_ids + group_ids]
+    paths += [(f"/livestock-subjects/{sid}/feeding-history", None) for sid in animal_ids + group_ids]
     return paths
 
 

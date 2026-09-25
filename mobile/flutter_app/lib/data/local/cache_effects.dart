@@ -178,6 +178,75 @@ final List<_Rule> _rules = [
     return [AdjustNumber('/feed/items', itemId, 'current_qty', delta)];
   }),
 
+  // --- The generic feed architecture (docs/GENERIC-FEED-ARCHITECTURE.md).
+  // A feeding recorded out of range shows on the farm-wide event list, on
+  // the animal's or group's own history and in its plan's recent events.
+  // Stock is *not* predicted: the server picks the lots FIFO and prices
+  // the event from them, and a guess here would be wrong in both.
+  _Rule('POST', '/feeding-events', (m) {
+    final subjectId = m.body['subject_id'] as String?;
+    final record = _newRecord(m, extra: {
+      'status': 'recorded',
+      'occurred_at': m.body['occurred_at'] ?? _now(),
+      'components': [
+        for (final c in m.body['components'] as List<dynamic>? ?? const [])
+          if (c is Map<String, dynamic>) <String, dynamic>{...c, 'id': '${m.localId}-${c['feed_product_id']}'},
+      ],
+    });
+    return [
+      AppendRecord('/feeding-events', record),
+      if (subjectId != null) AppendRecord('/livestock-subjects/$subjectId/feeding-history', record),
+      if (subjectId != null) AppendRecord('/livestock-subjects/$subjectId/feeding-plan', record, listKey: 'recent_events'),
+    ];
+  }),
+  _Rule('POST', '/feeding-events/$_id/reverse', (m) => [MergeRecord('/feeding-events', m.ids[0], const {'status': 'reversed'})]),
+  // A delivery is a new lot; what it does to availability comes back with
+  // the next refresh.
+  _Rule('POST', '/feed-lots/receive', (m) {
+    final received = (m.body['quantity'] as num?)?.toDouble() ?? 0;
+    final rejected = (m.body['rejected_quantity'] as num?)?.toDouble() ?? 0;
+    return [
+      AppendRecord('/feed-lots', _newRecord(m, extra: {
+        'lot_code': m.body['lot_code'] ?? m.localId,
+        'source_type': m.body['source_type'] ?? 'purchased',
+        'received_at': m.body['received_at'] ?? _now(),
+        'received_quantity': received,
+        'accepted_quantity': received - rejected,
+        'rejected_quantity': rejected,
+        'quantity_on_hand': received - rejected,
+        'status': 'active',
+      })),
+    ];
+  }),
+  _Rule('PATCH', '/feed-lots/$_id/status', (m) => [MergeRecord('/feed-lots', m.ids[0], {'status': m.body['status']})]),
+  ..._crud('/feed-products'),
+  _Rule('POST', '/feed-formulas', (m) => [AppendRecord('/feed-formulas', _newRecord(m, extra: {'status': 'active'}))]),
+  _Rule('POST', '/feed-batches', (m) => [AppendRecord('/feed-batches', _newRecord(m, extra: {'status': 'in_progress', 'started_at': _now()}))]),
+  _Rule('POST', '/feed-batches/$_id/complete', (m) => [
+        MergeRecord('/feed-batches', m.ids[0], {
+          'status': 'completed',
+          'produced_at': m.body['produced_at'] ?? _now(),
+          if (m.body['actual_quantity'] != null) 'actual_quantity': m.body['actual_quantity'],
+        }),
+      ]),
+  _Rule('POST', '/feed-batches/$_id/quarantine', (m) => [MergeRecord('/feed-batches', m.ids[0], const {'status': 'quarantined'})]),
+  _Rule('POST', '/feeding-programs', (m) => [AppendRecord('/feeding-programs', _newRecord(m, extra: {'status': 'active'}))]),
+  _Rule('POST', '/livestock-subjects/$_id/feeding-assignments', (m) => [
+        AppendRecord('/livestock-subjects/${m.ids[0]}/feeding-assignments', _newRecord(m, extra: {'subject_id': m.ids[0], 'status': 'active', 'valid_from': m.body['valid_from'] ?? _now()})),
+      ]),
+  _Rule('DELETE', '/livestock-subjects/$_id/feeding-assignments/$_id', (m) => [
+        MergeRecord('/livestock-subjects/${m.ids[0]}/feeding-assignments', m.ids[1], {'status': 'ended', 'valid_to': _now()}),
+      ]),
+  _Rule('POST', '/feed-allocations', (m) {
+    final quantity = (m.body['quantity'] as num?)?.toDouble() ?? 0;
+    return [
+      AppendRecord('/feed-allocations', _newRecord(m, extra: {'allocated_quantity': quantity, 'consumed_quantity': 0.0, 'remaining_quantity': quantity, 'status': 'active'})),
+    ];
+  }),
+  _Rule('POST', '/feed-allocations/$_id/release', (m) => [MergeRecord('/feed-allocations', m.ids[0], const {'status': 'released'})]),
+  _Rule('POST', '/feed-reconciliations', (m) => [AppendRecord('/feed-reconciliations', _newRecord(m, extra: {'status': 'open'}))]),
+  _Rule('POST', '/feed-reconciliations/$_id/close', (m) => [MergeRecord('/feed-reconciliations', m.ids[0], {'status': 'closed', if (m.body['explanation'] != null) 'explanation': m.body['explanation']})]),
+
   // Recommendations: the decision is the patch.
   _Rule('PATCH', '/recommendations/$_id/decision', (m) => [MergeRecord('/recommendations', m.ids[0], m.body)]),
 

@@ -5,7 +5,7 @@ import '../core/widgets/nav_rail.dart';
 import '../domain/entities/access.dart';
 import '../features/animals/animal_status_screen.dart';
 import '../features/employees/employees_screen.dart';
-import '../features/feed/feed_inventory_screen.dart';
+import '../features/feed/feed_workspace_screen.dart';
 import '../features/finance/sales_finance_screen.dart';
 import '../features/health/health_intelligence_screen.dart';
 import '../features/morning/morning_briefing_screen.dart';
@@ -48,7 +48,7 @@ final List<_Destination> _destinations = [
       accent: FarmColors.gold, modules: [FarmModule.morningOperations]),
   _Destination(FarmIcon.cow, 'navAnimals', () => const AnimalStatusScreen(),
       accent: FarmColors.cedar, modules: [FarmModule.animals, FarmModule.animalHealth]),
-  _Destination(FarmIcon.feedBag, 'navFeedInventory', () => const FeedInventoryScreen(),
+  _Destination(FarmIcon.feedBag, 'navFeedInventory', () => const FeedWorkspaceScreen(),
       accent: FarmColors.olive, modules: [FarmModule.feedNutrition, FarmModule.inventory]),
   _Destination(FarmIcon.milkBottle, 'navMilk', () => const MilkProductionScreen(),
       accent: FarmColors.milkBlue, modules: [FarmModule.milkProduction]),

@@ -11,7 +11,6 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../domain/entities/animal.dart';
 import '../../domain/entities/production_records.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';

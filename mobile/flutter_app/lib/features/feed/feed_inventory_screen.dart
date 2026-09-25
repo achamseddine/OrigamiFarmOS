@@ -24,7 +24,11 @@ import 'feed_movement_dialog.dart';
 /// list — so "what came in this week" is answered on the same screen as
 /// "what is running out".
 class FeedInventoryScreen extends StatefulWidget {
-  const FeedInventoryScreen({super.key});
+  const FeedInventoryScreen({super.key, this.embedded = false});
+
+  /// True when shown as the first tab of the Feed workspace, which draws
+  /// the band itself — the stock figures and table start straight away.
+  final bool embedded;
 
   @override
   State<FeedInventoryScreen> createState() => _FeedInventoryScreenState();
@@ -75,31 +79,33 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          HeroBand(
-            title: context.t('feedInventoryTitle'),
-            subtitle: context.t('feedInventorySubtitle'),
-            icon: FarmIcon.feedBag,
-            actions: [
-              if (canRecord)
-                HeroAction(
-                  primary: true,
-                  icon: FarmIconMap.add,
-                  label: context.t('addFeed'),
-                  onPressed: () => showFeedMovementDialog(context, direction: FeedMovementDirection.inbound),
-                ),
-              if (canExport)
-                HeroAction(
-                  icon: FarmIconMap.download,
-                  label: context.t('exportReport'),
-                  // There is no report endpoint yet. Saying so beats a
-                  // button that does nothing.
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.t('reportsNotYet'))),
+          if (!widget.embedded) ...[
+            HeroBand(
+              title: context.t('feedInventoryTitle'),
+              subtitle: context.t('feedInventorySubtitle'),
+              icon: FarmIcon.feedBag,
+              actions: [
+                if (canRecord)
+                  HeroAction(
+                    primary: true,
+                    icon: FarmIconMap.add,
+                    label: context.t('addFeed'),
+                    onPressed: () => showFeedMovementDialog(context, direction: FeedMovementDirection.inbound),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: FarmSpacing.md),
+                if (canExport)
+                  HeroAction(
+                    icon: FarmIconMap.download,
+                    label: context.t('exportReport'),
+                    // There is no report endpoint yet. Saying so beats a
+                    // button that does nothing.
+                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(context.t('reportsNotYet'))),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: FarmSpacing.md),
+          ],
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 700 ? 3 : 2;
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;

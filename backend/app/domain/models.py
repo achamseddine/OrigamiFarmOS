@@ -307,6 +307,10 @@ class InventoryTransaction(Base):
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     linked_entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     linked_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The feed lot this movement belongs to (feed architecture §26). Null
+    # for items that are not feed, and for movements made before lots
+    # existed; a feed movement always names its lot.
+    lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

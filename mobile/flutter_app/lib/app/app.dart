@@ -13,6 +13,7 @@ import '../providers/agriculture_provider.dart';
 import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
+import '../providers/feeding_provider.dart';
 import '../providers/livestock_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/notifications_provider.dart';
@@ -96,6 +97,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
+        ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => RecommendationsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => SalesProvider(apiClient: api, farmId: user.farmId)),
@@ -186,6 +188,9 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       ifAllowed(FarmModuleShortcuts.tasks, () => context.read<TasksProvider>().load(includeRoster: access.isFullAccess)),
       ifAllowed(FarmModuleShortcuts.animals, () => context.read<AnimalsProvider>().load()),
       ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedProvider>().load()),
+      // The generic feed architecture: products, lots, formulas, programs,
+      // today's plan. Same module as the stock screen it sits behind.
+      ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedingProvider>().load()),
       ifAllowed(FarmModuleShortcuts.produce, () => context.read<ProductionProvider>().load()),
       ifAllowed(FarmModuleShortcuts.agriculture, () => context.read<AgricultureProvider>().load()),
       ifAllowed(FarmModuleShortcuts.ai, () => context.read<RecommendationsProvider>().load()),

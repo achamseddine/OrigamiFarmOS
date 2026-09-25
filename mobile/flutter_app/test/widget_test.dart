@@ -229,6 +229,81 @@ void main() {
     });
   });
 
+  group('feed architecture write effects', () {
+    test('a feeding shows on the event list, the subject history and its plan — but touches no stock', () {
+      final effects = effectsFor(
+        'POST',
+        '/feeding-events',
+        {
+          'subject_type': 'animal',
+          'subject_id': 'cow-744',
+          'event_type': 'delivered',
+          'components': [
+            {'feed_product_id': 'fp-alfalfa', 'quantity_offered': 4, 'unit': 'kg'},
+          ],
+        },
+        localId: 'fe-1',
+      );
+      expect(effects.map((e) => e.collectionPath), ['/feeding-events', '/livestock-subjects/cow-744/feeding-history', '/livestock-subjects/cow-744/feeding-plan']);
+      expect((effects.last as AppendRecord).listKey, 'recent_events');
+      final record = (effects.first as AppendRecord).record;
+      expect(record['status'], 'recorded');
+      expect(record['occurred_at'], isNotNull);
+      // The server picks the lots FIFO and prices from them; the tablet
+      // never guesses which lot was drawn.
+      expect(effects.whereType<AdjustNumber>(), isEmpty);
+    });
+
+    test('a delivery becomes a usable lot with ordered, received and rejected kept apart', () {
+      final effect = effectsFor(
+        'POST',
+        '/feed-lots/receive',
+        {'feed_product_id': 'fp-barley', 'quantity': 500, 'rejected_quantity': 20, 'lot_code': 'BAR-1'},
+        localId: 'lot-1',
+      ).single as AppendRecord;
+      expect(effect.collectionPath, '/feed-lots');
+      expect(effect.record['status'], 'active');
+      expect(effect.record['accepted_quantity'], 480.0);
+      expect(effect.record['quantity_on_hand'], 480.0);
+      expect(effect.record['rejected_quantity'], 20.0);
+    });
+
+    test('quarantining a lot keeps it in the list, marked', () {
+      final effect = effectsFor('PATCH', '/feed-lots/l1/status', {'status': 'quarantined', 'reason': 'mould'}, localId: 'x').single as MergeRecord;
+      expect(effect.collectionPath, '/feed-lots');
+      expect(effect.patch, {'status': 'quarantined'});
+    });
+
+    test('a batch moves planned → mixing → completed', () {
+      final started = effectsFor('POST', '/feed-batches', {'formula_id': 'f1', 'target_quantity': 1000}, localId: 'b1').single as AppendRecord;
+      expect(started.record['status'], 'in_progress');
+      final done = effectsFor('POST', '/feed-batches/b1/complete', {'actual_quantity': 990}, localId: 'x').single as MergeRecord;
+      expect(done.patch['status'], 'completed');
+      expect(done.patch['actual_quantity'], 990);
+    });
+
+    test('an explicit assignment lands on the subject; ending it keeps the row', () {
+      final added = effectsFor('POST', '/livestock-subjects/cow-744/feeding-assignments', {'assignment_type': 'supplement', 'feed_product_id': 'fp-dairy-concentrate', 'quantity_per_head': 2}, localId: 'a1').single as AppendRecord;
+      expect(added.collectionPath, '/livestock-subjects/cow-744/feeding-assignments');
+      expect(added.record['status'], 'active');
+      final ended = effectsFor('DELETE', '/livestock-subjects/cow-744/feeding-assignments/a1', null, localId: 'x').single as MergeRecord;
+      expect(ended.id, 'a1');
+      expect(ended.patch['status'], 'ended');
+    });
+
+    test('a reservation starts whole and a release marks it released', () {
+      final made = effectsFor('POST', '/feed-allocations', {'feed_product_id': 'fp-dairy-premix', 'quantity': 400}, localId: 'al1').single as AppendRecord;
+      expect(made.record['remaining_quantity'], 400.0);
+      expect(made.record['consumed_quantity'], 0.0);
+      final released = effectsFor('POST', '/feed-allocations/al1/release', null, localId: 'x').single as MergeRecord;
+      expect(released.patch['status'], 'released');
+    });
+
+    test('a stock adjustment is not predicted — availability comes back from the server', () {
+      expect(effectsFor('POST', '/feed-inventory/adjustments', {'feed_product_id': 'fp-barley', 'quantity': -5}, localId: 'x'), isEmpty);
+    });
+  });
+
   group('outbox labels', () {
     test('the longest matching path wins', () {
       expect(describeWrite('/mouneh/batches/b1/complete').labelKey, 'outboxMounehBatch');
@@ -238,6 +313,14 @@ void main() {
 
     test('an unknown path still gets a readable label', () {
       expect(describeWrite('/something-new').labelKey, 'outboxChange');
+    });
+
+    test('feed architecture writes read as what they are about', () {
+      expect(describeWrite('/feeding-events').labelKey, 'outboxFeeding');
+      expect(describeWrite('/feed-lots/receive').labelKey, 'outboxFeedReceipt');
+      expect(describeWrite('/feed-batches/b1/complete').labelKey, 'outboxFeedBatch');
+      expect(describeWrite('/livestock-subjects/cow-744/feeding-assignments').labelKey, 'outboxFeedingAssignment');
+      expect(describeWrite('/feed-inventory/reorder-recommendations/fp-1/acknowledge').labelKey, 'outboxFeedAdjustment');
     });
   });
 }

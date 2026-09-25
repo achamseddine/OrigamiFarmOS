@@ -182,6 +182,25 @@ read it:
   sections and quick actions its capabilities allow: no milk card on a
   hen, no pregnancy line on a bull. Full edit, plus Observe / Treat / Feed
   / Milk / Move quick actions.
+- **Feed** — one workspace (`features/feed/feed_workspace_screen.dart`,
+  `docs/GENERIC-FEED-ARCHITECTURE.md`) with nine tabs over one
+  `FeedingProvider`: the stock screen; feeds and their lots (receive a
+  delivery keeping ordered / received / rejected apart, reserve stock for
+  a purpose, quarantine / block / recall / release a lot); formulas with
+  versions, scaling and calculated nutrients; mixing (start a batch from
+  scaled targets, complete it with actuals and the lots used); feeding
+  programs with their rules and a "which program would apply?" resolver
+  panel; today's feeding list with planned against fed and one-tap
+  recording; declared and lab nutrient profiles; costs by animal, feed
+  and batch; and trace & control (a lot's origin and everyone who ate
+  from it, days of cover, reorder recommendations that open tasks,
+  reconciliations). The Digital Twin's Feeding section shows the
+  animal's effective program — its own or inherited from its group — the
+  review banner with the recommended program and reasons when a
+  lifecycle change calls for one (Assign for approvers), today's targets,
+  its own supplements / overrides / restrictions and the last seven days'
+  feedings and cost; the Feed quick action records a feeding through the
+  same dialog. Nothing here is species-specific.
 - **Agriculture** — Add Field, Add Crop Type (crops are farm data; the
   platform ships no crop list), Record Planting, and **Record Harvest**,
   which splits the day's pick into sellable and waste and moves the

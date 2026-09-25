@@ -23,6 +23,9 @@ from app.domain import models
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
+from app.domain import feed_models  # noqa: F401 - feed products / formulas / programs tables
+from app.feeding.catalog import ensure_feed_reference_data
+from app.feeding.seed import seed_feed_demo_data
 from app.livestock.reference import ensure_reference_data
 from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
@@ -52,6 +55,7 @@ def seed_demo_data(db: Session) -> None:
     # Species, capabilities and their rules are configuration the whole
     # farm depends on — they go in before any animal that refers to them.
     ensure_reference_data(db)
+    ensure_feed_reference_data(db)
 
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
     db.add(farm)
@@ -345,6 +349,10 @@ def seed_demo_data(db: Session) -> None:
         ))
 
     db.flush()
+    # Feed products, formulas, a mixed batch, programs and a week of
+    # feedings — built on the inventory items and animals seeded above.
+    db.flush()
+    seed_feed_demo_data(db, FARM_ID)
     seed_mouneh_demo_data(db, FARM_ID)
     db.flush()
     seed_visits_demo_data(db, FARM_ID)

@@ -19,6 +19,7 @@ import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
+import 'animal_feeding_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
 import 'capability_chips.dart';
@@ -675,10 +676,18 @@ class _InsightsColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final milkRecords = context.watch<ProductionProvider>().milkRecords.where((r) => r.animalId == animal.id).toList();
     final recs = (twin?['open_recommendations'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final feedModule = context.watch<AccessProvider>().isModuleAvailable(FarmModule.feedNutrition);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // What this animal should be fed, from its own or its group's
+        // program (generic feed architecture §17) — for anyone who holds
+        // the feed module, whatever the species.
+        if (feedModule) ...[
+          AnimalFeedingSection(animal: animal),
+          const SizedBox(height: FarmSpacing.md),
+        ],
         // A milk card only for an animal that is milked. A hen's or a
         // horse's profile simply has no such section — which is the point
         // of resolving capabilities rather than checking the species.

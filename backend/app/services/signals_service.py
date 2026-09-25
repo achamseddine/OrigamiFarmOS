@@ -19,9 +19,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core import permissions as perms
+from app.domain import feed_models as fm
 from app.domain import models, mouneh_models
 from app.domain import visits_models as vm
 from app.repositories.base import ensure_utc, now
+from app.services import feed_forecast_service
 
 # Recommendation categories -> the module a user must hold to see them.
 _RECOMMENDATION_MODULE = {
@@ -100,8 +102,17 @@ def _recommendation_signals(db: Session, farm_id: str) -> list[Signal]:
 
 def _low_stock_signals(db: Session, farm_id: str) -> list[Signal]:
     rows = db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == farm_id)).all()
+    # Feed products with a reorder policy are watched by the feed forecast
+    # (days of cover, lead time, reservations) — raising the plain threshold
+    # alert as well would say the same thing twice.
+    governed = set(db.scalars(
+        select(fm.FeedProduct.inventory_item_id).join(fm.FeedReorderPolicy, fm.FeedReorderPolicy.feed_product_id == fm.FeedProduct.id)
+        .where(fm.FeedProduct.farm_id == farm_id, fm.FeedReorderPolicy.active.is_(True))
+    ))
     signals = []
     for item in rows:
+        if item.id in governed:
+            continue
         # reorder_level defaults to 0, which means "no threshold set" —
         # without this guard every empty item would raise a false alarm.
         if not item.reorder_level or item.current_qty > item.reorder_level:
@@ -315,7 +326,7 @@ def collect_signals(db: Session, farm_id: str) -> list[Signal]:
     never to an error page.
     """
     signals: list[Signal] = []
-    for source in _SOURCES:
+    for source in (*_SOURCES, feed_forecast_service.reorder_signals, feed_forecast_service.variance_signals):
         try:
             signals.extend(source(db, farm_id))
         except Exception:  # noqa: BLE001 - one bad source must not break the feed

@@ -11,7 +11,7 @@ from app.domain import models
 from app.livestock.catalog import Cap
 from app.repositories.base import diff_changes, new_id, snapshot, write_audit_log, write_event
 from app.schemas.animals import AnimalCreate, AnimalDigitalTwinOut, AnimalMove, AnimalOut, AnimalUpdate
-from app.services import capability_service, identifier_service
+from app.services import capability_service, feeding_program_service, identifier_service
 from app.services.capability_service import CapabilitySet
 
 router = APIRouter(prefix="/animals", tags=["animals"])
@@ -182,6 +182,10 @@ def update_animal(
     before = snapshot(animal, _AUDITED_ANIMAL_FIELDS)
     for field, value in changes.items():
         setattr(animal, field, value)
+    # A change to what the feeding resolver reads (pregnant, lactating,
+    # stage, profile, group…) asks for a feeding review (feed architecture
+    # §10) — an event and a task, never a silent reassignment.
+    feeding_program_service.review_animal_if_relevant(db, animal, set(changes), user_id=current_user.id)
     if new_tag is not None and new_tag.strip() and new_tag.strip() != (animal.tag or ""):
         identifier_service.replace_primary_value(
             db, animal, new_tag.strip(), cap_set or capability_service.resolve_for_animal(db, animal)
