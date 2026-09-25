@@ -11,11 +11,17 @@ import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/top_bar.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
+import '../../domain/entities/livestock.dart';
 import '../../domain/entities/production_records.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
+import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
+import 'capability_chips.dart';
 import '../../core/widgets/directional_icon.dart';
 
 const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -79,9 +85,34 @@ class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
     }
   }
 
+  /// Refreshes both the farm-wide list (the header's primary id) and the
+  /// twin (the identifier list) after an identifier is added or retired.
+  Future<void> _refreshRecord() async {
+    await context.read<AnimalsProvider>().load();
+    if (mounted) await _loadTwin();
+  }
+
+  /// What this animal can do. The server's answer travels with the twin;
+  /// until it arrives — or for an animal registered offline a moment ago,
+  /// which the server has never seen — the device resolves it from the
+  /// same cached rules, and the two are proven to agree.
+  CapabilitySet _capabilities(BuildContext context, Animal animal) {
+    final fromTwin = _twin?['capabilities'];
+    if (fromTwin is Map<String, dynamic> && (fromTwin['capabilities'] as List<dynamic>? ?? const []).isNotEmpty) {
+      return CapabilitySet.fromJson(fromTwin);
+    }
+    return context.watch<LivestockProvider>().resolve(
+          species: animal.species,
+          sex: animal.sex,
+          lifeStage: animal.lifeStage,
+          managementProfile: animal.managementProfile,
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final animal = context.watch<AnimalsProvider>().byId(widget.animalId);
+    final caps = _capabilities(context, animal);
 
     return Scaffold(
       backgroundColor: FarmColors.stone,
@@ -106,9 +137,9 @@ class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
                 child: SingleChildScrollView(
                   child: LayoutBuilder(builder: (context, constraints) {
                     final wide = constraints.maxWidth > kTabletBreakpoint;
-                    final left = _ProfileColumn(animal: animal);
-                    final center = _HistoryColumn(animal: animal, twin: _twin, twinLoading: _twinLoading, twinError: _twinError);
-                    final right = _InsightsColumn(animal: animal, twin: _twin, twinLoading: _twinLoading);
+                    final left = _ProfileColumn(animal: animal, caps: caps, onRecordChanged: _refreshRecord);
+                    final center = _HistoryColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading, twinError: _twinError);
+                    final right = _InsightsColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading);
                     if (!wide) {
                       return Column(children: [left, const SizedBox(height: FarmSpacing.md), center, const SizedBox(height: FarmSpacing.md), right]);
                     }
@@ -135,18 +166,39 @@ class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
   }
 }
 
+/// The identity card. Everything species-specific on it — the name of the
+/// species, what a female of it is called, whether a pregnancy line can
+/// exist, which identifiers it carries — comes from the catalog and the
+/// resolved capabilities (§8), so this column draws a mare and a hen with
+/// the same code it draws a cow.
 class _ProfileColumn extends StatelessWidget {
-  const _ProfileColumn({required this.animal});
+  const _ProfileColumn({required this.animal, required this.caps, required this.onRecordChanged});
   final Animal animal;
+  final CapabilitySet caps;
+  final Future<void> Function() onRecordChanged;
 
   @override
   Widget build(BuildContext context) {
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
+    final speciesName = livestock.speciesName(animal.species, lang);
+    final canEdit = context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.edit);
+    final identifiers = animal.activeIdentifiers;
+    final stage = livestock.lifeStageLabel(animal.species, animal.lifeStage, lang);
+    final profile = livestock.profileLabel(animal.species, animal.managementProfile, lang);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text('${animal.name} #${animal.tag}', style: FarmTypography.display(size: 24)),
+            Flexible(
+              child: Text(
+                animal.primaryId.isEmpty ? animal.name : '${animal.name} #${animal.primaryId}',
+                style: FarmTypography.display(size: 24),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const SizedBox(width: 8),
             StatusPill(label: context.t('active'), level: FarmStatusLevel.good, dense: true),
           ],
@@ -154,30 +206,110 @@ class _ProfileColumn extends StatelessWidget {
         const SizedBox(height: FarmSpacing.sm),
         AspectRatio(
           aspectRatio: 1.1,
-          child: PhotoSlot(filePath: animal.photoPath, icon: FarmIconMap.species(animal.species), label: animal.species.label),
+          child: PhotoSlot(
+            filePath: animal.photoPath,
+            icon: FarmIconMap.species(livestock.speciesIcon(animal.species)),
+            label: speciesName,
+          ),
         ),
         const SizedBox(height: FarmSpacing.md),
         SectionCard(
           padding: const EdgeInsets.all(FarmSpacing.md),
           child: Column(
             children: [
-              _fact(context, context.t('species'), animal.species.label),
-              _fact(context, context.t('breed'), animal.breed),
+              _fact(context, context.t('species'), speciesName),
+              if (animal.breed.isNotEmpty) _fact(context, context.t('breed'), animal.breed),
+              _fact(context, context.t('sex'), _sexLabel(context, lang)),
+              if (stage.isNotEmpty) _fact(context, context.t('lifeStage'), stage),
+              if (profile.isNotEmpty) _fact(context, context.t('managementProfile'), profile),
               _fact(context, context.t('age'), animal.ageLabel),
               _fact(context, context.t('location'), animal.location),
               _fact(context, context.t('healthScore'), '${animal.healthScore} / 100', valueColor: _scoreColor(animal.healthScore)),
-              if (animal.pregnant)
+              // Reproduction and lactation lines exist only where the
+              // resolver says they can — never on a bull, a hen or a
+              // gelding, whatever a stale flag on the record says.
+              if (caps.has(Cap.pregnancy) && animal.pregnant)
                 _fact(context, context.t('pregnancyStatus'), 'Confirmed (${animal.pregnancyDays} days)'),
-              if (animal.lactating)
+              if (caps.has(Cap.lactation) && animal.lactating)
                 _fact(context, context.t('lactationStatus'), 'Lactating — ${animal.lactationCycle ?? 1}'),
               const Divider(height: 20, color: FarmColors.border),
-              _fact(context, context.t('earTag'), animal.tag),
-              _fact(context, context.t('internalId'), 'COW-${animal.tag.padLeft(4, '0')}', last: true),
+              Row(children: [
+                Expanded(
+                  child: Text(
+                    context.t('identification'),
+                    style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                  ),
+                ),
+                if (canEdit)
+                  IconButton(
+                    tooltip: context.t('addIdentifier'),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final added = await showAddIdentifierDialog(context, animal: animal, caps: caps);
+                      if (added) await onRecordChanged();
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                  ),
+              ]),
+              if (identifiers.isEmpty) _fact(context, context.t('noIdentifiers'), '—'),
+              for (final i in identifiers)
+                _IdentifierRow(
+                  identifier: i,
+                  onRetire: canEdit && !i.isPrimary ? () => _retire(context, i) : null,
+                ),
+              _fact(context, context.t('internalId'), animal.id, last: true),
             ],
           ),
         ),
+        if (caps.capabilities.isNotEmpty) ...[
+          const SizedBox(height: FarmSpacing.md),
+          SectionCard(
+            title: context.t('tracked'),
+            child: CapabilityChips(caps: caps),
+          ),
+        ],
       ],
     );
+  }
+
+  /// "Female · Cow", "Male · Stallion": the generic word, then what this
+  /// farm calls one of this species.
+  String _sexLabel(BuildContext context, String lang) {
+    final code = animal.sex.trim().toUpperCase();
+    final base = switch (code) {
+      'F' || 'FEMALE' => context.t('female'),
+      'M' || 'MALE' => context.t('male'),
+      _ => context.t('unknownSex'),
+    };
+    final term = switch (code) {
+      'F' || 'FEMALE' => caps.term('female', lang),
+      'M' || 'MALE' => caps.term('male', lang),
+      _ => '',
+    };
+    return term.isEmpty ? base : '$base · $term';
+  }
+
+  /// Retiring keeps the row (§4: "retire, never delete") — a replaced ear
+  /// tag still finds the animal it was on.
+  Future<void> _retire(BuildContext context, AnimalIdentifier identifier) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.t('retireIdentifier')),
+        content: Text('${ctx.t('id_${identifier.type}')} ${identifier.value}\n\n${ctx.t('retireIdentifierBody')}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(ctx.t('cancel'))),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(ctx.t('retire'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final result = await context.read<LivestockProvider>().retireIdentifier(animal.id, identifier.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.success ? context.t('identifierRetired') : (result.error ?? context.t('identifierRetired')))),
+    );
+    if (result.success) await onRecordChanged();
   }
 
   Widget _fact(BuildContext context, String label, String value, {Color? valueColor, bool last = false}) {
@@ -206,6 +338,45 @@ class _ProfileColumn extends StatelessWidget {
   }
 }
 
+/// One identifier on the identity card: its type, its value (and issuer),
+/// a star on the primary one, and — for anyone who may edit animals — a
+/// way to retire a non-primary one.
+class _IdentifierRow extends StatelessWidget {
+  const _IdentifierRow({required this.identifier, this.onRetire});
+  final AnimalIdentifier identifier;
+  final VoidCallback? onRetire;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.t('id_${identifier.type}');
+    final issuer = identifier.issuingAuthority;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Text(identifier.isPrimary ? '$label ★' : label, style: FarmTypography.textTheme.bodySmall)),
+          Flexible(
+            child: Text(
+              issuer == null || issuer.isEmpty ? identifier.value : '${identifier.value} · $issuer',
+              textAlign: TextAlign.right,
+              style: FarmTypography.textTheme.titleSmall,
+            ),
+          ),
+          if (onRetire != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                onTap: onRetire,
+                child: const Icon(Icons.remove_circle_outline, size: 16, color: FarmColors.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _QuickAction {
   const _QuickAction(this.icon, this.labelKey, this.onTap);
   final FarmIcon icon;
@@ -214,19 +385,23 @@ class _QuickAction {
 }
 
 class _HistoryColumn extends StatelessWidget {
-  const _HistoryColumn({required this.animal, required this.twin, required this.twinLoading, required this.twinError});
+  const _HistoryColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading, required this.twinError});
   final Animal animal;
+  final CapabilitySet caps;
   final Map<String, dynamic>? twin;
   final bool twinLoading;
   final String? twinError;
 
   @override
   Widget build(BuildContext context) {
+    // The quick actions follow the capabilities (§8): "Milk" is offered
+    // only to an animal that is milked. The server would refuse the
+    // record anyway; better not to show the button.
     final actions = <_QuickAction>[
       _QuickAction(FarmIcon.eye, 'observe', () => showObserveDialog(context, animal.id)),
       _QuickAction(FarmIcon.stethoscope, 'treat', () => showTreatDialog(context, animal)),
       _QuickAction(FarmIcon.feedBag, 'feed', () => showFeedDialog(context, animal)),
-      _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
+      if (caps.has(Cap.milkProduction)) _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
       _QuickAction(FarmIcon.location, 'move', () => showMoveDialog(context, animal)),
       _QuickAction(FarmIcon.calendar, 'viewHistory', () {}),
     ];
@@ -490,8 +665,9 @@ class _ObservationLine extends StatelessWidget {
 }
 
 class _InsightsColumn extends StatelessWidget {
-  const _InsightsColumn({required this.animal, required this.twin, required this.twinLoading});
+  const _InsightsColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading});
   final Animal animal;
+  final CapabilitySet caps;
   final Map<String, dynamic>? twin;
   final bool twinLoading;
 
@@ -503,13 +679,18 @@ class _InsightsColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionCard(
-          title: context.t('milkTrend'),
-          child: milkRecords.isEmpty
-              ? Text('No milk records for this animal yet.', style: FarmTypography.textTheme.bodySmall)
-              : _MilkTrend(records: milkRecords),
-        ),
-        const SizedBox(height: FarmSpacing.md),
+        // A milk card only for an animal that is milked. A hen's or a
+        // horse's profile simply has no such section — which is the point
+        // of resolving capabilities rather than checking the species.
+        if (caps.has(Cap.milkProduction)) ...[
+          SectionCard(
+            title: context.t('milkTrend'),
+            child: milkRecords.isEmpty
+                ? Text('No milk records for this animal yet.', style: FarmTypography.textTheme.bodySmall)
+                : _MilkTrend(records: milkRecords),
+          ),
+          const SizedBox(height: FarmSpacing.md),
+        ],
         SectionCard(
           title: context.t('aiRecommendation'),
           child: twinLoading

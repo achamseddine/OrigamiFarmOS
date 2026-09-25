@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.livestock.catalog import Cap
+from app.services import capability_service
 from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
@@ -67,6 +69,16 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     if animal is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
 
+    # Milk is a capability (generic animal model §12): a bull, a hen, a
+    # meat ewe or a mare cannot have a milk record, however the form was
+    # filled in.
+    cap_set = capability_service.resolve_for_animal(db, animal)
+    if not cap_set.has(Cap.MILK_PRODUCTION):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            capability_service.describe_missing(cap_set, Cap.MILK_PRODUCTION, animal.name),
+        )
+
     under_withdrawal = animal.withdrawal_until is not None and ensure_utc(animal.withdrawal_until) > datetime.now(timezone.utc)
     if under_withdrawal and payload.destination == "sold":
         raise HTTPException(
@@ -107,6 +119,12 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
     flock = db.get(models.Flock, payload.flock_id)
     if flock is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Flock not found")
+    cap_set = capability_service.resolve_for_group(db, flock)
+    if not cap_set.has(Cap.EGG_PRODUCTION):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            capability_service.describe_missing(cap_set, Cap.EGG_PRODUCTION, flock.name),
+        )
     if not payload.is_allocation_valid():
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -4,18 +4,35 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, field_validator
 
+from app.livestock import catalog
 from app.schemas.common import ORMModel
+from app.schemas.livestock import IdentifierIn, IdentifierOut
+
+
+def _normalise_sex(v: str | None) -> str | None:
+    """Accepts F/M/U and the spec's FEMALE/MALE/UNKNOWN; stores the code."""
+    if v is None or not str(v).strip():
+        return None
+    code = str(v).strip().upper()
+    code = {"FEMALE": "F", "MALE": "M", "UNKNOWN": "U", "UNDETERMINED": "U"}.get(code, code)
+    if code not in catalog.SEXES:
+        raise ValueError(f"sex must be one of {list(catalog.SEXES)}")
+    return code
 
 
 class AnimalOut(ORMModel):
     id: str
     farm_id: str
-    tag: str
+    tag: str | None = None
     name: str
     species: str
     breed: str | None = None
+    breed_id: str | None = None
     sex: str | None = None
     birth_date: datetime | None = None
+    birth_date_estimated: bool = False
+    life_stage: str | None = None
+    management_profile: str | None = None
     status: str
     location_label: str | None = None
     health_score: int
@@ -37,6 +54,9 @@ class AnimalOut(ORMModel):
     current_value: float | None = None
     notes: str | None = None
     active: bool = True
+    # Every identifier the animal carries (generic animal model §4). `tag`
+    # above is the primary one's value, kept for display and search.
+    identifiers: list[IdentifierOut] = []
 
     @property
     def is_under_withdrawal(self) -> bool:
@@ -55,23 +75,34 @@ class AnimalMove(BaseModel):
     location_label: str
 
 
-ANIMAL_SPECIES = {"cow", "goat", "sheep", "horse", "layer_hen", "duck", "turkey", "other"}
+# Species is not an enum any more — it is a row in `species`, checked in
+# the router against the database (generic animal model §14: adding a
+# species is configuration, not code).
 ANIMAL_STATUSES = {"healthy", "under_observation", "under_treatment"}
 
 
 class AnimalCreate(BaseModel):
-    """The full Add-Animal record (tech spec §13). Only tag/name/species
-    are required — a farmer standing in a barn should be able to register
-    an animal in three fields and fill in the rest later.
+    """The full Add-Animal record (tech spec §13, generic animal model §2).
+
+    Only name and species are required. Identity comes as a list of typed
+    identifiers — which ones are allowed, and which are required, is
+    decided by the capability resolver for the species / sex / stage /
+    profile, not by a universal ear-tag rule. `tag` is still accepted from
+    older clients and becomes the primary identifier.
     """
 
     # Identity
-    tag: str
+    tag: str | None = None
+    identifiers: list[IdentifierIn] = []
     name: str
     species: str
     breed: str | None = None
+    breed_id: str | None = None
     sex: str | None = None
     birth_date: datetime | None = None
+    birth_date_estimated: bool = False
+    life_stage: str | None = None
+    management_profile: str | None = None
     acquisition_date: datetime | None = None
     acquisition_source: str | None = None
     sire_tag: str | None = None
@@ -96,19 +127,23 @@ class AnimalCreate(BaseModel):
     current_value: float | None = None
     notes: str | None = None
 
-    @field_validator("tag", "name")
+    @field_validator("name")
     @classmethod
     def non_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("value cannot be empty")
         return v.strip()
 
-    @field_validator("species")
+    @field_validator("tag")
     @classmethod
-    def species_known(cls, v: str) -> str:
-        if v not in ANIMAL_SPECIES:
-            raise ValueError(f"species must be one of {sorted(ANIMAL_SPECIES)}")
-        return v
+    def tag_stripped(cls, v: str | None) -> str | None:
+        v = (v or "").strip()
+        return v or None
+
+    @field_validator("sex")
+    @classmethod
+    def sex_code(cls, v: str | None) -> str | None:
+        return _normalise_sex(v)
 
     @field_validator("status")
     @classmethod
@@ -141,8 +176,12 @@ class AnimalUpdate(BaseModel):
     name: str | None = None
     species: str | None = None
     breed: str | None = None
+    breed_id: str | None = None
     sex: str | None = None
     birth_date: datetime | None = None
+    birth_date_estimated: bool | None = None
+    life_stage: str | None = None
+    management_profile: str | None = None
     acquisition_date: datetime | None = None
     acquisition_source: str | None = None
     sire_tag: str | None = None
@@ -163,12 +202,10 @@ class AnimalUpdate(BaseModel):
     notes: str | None = None
     active: bool | None = None
 
-    @field_validator("species")
+    @field_validator("sex")
     @classmethod
-    def species_known(cls, v: str | None) -> str | None:
-        if v is not None and v not in ANIMAL_SPECIES:
-            raise ValueError(f"species must be one of {sorted(ANIMAL_SPECIES)}")
-        return v
+    def sex_code(cls, v: str | None) -> str | None:
+        return _normalise_sex(v)
 
     @field_validator("status")
     @classmethod
@@ -182,3 +219,6 @@ class AnimalDigitalTwinOut(AnimalOut):
     recent_observations: list[dict] = []
     recent_events: list[dict] = []
     open_recommendations: list[dict] = []
+    # The resolved capability set (generic animal model §8): the profile
+    # draws its tabs from this, so one fetch is enough to render it.
+    capabilities: dict = {}

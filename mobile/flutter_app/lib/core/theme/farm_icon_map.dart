@@ -29,26 +29,18 @@ class FarmIconMap {
   static const FarmIcon scanQr = FarmIcon.qr;
 
   // --- animals ---------------------------------------------------------
-  static FarmIcon species(AnimalSpecies s) => switch (s) {
-        AnimalSpecies.cow => FarmIcon.cow,
-        AnimalSpecies.goat => FarmIcon.goat,
-        AnimalSpecies.sheep => FarmIcon.sheep,
-        AnimalSpecies.horse => FarmIcon.horse,
-        AnimalSpecies.layerHen || AnimalSpecies.turkey => FarmIcon.poultry,
-        AnimalSpecies.duck => FarmIcon.duck,
-        AnimalSpecies.other => FarmIcon.barn,
-      };
-
-  /// For code that only has the species *label* ("Cow", "Goat"), as the
-  /// herd-group rollup does.
-  static FarmIcon speciesLabel(String label) => switch (label.trim().toLowerCase()) {
-        'cow' || 'cows' || 'cattle' => FarmIcon.cow,
-        'goat' || 'goats' => FarmIcon.goat,
-        'sheep' => FarmIcon.sheep,
-        'horse' || 'horses' => FarmIcon.horse,
-        'duck' || 'ducks' => FarmIcon.duck,
-        'other' => FarmIcon.barn,
-        _ => FarmIcon.poultry,
+  /// The icon for a species, from the catalog's `icon` hint (`cow`,
+  /// `poultry`, `duck`…) — or the species code itself when the catalog
+  /// has not loaded. A species the pack has no drawing for gets the barn:
+  /// never a crash, and never a cow standing in for a camel.
+  static FarmIcon species(String hint) => switch (hint.trim().toLowerCase()) {
+        'cow' || 'cows' || 'cattle' || 'bull' || 'calf' => FarmIcon.cow,
+        'goat' || 'goats' || 'kid' => FarmIcon.goat,
+        'sheep' || 'ewe' || 'ram' || 'lamb' => FarmIcon.sheep,
+        'horse' || 'horses' || 'mare' || 'stallion' || 'foal' || 'donkey' => FarmIcon.horse,
+        'duck' || 'ducks' || 'goose' || 'geese' => FarmIcon.duck,
+        'poultry' || 'hen' || 'chicken' || 'layer_hen' || 'broiler' || 'turkey' || 'bird' || 'quail' => FarmIcon.poultry,
+        _ => FarmIcon.barn,
       };
 
   static FarmIcon health(AnimalHealthStatus s) => switch (s) {

@@ -30,6 +30,7 @@ from app.domain import models
 from app.domain import mouneh_models
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.repositories.base import new_id
+from app.livestock.reference import ensure_reference_data
 
 FARM_ID = "farm-origami"
 
@@ -77,6 +78,7 @@ def _grant_department_modules(db: Session, user: models.User) -> None:
 
 
 def seed_production_data(db: Session) -> None:
+    ensure_reference_data(db)
     if db.get(models.Farm, FARM_ID) is not None:
         print(f"Farm '{FARM_ID}' already exists — skipping (no passwords were changed).")
         return

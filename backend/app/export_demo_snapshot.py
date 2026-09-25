@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.security import hash_password
 from app.db.base import Base, get_db
 from app.domain import models
+from app.domain import livestock_models
 from app.domain import mouneh_models  # noqa: F401 - registers Mouneh tables
 from app.domain import visits_models  # noqa: F401 - registers Visits tables
 from app.main import app
@@ -137,7 +138,16 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
         ("/visitor-feedback", None),
         ("/visitors", None),
     ]
+    # Generic animal model: species configuration and per-animal
+    # capabilities, so the Add Animal form and the profile work offline.
+    species_codes = [sp.code for sp in db.query(livestock_models.Species).filter_by(active=True).all()]
+    group_ids = [g.id for g in db.query(models.Flock).all()]
+    paths += [("/species", None), ("/capabilities", None), ("/animal-groups", None)]
+    paths += [(f"/species/{code}/configuration", None) for code in species_codes]
     paths += [(f"/animals/{animal_id}", None) for animal_id in animal_ids]
+    paths += [(f"/animals/{animal_id}/capabilities", None) for animal_id in animal_ids]
+    paths += [(f"/animals/{animal_id}/identifiers", None) for animal_id in animal_ids]
+    paths += [(f"/animal-groups/{group_id}", None) for group_id in group_ids]
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]
     return paths
 

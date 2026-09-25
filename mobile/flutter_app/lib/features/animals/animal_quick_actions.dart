@@ -166,7 +166,7 @@ class _MilkDialogState extends State<_MilkDialog> {
   Widget build(BuildContext context) {
     final isUnderWithdrawal = widget.animal.isUnderWithdrawal;
     return AlertDialog(
-      title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -300,7 +300,7 @@ class _TreatDialogState extends State<_TreatDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${context.t('treat')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('treat')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -410,7 +410,7 @@ class _MoveDialogState extends State<_MoveDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${context.t('move')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('move')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 360,
         child: TextField(controller: _location, decoration: const InputDecoration(labelText: 'New location')),
@@ -463,7 +463,7 @@ class _FeedDialogState extends State<_FeedDialog> {
     final items = context.watch<FeedProvider>().items;
     _itemId ??= items.isNotEmpty ? items.first.id : null;
     return AlertDialog(
-      title: Text('${context.t('feed')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('feed')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 380,
         child: Column(

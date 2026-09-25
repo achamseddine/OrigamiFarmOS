@@ -8,15 +8,19 @@ from app.api.deps import get_current_user, require_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
+from app.livestock.catalog import Cap
 from app.repositories.base import diff_changes, new_id, snapshot, write_audit_log, write_event
 from app.schemas.animals import AnimalCreate, AnimalDigitalTwinOut, AnimalMove, AnimalOut, AnimalUpdate
+from app.services import capability_service, identifier_service
+from app.services.capability_service import CapabilitySet
 
 router = APIRouter(prefix="/animals", tags=["animals"])
 
 # Fields the audit trail follows on an animal — everything a manager might
 # need to explain later ("who changed this cow's status?").
 _AUDITED_ANIMAL_FIELDS = [
-    "tag", "name", "species", "breed", "sex", "status", "location_label",
+    "tag", "name", "species", "breed", "breed_id", "sex", "life_stage", "management_profile",
+    "birth_date_estimated", "status", "location_label",
     "health_score", "weight_kg", "group_name", "pregnant", "lactating",
     "purchase_cost", "current_value", "active", "notes",
 ]
@@ -24,6 +28,41 @@ _AUDITED_ANIMAL_FIELDS = [
 # Money on an animal record is Finance data. Someone who looks after the
 # herd does not automatically get to see what it cost.
 _FINANCIAL_FIELDS = ("purchase_cost", "current_value")
+
+
+def _species_or_422(db: Session, code: str) -> None:
+    try:
+        capability_service.get_species(db, code)
+    except capability_service.UnknownSpecies:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"'{code}' is not a species this farm keeps. See GET /species for the list.",
+        ) from None
+
+
+def _check_state_against(cap_set: CapabilitySet, *, name: str, pregnant: bool, lactating: bool) -> None:
+    """Generic animal model §12: pregnancy needs PREGNANCY, lactation needs
+    LACTATION. A male, a hen, or a meat ewe cannot be recorded as either."""
+    if pregnant and not cap_set.has(Cap.PREGNANCY):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, capability_service.describe_missing(cap_set, Cap.PREGNANCY, name))
+    if lactating and not cap_set.has(Cap.LACTATION):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, capability_service.describe_missing(cap_set, Cap.LACTATION, name))
+
+
+def _has_operational_history(db: Session, animal_id: str) -> bool:
+    """Anything recorded *about* the animal since it was registered. While
+    this is true its species cannot change (§12) — the history would no
+    longer mean what it meant."""
+    milk = db.scalar(select(models.MilkRecord.id).where(models.MilkRecord.animal_id == animal_id).limit(1))
+    if milk:
+        return True
+    obs = db.scalar(select(models.Observation.id).where(
+        models.Observation.entity_type == "animal", models.Observation.entity_id == animal_id).limit(1))
+    if obs:
+        return True
+    treat = db.scalar(select(models.Treatment.id).where(
+        models.Treatment.entity_type == "animal", models.Treatment.entity_id == animal_id).limit(1))
+    return bool(treat)
 
 
 @router.get("", response_model=list[AnimalOut])
@@ -52,26 +91,27 @@ def create_animal(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_permission(perms.ANIMALS, perms.CREATE)),
 ) -> models.Animal:
-    """Registers a new animal — the start of its digital twin (tech spec §13)."""
-    clash = db.scalars(
-        select(models.Animal).where(
-            models.Animal.farm_id == current_user.farm_id,
-            models.Animal.tag == payload.tag,
-            models.Animal.active.is_(True),
-        )
-    ).one_or_none()
-    if clash is not None:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"Ear tag '{payload.tag}' is already used by {clash.name}."
-        )
+    """Registers a new animal — the start of its digital twin (tech spec §13).
 
-    data = payload.model_dump()
+    Generic animal model §2: species, sex, stage and profile go through
+    the capability resolver first; it decides which identifiers this
+    animal may and must carry and whether it can be pregnant or lactating.
+    """
+    _species_or_422(db, payload.species)
+    cap_set = capability_service.resolve(db, payload.species, payload.sex, payload.life_stage, payload.management_profile)
+    _check_state_against(cap_set, name=payload.name, pregnant=payload.pregnant, lactating=payload.lactating)
+    identifiers = identifier_service.collect(payload.identifiers, payload.tag, cap_set)
+    identifier_service.ensure_unique(db, current_user.farm_id, identifiers)
+
+    data = payload.model_dump(exclude={"identifiers", "tag"})
     if not user_can(db, current_user, perms.FINANCE, perms.CREATE):
         for field in _FINANCIAL_FIELDS:
             data.pop(field, None)
 
     animal = models.Animal(id=new_id(), farm_id=current_user.farm_id, **data)
     db.add(animal)
+    db.flush()
+    identifier_service.attach(db, animal, identifiers)
     write_event(
         db, farm_id=current_user.farm_id, entity_type="animal", entity_id=animal.id,
         event_type="animal_created",
@@ -108,23 +148,44 @@ def update_animal(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "You do not have permission to archive an animal in Animals."
         )
-    if "tag" in changes and changes["tag"] != animal.tag:
-        clash = db.scalars(
-            select(models.Animal).where(
-                models.Animal.farm_id == current_user.farm_id,
-                models.Animal.tag == changes["tag"],
-                models.Animal.id != animal.id,
-                models.Animal.active.is_(True),
-            )
-        ).one_or_none()
-        if clash is not None:
+
+    # Species is the one thing history depends on (§12): once anything has
+    # been recorded about the animal, it stays what it was registered as.
+    new_species = changes.get("species", animal.species)
+    if new_species != animal.species:
+        _species_or_422(db, new_species)
+        if _has_operational_history(db, animal.id):
             raise HTTPException(
-                status.HTTP_409_CONFLICT, f"Ear tag '{changes['tag']}' is already used by {clash.name}."
+                status.HTTP_409_CONFLICT,
+                f"{animal.name} already has milk, treatment or observation records as a "
+                f"{animal.species.replace('_', ' ')}. Its species cannot be changed; register a new animal instead.",
             )
+
+    # Sex, stage or profile changing re-evaluates what the animal can be
+    # — a cow that becomes 'meat' cannot stay flagged as lactating.
+    resolver_inputs = {"species", "sex", "life_stage", "management_profile"}
+    state_inputs = {"pregnant", "lactating"}
+    if resolver_inputs & changes.keys() or state_inputs & changes.keys():
+        cap_set = capability_service.resolve(
+            db, new_species, changes.get("sex", animal.sex),
+            changes.get("life_stage", animal.life_stage), changes.get("management_profile", animal.management_profile),
+        )
+        _check_state_against(
+            cap_set, name=animal.name,
+            pregnant=changes.get("pregnant", animal.pregnant), lactating=changes.get("lactating", animal.lactating),
+        )
+    else:
+        cap_set = None
+
+    new_tag = changes.pop("tag", None)
 
     before = snapshot(animal, _AUDITED_ANIMAL_FIELDS)
     for field, value in changes.items():
         setattr(animal, field, value)
+    if new_tag is not None and new_tag.strip() and new_tag.strip() != (animal.tag or ""):
+        identifier_service.replace_primary_value(
+            db, animal, new_tag.strip(), cap_set or capability_service.resolve_for_animal(db, animal)
+        )
 
     write_event(
         db, farm_id=current_user.farm_id, entity_type="animal", entity_id=animal.id,
@@ -203,6 +264,7 @@ def get_animal(animal_id: str, db: Session = Depends(get_db), _user: models.User
 
     return AnimalDigitalTwinOut(
         **AnimalOut.model_validate(animal).model_dump(),
+        capabilities=capability_service.resolve_for_animal(db, animal).to_dict(),
         recent_observations=[
             {
                 "id": o.id,

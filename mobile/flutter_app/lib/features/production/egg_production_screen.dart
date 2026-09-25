@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
@@ -12,7 +13,9 @@ import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/animal.dart';
+import '../../domain/entities/livestock.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 
 bool _isToday(DateTime d) {
@@ -20,13 +23,12 @@ bool _isToday(DateTime d) {
   return d.year == now.year && d.month == now.month && d.day == now.day;
 }
 
-/// A poultry species group backing one "Flock Overview" card. There is no
-/// backend model wiring individual birds (tracked as [Animal] digital
-/// twins) to the `flocks`/`egg_records` tables the API keeps for egg
-/// counts — the two are separate concepts server-side with no shared id
-/// exposed to the client — so this only carries what's actually
-/// computable client-side: how many birds of this species are on record
-/// and their aggregate health, not an egg count.
+/// One egg-laying species backing one "Flock Overview" card: the birds
+/// tracked individually as [Animal] twins plus the head count of every
+/// [AnimalGroup] of that species (§7 — a batch of 120 layers is one row,
+/// not 120). Health is the worst of the individuals'. Egg counts are not
+/// here: an egg record belongs to a flock, not a species, and is summed
+/// farm-wide above.
 class _PoultryGroup {
   const _PoultryGroup({required this.label, required this.icon, required this.count, required this.status});
   final String label;
@@ -35,16 +37,30 @@ class _PoultryGroup {
   final AnimalHealthStatus status;
 }
 
-_PoultryGroup _groupFor(List<Animal> animals, AnimalSpecies species, String label, FarmIcon icon) {
-  final group = animals.where((a) => a.species == species).toList();
-  final status = group.isEmpty
+/// Which species get a card when the catalog has not loaded yet — the
+/// oviparous ones the demo farm ships with. Once it has, the catalog's
+/// `reproduction_mode` decides, and a new layer species appears by itself.
+const _fallbackLayerSpecies = ['layer_hen', 'duck', 'turkey'];
+
+_PoultryGroup _groupFor(List<Animal> animals, List<AnimalGroup> groups, String species, String label, FarmIcon icon) {
+  final individuals = animals.where((a) => a.species == species).toList();
+  final grouped = groups.where((g) => g.species == species && g.status != 'archived').fold<int>(0, (s, g) => s + g.count);
+  final status = individuals.isEmpty
       ? AnimalHealthStatus.healthy
-      : group.any((a) => a.status == AnimalHealthStatus.underTreatment)
+      : individuals.any((a) => a.status == AnimalHealthStatus.underTreatment)
           ? AnimalHealthStatus.underTreatment
-          : group.any((a) => a.status == AnimalHealthStatus.underObservation)
+          : individuals.any((a) => a.status == AnimalHealthStatus.underObservation)
               ? AnimalHealthStatus.underObservation
               : AnimalHealthStatus.healthy;
-  return _PoultryGroup(label: label, icon: icon, count: group.length, status: status);
+  return _PoultryGroup(label: label, icon: icon, count: individuals.length + grouped, status: status);
+}
+
+/// "Layer hen flock" / "سرب دجاجة بياضة": the species' own word for a
+/// group, in the order the language puts it.
+String _flockLabel(LivestockProvider livestock, String species, String lang, String fallbackGroupWord) {
+  final name = livestock.speciesName(species, lang);
+  final group = livestock.term(species, 'group', lang, fallback: fallbackGroupWord);
+  return lang == 'ar' ? '$group $name' : '$name ${group.toLowerCase()}';
 }
 
 class EggProductionScreen extends StatelessWidget {
@@ -75,9 +91,21 @@ class EggProductionScreen extends StatelessWidget {
         : (thisWeekTotal > 0 ? 100.0 : 0.0);
     final eggDiff = thisWeekTotal - lastWeekTotal;
 
-    final layerGroup = _groupFor(animals, AnimalSpecies.layerHen, context.t('layerFlock'), FarmIcon.poultry);
-    final duckGroup = _groupFor(animals, AnimalSpecies.duck, context.t('duckFlock'), FarmIcon.duck);
-    final turkeyGroup = _groupFor(animals, AnimalSpecies.turkey, context.t('turkeyFlock'), FarmIcon.poultry);
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
+    final layerSpecies = livestock.oviparousSpecies.isNotEmpty
+        ? [for (final s in livestock.oviparousSpecies) s.code]
+        : _fallbackLayerSpecies;
+    final poultryGroups = [
+      for (final code in layerSpecies)
+        _groupFor(
+          animals,
+          livestock.groups,
+          code,
+          _flockLabel(livestock, code, lang, context.t('flock')),
+          FarmIconMap.species(livestock.speciesIcon(code)),
+        ),
+    ];
 
     return SingleChildScrollView(
       child: Column(
@@ -113,11 +141,7 @@ class EggProductionScreen extends StatelessWidget {
             subtitle: context.t('flockOverviewSubtitle'),
             child: LayoutBuilder(builder: (context, c) {
               final wide = c.maxWidth > kTabletBreakpoint;
-              final cards = [
-                _FlockCard(group: layerGroup),
-                _FlockCard(group: duckGroup),
-                _FlockCard(group: turkeyGroup),
-              ];
+              final cards = [for (final g in poultryGroups) _FlockCard(group: g)];
               final insight = _WeeklyInsightCard(pctChange: pctChange, eggDiff: eggDiff, hasTrendData: hasTrendData);
               if (!wide) {
                 return Column(children: [for (final c2 in cards) ...[c2, const SizedBox(height: FarmSpacing.md)], insight]);

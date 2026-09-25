@@ -68,6 +68,25 @@ class AdjustNumber extends CacheEffect {
   final double delta;
 }
 
+/// Prepends [record] to a list *inside* one cached record — an identifier
+/// onto the animal that carries it, in the farm-wide `/animals` list.
+class AppendNested extends CacheEffect {
+  const AppendNested(super.collectionPath, this.id, this.field, this.record, {super.listKey});
+  final String id;
+  final String field;
+  final Map<String, dynamic> record;
+}
+
+/// Patches one entry of a list inside one cached record — retiring an
+/// identifier on its animal without touching anything else on it.
+class MergeNested extends CacheEffect {
+  const MergeNested(super.collectionPath, this.id, this.field, this.nestedId, this.patch, {super.listKey});
+  final String id;
+  final String field;
+  final String nestedId;
+  final Map<String, dynamic> patch;
+}
+
 typedef _EffectBuilder = List<CacheEffect> Function(_Match match);
 
 class _Match {
@@ -122,6 +141,24 @@ final List<_Rule> _rules = [
   // --- Daily field work: the writes a worker actually makes out of range.
   ..._crud('/tasks', remove: true),
   ..._crud('/animals'),
+  // Identifiers live on the animal (generic animal model §4). A new one
+  // shows on the animal's own list, on its Digital Twin and on its row in
+  // the herd; a retired one stays everywhere, marked retired.
+  _Rule('POST', '/animals/$_id/identifiers', (m) {
+    final record = _newRecord(m, extra: {'animal_id': m.ids[0], 'status': 'active', 'created_at': _now()});
+    return [
+      AppendRecord('/animals/${m.ids[0]}/identifiers', record),
+      AppendRecord('/animals/${m.ids[0]}', record, listKey: 'identifiers'),
+      AppendNested('/animals', m.ids[0], 'identifiers', record),
+    ];
+  }),
+  _Rule('DELETE', '/animals/$_id/identifiers/$_id', (m) => [
+        MergeRecord('/animals/${m.ids[0]}/identifiers', m.ids[1], const {'status': 'retired'}),
+        MergeRecord('/animals/${m.ids[0]}', m.ids[1], const {'status': 'retired'}, listKey: 'identifiers'),
+        MergeNested('/animals', m.ids[0], 'identifiers', m.ids[1], const {'status': 'retired'}),
+      ]),
+  // Herds, flocks and batches managed as one unit (§7).
+  ..._crud('/animal-groups'),
   _Rule('POST', '/health/treatments', (m) => [AppendRecord('/health/treatments', _newRecord(m))]),
   _Rule('POST', '/production/milk', (m) => [AppendRecord('/production/milk', _newRecord(m))]),
   _Rule('POST', '/production/eggs', (m) => [AppendRecord('/production/eggs', _newRecord(m))]),
@@ -355,6 +392,33 @@ List<dynamic>? _applyToList(List<dynamic> list, CacheEffect effect) {
         for (final entry in list)
           if (entry is Map<String, dynamic> && entry['id'] == id)
             <String, dynamic>{...entry, field: ((entry[field] as num?)?.toDouble() ?? 0) + delta, kPendingFlag: true}
+          else
+            entry,
+      ];
+    case AppendNested(:final id, :final field, :final record):
+      return [
+        for (final entry in list)
+          if (entry is Map<String, dynamic> && entry['id'] == id)
+            <String, dynamic>{
+              ...entry,
+              field: [record, ...(entry[field] as List<dynamic>? ?? const [])],
+              kPendingFlag: true,
+            }
+          else
+            entry,
+      ];
+    case MergeNested(:final id, :final field, :final nestedId, :final patch):
+      return [
+        for (final entry in list)
+          if (entry is Map<String, dynamic> && entry['id'] == id)
+            <String, dynamic>{
+              ...entry,
+              field: [
+                for (final nested in entry[field] as List<dynamic>? ?? const [])
+                  if (nested is Map<String, dynamic> && nested['id'] == nestedId) <String, dynamic>{...nested, ...patch} else nested,
+              ],
+              kPendingFlag: true,
+            }
           else
             entry,
       ];

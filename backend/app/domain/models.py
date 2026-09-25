@@ -179,12 +179,25 @@ class Animal(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
-    tag: Mapped[str] = mapped_column(String(50))
+    # The primary identifier's value, kept here for display and search.
+    # Nullable on purpose (generic animal model §4): identity lives in
+    # `animal_identifiers`, and a mare with a microchip and no ear tag is
+    # as valid as a cow with one.
+    tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
-    species: Mapped[str] = mapped_column(String(30))
+    # A row in `species`, not a member of an enum — adding goats is data.
+    species: Mapped[str] = mapped_column(String(30), ForeignKey("species.code"))
     breed: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    breed_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("breeds.id"), nullable=True)
     sex: Mapped[str | None] = mapped_column(String(5), nullable=True)
     birth_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    birth_date_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # With species and sex, these two decide what this animal can do —
+    # see services/capability_service.py.
+    life_stage: Mapped[str | None] = mapped_column(String(30), ForeignKey("life_stages.code"), nullable=True)
+    management_profile: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("management_profiles.code"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(30), default="healthy")
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -212,15 +225,35 @@ class Animal(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
+    identifiers: Mapped[list["AnimalIdentifier"]] = relationship(  # noqa: F821 - livestock_models
+        "AnimalIdentifier",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="AnimalIdentifier.created_at",
+    )
+
 
 class Flock(Base):
+    """A group managed as one unit — the generic model's `AnimalGroup`
+    (§7). Poultry usually; sheep and goats sometimes. Production, feed and
+    health can all attach here as well as to an individual animal."""
+
     __tablename__ = "flocks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     name: Mapped[str] = mapped_column(String(200))
-    species: Mapped[str] = mapped_column(String(30))
+    species: Mapped[str] = mapped_column(String(30), ForeignKey("species.code"))
+    # flock | herd | batch | pen — what the farm calls it.
+    group_type: Mapped[str] = mapped_column(String(20), default="flock")
     count: Mapped[int] = mapped_column(Integer, default=0)
+    # female | male | mixed — a laying flock is female; the resolver will
+    # not claim a mixed flock lays.
+    sex_composition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    life_stage: Mapped[str | None] = mapped_column(String(30), ForeignKey("life_stages.code"), nullable=True)
+    management_profile: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("management_profiles.code"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(30), default="healthy")
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)

@@ -10,6 +10,7 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
@@ -306,10 +307,7 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
     final needle = _query.text.trim().toLowerCase();
     final matches = needle.isEmpty
         ? all
-        : all
-            .where((a) =>
-                a.name.toLowerCase().contains(needle) || a.tag.toLowerCase().contains(needle))
-            .toList();
+        : all.where((a) => a.matches(needle)).toList();
 
     return AlertDialog(
       title: Text(context.t('chooseAnimal')),
@@ -341,12 +339,15 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
                       separatorBuilder: (_, __) => const Divider(height: 1, color: FarmColors.border),
                       itemBuilder: (context, i) {
                         final animal = matches[i];
+                        final speciesName = context
+                            .read<LivestockProvider>()
+                            .speciesName(animal.species, Localizations.localeOf(context).languageCode);
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: Text('${animal.name}  #${animal.tag}',
+                          title: Text(animal.primaryId.isEmpty ? animal.name : '${animal.name}  #${animal.primaryId}',
                               style: FarmTypography.textTheme.titleSmall),
                           subtitle: Text(
-                            '${animal.species.label} • ${animal.groupName ?? animal.location}',
+                            '$speciesName • ${animal.groupName ?? animal.location}',
                             style: FarmTypography.textTheme.bodySmall,
                           ),
                           trailing: const ForwardChevron(size: 18, color: FarmColors.muted),

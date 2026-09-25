@@ -92,6 +92,31 @@ void main() {
       expect(effect.listKey, 'notifications');
     });
 
+    test('a new identifier lands on the animal everywhere it is cached', () {
+      final effects = effectsFor(
+        'POST',
+        '/animals/cow-744/identifiers',
+        {'identifier_type': 'RFID', 'identifier_value': '982000123', 'is_primary': false},
+        localId: 'id-1',
+      );
+      // Its own list, the Digital Twin's nested list, and the row in the
+      // farm-wide herd list — so the card and the profile agree offline.
+      expect(effects.whereType<AppendRecord>().map((e) => e.collectionPath), ['/animals/cow-744/identifiers', '/animals/cow-744']);
+      expect(effects.whereType<AppendRecord>().last.listKey, 'identifiers');
+      final nested = effects.whereType<AppendNested>().single;
+      expect(nested.collectionPath, '/animals');
+      expect(nested.id, 'cow-744');
+      expect(nested.record['status'], 'active');
+    });
+
+    test('retiring an identifier keeps the row and marks it retired', () {
+      final effects = effectsFor('DELETE', '/animals/cow-744/identifiers/i-9', null, localId: 'x');
+      expect(effects.whereType<MergeRecord>().every((e) => e.patch['status'] == 'retired'), isTrue);
+      final nested = effects.whereType<MergeNested>().single;
+      expect(nested.nestedId, 'i-9');
+      expect(nested.patch, {'status': 'retired'});
+    });
+
     test('an unrecognised write produces no effect rather than guessing', () {
       // Offline it still reaches the outbox and syncs; it just has no
       // local prediction. Guessing wrong is worse than showing nothing.

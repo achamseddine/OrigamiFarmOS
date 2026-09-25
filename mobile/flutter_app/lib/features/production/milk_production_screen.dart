@@ -14,6 +14,7 @@ import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/production_records.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 
 bool _isToday(DateTime d) {
@@ -85,9 +86,20 @@ class MilkProductionScreen extends StatelessWidget {
     final morningPct = total > 0 ? morningTotal / total * 100 : 0.0;
     final eveningPct = total > 0 ? eveningTotal / total * 100 : 0.0;
 
-    final cowsLactating = animals.where((a) => a.species == AnimalSpecies.cow && a.lactating).length;
-    final goatsLactating = animals.where((a) => a.species == AnimalSpecies.goat && a.lactating).length;
-    final avgPerCow = cowsLactating > 0 ? total / cowsLactating : 0.0;
+    // Whoever is lactating is milked — cows, goats, dairy ewes, or a
+    // species this screen has never heard of. Counted per species for the
+    // caption, named from the catalog.
+    final lactating = animals.where((a) => a.lactating).toList();
+    final lactatingBySpecies = <String, int>{};
+    for (final a in lactating) {
+      lactatingBySpecies.update(a.species, (n) => n + 1, ifAbsent: () => 1);
+    }
+    final avgPerAnimal = lactating.isNotEmpty ? total / lactating.length : 0.0;
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
+    final lactatingSummary = lactatingBySpecies.isEmpty
+        ? context.t('noneLactating')
+        : lactatingBySpecies.entries.map((e) => '${e.value} ${livestock.speciesName(e.key, lang)}').join(' • ');
 
     final underWithdrawal = animals.where((a) => a.isUnderWithdrawal).toList();
 
@@ -119,7 +131,7 @@ class MilkProductionScreen extends StatelessWidget {
               KpiCard(icon: FarmIcon.milkBottle, label: context.t('milkToday'), value: total.toStringAsFixed(0), unit: context.t('liters')),
               KpiCard(icon: FarmIcon.sun, label: context.t('morningSession'), value: morningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${morningPct.toStringAsFixed(0)}% of total'),
               KpiCard(icon: FarmIcon.leaf, label: context.t('eveningSession'), value: eveningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${eveningPct.toStringAsFixed(0)}% of total'),
-              KpiCard(icon: FarmIcon.cow, label: context.t('averagePerCow'), value: avgPerCow.toStringAsFixed(1), unit: context.t('liters'), caption: '$cowsLactating cows milked'),
+              KpiCard(icon: FarmIcon.milkBottle, label: context.t('averagePerAnimal'), value: avgPerAnimal.toStringAsFixed(1), unit: context.t('liters'), caption: '${lactating.length} ${context.t('animalsMilked')}'),
               KpiCard(icon: FarmIcon.warning, label: context.t('underWithdrawal'), value: '${underWithdrawal.length}', caption: context.t('milkNotForSale'), tint: underWithdrawal.isEmpty ? null : FarmColors.warning),
             ];
             return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
@@ -209,9 +221,9 @@ class MilkProductionScreen extends StatelessWidget {
             final sessions = SectionCard(
               title: context.t('sessionOverview'),
               child: Row(children: [
-                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('morningSession'), value: morningTotal, sub: '$cowsLactating cows • $goatsLactating goats')),
+                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('morningSession'), value: morningTotal, sub: lactatingSummary)),
                 const SizedBox(width: 10),
-                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('eveningSession'), value: eveningTotal, sub: '$cowsLactating cows • $goatsLactating goats')),
+                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('eveningSession'), value: eveningTotal, sub: lactatingSummary)),
               ]),
             );
             final destination = SectionCard(

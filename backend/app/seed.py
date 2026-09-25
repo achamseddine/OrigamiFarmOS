@@ -22,6 +22,8 @@ from app.db.base import Base, SessionLocal, engine
 from app.domain import models
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
+from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
+from app.livestock.reference import ensure_reference_data
 from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
 from app.visits.seed import seed_visits_demo_data
@@ -46,6 +48,10 @@ def seed_demo_data(db: Session) -> None:
     if db.get(models.Farm, FARM_ID) is not None:
         print("Demo data already present — skipping (delete the DB file to reseed).")
         return
+
+    # Species, capabilities and their rules are configuration the whole
+    # farm depends on — they go in before any animal that refers to them.
+    ensure_reference_data(db)
 
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
     db.add(farm)
@@ -129,14 +135,27 @@ def seed_demo_data(db: Session) -> None:
         dict(id="goat-gigi", tag="G-091", name="Gigi", species="goat", breed="Saanen", sex="F",
              birth_years=2, status="healthy", location_label="Hillside Paddock", health_score=89, lactating=True, group_name="Goat Group B"),
     ]
+    # Generic animal model: every seeded animal gets the stage and profile
+    # the resolver needs — a lactating animal is a dairy animal, and
+    # without that profile its next milk record would be refused — and its
+    # tag becomes a typed identifier row (ear tag on mammals, leg band on
+    # poultry), the same mapping the migration applies to a live database.
+    poultry = {"layer_hen", "duck", "turkey"}
     for a in animals:
+        profile = "dairy" if a.get("lactating") else ("layer" if a["species"] in poultry else None)
         db.add(models.Animal(
             id=a["id"], farm_id=FARM_ID, tag=a["tag"], name=a["name"], species=a["species"], breed=a["breed"], sex=a["sex"],
             birth_date=_now() - timedelta(days=365 * a["birth_years"] + 40), status=a["status"],
+            life_stage="adult" if a["birth_years"] >= 1 else "young", management_profile=profile,
             location_label=a["location_label"], health_score=a["health_score"], pregnant=a.get("pregnant", False),
             pregnancy_days=a.get("pregnancy_days"), lactating=a.get("lactating", False), lactation_cycle=a.get("lactation_cycle"),
             withdrawal_until=_in_hours(a["withdrawal_days"] * 24) if a.get("withdrawal_days") else None,
             withdrawal_reason=a.get("withdrawal_reason"), weight_kg=a.get("weight_kg"), group_name=a.get("group_name"),
+        ))
+        db.add(livestock_models.AnimalIdentifier(
+            id=new_id(), animal_id=a["id"],
+            identifier_type="LEG_BAND" if a["species"] in poultry else "EAR_TAG",
+            identifier_value=a["tag"], is_primary=True, status="active",
         ))
 
     # Bella's milk trend: declining over the last 8 sessions (triggers RULE-HEALTH-RISK).
@@ -173,7 +192,11 @@ def seed_demo_data(db: Session) -> None:
         ("flock-turkey", "Turkey Flock", "turkey", 120, "Barn C"),
     ]
     for fid, name, species, count, loc in flocks:
-        db.add(models.Flock(id=fid, farm_id=FARM_ID, name=name, species=species, count=count, status="healthy", location_label=loc))
+        # A laying flock is female by what it is kept for; the resolver
+        # needs that to grant EGG_PRODUCTION.
+        db.add(models.Flock(id=fid, farm_id=FARM_ID, name=name, species=species, count=count, status="healthy",
+                            location_label=loc, group_type="flock", sex_composition="female",
+                            life_stage="adult", management_profile="layer"))
 
     # Duck flock egg drop (-22%, triggers RULE-EGG-DROP); layer/turkey stay stable.
     db.add(models.EggRecord(id=new_id(), flock_id="flock-duck", total_eggs=1446, sellable_eggs=1300, broken_eggs=60,

@@ -14,6 +14,7 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
 import '../../sync/sync_controller.dart';
 import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
@@ -28,12 +29,15 @@ class AnimalStatusScreen extends StatefulWidget {
 }
 
 class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
-  AnimalSpecies? _speciesFilter;
+  /// A species *code*; the chips come from the catalog, not an enum.
+  String? _speciesFilter;
   AnimalHealthStatus? _healthFilter;
 
   @override
   Widget build(BuildContext context) {
     final animals = context.watch<AnimalsProvider>().animals;
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
     final matching = animals.where((a) {
       final speciesOk = _speciesFilter == null || a.species == _speciesFilter;
       final healthOk = _healthFilter == null || a.status == _healthFilter;
@@ -92,6 +96,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
           ),
           const SizedBox(height: FarmSpacing.md),
           _SpeciesFilterRow(
+            options: _speciesOptions(context, livestock, animals, lang),
             selected: _speciesFilter,
             onSelected: (s) => setState(() => _speciesFilter = s),
           ),
@@ -121,7 +126,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
-            final herdGroups = _computeHerdGroups(animals);
+            final herdGroups = _computeHerdGroups(animals, (code) => livestock.speciesName(code, lang));
             final herdCard = SectionCard(
               title: context.t('herdFlockSummary'),
               child: herdGroups.isEmpty
@@ -129,7 +134,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                   : Column(
                       children: [
                         for (final g in herdGroups) ...[
-                          _HerdGroupRow(group: g),
+                          _HerdGroupRow(group: g, icon: FarmIconMap.species(livestock.speciesIcon(g['species'] as String))),
                           const Divider(height: 20, color: FarmColors.border),
                         ],
                         Align(
@@ -193,20 +198,40 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
   }
 }
 
-/// Groups the real herd by [Animal.groupName] (falling back to species
-/// label for animals with no group assigned) — a client-side computation
+/// The species chips: the catalog's order, limited to species this farm
+/// actually keeps, plus any code the catalog does not know (so no animal
+/// is ever unfilterable). No hard-coded "Cows / Goats / Poultry" — a farm
+/// that starts keeping camels gets a Camels chip the day the server lists
+/// them.
+List<(String, String?)> _speciesOptions(BuildContext context, LivestockProvider livestock, List<Animal> animals, String lang) {
+  final present = {for (final a in animals) a.species};
+  final ordered = [
+    for (final s in livestock.species)
+      if (present.contains(s.code)) s.code,
+    for (final code in present)
+      if (livestock.speciesByCode(code) == null) code,
+  ];
+  return [
+    (context.t('allSpecies'), null),
+    for (final code in ordered) (livestock.speciesName(code, lang), code),
+  ];
+}
+
+/// Groups the real herd by [Animal.groupName] (falling back to the species
+/// name for animals with no group assigned) — a client-side computation
 /// over already-loaded [Animal]s, since the backend has no dedicated
 /// herd-group rollup endpoint.
-List<Map<String, Object>> _computeHerdGroups(List<Animal> animals) {
+List<Map<String, Object>> _computeHerdGroups(List<Animal> animals, String Function(String code) speciesName) {
   final groups = <String, List<Animal>>{};
   for (final a in animals) {
-    groups.putIfAbsent(a.groupName ?? a.species.label, () => []).add(a);
+    groups.putIfAbsent(a.groupName ?? speciesName(a.species), () => []).add(a);
   }
   final result = <Map<String, Object>>[
     for (final entry in groups.entries)
       {
         'name': entry.key,
-        'species': entry.value.first.species.label,
+        'species': entry.value.first.species,
+        'speciesLabel': speciesName(entry.value.first.species),
         'count': entry.value.length,
         'healthy': entry.value.where((a) => a.status == AnimalHealthStatus.healthy).length,
         'attention': entry.value.where((a) => a.status != AnimalHealthStatus.healthy).length,
@@ -217,20 +242,13 @@ List<Map<String, Object>> _computeHerdGroups(List<Animal> animals) {
 }
 
 class _SpeciesFilterRow extends StatelessWidget {
-  const _SpeciesFilterRow({required this.selected, required this.onSelected});
-  final AnimalSpecies? selected;
-  final ValueChanged<AnimalSpecies?> onSelected;
+  const _SpeciesFilterRow({required this.options, required this.selected, required this.onSelected});
+  final List<(String, String?)> options;
+  final String? selected;
+  final ValueChanged<String?> onSelected;
 
   @override
   Widget build(BuildContext context) {
-    final options = <(String, AnimalSpecies?)>[
-      (context.t('allSpecies'), null),
-      (context.t('cows'), AnimalSpecies.cow),
-      (context.t('goats'), AnimalSpecies.goat),
-      (context.t('sheep'), AnimalSpecies.sheep),
-      (context.t('horses'), AnimalSpecies.horse),
-      (context.t('poultry'), AnimalSpecies.layerHen),
-    ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -306,8 +324,9 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _HerdGroupRow extends StatelessWidget {
-  const _HerdGroupRow({required this.group});
+  const _HerdGroupRow({required this.group, required this.icon});
   final Map<String, Object> group;
+  final FarmIcon icon;
 
   @override
   Widget build(BuildContext context) {
@@ -317,7 +336,7 @@ class _HerdGroupRow extends StatelessWidget {
           width: 38,
           height: 38,
           decoration: const BoxDecoration(color: FarmColors.mist, shape: BoxShape.circle),
-          child: Center(child: AppIcon(FarmIconMap.speciesLabel(group['species'] as String), size: 17, color: FarmColors.cedar)),
+          child: Center(child: AppIcon(icon, size: 17, color: FarmColors.cedar)),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -327,7 +346,7 @@ class _HerdGroupRow extends StatelessWidget {
               Text(group['name'] as String, style: FarmTypography.textTheme.titleSmall),
               Row(
                 children: [
-                  Text('${group['species']}', style: FarmTypography.textTheme.bodySmall),
+                  Text('${group['speciesLabel']}', style: FarmTypography.textTheme.bodySmall),
                   const SizedBox(width: 8),
                   Text('${context.t('healthy')} ${group['healthy']}',
                       style: const TextStyle(fontSize: 11, color: FarmColors.success, fontWeight: FontWeight.w700)),
@@ -362,6 +381,8 @@ class _AnimalCard extends StatelessWidget {
       AnimalHealthStatus.underObservation => context.t('underObservation'),
       AnimalHealthStatus.underTreatment => context.t('underTreatment'),
     };
+    final livestock = context.watch<LivestockProvider>();
+    final speciesName = livestock.speciesName(animal.species, Localizations.localeOf(context).languageCode);
     return Material(
       color: FarmColors.card,
       borderRadius: FarmRadii.card,
@@ -383,7 +404,7 @@ class _AnimalCard extends StatelessWidget {
                     Positioned.fill(
                       child: PhotoSlot(
                         filePath: animal.photoPath,
-                        icon: FarmIconMap.species(animal.species),
+                        icon: FarmIconMap.species(livestock.speciesIcon(animal.species)),
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(FarmRadii.md - 1)),
                       ),
                     ),
@@ -414,8 +435,9 @@ class _AnimalCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${animal.name}  #${animal.tag}', style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis),
-                    Text('${animal.species.label} • ${animal.groupName ?? animal.location}',
+                    Text(animal.primaryId.isEmpty ? animal.name : '${animal.name}  #${animal.primaryId}',
+                        style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis),
+                    Text('$speciesName • ${animal.groupName ?? animal.location}',
                         style: FarmTypography.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
                     if (animal.milkTodayL != null)

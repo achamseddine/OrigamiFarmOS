@@ -13,6 +13,7 @@ import '../providers/agriculture_provider.dart';
 import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
+import '../providers/livestock_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../providers/production_provider.dart';
@@ -93,6 +94,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AgricultureProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => TasksProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
+        ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => RecommendationsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
@@ -193,7 +195,21 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       // The bell is for everyone: the backend already scopes its contents
       // to the modules this user holds.
       context.read<NotificationsProvider>().load(),
+      // The species catalog is reference data for anyone who sees an
+      // animal anywhere — a herd card, a milk record, a flock — so it is
+      // not gated on a module. Small, cached, and what the Add Animal
+      // form resolves against with no signal.
+      quietly(() => context.read<LivestockProvider>().load()),
     ]);
+  }
+
+  /// A load whose failure the screens already handle with an empty state.
+  Future<void> quietly(Future<void> Function() load) async {
+    try {
+      await load();
+    } catch (_) {
+      // Nothing cached yet and no network: the form says so itself.
+    }
   }
 
   @override

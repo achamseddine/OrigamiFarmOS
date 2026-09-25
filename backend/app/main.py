@@ -18,6 +18,7 @@ from app.api.v1 import (
     farms,
     feed,
     health,
+    livestock,
     modules,
     mouneh,
     notifications,
@@ -37,6 +38,7 @@ from app.core.idempotency import IdempotencyMiddleware
 from app.db.base import Base, engine
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
+from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
 
 settings = get_settings()
 
@@ -97,6 +99,7 @@ app.include_router(farms.router, prefix=api_prefix)
 app.include_router(sync.router, prefix=api_prefix)
 app.include_router(sales.router, prefix=api_prefix)
 app.include_router(animals.router, prefix=api_prefix)
+app.include_router(livestock.router, prefix=api_prefix)
 app.include_router(observations.router, prefix=api_prefix)
 app.include_router(tasks.router, prefix=api_prefix)
 app.include_router(feed.router, prefix=api_prefix)
