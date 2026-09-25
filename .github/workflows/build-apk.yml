@@ -1,0 +1,81 @@
+name: Build tablet APK
+
+# Manual trigger only — this does not run on every push. The build
+# environment used to develop this repo has an egress policy that blocks
+# dl.google.com (the Android SDK distribution host), so the APK cannot be
+# built there; GitHub-hosted runners have unrestricted network access and
+# come with a pre-installed Android SDK, so the build runs here instead.
+on:
+  workflow_dispatch:
+    inputs:
+      build-mode:
+        description: "Flutter build mode"
+        required: false
+        default: release
+        type: choice
+        options:
+          - release
+          - debug
+  # workflow_dispatch only becomes available from the GitHub UI/API once
+  # this file exists on the repo's default branch, so this push trigger
+  # scoped to the MVP branch lets the first build run without needing that.
+  push:
+    branches:
+      - claude/origami-farmos-tablet-mvp-u88i3e
+    paths:
+      - ".github/workflows/build-apk.yml"
+      - "mobile/flutter_app/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile/flutter_app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter --version
+
+      - run: flutter pub get
+
+      - run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      - run: flutter build apk --${{ inputs.build-mode || 'release' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: origami-farmos-${{ inputs.build-mode || 'release' }}-apk
+          path: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+
+      # Actions artifacts are served from a rotating Azure Blob Storage
+      # host that some network policies (including the one this repo was
+      # developed under) block. A GitHub Release asset is served from
+      # api.github.com / objects.githubusercontent.com instead, which is
+      # reachable in more environments, so publish the APK there too.
+      - name: Publish APK to a rolling GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tablet-apk-latest
+          name: "Tablet APK (latest automated build)"
+          body: |
+            Automated build from commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            Signed with the Flutter debug keystore — fine for sideloading onto a test
+            tablet, not for Play Store distribution. This release is overwritten by
+            every run of the "Build tablet APK" workflow.
+          prerelease: true
+          files: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk

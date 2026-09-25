@@ -1,0 +1,17 @@
+
+/* Origami FarmOS reusable dashboard components */
+.of-card{background:rgba(255,255,255,.76);border:1px solid var(--farmos-border);border-radius:24px;box-shadow:var(--farmos-shadow-card);padding:20px;}
+.of-kpi{display:flex;align-items:center;justify-content:space-between;min-height:104px;}
+.of-kpi__icon{width:52px;height:52px;border-radius:18px;background:var(--farmos-mist);display:grid;place-items:center;color:var(--farmos-cedar);}
+.of-kpi__value{font-size:30px;font-weight:850;color:var(--farmos-cedar);letter-spacing:-.05em;}
+.of-status{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:850;}
+.of-status--good{background:#EAF1EC;color:var(--farmos-success)}
+.of-status--watch{background:#FFF3DF;color:var(--farmos-warning)}
+.of-status--alert{background:#FCEAE7;color:var(--farmos-danger)}
+.of-list-row{display:grid;grid-template-columns:48px 1fr auto;gap:14px;align-items:center;padding:14px 0;border-bottom:1px solid var(--farmos-border);}
+.of-table{width:100%;border-collapse:collapse;font-size:14px;}
+.of-table th{text-align:left;color:var(--farmos-muted);font-weight:850;padding:12px;border-bottom:1px solid var(--farmos-border);}
+.of-table td{padding:14px 12px;border-bottom:1px solid #eee5d6;}
+.of-sidebar-item{display:flex;align-items:center;gap:12px;height:48px;border-radius:14px;padding:0 14px;color:#193D31;font-weight:750;}
+.of-sidebar-item--active{background:linear-gradient(135deg,var(--farmos-cedar),var(--farmos-cedar-2));color:white;}
+.of-chart-placeholder{height:220px;border-radius:18px;background:linear-gradient(180deg,rgba(31,122,77,.12),rgba(31,122,77,.02));border:1px dashed rgba(31,122,77,.32);}

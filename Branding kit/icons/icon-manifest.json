@@ -1,0 +1,182 @@
+[
+  {
+    "name": "sun",
+    "file": "icons/svg/sun.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "cow",
+    "file": "icons/svg/cow.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "goat",
+    "file": "icons/svg/goat.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "sheep",
+    "file": "icons/svg/sheep.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "horse",
+    "file": "icons/svg/horse.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "poultry",
+    "file": "icons/svg/poultry.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "duck",
+    "file": "icons/svg/duck.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "egg",
+    "file": "icons/svg/egg.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "milk-bottle",
+    "file": "icons/svg/milk-bottle.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "feed-bag",
+    "file": "icons/svg/feed-bag.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "leaf",
+    "file": "icons/svg/leaf.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "harvest-basket",
+    "file": "icons/svg/harvest-basket.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "warning",
+    "file": "icons/svg/warning.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "bell",
+    "file": "icons/svg/bell.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "cloud-sync",
+    "file": "icons/svg/cloud-sync.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "calendar",
+    "file": "icons/svg/calendar.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "task",
+    "file": "icons/svg/task.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "chart-line",
+    "file": "icons/svg/chart-line.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "money",
+    "file": "icons/svg/money.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "medicine",
+    "file": "icons/svg/medicine.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "stethoscope",
+    "file": "icons/svg/stethoscope.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "syringe",
+    "file": "icons/svg/syringe.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "tractor",
+    "file": "icons/svg/tractor.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "barn",
+    "file": "icons/svg/barn.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "inventory",
+    "file": "icons/svg/inventory.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "settings",
+    "file": "icons/svg/settings.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "report",
+    "file": "icons/svg/report.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "language",
+    "file": "icons/svg/language.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "arrow-right",
+    "file": "icons/svg/arrow-right.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "check",
+    "file": "icons/svg/check.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "heart",
+    "file": "icons/svg/heart.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "eye",
+    "file": "icons/svg/eye.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "scale",
+    "file": "icons/svg/scale.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "location",
+    "file": "icons/svg/location.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "pregnancy",
+    "file": "icons/svg/pregnancy.svg",
+    "usage": "line icon, currentColor, 24x24"
+  },
+  {
+    "name": "qr",
+    "file": "icons/svg/qr.svg",
+    "usage": "line icon, currentColor, 24x24"
+  }
+]

@@ -1,0 +1,117 @@
+{
+  "package": "Origami FarmOS Option C UI Kit",
+  "version": "0.1",
+  "created": "2026-08-22",
+  "screen_count": 10,
+  "screens": [
+    {
+      "file": "screens/high-res/01-welcome-start-my-day.png",
+      "title": "Welcome / Start My Day",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "6f363cb336979ac2"
+    },
+    {
+      "file": "screens/high-res/02-morning-briefing-dashboard.png",
+      "title": "Morning Briefing Dashboard",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "d98d278629e9fee1"
+    },
+    {
+      "file": "screens/high-res/03-animal-status-overview.png",
+      "title": "Animal Status Overview",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "87e7efe202984153"
+    },
+    {
+      "file": "screens/high-res/04-animal-digital-twin-bella-744.png",
+      "title": "Animal Digital Twin",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "430af2aaff5d9bdd"
+    },
+    {
+      "file": "screens/high-res/05-feed-inventory.png",
+      "title": "Feed & Inventory",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "7a50403852dc2592"
+    },
+    {
+      "file": "screens/high-res/06-milk-production.png",
+      "title": "Milk Production",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "4cdf88bdc2f360cb"
+    },
+    {
+      "file": "screens/high-res/07-egg-production.png",
+      "title": "Egg Production",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "02ed301b38081bba"
+    },
+    {
+      "file": "screens/high-res/08-health-intelligence.png",
+      "title": "Health Intelligence",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "e4d8992fbd81f035"
+    },
+    {
+      "file": "screens/high-res/09-produce-harvest.png",
+      "title": "Produce & Harvest",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "d04767b2ccb34a7b"
+    },
+    {
+      "file": "screens/high-res/10-sales-finance-daily-summary.png",
+      "title": "Sales, Expenses & Daily Summary",
+      "size": {
+        "width": 1448,
+        "height": 1086
+      },
+      "sha256_16": "e0aee5fb69b9f650"
+    }
+  ],
+  "assets": {
+    "logos": [
+      "branding/logo/origami-farmos-logo.svg",
+      "branding/logo/origami-farmos-mark.svg"
+    ],
+    "tokens": [
+      "branding/colors/design-tokens.json",
+      "branding/colors/design-tokens.css"
+    ],
+    "icons": 36,
+    "styles": [
+      "styles/farmos-theme.css",
+      "styles/component-library.css"
+    ],
+    "mockData": [
+      "data/option-c-demo-data.json",
+      "data/i18n-en-ar.sample.json"
+    ]
+  }
+}

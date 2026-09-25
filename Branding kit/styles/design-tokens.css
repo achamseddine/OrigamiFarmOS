@@ -1,0 +1,26 @@
+:root{
+  --farmos-cedar: #0B3D2E;
+  --farmos-cedar-2: #145C3D;
+  --farmos-olive: #1F7A4D;
+  --farmos-gold: #D6A84F;
+  --farmos-wheat: #F0D79A;
+  --farmos-stone: #F7F3EA;
+  --farmos-sand: #E8DEC9;
+  --farmos-clay: #B76E47;
+  --farmos-ink: #071814;
+  --farmos-muted: #65756D;
+  --farmos-mist: #EAF1EC;
+  --farmos-danger: #A63C35;
+  --farmos-warning: #D9822B;
+  --farmos-success: #1F7A4D;
+  --farmos-white: #FFFFFF;
+  --farmos-card: #FFFDF7;
+  --farmos-border: #E7DEC9;
+  --farmos-radius-card: 24px;
+  --farmos-radius-panel: 32px;
+  --farmos-shadow-card: 0 14px 45px rgba(17,58,46,.08);
+  --farmos-shadow-elevated: 0 24px 80px rgba(5,24,18,.20);
+  --farmos-font-ui: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --farmos-font-display: Fraunces, Georgia, serif;
+  --farmos-font-arabic: "Noto Sans Arabic", Tahoma, Arial, sans-serif;
+}
