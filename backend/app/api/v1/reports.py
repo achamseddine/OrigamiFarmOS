@@ -13,7 +13,7 @@ router = APIRouter(tags=["reports"])
 
 
 @router.get("/morning-briefing")
-def morning_briefing(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> dict:
+def morning_briefing(farm_id: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> dict:
     """Tech spec §16: "Morning Briefing ... Local cache refresh on app open
     and after sync." Refreshing recommendations here (not just from
     GET /recommendations) means the briefing's priorities are current even
@@ -21,7 +21,7 @@ def morning_briefing(farm_id: str, db: Session = Depends(get_db), _user: models.
     """
     regenerate_recommendations(db, farm_id)
     db.commit()
-    return build_morning_briefing(db, farm_id)
+    return build_morning_briefing(db, farm_id, viewer_name=current_user.name)
 
 
 @router.get("/reports/daily-summary")

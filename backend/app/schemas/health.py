@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas.common import ORMModel
+
 
 class TreatmentCreate(BaseModel):
     """POST /health/treatments.
@@ -35,3 +37,21 @@ class TreatmentCreate(BaseModel):
         if not v.strip():
             raise ValueError("medication, dose and route are required")
         return v
+
+
+class TreatmentOut(ORMModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    diagnosis: str | None = None
+    medication: str
+    dose: str
+    route: str
+    start_at: datetime
+    end_at: datetime | None = None
+    withdrawal_until: datetime | None = None
+    vet_id: str | None = None
+    responsible_user_id: str
+    status: str
+    cost: float | None = None
+    notes: str | None = None

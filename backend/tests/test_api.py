@@ -21,6 +21,12 @@ class TestAuth:
 
 
 class TestBootstrapAndAnimals:
+    def test_my_farm_returns_the_signed_in_users_farm(self, client):
+        headers = auth_headers(client)
+        r = client.get("/api/v1/farms/me", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["id"] == "farm-origami"
+
     def test_bootstrap_returns_full_local_cache_payload(self, client):
         headers = auth_headers(client)
         r = client.get("/api/v1/farms/farm-origami/bootstrap", headers=headers)
@@ -28,7 +34,9 @@ class TestBootstrapAndAnimals:
         body = r.json()
         assert body["farm"]["id"] == "farm-origami"
         assert len(body["animals"]) == 12
-        assert len(body["inventory_items"]) == 7
+        # 7 original items + the feed architecture's barley, concentrate,
+        # premix and broiler grower (app/feeding/seed.py).
+        assert len(body["inventory_items"]) == 11
 
     def test_list_animals_filters_by_species(self, client):
         headers = auth_headers(client)
@@ -45,7 +53,10 @@ class TestBootstrapAndAnimals:
         body = r.json()
         assert body["name"] == "Bella"
         assert len(body["recent_observations"]) >= 1
-        assert len(body["recent_events"]) == 0  # observations/treatments in seed data don't write events directly
+        # Observations/treatments in seed data don't write events directly;
+        # the only events on Bella are her feeding supplement and the
+        # feeding that delivered it (app/feeding/seed.py).
+        assert {e["event_type"] for e in body["recent_events"]} <= {"feeding_event_recorded", "feeding_program_assigned"}
 
     def test_get_unknown_animal_returns_404(self, client):
         headers = auth_headers(client)
@@ -328,7 +339,9 @@ class TestSync:
             headers=headers,
             json={"farm_id": "farm-origami", "entity_type": "animal", "entity_id": "cow-214", "observation_type": "limping", "observer_id": "user-worker-1"},
         )
-        r = client.get("/api/v1/sync/pull", params={"farm_id": "farm-origami"}, headers=headers)
+        # The seed now writes a few hundred feed events before this one; the
+        # default page of 100 stops well short of it.
+        r = client.get("/api/v1/sync/pull", params={"farm_id": "farm-origami", "limit": 500}, headers=headers)
         assert r.status_code == 200
         body = r.json()
         assert any(e["event_type"] == "observation_recorded" for e in body["events"])

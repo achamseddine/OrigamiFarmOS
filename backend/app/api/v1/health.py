@@ -1,15 +1,33 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_diagnostic_role
+from app.api.deps import get_current_user, require_diagnostic_role
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import new_id, now, write_event
-from app.schemas.health import TreatmentCreate
+from app.schemas.health import TreatmentCreate, TreatmentOut
 
 router = APIRouter(prefix="/health", tags=["health"])
+
+
+@router.get("/treatments", response_model=list[TreatmentOut])
+def list_treatments(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.Treatment]:
+    """Treatment rows aren't farm-scoped directly (entity_type/entity_id
+    is generic) so this resolves the farm's animal and flock ids first,
+    matching the same generic-entity pattern used in api/v1/animals.py.
+    """
+    animal_ids = db.scalars(select(models.Animal.id).where(models.Animal.farm_id == farm_id)).all()
+    flock_ids = db.scalars(select(models.Flock.id).where(models.Flock.farm_id == farm_id)).all()
+    stmt = select(models.Treatment).where(
+        or_(
+            (models.Treatment.entity_type == "animal") & models.Treatment.entity_id.in_(animal_ids),
+            (models.Treatment.entity_type == "flock") & models.Treatment.entity_id.in_(flock_ids),
+        )
+    ).order_by(models.Treatment.start_at.desc())
+    return list(db.scalars(stmt))
 
 
 @router.post("/treatments", status_code=status.HTTP_201_CREATED)

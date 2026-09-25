@@ -7,7 +7,7 @@ import '../../core/theme/typography.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/observation.dart';
 import '../../providers/animals_provider.dart';
-import '../../providers/feed_provider.dart';
+import '../feed/feeding_event_dialog.dart';
 
 const _observationTypes = [
   'reduced_appetite',
@@ -72,18 +72,18 @@ class _ObserveDialogState extends State<_ObserveDialog> {
             ),
             DropdownButtonFormField<String>(
               value: _type,
-              decoration: const InputDecoration(labelText: 'Observation type'),
+              decoration: InputDecoration(labelText: context.t('observationType')),
               items: [for (final t in _observationTypes) DropdownMenuItem(value: t, child: Text(_observationLabel(t)))],
               onChanged: (v) => setState(() => _type = v ?? _type),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _severity,
-              decoration: const InputDecoration(labelText: 'Severity'),
-              items: const [
-                DropdownMenuItem(value: 'mild', child: Text('Mild')),
-                DropdownMenuItem(value: 'moderate', child: Text('Moderate')),
-                DropdownMenuItem(value: 'severe', child: Text('Severe')),
+              decoration: InputDecoration(labelText: context.t('severity')),
+              items: [
+                DropdownMenuItem(value: 'mild', child: Text(context.t('sevMild'))),
+                DropdownMenuItem(value: 'moderate', child: Text(context.t('sevModerate'))),
+                DropdownMenuItem(value: 'severe', child: Text(context.t('sevSevere'))),
               ],
               onChanged: (v) => setState(() => _severity = v ?? _severity),
             ),
@@ -118,14 +118,14 @@ class _ObserveDialogState extends State<_ObserveDialog> {
     final result = await context.read<AnimalsProvider>().recordObservation(
           animalId: widget.animalId,
           observationType: _type,
-          quality: ObservationQuality.humanObserved.name,
+          quality: observationQualityToApi(ObservationQuality.humanObserved),
           severity: _severity,
           notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         );
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -166,7 +166,7 @@ class _MilkDialogState extends State<_MilkDialog> {
   Widget build(BuildContext context) {
     final isUnderWithdrawal = widget.animal.isUnderWithdrawal;
     return AlertDialog(
-      title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 380,
         child: Column(
@@ -188,10 +188,10 @@ class _MilkDialogState extends State<_MilkDialog> {
               ),
             DropdownButtonFormField<String>(
               value: _session,
-              decoration: const InputDecoration(labelText: 'Session'),
-              items: const [
-                DropdownMenuItem(value: 'morning', child: Text('Morning')),
-                DropdownMenuItem(value: 'evening', child: Text('Evening')),
+              decoration: InputDecoration(labelText: context.t('session')),
+              items: [
+                DropdownMenuItem(value: 'morning', child: Text(context.t('sessionMorning'))),
+                DropdownMenuItem(value: 'evening', child: Text(context.t('sessionEvening'))),
               ],
               onChanged: (v) => setState(() => _session = v ?? _session),
             ),
@@ -204,7 +204,7 @@ class _MilkDialogState extends State<_MilkDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _destination,
-              decoration: const InputDecoration(labelText: 'Destination'),
+              decoration: InputDecoration(labelText: context.t('destination')),
               items: [
                 DropdownMenuItem(value: 'stored', child: Text(context.t('stored'))),
                 DropdownMenuItem(
@@ -253,7 +253,7 @@ class _MilkDialogState extends State<_MilkDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -300,7 +300,7 @@ class _TreatDialogState extends State<_TreatDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${context.t('treat')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('treat')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -310,7 +310,7 @@ class _TreatDialogState extends State<_TreatDialog> {
             Container(
               padding: const EdgeInsets.all(10),
               margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.gold, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
               child: Text(context.t('diagnosisLocked'), style: FarmTypography.textTheme.bodySmall),
             ),
             TextField(controller: _diagnosis, decoration: const InputDecoration(labelText: 'Diagnosis')),
@@ -375,7 +375,7 @@ class _TreatDialogState extends State<_TreatDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
     } else {
       setState(() {
         _saving = false;
@@ -410,7 +410,7 @@ class _MoveDialogState extends State<_MoveDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${context.t('move')} — ${widget.animal.name} #${widget.animal.tag}'),
+      title: Text('${context.t('move')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
         width: 360,
         child: TextField(controller: _location, decoration: const InputDecoration(labelText: 'New location')),
@@ -425,7 +425,7 @@ class _MoveDialogState extends State<_MoveDialog> {
                   await context.read<AnimalsProvider>().moveAnimal(animalId: widget.animal.id, newLocation: _location.text.trim());
                   if (!context.mounted) return;
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
                 },
           child: Text(context.t('save')),
         ),
@@ -434,94 +434,9 @@ class _MoveDialogState extends State<_MoveDialog> {
   }
 }
 
-Future<void> showFeedDialog(BuildContext context, Animal animal) {
-  return showDialog(context: context, builder: (context) => _FeedDialog(animal: animal));
-}
-
-class _FeedDialog extends StatefulWidget {
-  const _FeedDialog({required this.animal});
-  final Animal animal;
-
-  @override
-  State<_FeedDialog> createState() => _FeedDialogState();
-}
-
-class _FeedDialogState extends State<_FeedDialog> {
-  String? _itemId;
-  final _qty = TextEditingController(text: '2');
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _qty.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final items = context.watch<FeedProvider>().items;
-    _itemId ??= items.isNotEmpty ? items.first.id : null;
-    return AlertDialog(
-      title: Text('${context.t('feed')} — ${widget.animal.name} #${widget.animal.tag}'),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String>(
-              value: _itemId,
-              decoration: const InputDecoration(labelText: 'Feed item'),
-              items: [for (final i in items) DropdownMenuItem(value: i.id, child: Text('${i.name} (${i.currentQty.toStringAsFixed(0)} ${i.unit})'))],
-              onChanged: (v) => setState(() => _itemId = v),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _qty,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Quantity (kg)'),
-            ),
-            if (_error != null) Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _submit() async {
-    final qty = double.tryParse(_qty.text.trim());
-    if (qty == null || qty <= 0 || _itemId == null) {
-      setState(() => _error = context.t('valueMustBePositive'));
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final result = await context.read<FeedProvider>().recordDistribution(
-          itemId: _itemId!,
-          quantityKg: qty,
-          reason: 'supplemental_feeding',
-          linkedEntityType: 'animal',
-          linkedEntityId: widget.animal.id,
-        );
-    if (!mounted) return;
-    if (result.success) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('savedOffline'))));
-    } else {
-      setState(() {
-        _saving = false;
-        _error = result.error;
-      });
-    }
-  }
-}
+/// The Feed quick action opens the generic feeding dialog (generic feed
+/// architecture §2.6). The server issues the stock from the feed's lots
+/// and applies its usage policy, so the tablet no longer picks a raw
+/// inventory item and writes a bare movement against it.
+Future<void> showFeedDialog(BuildContext context, Animal animal) =>
+    showFeedingEventDialog(context, subjectType: 'animal', subjectId: animal.id, subjectName: animal.name);

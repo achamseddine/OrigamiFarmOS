@@ -16,10 +16,20 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core import permissions as perms
 from app.core.security import hash_password
 from app.db.base import Base, SessionLocal, engine
 from app.domain import models
+from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
+from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
+from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
+from app.domain import feed_models  # noqa: F401 - feed products / formulas / programs tables
+from app.feeding.catalog import ensure_feed_reference_data
+from app.feeding.seed import seed_feed_demo_data
+from app.livestock.reference import ensure_reference_data
+from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
+from app.visits.seed import seed_visits_demo_data
 
 FARM_ID = "farm-origami"
 
@@ -42,18 +52,47 @@ def seed_demo_data(db: Session) -> None:
         print("Demo data already present — skipping (delete the DB file to reseed).")
         return
 
+    # Species, capabilities and their rules are configuration the whole
+    # farm depends on — they go in before any animal that refers to them.
+    ensure_reference_data(db)
+    ensure_feed_reference_data(db)
+
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
     db.add(farm)
 
+    # (id, name, email, role, department) — department drives the starting
+    # module responsibilities below; owner/manager need none (they hold
+    # every module implicitly, see api/deps.py).
     users = [
-        ("user-rami", "Rami Farah", "rami@origami.farm", "manager"),
-        ("user-owner", "Joseph Origami", "owner@origami.farm", "owner"),
-        ("user-vet-1", "Dr. Layla Haddad", "layla.vet@origami.farm", "veterinarian"),
-        ("user-worker-1", "Karim Youssef", "karim.worker@origami.farm", "worker"),
-        ("user-acct-1", "Nadine Saab", "nadine.acct@origami.farm", "accountant"),
+        ("user-rami", "Rami Farah", "rami@origami.farm", "manager", None),
+        ("user-owner", "Joseph Origami", "owner@origami.farm", "owner", None),
+        ("user-vet-1", "Dr. Layla Haddad", "layla.vet@origami.farm", "veterinarian", "animals"),
+        ("user-worker-1", "Karim Youssef", "karim.worker@origami.farm", "worker", "animals"),
+        ("user-acct-1", "Nadine Saab", "nadine.acct@origami.farm", "accountant", None),
     ]
-    for user_id, name, email, role in users:
-        db.add(models.User(id=user_id, farm_id=FARM_ID, name=name, email=email, password_hash=hash_password("farmos123"), role=role, language="en"))
+    for user_id, name, email, role, department in users:
+        db.add(
+            models.User(
+                id=user_id, farm_id=FARM_ID, name=name, email=email,
+                password_hash=hash_password("farmos123"), role=role, language="en",
+                department=department, job_title=role.replace("_", " ").title(),
+            )
+        )
+    db.flush()
+    for user_id, _name, _email, role, department in users:
+        if perms.is_full_access(role):
+            continue
+        codes = list(perms.BASELINE_EMPLOYEE_MODULES)
+        codes += [c for c in perms.DEPARTMENT_MODULE_PRESETS.get(department or "", ()) if c not in codes]
+        if role == "accountant":
+            codes += [perms.FINANCE, perms.SALES, perms.EXPENSES, perms.REPORTS]
+        for code in codes:
+            db.add(
+                models.UserModulePermission(
+                    id=new_id(), farm_id=FARM_ID, user_id=user_id, module_code=code,
+                    **{f"can_{a}": v for a, v in perms.DEFAULT_RESPONSIBILITY_GRANT.items()},
+                )
+            )
 
     suppliers = {
         "Al Mashreq": new_id(),
@@ -100,14 +139,27 @@ def seed_demo_data(db: Session) -> None:
         dict(id="goat-gigi", tag="G-091", name="Gigi", species="goat", breed="Saanen", sex="F",
              birth_years=2, status="healthy", location_label="Hillside Paddock", health_score=89, lactating=True, group_name="Goat Group B"),
     ]
+    # Generic animal model: every seeded animal gets the stage and profile
+    # the resolver needs — a lactating animal is a dairy animal, and
+    # without that profile its next milk record would be refused — and its
+    # tag becomes a typed identifier row (ear tag on mammals, leg band on
+    # poultry), the same mapping the migration applies to a live database.
+    poultry = {"layer_hen", "duck", "turkey"}
     for a in animals:
+        profile = "dairy" if a.get("lactating") else ("layer" if a["species"] in poultry else None)
         db.add(models.Animal(
             id=a["id"], farm_id=FARM_ID, tag=a["tag"], name=a["name"], species=a["species"], breed=a["breed"], sex=a["sex"],
             birth_date=_now() - timedelta(days=365 * a["birth_years"] + 40), status=a["status"],
+            life_stage="adult" if a["birth_years"] >= 1 else "young", management_profile=profile,
             location_label=a["location_label"], health_score=a["health_score"], pregnant=a.get("pregnant", False),
             pregnancy_days=a.get("pregnancy_days"), lactating=a.get("lactating", False), lactation_cycle=a.get("lactation_cycle"),
             withdrawal_until=_in_hours(a["withdrawal_days"] * 24) if a.get("withdrawal_days") else None,
             withdrawal_reason=a.get("withdrawal_reason"), weight_kg=a.get("weight_kg"), group_name=a.get("group_name"),
+        ))
+        db.add(livestock_models.AnimalIdentifier(
+            id=new_id(), animal_id=a["id"],
+            identifier_type="LEG_BAND" if a["species"] in poultry else "EAR_TAG",
+            identifier_value=a["tag"], is_primary=True, status="active",
         ))
 
     # Bella's milk trend: declining over the last 8 sessions (triggers RULE-HEALTH-RISK).
@@ -144,7 +196,11 @@ def seed_demo_data(db: Session) -> None:
         ("flock-turkey", "Turkey Flock", "turkey", 120, "Barn C"),
     ]
     for fid, name, species, count, loc in flocks:
-        db.add(models.Flock(id=fid, farm_id=FARM_ID, name=name, species=species, count=count, status="healthy", location_label=loc))
+        # A laying flock is female by what it is kept for; the resolver
+        # needs that to grant EGG_PRODUCTION.
+        db.add(models.Flock(id=fid, farm_id=FARM_ID, name=name, species=species, count=count, status="healthy",
+                            location_label=loc, group_type="flock", sex_composition="female",
+                            life_stage="adult", management_profile="layer"))
 
     # Duck flock egg drop (-22%, triggers RULE-EGG-DROP); layer/turkey stay stable.
     db.add(models.EggRecord(id=new_id(), flock_id="flock-duck", total_eggs=1446, sellable_eggs=1300, broken_eggs=60,
@@ -170,7 +226,56 @@ def seed_demo_data(db: Session) -> None:
     ]
     for fid, name, crop, stage, yield_kg, harvest_date in fields:
         db.add(models.Field(id=fid, farm_id=FARM_ID, name=name, crop_type=crop, stage=stage,
-                             est_yield_kg=yield_kg, expected_harvest_date=harvest_date))
+                             est_yield_kg=yield_kg, expected_harvest_date=harvest_date,
+                             field_code=fid.replace("field-", "F-").upper(),
+                             location_label="Bekaa Valley — home block",
+                             soil_type="clay_loam", irrigation_method="drip", status="active"))
+
+    # ------------------------------------------------- Crops and plantings
+    # Crop *types* are farm data, never a hard-coded list (tech spec §16) —
+    # these are the ones this farm happens to grow, added the same way an
+    # employee would add a new one from the Agriculture screen.
+    crops = [
+        ("crop-tomato", "Tomatoes", "vegetable", 95),
+        ("crop-zucchini", "Zucchini", "vegetable", 55),
+        ("crop-cucumber", "Cucumbers", "vegetable", 60),
+        ("crop-basil", "Basil", "herb", 40),
+        ("crop-orange", "Oranges", "tree", 300),
+    ]
+    for crop_id, name, category, cycle_days in crops:
+        db.add(models.Crop(id=crop_id, farm_id=FARM_ID, name=name, category=category,
+                            default_cycle_days=cycle_days))
+
+    # (field, crop, variety, area, planted days ago, harvest in days, expected kg, stage)
+    plantings = [
+        ("field-2", "crop-tomato", "Roma", 1.2, 70, 1, 420, "ripening"),
+        ("field-3", "crop-zucchini", "Black Beauty", 0.8, 40, 3, 310, "flowering"),
+        ("field-4", "crop-cucumber", "Beit Alpha", 0.9, 30, 5, 280, "growing"),
+        ("field-herb", "crop-basil", "Genovese", 0.15, 35, 0, 65, "mature"),
+        ("field-orchard", "crop-orange", "Valencia", 3.5, 300, 28, 1200, "growing"),
+    ]
+    for field_id, crop_id, variety, area, planted_ago, harvest_in, expected_kg, stage in plantings:
+        db.add(models.CropPlanting(
+            id=new_id(), farm_id=FARM_ID, field_id=field_id, crop_id=crop_id, variety=variety,
+            planted_area=area, area_unit="dunum", planted_date=_days_ago(planted_ago),
+            expected_harvest_date=_in_hours(24 * harvest_in), expected_yield_kg=expected_kg,
+            stage=stage, status="active", created_by="user-rami",
+        ))
+
+    # A week of picking, so the harvest trend and produce inventory have
+    # something real behind them rather than an empty chart.
+    harvests = [
+        ("field-2", "Tomatoes", 96, 6, 1),
+        ("field-2", "Tomatoes", 112, 4, 3),
+        ("field-3", "Zucchini", 54, 3, 2),
+        ("field-4", "Cucumbers", 61, 5, 4),
+        ("field-herb", "Basil", 12, 1, 1),
+        ("field-2", "Tomatoes", 104, 7, 6),
+    ]
+    for field_id, product, quantity, waste, days_ago in harvests:
+        db.add(models.HarvestRecord(id=new_id(), field_id=field_id, product_name=product,
+                                     quantity=quantity, unit="kg", waste_qty=waste,
+                                     destination="inventory", recorded_at=_days_ago(days_ago, hour=7)))
 
     # --------------------------------------------------------- Inventory
     items = [
@@ -217,6 +322,40 @@ def seed_demo_data(db: Session) -> None:
     expenses = [("feed", 1680), ("medicine", 720), ("labor", 1150), ("fuel", 420), ("other", 260)]
     for category, amount in expenses:
         db.add(models.Expense(id=new_id(), farm_id=FARM_ID, category=category, amount=amount, incurred_at=_days_ago(0, hour=8)))
+
+    # ----------------------------------------------------------- Audit log
+    # A few real-looking entries so Audit History opens onto something —
+    # same shape `write_audit_log` produces, including the before/after
+    # values a manager actually reads (tech spec §23).
+    audits = [
+        ("user-rami", "animal.updated", "animal", "cow-744", perms.ANIMALS,
+         "Moved Cow 744 to the isolation pen",
+         {"location_label": {"from": "Barn A", "to": "Isolation Pen"}}, 2),
+        ("user-vet-1", "treatment.created", "treatment", "treat-744", perms.ANIMAL_HEALTH,
+         "Recorded a mastitis treatment for Cow 744",
+         {"status": {"from": "under_observation", "to": "under_treatment"}}, 2),
+        ("user-worker-1", "harvest.recorded", "field", "field-2", perms.PRODUCE_HARVEST,
+         "Recorded 112 kg of tomatoes from Field 2",
+         {"quantity": {"from": None, "to": 112.0}}, 3),
+        ("user-rami", "employee.permissions_updated", "user", "user-worker-1", perms.EMPLOYEES,
+         "Granted Karim Youssef edit access to Feed & Nutrition",
+         {"feed_nutrition.can_edit": {"from": False, "to": True}}, 5),
+    ]
+    for user_id, action, entity_type, entity_id, module_code, summary, changes, days in audits:
+        db.add(models.AuditLog(
+            id=new_id(), farm_id=FARM_ID, user_id=user_id, action=action,
+            entity_type=entity_type, entity_id=entity_id, timestamp=_days_ago(days, hour=10),
+            module_code=module_code, summary=summary, changes_json=changes, device="Tablet 1",
+        ))
+
+    db.flush()
+    # Feed products, formulas, a mixed batch, programs and a week of
+    # feedings — built on the inventory items and animals seeded above.
+    db.flush()
+    seed_feed_demo_data(db, FARM_ID)
+    seed_mouneh_demo_data(db, FARM_ID)
+    db.flush()
+    seed_visits_demo_data(db, FARM_ID)
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")

@@ -70,8 +70,23 @@ def write_event(
 
 
 def write_audit_log(
-    db: Session, *, farm_id: str, user_id: str, action: str, entity_type: str, entity_id: str, metadata: dict | None = None
+    db: Session,
+    *,
+    farm_id: str,
+    user_id: str,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    metadata: dict | None = None,
+    module_code: str | None = None,
+    summary: str | None = None,
+    changes: dict | None = None,
+    device: str | None = None,
 ) -> models.AuditLog:
+    """Tech spec §23. `changes` is `{field: {"from": x, "to": y}}` — see
+    [diff_changes], which builds it from an ORM object before/after an
+    update so the log records the actual values, not just "edited".
+    """
     entry = models.AuditLog(
         id=new_id(),
         farm_id=farm_id,
@@ -81,6 +96,36 @@ def write_audit_log(
         entity_id=entity_id,
         timestamp=now(),
         metadata_json=metadata or {},
+        module_code=module_code,
+        summary=summary,
+        changes_json=changes,
+        device=device,
     )
     db.add(entry)
     return entry
+
+
+def _audit_value(value):
+    """JSON-safe rendering of an ORM attribute for the audit log."""
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def diff_changes(before: dict, obj, fields: list[str]) -> dict:
+    """Compares a snapshot taken before an update against the object now,
+    returning only the fields that actually changed.
+    """
+    changes: dict = {}
+    for field in fields:
+        old = before.get(field)
+        new = getattr(obj, field, None)
+        if old != new:
+            changes[field] = {"from": _audit_value(old), "to": _audit_value(new)}
+    return changes
+
+
+def snapshot(obj, fields: list[str]) -> dict:
+    return {field: getattr(obj, field, None) for field in fields}

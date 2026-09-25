@@ -28,10 +28,70 @@ CREATE TABLE users (
     phone          TEXT,
     email          TEXT UNIQUE,
     password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only')),
+    role           TEXT NOT NULL CHECK (role IN ('owner','manager','worker','veterinarian','accountant','read_only','super_user','visitor_coordinator','activity_staff','cashier','mouneh_operator')),
+    -- A starting point for a new hire's module responsibilities only; the
+    -- authoritative answer to "what may this person do" is
+    -- user_module_permissions below, which is many-to-many by design.
+    department     TEXT CHECK (department IN ('animals','produce','mouneh','visits')),
     language       TEXT NOT NULL DEFAULT 'en',
-    active         BOOLEAN NOT NULL DEFAULT true
+    active         BOOLEAN NOT NULL DEFAULT true,
+    -- Employee record (tech spec §8)
+    job_title          TEXT,
+    employment_status  TEXT NOT NULL DEFAULT 'active' CHECK (employment_status IN ('active','on_leave','seasonal','suspended','ended')),
+    start_date         TIMESTAMPTZ,
+    photo_path         TEXT,
+    working_days       JSONB,
+    working_hours      TEXT,
+    notes              TEXT
 );
+
+-- The flexible User <-> Responsibility <-> Module relationship (tech spec
+-- §9/§11). One row per module an employee is responsible for, carrying the
+-- granular action flags for that module — so an employee can hold Animals
+-- with create+edit and Mouneh with view-only at the same time.
+-- Owners/managers hold no rows: the API grants them everything implicitly,
+-- so a farm is never locked out of its own data.
+CREATE TABLE user_module_permissions (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    user_id        UUID NOT NULL REFERENCES users(id),
+    module_code    TEXT NOT NULL,
+    can_view       BOOLEAN NOT NULL DEFAULT true,
+    can_create     BOOLEAN NOT NULL DEFAULT false,
+    can_edit       BOOLEAN NOT NULL DEFAULT false,
+    can_delete     BOOLEAN NOT NULL DEFAULT false,
+    can_approve    BOOLEAN NOT NULL DEFAULT false,
+    can_export     BOOLEAN NOT NULL DEFAULT false,
+    can_assign     BOOLEAN NOT NULL DEFAULT false,
+    can_configure  BOOLEAN NOT NULL DEFAULT false,
+    granted_by     UUID REFERENCES users(id),
+    granted_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (user_id, module_code)
+);
+CREATE INDEX idx_user_module_permissions_user ON user_module_permissions(user_id);
+
+-- Derived farm alerts backing the notification bell (tech spec §3). Rows
+-- are reconciled against live farm state on every read: a signal that stops
+-- being true stops being shown. entity_type/entity_id are what make a
+-- notification actionable — they are the record the tablet opens on tap.
+CREATE TABLE notifications (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id            UUID NOT NULL REFERENCES farms(id),
+    user_id            UUID REFERENCES users(id),   -- NULL = farm-wide
+    module_code        TEXT NOT NULL,
+    notification_type  TEXT NOT NULL,
+    title              TEXT NOT NULL,
+    description        TEXT,
+    priority           TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('critical','high','medium','low','info')),
+    entity_type        TEXT,
+    entity_id          UUID,
+    source_type        TEXT,
+    source_id          TEXT,
+    read_at            TIMESTAMPTZ,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_notifications_farm ON notifications(farm_id);
+CREATE INDEX idx_notifications_source ON notifications(farm_id, source_type, source_id);
 
 CREATE TABLE locations (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -78,6 +138,17 @@ CREATE TABLE animals (
     weight_kg          NUMERIC(8,2),
     group_name         TEXT,
     photo_path         TEXT,
+    -- Full Add-Animal record (tech spec §13): provenance, description and
+    -- the financial fields, which the API only writes for a caller who
+    -- also holds the Finance module.
+    acquisition_date   TIMESTAMPTZ,
+    acquisition_source TEXT,
+    sire_tag           TEXT,
+    dam_tag            TEXT,
+    color_markings     TEXT,
+    purchase_cost      NUMERIC(12,2),
+    current_value      NUMERIC(12,2),
+    notes              TEXT,
     active             BOOLEAN NOT NULL DEFAULT true,
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -105,8 +176,49 @@ CREATE TABLE fields (
     area_unit              TEXT,
     stage                  TEXT,
     expected_harvest_date  TIMESTAMPTZ,
-    est_yield_kg           NUMERIC(10,2)
+    est_yield_kg           NUMERIC(10,2),
+    -- Add-Field record (tech spec §15)
+    field_code             TEXT,
+    location_label         TEXT,
+    soil_type              TEXT,
+    irrigation_method      TEXT,
+    status                 TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','fallow','retired')),
+    notes                  TEXT
 );
+
+-- Crop types are farm data, never a hard-coded list (tech spec §16): an
+-- authorized user adds whatever this farm actually grows.
+CREATE TABLE crops (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    name                TEXT NOT NULL,
+    category            TEXT,
+    default_cycle_days  INTEGER,
+    active              BOOLEAN NOT NULL DEFAULT true,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, name)
+);
+
+-- One planting of a crop in a field — what is actually growing where, so a
+-- harvest can be attributed to it (tech spec §16).
+CREATE TABLE crop_plantings (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                UUID NOT NULL REFERENCES farms(id),
+    field_id               UUID NOT NULL REFERENCES fields(id),
+    crop_id                UUID NOT NULL REFERENCES crops(id),
+    variety                TEXT,
+    planted_area           NUMERIC(10,2),
+    area_unit              TEXT,
+    planted_date           TIMESTAMPTZ,
+    expected_harvest_date  TIMESTAMPTZ,
+    expected_yield_kg      NUMERIC(10,2),
+    stage                  TEXT NOT NULL DEFAULT 'planted' CHECK (stage IN ('planted','growing','flowering','developing','ripening','mature','harvested')),
+    status                 TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','harvested','failed','cleared')),
+    notes                  TEXT,
+    created_by             UUID REFERENCES users(id),
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_crop_plantings_field ON crop_plantings(field_id);
 
 CREATE TABLE inventory_items (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -313,6 +425,25 @@ CREATE TABLE sync_queue (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Replay protection for writes queued on an offline tablet. A tablet
+-- that loses the farm network re-sends the write when it comes back; if
+-- the first attempt actually committed and only its response was lost,
+-- the replay must return that response rather than record the milking a
+-- second time. Keyed per (key, user) so two tablets can never collide
+-- and a replayed key can never hand back another account's response.
+CREATE TABLE idempotency_records (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    idempotency_key   TEXT NOT NULL,
+    user_id           UUID NOT NULL,
+    method            TEXT NOT NULL,
+    path              TEXT NOT NULL,
+    status_code       INTEGER NOT NULL,
+    response_body     TEXT,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (idempotency_key, user_id)
+);
+CREATE INDEX idx_idempotency_records_key ON idempotency_records(idempotency_key);
+
 CREATE TABLE audit_log (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     farm_id        UUID NOT NULL REFERENCES farms(id),
@@ -321,6 +452,441 @@ CREATE TABLE audit_log (
     entity_type    TEXT NOT NULL,
     entity_id      UUID NOT NULL,
     timestamp      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    metadata_json  JSONB NOT NULL DEFAULT '{}'::jsonb
+    metadata_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Tech spec §23: the log records the actual before/after values, so a
+    -- manager can read what changed, not just that something did.
+    module_code    TEXT,
+    summary        TEXT,
+    changes_json   JSONB,
+    device         TEXT
 );
 CREATE INDEX idx_audit_farm_time ON audit_log(farm_id, timestamp);
+CREATE INDEX idx_audit_entity ON audit_log(farm_id, entity_type, entity_id);
+
+-- ============================================================================
+-- Mouneh & Farm Product Processing module (tech spec v0.5 §3 "Core Data
+-- Model"). License-gated per farm via module_licenses; nothing here
+-- hard-codes a product type — mouneh_products rows are created dynamically
+-- by a farm manager through the Product Builder (see database/seed_demo_data.sql
+-- for Makdous used purely as demo data).
+-- ============================================================================
+
+CREATE TABLE module_licenses (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    module_code    TEXT NOT NULL,
+    status         TEXT NOT NULL DEFAULT 'inactive' CHECK (status IN ('active','inactive','trial','expired')),
+    plan           TEXT NOT NULL DEFAULT 'mouneh_addon',
+    starts_at      TIMESTAMPTZ,
+    expires_at     TIMESTAMPTZ,
+    max_users      INTEGER,
+    max_products   INTEGER,
+    features_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    activated_by   UUID REFERENCES users(id),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, module_code)
+);
+
+CREATE TABLE mouneh_products (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                   UUID NOT NULL REFERENCES farms(id),
+    name                      TEXT NOT NULL,
+    category                  TEXT NOT NULL DEFAULT 'general',
+    photo_path                TEXT,
+    output_unit               TEXT NOT NULL CHECK (output_unit IN ('jar','bottle','pack','kg','liter','tray','piece','custom')),
+    custom_output_unit_label  TEXT,
+    default_batch_size        NUMERIC(10,2) NOT NULL DEFAULT 1 CHECK (default_batch_size > 0),
+    shelf_life_days           INTEGER,
+    warehouse_rules           TEXT,
+    low_stock_threshold       NUMERIC(10,2),
+    target_price              NUMERIC(10,2),
+    wholesale_price           NUMERIC(10,2),
+    target_margin_pct         NUMERIC(5,2),
+    status                    TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','archived')),
+    license_required          TEXT NOT NULL DEFAULT 'mouneh',
+    created_by                UUID REFERENCES users(id),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (farm_id, category, name)
+);
+CREATE INDEX idx_mouneh_products_farm ON mouneh_products(farm_id);
+
+CREATE TABLE raw_materials (
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                UUID NOT NULL REFERENCES farms(id),
+    name                   TEXT NOT NULL,
+    category               TEXT NOT NULL DEFAULT 'raw_material' CHECK (category IN ('raw_material','packaging')),
+    source_type            TEXT NOT NULL DEFAULT 'purchased' CHECK (source_type IN ('farm_produced','purchased')),
+    inventory_item_id      UUID REFERENCES inventory_items(id),
+    unit                   TEXT NOT NULL,
+    default_unit_cost      NUMERIC(10,4) NOT NULL DEFAULT 0 CHECK (default_unit_cost >= 0),
+    stock_tracking_enabled BOOLEAN NOT NULL DEFAULT true,
+    current_stock          NUMERIC(12,3) NOT NULL DEFAULT 0 CHECK (current_stock >= 0),
+    loss_percent_default   NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (loss_percent_default BETWEEN 0 AND 100),
+    active                 BOOLEAN NOT NULL DEFAULT true,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_raw_materials_farm ON raw_materials(farm_id);
+
+CREATE TABLE mouneh_recipes (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id       UUID NOT NULL REFERENCES mouneh_products(id),
+    version          INTEGER NOT NULL DEFAULT 1,
+    effective_from   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    basis_quantity   NUMERIC(10,2) NOT NULL CHECK (basis_quantity > 0),
+    basis_unit       TEXT NOT NULL,
+    active           BOOLEAN NOT NULL DEFAULT true,
+    notes            TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (product_id, version)
+);
+CREATE INDEX idx_mouneh_recipes_product ON mouneh_recipes(product_id);
+
+CREATE TABLE mouneh_recipe_items (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    recipe_id     UUID NOT NULL REFERENCES mouneh_recipes(id) ON DELETE CASCADE,
+    material_id   UUID NOT NULL REFERENCES raw_materials(id),
+    material_type TEXT NOT NULL DEFAULT 'raw_material',
+    quantity      NUMERIC(12,3) NOT NULL CHECK (quantity > 0),
+    unit          TEXT NOT NULL,
+    loss_percent  NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (loss_percent BETWEEN 0 AND 100),
+    is_optional   BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX idx_mouneh_recipe_items_recipe ON mouneh_recipe_items(recipe_id);
+
+CREATE TABLE production_batches (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    product_id          UUID NOT NULL REFERENCES mouneh_products(id),
+    recipe_version_id   UUID NOT NULL REFERENCES mouneh_recipes(id),
+    batch_code          TEXT NOT NULL,
+    planned_qty         NUMERIC(10,2) NOT NULL CHECK (planned_qty > 0),
+    actual_output_qty   NUMERIC(10,2),
+    waste_qty           NUMERIC(10,2) NOT NULL DEFAULT 0,
+    damaged_qty         NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quality_status      TEXT NOT NULL DEFAULT 'good' CHECK (quality_status IN ('good','substandard','rejected')),
+    expiry_date         TIMESTAMPTZ,
+    warehouse_location  TEXT,
+    status              TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','in_progress','completed','cancelled')),
+    planned_unit_cost   NUMERIC(10,4),
+    planned_total_cost  NUMERIC(12,2),
+    actual_unit_cost    NUMERIC(10,4),
+    actual_total_cost   NUMERIC(12,2),
+    labor_hours         NUMERIC(8,2),
+    started_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at        TIMESTAMPTZ,
+    created_by          UUID REFERENCES users(id),
+    notes               TEXT,
+    UNIQUE (farm_id, batch_code)
+);
+CREATE INDEX idx_production_batches_farm ON production_batches(farm_id);
+CREATE INDEX idx_production_batches_product ON production_batches(product_id, status);
+
+CREATE TABLE cost_components (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id          UUID REFERENCES mouneh_products(id),
+    batch_id            UUID REFERENCES production_batches(id),
+    cost_type           TEXT NOT NULL CHECK (cost_type IN
+                           ('labor','packaging_extra','utilities','transport','cooling_storage','market_fees','byproduct_credit','other')),
+    label               TEXT,
+    calculation_method  TEXT NOT NULL DEFAULT 'fixed' CHECK (calculation_method IN ('fixed','per_output_unit','quantity_x_rate','percentage')),
+    amount              NUMERIC(10,4),
+    quantity            NUMERIC(10,2),
+    unit_cost           NUMERIC(10,4),
+    allocation_basis    TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CHECK (product_id IS NOT NULL OR batch_id IS NOT NULL)
+);
+CREATE INDEX idx_cost_components_product ON cost_components(product_id);
+CREATE INDEX idx_cost_components_batch ON cost_components(batch_id);
+
+CREATE TABLE batch_input_consumptions (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    batch_id      UUID NOT NULL REFERENCES production_batches(id) ON DELETE CASCADE,
+    material_id   UUID NOT NULL REFERENCES raw_materials(id),
+    planned_qty   NUMERIC(12,3) NOT NULL,
+    actual_qty    NUMERIC(12,3),
+    unit_cost     NUMERIC(10,4) NOT NULL,
+    total_cost    NUMERIC(12,2)
+);
+CREATE INDEX idx_batch_input_consumptions_batch ON batch_input_consumptions(batch_id);
+
+CREATE TABLE finished_goods_stock (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    product_id           UUID NOT NULL REFERENCES mouneh_products(id),
+    batch_id             UUID NOT NULL REFERENCES production_batches(id),
+    warehouse_location   TEXT,
+    quantity_produced    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_available   NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (quantity_available >= 0),
+    quantity_reserved    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_sold        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_expired     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    quantity_damaged     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    unit_cost            NUMERIC(10,4) NOT NULL DEFAULT 0,
+    expiry_date          TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_finished_goods_product ON finished_goods_stock(product_id);
+CREATE INDEX idx_finished_goods_expiry ON finished_goods_stock(expiry_date);
+
+CREATE TABLE mouneh_sale_lines (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id                   UUID NOT NULL REFERENCES farms(id),
+    sale_id                   UUID REFERENCES sales(id),
+    product_id                UUID NOT NULL REFERENCES mouneh_products(id),
+    batch_id                  UUID NOT NULL REFERENCES production_batches(id),
+    finished_goods_stock_id   UUID NOT NULL REFERENCES finished_goods_stock(id),
+    quantity                  NUMERIC(10,2) NOT NULL CHECK (quantity > 0),
+    unit_price                NUMERIC(10,2) NOT NULL CHECK (unit_price > 0),
+    discount                  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (discount >= 0),
+    customer_id               UUID REFERENCES customers(id),
+    channel                   TEXT NOT NULL DEFAULT 'retail' CHECK (channel IN ('retail','wholesale','market','other')),
+    cost_per_unit             NUMERIC(10,4) NOT NULL,
+    revenue                   NUMERIC(12,2) NOT NULL,
+    margin                    NUMERIC(12,2) NOT NULL,
+    sold_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sold_by                   UUID REFERENCES users(id)
+);
+CREATE INDEX idx_mouneh_sale_lines_farm_time ON mouneh_sale_lines(farm_id, sold_at);
+CREATE INDEX idx_mouneh_sale_lines_product ON mouneh_sale_lines(product_id);
+
+CREATE TABLE mouneh_events (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    entity_type   TEXT NOT NULL,
+    entity_id     UUID NOT NULL,
+    event_type    TEXT NOT NULL,
+    payload_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_by    UUID REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_mouneh_events_entity ON mouneh_events(entity_type, entity_id);
+CREATE INDEX idx_mouneh_events_farm_time ON mouneh_events(farm_id, created_at);
+
+-- ============================================================================
+-- Farm Visits & Agri-Tourism module (tech spec v0.6 §4 "Data Model").
+-- License-gated per farm via module_licenses (module_code =
+-- 'visits_agritourism'); nothing here hard-codes an opening weekday or a
+-- fixed activity list — see database/seed_demo_data.sql for the
+-- Friday/Saturday/Sunday + Horse Ride demo data used purely as an example.
+-- ============================================================================
+
+CREATE TABLE visit_opening_calendar (
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id            UUID NOT NULL REFERENCES farms(id),
+    weekday            INTEGER NOT NULL CHECK (weekday BETWEEN 0 AND 6),
+    is_open            BOOLEAN NOT NULL DEFAULT false,
+    open_time          TIME,
+    close_time         TIME,
+    default_capacity   INTEGER NOT NULL DEFAULT 0,
+    notes              TEXT,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by         UUID REFERENCES users(id),
+    sync_status        TEXT NOT NULL DEFAULT 'synced',
+    deleted_at         TIMESTAMPTZ,
+    UNIQUE (farm_id, weekday)
+);
+
+CREATE TABLE visit_sessions (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    date                 DATE NOT NULL,
+    start_time           TIME NOT NULL,
+    end_time             TIME NOT NULL,
+    capacity             INTEGER NOT NULL CHECK (capacity > 0),
+    status               TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','full','closed','cancelled','completed')),
+    weather_note         TEXT,
+    expected_staff_cost  NUMERIC(10,2),
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by           UUID REFERENCES users(id),
+    sync_status          TEXT NOT NULL DEFAULT 'synced',
+    deleted_at           TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_sessions_farm_date ON visit_sessions(farm_id, date);
+
+CREATE TABLE visit_packages (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id               UUID NOT NULL REFERENCES farms(id),
+    name                  TEXT NOT NULL,
+    description           TEXT,
+    base_price            NUMERIC(10,2) NOT NULL DEFAULT 0,
+    currency              TEXT NOT NULL DEFAULT 'USD',
+    duration_minutes      INTEGER,
+    included_items_json   JSONB NOT NULL DEFAULT '{}'::jsonb,
+    active                BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by            UUID REFERENCES users(id),
+    sync_status           TEXT NOT NULL DEFAULT 'synced',
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_packages_farm ON visit_packages(farm_id);
+
+CREATE TABLE visit_activities (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id               UUID NOT NULL REFERENCES farms(id),
+    name                  TEXT NOT NULL,
+    activity_type         TEXT NOT NULL DEFAULT 'other' CHECK (activity_type IN ('tour','ride','workshop','tasting','event','other')),
+    price                 NUMERIC(10,2) NOT NULL DEFAULT 0,
+    capacity_per_slot     INTEGER NOT NULL DEFAULT 1 CHECK (capacity_per_slot > 0),
+    duration_minutes      INTEGER,
+    requires_staff_role   TEXT,
+    requires_animal_id    UUID REFERENCES animals(id),
+    welfare_limit_json    JSONB,
+    active                BOOLEAN NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by            UUID REFERENCES users(id),
+    sync_status           TEXT NOT NULL DEFAULT 'synced',
+    deleted_at            TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_activities_farm ON visit_activities(farm_id);
+
+CREATE TABLE visitor_profiles (
+    id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id              UUID NOT NULL REFERENCES farms(id),
+    full_name            TEXT NOT NULL,
+    phone                TEXT,
+    email                TEXT,
+    preferred_language   TEXT NOT NULL DEFAULT 'en' CHECK (preferred_language IN ('en','ar')),
+    notes                TEXT,
+    consent_marketing    BOOLEAN NOT NULL DEFAULT false,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by           UUID REFERENCES users(id),
+    sync_status          TEXT NOT NULL DEFAULT 'synced',
+    deleted_at           TIMESTAMPTZ
+);
+CREATE INDEX idx_visitor_profiles_farm ON visitor_profiles(farm_id);
+
+CREATE TABLE visit_bookings (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id           UUID NOT NULL REFERENCES farms(id),
+    visitor_id        UUID NOT NULL REFERENCES visitor_profiles(id),
+    session_id        UUID NOT NULL REFERENCES visit_sessions(id),
+    package_id        UUID NOT NULL REFERENCES visit_packages(id),
+    status            TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','confirmed','checked_in','completed','cancelled','no_show','refunded')),
+    adults            INTEGER NOT NULL DEFAULT 1 CHECK (adults >= 0),
+    children          INTEGER NOT NULL DEFAULT 0 CHECK (children >= 0),
+    total_amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
+    deposit_amount    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    balance_due       NUMERIC(10,2) NOT NULL DEFAULT 0,
+    source            TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','whatsapp','website','phone','walk_in')),
+    payment_method    TEXT,
+    notes             TEXT,
+    idempotency_key   TEXT,
+    confirmed_at      TIMESTAMPTZ,
+    checked_in_at     TIMESTAMPTZ,
+    completed_at      TIMESTAMPTZ,
+    cancelled_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by        UUID REFERENCES users(id),
+    sync_status       TEXT NOT NULL DEFAULT 'synced',
+    deleted_at        TIMESTAMPTZ,
+    UNIQUE (farm_id, idempotency_key)
+);
+CREATE INDEX idx_visit_bookings_session ON visit_bookings(session_id, status);
+CREATE INDEX idx_visit_bookings_visitor ON visit_bookings(visitor_id);
+
+CREATE TABLE visit_booking_activities (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    booking_id     UUID NOT NULL REFERENCES visit_bookings(id) ON DELETE CASCADE,
+    activity_id    UUID NOT NULL REFERENCES visit_activities(id),
+    scheduled_at   TIMESTAMPTZ NOT NULL,
+    quantity       INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    unit_price     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    status         TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled','completed','cancelled','missed')),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_visit_booking_activities_booking ON visit_booking_activities(booking_id);
+CREATE INDEX idx_visit_booking_activities_slot ON visit_booking_activities(activity_id, scheduled_at);
+
+CREATE TABLE visit_staff_roster (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    session_id     UUID NOT NULL REFERENCES visit_sessions(id),
+    worker_id      UUID NOT NULL REFERENCES users(id),
+    role           TEXT NOT NULL,
+    start_time     TIME NOT NULL,
+    end_time       TIME NOT NULL,
+    hourly_rate    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    total_cost     NUMERIC(10,2),
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by     UUID REFERENCES users(id),
+    sync_status    TEXT NOT NULL DEFAULT 'synced',
+    deleted_at     TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_staff_roster_session ON visit_staff_roster(session_id);
+
+CREATE TABLE visit_costs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id             UUID NOT NULL REFERENCES farms(id),
+    session_id          UUID NOT NULL REFERENCES visit_sessions(id),
+    category            TEXT NOT NULL CHECK (category IN ('staff','cleaning','utilities','tasting','marketing','safety','maintenance','other')),
+    description         TEXT,
+    amount              NUMERIC(10,2) NOT NULL DEFAULT 0,
+    allocation_method   TEXT NOT NULL DEFAULT 'per_session' CHECK (allocation_method IN ('per_session','per_guest','per_package','per_activity')),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by          UUID REFERENCES users(id),
+    sync_status         TEXT NOT NULL DEFAULT 'synced',
+    deleted_at          TIMESTAMPTZ
+);
+CREATE INDEX idx_visit_costs_session ON visit_costs(session_id);
+
+CREATE TABLE visit_retail_sales (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    booking_id    UUID REFERENCES visit_bookings(id),
+    visitor_id    UUID REFERENCES visitor_profiles(id),
+    sale_id       UUID NOT NULL REFERENCES sales(id),
+    channel       TEXT NOT NULL DEFAULT 'farm_shop' CHECK (channel IN ('farm_shop','tasting_upgrade','delivery_after_visit')),
+    notes         TEXT,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    sync_status   TEXT NOT NULL DEFAULT 'synced'
+);
+CREATE INDEX idx_visit_retail_sales_booking ON visit_retail_sales(booking_id);
+
+CREATE TABLE visitor_feedback (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id        UUID NOT NULL REFERENCES farms(id),
+    booking_id     UUID NOT NULL REFERENCES visit_bookings(id),
+    rating         INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+    comments       TEXT,
+    would_return   BOOLEAN,
+    submitted_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE visit_incidents (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id          UUID NOT NULL REFERENCES farms(id),
+    session_id       UUID NOT NULL REFERENCES visit_sessions(id),
+    booking_id       UUID REFERENCES visit_bookings(id),
+    incident_type    TEXT NOT NULL CHECK (incident_type IN ('safety','animal','weather','payment','complaint','other')),
+    severity         TEXT NOT NULL DEFAULT 'low' CHECK (severity IN ('low','medium','high')),
+    description      TEXT NOT NULL,
+    action_taken     TEXT,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by       UUID REFERENCES users(id),
+    sync_status      TEXT NOT NULL DEFAULT 'synced'
+);
+CREATE INDEX idx_visit_incidents_session ON visit_incidents(session_id);
+
+CREATE TABLE visit_events (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    farm_id       UUID NOT NULL REFERENCES farms(id),
+    entity_type   TEXT NOT NULL,
+    entity_id     UUID NOT NULL,
+    event_type    TEXT NOT NULL,
+    payload_json  JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_by    UUID REFERENCES users(id),
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_visit_events_entity ON visit_events(entity_type, entity_id);
+CREATE INDEX idx_visit_events_farm_time ON visit_events(farm_id, created_at);

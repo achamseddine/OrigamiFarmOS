@@ -1,17 +1,61 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.livestock.catalog import Cap
+from app.services import capability_service, feeding_program_service
 from app.api.deps import get_current_user
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_event
-from app.schemas.production import EggRecordCreate, HarvestRecordCreate, MilkRecordCreate
+from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
 router = APIRouter(prefix="/production", tags=["production"])
+
+
+@router.get("/fields", response_model=list[FieldOut])
+def list_fields(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.Field]:
+    return list(db.scalars(select(models.Field).where(models.Field.farm_id == farm_id).order_by(models.Field.name)))
+
+
+@router.get("/milk", response_model=list[MilkRecordOut])
+def list_milk_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.MilkRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.MilkRecord)
+        .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
+        .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= cutoff)
+        .order_by(models.MilkRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/eggs", response_model=list[EggRecordOut])
+def list_egg_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.EggRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.EggRecord)
+        .join(models.Flock, models.Flock.id == models.EggRecord.flock_id)
+        .where(models.Flock.farm_id == farm_id, models.EggRecord.recorded_at >= cutoff)
+        .order_by(models.EggRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
+
+
+@router.get("/harvest", response_model=list[HarvestRecordOut])
+def list_harvest_records(farm_id: str, days: int = 90, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.HarvestRecord]:
+    cutoff = now() - timedelta(days=days)
+    stmt = (
+        select(models.HarvestRecord)
+        .join(models.Field, models.Field.id == models.HarvestRecord.field_id)
+        .where(models.Field.farm_id == farm_id, models.HarvestRecord.recorded_at >= cutoff)
+        .order_by(models.HarvestRecord.recorded_at.desc())
+    )
+    return list(db.scalars(stmt))
 
 
 @router.post("/milk", status_code=status.HTTP_201_CREATED)
@@ -24,6 +68,16 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     animal = db.get(models.Animal, payload.animal_id)
     if animal is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+
+    # Milk is a capability (generic animal model §12): a bull, a hen, a
+    # meat ewe or a mare cannot have a milk record, however the form was
+    # filled in.
+    cap_set = capability_service.resolve_for_animal(db, animal)
+    if not cap_set.has(Cap.MILK_PRODUCTION):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            capability_service.describe_missing(cap_set, Cap.MILK_PRODUCTION, animal.name),
+        )
 
     under_withdrawal = animal.withdrawal_until is not None and ensure_utc(animal.withdrawal_until) > datetime.now(timezone.utc)
     if under_withdrawal and payload.destination == "sold":
@@ -44,6 +98,10 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         recorded_by=payload.recorded_by or current_user.id,
     )
     db.add(record)
+    db.flush()
+    # A yield that crosses a production band asks for a feeding review
+    # (feed architecture §11) — a task, never an automatic ration change.
+    feeding_program_service.review_after_milk(db, animal, user_id=current_user.id)
     write_event(
         db,
         farm_id=animal.farm_id,
@@ -65,6 +123,12 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
     flock = db.get(models.Flock, payload.flock_id)
     if flock is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Flock not found")
+    cap_set = capability_service.resolve_for_group(db, flock)
+    if not cap_set.has(Cap.EGG_PRODUCTION):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            capability_service.describe_missing(cap_set, Cap.EGG_PRODUCTION, flock.name),
+        )
     if not payload.is_allocation_valid():
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,

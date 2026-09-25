@@ -7,10 +7,15 @@ enum FarmIcon {
   barn,
   bell,
   calendar,
+  cart,
   chartLine,
   check,
+  chevronDown,
+  chevronLeft,
   cloudSync,
+  coins,
   cow,
+  download,
   duck,
   egg,
   eye,
@@ -23,14 +28,19 @@ enum FarmIcon {
   language,
   leaf,
   location,
+  logout,
   medicine,
   milkBottle,
   money,
+  package,
+  people,
+  plus,
   poultry,
   pregnancy,
   qr,
   report,
   scale,
+  search,
   settings,
   sheep,
   stethoscope,
@@ -48,6 +58,10 @@ extension on FarmIcon {
         return 'arrow-right';
       case FarmIcon.chartLine:
         return 'chart-line';
+      case FarmIcon.chevronDown:
+        return 'chevron-down';
+      case FarmIcon.chevronLeft:
+        return 'chevron-left';
       case FarmIcon.cloudSync:
         return 'cloud-sync';
       case FarmIcon.feedBag:

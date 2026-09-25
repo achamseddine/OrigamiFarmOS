@@ -28,11 +28,16 @@ class PhotoSlot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = borderRadius ?? FarmRadii.card;
-    if (filePath != null && filePath!.isNotEmpty) {
-      return ClipRRect(
-        borderRadius: radius,
-        child: Image.file(File(filePath!), fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius)),
-      );
+    final path = filePath;
+    if (path != null && path.isNotEmpty) {
+      // A path under assets/ is bundled imagery — the demo farm's animals
+      // from the v1 asset pack. Anything else is a file the tablet's
+      // camera wrote. The slot does not care which; a real farm's photos
+      // replace the demo ones without touching this widget.
+      final image = path.startsWith('assets/')
+          ? Image.asset(path, fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius))
+          : Image.file(File(path), fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius));
+      return ClipRRect(borderRadius: radius, child: image);
     }
     return _placeholder(radius);
   }

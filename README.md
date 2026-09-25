@@ -55,15 +55,153 @@ To run the tablet app, see `mobile/flutter_app/README.md` (requires the
 Flutter SDK, which was not available while building this MVP — see that
 README's "Verification status" section).
 
+## Running the tablet app with no server
+
+There is no API deployment or production database yet, so the tablet app
+also ships a complete farm inside it. Sign in as **`ali` / `ali123`** and
+every section has real data behind it — animals, fields and crops, milk
+and eggs, feed, Mouneh production, visits and bookings, staff, tasks and
+finance — and anything added is saved on the device and still there after
+a restart.
+
+The bundled dataset is generated, not hand-written: `python -m
+app.export_demo_snapshot` seeds a throwaway database with the backend's
+own demo data, starts the real API in-process, and records the genuine
+response of every endpoint the tablet reads. It is therefore correct by
+construction rather than fixture JSON that drifts from the schema.
+
+Entering any other credentials still authenticates against a real
+deployment exactly as before. See `mobile/flutter_app/README.md` for the
+full mechanism.
+
+## Working offline
+
+"Farm operations cannot stop because internet connectivity is
+unavailable" is the second principle above, and the tablet app is built
+for it: **online the first time, then usable in the field.**
+
+Signing in needs the farm network — there is no way to verify a password
+or issue a token without it — and that is the only online requirement.
+Afterwards the session, the permission set and every screen the tablet
+has loaded are cached locally, so a worker in a field with no coverage
+still sees their animals, fields and tasks, and can keep recording. Each
+write made offline is queued as the HTTP request itself, so every
+endpoint works offline without a matching branch on the server, and the
+queue is replayed in order the moment the farm server answers again — no
+button press required.
+
+Two things stop the obvious failure modes: every queued request carries
+an `Idempotency-Key`, so a replay of a write that already committed
+returns the original response instead of recording the work twice
+(`backend/app/core/idempotency.py`); and IDs minted on the tablet are
+rewritten to the server's real ones as the queue drains, so a crop
+planted in a field created ten minutes earlier still lands. Anything the
+server rejects is kept and shown with the server's own words rather than
+silently dropped.
+
+See `mobile/flutter_app/README.md` for the full mechanism.
+
+## One animal model for every species
+
+There is no `Cow` class and no `if species == "cow"` anywhere. Every
+animal is one `Animal` record; what the farm can do with it — milk it,
+record a pregnancy, count its eggs, book the farrier, which tag it must
+carry — is *resolved* from configuration: species → sex → life stage →
+management profile → a set of capability codes
+(`backend/app/services/capability_service.py`), with the biological
+invariants applied last so no rule can make a bull pregnant. Species,
+breeds, profiles and the rules are rows served by `GET /species` and
+`GET /species/{code}/configuration`, so adding a species is a
+configuration change, not a release — the test suite proves it by adding
+a camel with no code. Identifiers are typed rows on the animal (ear tag,
+RFID, microchip, leg band, passport…), retired rather than deleted; an
+ear tag is not mandatory any more.
+
+The tablet runs the same resolver on the device
+(`mobile/flutter_app/lib/livestock/capability_resolver.dart`) against the
+cached rules, so the Add Animal form shapes itself offline — a horse asks
+for a microchip, a hen for a leg band, neither for a pregnancy flag on a
+male — and can never disagree with the server. See
+`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md`.
+
+## One feed system for every species
+
+Feeding is built the same way. There is no dairy feed module and no
+poultry feed module: five generic concepts — feed product (what can be
+fed), formula and version (how a farm-made feed is meant to be mixed,
+immutable once a batch has used it), batch (what was actually mixed,
+from which lots, at what cost), feeding program and version (what a kind
+of animal should get, with applicability rules over species, sex, life
+stage, profile, reproductive and lactation state, production, weight and
+age), and feeding event (what was fed, from which lot) — over one stock
+ledger where lots are the only physical quantities and availability is
+net of quarantined, blocked, recalled, expired and reserved stock. The
+program resolver is explainable and never reassigns silently: a
+lifecycle change or a milk record crossing a band raises a review and
+opens one task, and a person assigns. Usage policies are enforced when a
+formula is composed, a batch is completed, a program is assigned and a
+feeding is recorded. Every lot is traceable both ways — a recall names
+every batch and every animal that ate from it — and days of cover,
+reorder recommendations with reasons and ledger-versus-count
+reconciliations come from the same records. See
+`docs/GENERIC-FEED-ARCHITECTURE.md`.
+
 ## MVP Status
 
-This is the first tablet MVP build. All 10 Option C manager-demo screens
-are implemented in Flutter with the full brand theme, EN/AR + RTL support,
-and a real local-first write pipeline (SQLite + event log + sync queue)
-for the core animal/task/feed workflows. The FastAPI backend implements
-every endpoint from the tech spec, a rule-based recommendation engine
-(6 rules, unit tested and wired end-to-end against real seeded data), and
-role-based access control — 66 backend tests pass. See
-`backend/README.md` and `mobile/flutter_app/README.md` for the detailed
-"what's complete / what's mocked / what remains" breakdown, and
+The tablet app is operational rather than a demo: no demo mode, no
+sample dataset, and what a given person sees is decided by the module
+responsibilities their farm manager gave them. All screens are
+implemented in Flutter with the full brand theme and Arabic-first AR/EN + RTL
+support. The FastAPI backend implements every endpoint from the tech
+spec, a flexible per-user/per-module permission model enforced on every
+request, a rule-based recommendation engine (6 rules, unit tested and
+wired end-to-end against real seeded data), and a full audit trail —
+271 backend tests pass. See `backend/README.md` and
+`mobile/flutter_app/README.md` for the detailed "what's complete /
+what's simplified / what remains" breakdown, and
 `product/TRACEABILITY.md` for the full requirement map.
+
+### Mouneh & Farm Product Processing module (v0.5)
+
+A license-gated module (activated per farm by a super user) letting a
+manager turn any farm harvest into a priced, sellable product — Makdous,
+Labneh, Kishk, Jam, or a custom item, with no code changes. Covers the
+full loop: Dynamic Product Builder → recipe (raw materials, packaging,
+labor, optional overhead costs) → automatic planned/actual cost per unit
+→ production batches → finished-goods stock → sales → profitability
+dashboard (cost per unit, margin, sales velocity, and a
+continue-production / slow-mover / review-pricing call per product).
+Backend: `backend/app/mouneh/`, `backend/app/api/v1/{modules,mouneh}.py`,
+`backend/app/domain/mouneh_models.py` — 41 tests (`backend/tests/test_mouneh_*.py`),
+verified against real PostgreSQL (schema + Alembic migration). Mobile:
+`mobile/flutter_app/lib/{mouneh,features/mouneh}/` — 7 screens behind one
+"Mouneh & Products" nav entry, a Dart port of the costing engine, and the
+same offline queue as the rest of the app. Makdous
+is demo data only; see `product/TRACEABILITY.md` for the full
+requirement-to-code map.
+
+### Farm Visits & Agri-Tourism module (v0.6)
+
+A second license-gated module, structured the same way as Mouneh, letting
+a farm owner open the farm to visitors on a configurable set of days
+(never hard-coded to any specific weekday) and manage the full loop:
+opening calendar, dynamic package/activity builders (any activity, not
+just a ride or a workshop), visitor bookings with a full status machine
+(draft to confirmed to checked_in to completed, or cancelled/no_show to
+refunded), session-capacity/activity-capacity/animal-welfare/handler
+checks enforced at the right step, staff roster & direct costs, a Farm
+Shop / Visitor POS that deducts real inventory or Mouneh finished-goods
+stock and posts into Sales & Finance, and a profitability report covering
+every formula in the spec (visitor revenue, direct visit cost, gross
+margin, revenue per visitor, activity utilization, retail conversion,
+average basket value, package profitability). Backend:
+`backend/app/visits/`, `backend/app/api/v1/visits.py`,
+`backend/app/domain/visits_models.py` — 58 tests
+(`backend/tests/test_visits_*.py`), verified against real PostgreSQL
+(schema + Alembic migration), including a cross-module demo sale that
+debits real Mouneh Makdous stock. Mobile:
+`mobile/flutter_app/lib/{visits,features/visits}/` — 10 screens behind
+one "Farm Visits" nav entry, a Dart port of the analytics engine, and the
+same offline queue as the rest of the app. Horse
+Ride and the weekend-only opening calendar are demo data only; see
+`product/TRACEABILITY.md` for the full requirement-to-code map.

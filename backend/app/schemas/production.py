@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas.common import ORMModel
+
 ALLOWED_MILK_DESTINATIONS = {"stored", "sold", "processed", "consumed"}
 
 
@@ -86,3 +88,54 @@ class HarvestRecordCreate(BaseModel):
         if v <= 0:
             raise ValueError("quantity must be greater than zero")
         return v
+
+
+class MilkRecordOut(ORMModel):
+    id: str
+    animal_id: str
+    session: str
+    liters: float
+    quality_status: str
+    destination: str
+    recorded_at: datetime
+    recorded_by: str | None = None
+
+
+class EggRecordOut(ORMModel):
+    id: str
+    flock_id: str
+    total_eggs: int
+    sellable_eggs: int
+    broken_eggs: int
+    consumed: int
+    hatched: int
+    wasted: int
+    recorded_at: datetime
+
+
+class HarvestRecordOut(ORMModel):
+    id: str
+    field_id: str
+    product_name: str
+    quantity: float
+    unit: str
+    waste_qty: float
+    destination: str | None = None
+    recorded_at: datetime
+
+
+class FieldOut(ORMModel):
+    id: str
+    name: str
+    crop_type: str | None = None
+    area_value: float | None = None
+    area_unit: str | None = None
+    stage: str | None = None
+    expected_harvest_date: datetime | None = None
+    est_yield_kg: float | None = None
+    field_code: str | None = None
+    location_label: str | None = None
+    soil_type: str | None = None
+    irrigation_method: str | None = None
+    status: str = "active"
+    notes: str | None = None

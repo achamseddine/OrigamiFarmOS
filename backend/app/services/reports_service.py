@@ -69,7 +69,7 @@ def build_daily_summary(db: Session, farm_id: str) -> dict:
     }
 
 
-def build_morning_briefing(db: Session, farm_id: str) -> dict:
+def build_morning_briefing(db: Session, farm_id: str, viewer_name: str = "") -> dict:
     """Backs GET /morning-briefing (tech spec projections table)."""
     farm = db.get(models.Farm, farm_id)
     start = _today_start()
@@ -112,7 +112,7 @@ def build_morning_briefing(db: Session, farm_id: str) -> dict:
     return {
         "date": start.date().isoformat(),
         "farm_name": farm.name if farm else "",
-        "manager_name": "Rami",
+        "manager_name": viewer_name,
         "kpis": {
             "animals": animal_count,
             "milk_today_l": round(milk_today, 1),

@@ -5,11 +5,13 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../data/demo/demo_data.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
+import '../../core/widgets/directional_icon.dart';
 
 class HealthIntelligenceScreen extends StatefulWidget {
   const HealthIntelligenceScreen({super.key});
@@ -20,22 +22,24 @@ class HealthIntelligenceScreen extends StatefulWidget {
 
 class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
   int _tab = 0;
-  late String _selectedId = DemoData.featuredRecommendation.id;
+  String? _selectedId;
 
   @override
   Widget build(BuildContext context) {
-    final alerts = DemoData.recommendations.where((r) => r.category == RecommendationCategory.health).toList();
-    final selected = alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
+    final alerts = context.watch<RecommendationsProvider>().forCategory(RecommendationCategory.health);
+    final selected = alerts.isEmpty ? null : alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
     final tasksProvider = context.watch<TasksProvider>();
-    final taskCreated = tasksProvider.tasks.any((t) => t.sourceId == selected.id);
+    final taskCreated = selected != null && tasksProvider.tasks.any((t) => t.sourceId == selected.id);
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.t('healthIntelligenceTitle'), style: FarmTypography.display(size: 28)),
-          const SizedBox(height: 2),
-          Text(context.t('healthIntelligenceSubtitle'), style: FarmTypography.textTheme.bodyMedium),
+          HeroBand(
+            title: context.t('healthIntelligenceTitle'),
+            subtitle: context.t('healthIntelligenceSubtitle'),
+            icon: FarmIcon.stethoscope,
+          ),
           const SizedBox(height: FarmSpacing.md),
           Row(
             children: [
@@ -50,39 +54,47 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
           ),
           const Divider(height: 24, color: FarmColors.border),
           if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
-            LayoutBuilder(builder: (context, c) {
-              final wide = c.maxWidth > kTabletBreakpoint;
-              final list = SectionCard(
-                padding: const EdgeInsets.all(FarmSpacing.sm),
-                child: Column(
-                  children: [
-                    for (final rec in alerts) ...[
-                      _AlertRow(rec: rec, selected: rec.id == selected.id, onTap: () => setState(() => _selectedId = rec.id)),
-                      const SizedBox(height: 6),
-                    ],
-                    Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () {}, child: Text(context.t('viewAllAlerts')))),
-                  ],
+            if (alerts.isEmpty)
+              SectionCard(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Center(child: Text(context.t('noHealthAlerts'), style: FarmTypography.textTheme.bodyMedium)),
                 ),
-              );
-              final detail = _DetailCard(rec: selected, taskCreated: taskCreated);
-              if (!wide) return Column(children: [list, const SizedBox(height: FarmSpacing.md), detail]);
-              return IntrinsicHeight(
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Expanded(flex: 4, child: list),
-                  const SizedBox(width: FarmSpacing.md),
-                  Expanded(flex: 6, child: detail),
-                ]),
-              );
-            }),
+              )
+            else
+              LayoutBuilder(builder: (context, c) {
+                final wide = c.maxWidth > kTabletBreakpoint;
+                final list = SectionCard(
+                  padding: const EdgeInsets.all(FarmSpacing.sm),
+                  child: Column(
+                    children: [
+                      for (final rec in alerts) ...[
+                        _AlertRow(rec: rec, selected: rec.id == selected!.id, onTap: () => setState(() => _selectedId = rec.id)),
+                        const SizedBox(height: 6),
+                      ],
+                      Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () {}, child: Text(context.t('viewAllAlerts')))),
+                    ],
+                  ),
+                );
+                final detail = _DetailCard(rec: selected!, taskCreated: taskCreated);
+                if (!wide) return Column(children: [list, const SizedBox(height: FarmSpacing.md), detail]);
+                return IntrinsicHeight(
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(flex: 4, child: list),
+                    const SizedBox(width: FarmSpacing.md),
+                    Expanded(flex: 6, child: detail),
+                  ]),
+                );
+              }),
             const SizedBox(height: FarmSpacing.md),
             SectionCard(
               title: context.t('fromObservationToRecommendation'),
               child: LayoutBuilder(builder: (context, c) {
                 final wide = c.maxWidth > 640;
                 final steps = [
-                  _ChainStep(icon: FarmIcon.eye, title: context.t('observationStep'), body: '1 Observation', bullets: const ['Raw data from sensors, logs, field observations.']),
+                  _ChainStep(icon: FarmIcon.eye, title: context.t('observationStep'), body: '1 Observation', bullets: [context.t('observationStepBody')]),
                   _ChainStep(icon: FarmIcon.chartLine, title: context.t('knowledgeStep'), body: 'Knowledge', bullets: const ['AI models + farm history turn data into insight.']),
-                  _ChainStep(icon: FarmIcon.check, title: context.t('recommendationStep'), body: 'Recommendation', bullets: const ['Explainable, actionable next steps.']),
+                  _ChainStep(icon: FarmIcon.check, title: context.t('recommendationStep'), body: 'Recommendation', bullets: [context.t('recommendationStepBody')]),
                 ];
                 if (!wide) {
                   return Column(children: [for (final s in steps) ...[s, const SizedBox(height: 8)]]);
@@ -90,7 +102,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
                 return Row(children: [
                   for (var i = 0; i < steps.length; i++) ...[
                     Expanded(child: steps[i]),
-                    if (i != steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: Icon(Icons.arrow_forward, color: FarmColors.muted)),
+                    if (i != steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardArrow(color: FarmColors.muted)),
                   ],
                 ]);
               }),
@@ -103,7 +115,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
                 const Icon(Icons.verified_outlined, color: FarmColors.cedar2, size: 18),
                 const SizedBox(width: 10),
                 Expanded(child: Text(context.t('evidenceFooter'), style: FarmTypography.textTheme.bodySmall)),
-                TextButton(onPressed: () {}, child: const Text('Learn more about our models')),
+                TextButton(onPressed: () {}, child: Text(context.t('learnMoreModels'))),
               ]),
             ),
           ],
@@ -188,17 +200,15 @@ class _AlertRow extends StatelessWidget {
       RecommendationPriority.info => context.t('priorityInfo').toUpperCase(),
     };
     return Material(
-      color: selected ? FarmColors.tint(FarmColors.danger, 0.06) : FarmColors.card,
+      // The selected recommendation takes a wash of the alert colour; the
+      // rest take the page's paper. No outlines either way.
+      color: selected ? FarmColors.tint(FarmColors.danger, 0.12) : FarmColors.stone,
       borderRadius: BorderRadius.circular(FarmRadii.sm),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(FarmRadii.sm),
         child: Container(
           padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(FarmRadii.sm),
-            border: Border.all(color: selected ? FarmColors.danger.withOpacity(0.4) : FarmColors.border),
-          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -325,15 +335,16 @@ class _DetailCard extends StatelessWidget {
                       ? null
                       : () {
                           context.read<TasksProvider>().addFromRecommendation(
-                                id: 'task-${rec.id}',
                                 title: '${rec.title} — ${rec.entityLabel}',
+                                // Stays English: the server stores this
+                                // category, nobody reads it on screen.
                                 category: 'From recommendation',
                                 sourceId: rec.id,
                               );
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('createTask'))));
                         },
                   icon: Icon(taskCreated ? Icons.check : Icons.add_task, size: 16),
-                  label: Text(taskCreated ? 'Task created' : context.t('createTask')),
+                  label: Text(taskCreated ? context.t('taskCreated') : context.t('createTask')),
                 ),
               ],
             ),
@@ -353,7 +364,7 @@ class _EvidenceTile extends StatelessWidget {
     final concerning = evidence.trendDown == true;
     return Container(
       padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.border)),
+      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.sm)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

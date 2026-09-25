@@ -4,6 +4,7 @@ import 'status_pill.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
+import 'directional_icon.dart';
 
 /// Alert / recommendation row: priority pill, icon roundel, title, evidence
 /// lines, optional chevron. Used for animal alerts, feed warnings, harvest
@@ -48,21 +49,19 @@ class AlertCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = _accent;
+    // An alert row almost always sits inside a white SectionCard. It used
+    // to be white-on-white held apart by a border; now it takes the page's
+    // own paper as its fill, so the row reads as inset without a line
+    // being drawn. Highlighted rows get a wash of their own accent.
     return Material(
-      color: highlighted ? FarmColors.tint(accent, 0.08) : FarmColors.card,
-      borderRadius: BorderRadius.circular(FarmRadii.sm),
+      color: highlighted ? FarmColors.tint(accent, 0.10) : FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.sm + 2),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(FarmRadii.sm),
+        borderRadius: BorderRadius.circular(FarmRadii.sm + 2),
         child: Container(
-          constraints: const BoxConstraints(minHeight: kFarmTouchTarget),
-          padding: const EdgeInsets.all(FarmSpacing.sm + 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(FarmRadii.sm),
-            border: Border.all(
-              color: highlighted ? accent.withOpacity(0.35) : FarmColors.border,
-            ),
-          ),
+          constraints: const BoxConstraints(minHeight: kFarmTouchTarget + 8),
+          padding: const EdgeInsets.all(FarmSpacing.md - 2),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -70,8 +69,8 @@ class AlertCard extends StatelessWidget {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: FarmColors.tint(accent, 0.16),
-                  shape: BoxShape.circle,
+                  color: FarmColors.tint(accent, 0.18),
+                  borderRadius: BorderRadius.circular(13),
                 ),
                 child: Center(child: AppIcon(icon, size: 19, color: accent)),
               ),
@@ -100,7 +99,7 @@ class AlertCard extends StatelessWidget {
               ],
               if (onTap != null) ...[
                 const SizedBox(width: 4),
-                const Icon(Icons.chevron_right, size: 18, color: FarmColors.muted),
+                const ForwardChevron(size: 18, color: FarmColors.muted),
               ],
             ],
           ),

@@ -43,10 +43,10 @@ class FarmTheme {
         color: FarmColors.card,
         elevation: 0,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: FarmRadii.card,
-          side: const BorderSide(color: FarmColors.border, width: 1),
-        ),
+        // Borderless, like SectionCard: white on warm paper is the whole
+        // separation, so a Material Card dropped into a screen matches the
+        // panels around it instead of wearing an outline they no longer have.
+        shape: RoundedRectangleBorder(borderRadius: FarmRadii.card),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: FarmColors.mist,
@@ -60,20 +60,24 @@ class FarmTheme {
           backgroundColor: FarmColors.cedar,
           foregroundColor: FarmColors.white,
           disabledBackgroundColor: FarmColors.muted.withOpacity(0.4),
-          minimumSize: const Size(kFarmTouchTarget * 2, kFarmTouchTarget),
-          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(FarmRadii.sm)),
+          minimumSize: const Size(kFarmTouchTarget * 2, kFarmPrimaryTarget),
+          padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 14),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(4)),
+          ),
           textStyle: FarmTypography.textTheme.labelLarge,
           elevation: 0,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: FarmColors.cedar,
-          side: const BorderSide(color: FarmColors.border, width: 1.4),
-          minimumSize: const Size(kFarmTouchTarget * 2, kFarmTouchTarget),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(FarmRadii.sm)),
+          foregroundColor: FarmColors.ink,
+          side: const BorderSide(color: FarmColors.ink, width: 1),
+          minimumSize: const Size(kFarmTouchTarget * 2, kFarmPrimaryTarget),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(4)),
+          ),
           textStyle: FarmTypography.textTheme.titleSmall,
         ),
       ),

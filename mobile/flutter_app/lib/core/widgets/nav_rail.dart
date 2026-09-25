@@ -6,34 +6,33 @@ import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
 
+/// One row of the nav rail. Which rows a user gets is decided in
+/// `app/nav_config.dart` from their actual module permissions, so this is
+/// only what a row looks like — never who may see it.
 class NavEntry {
-  const NavEntry(this.icon, this.labelKey);
+  const NavEntry(this.icon, this.labelKey, {this.accent = FarmColors.cedar});
   final FarmIcon icon;
   final String labelKey;
-}
 
-const List<NavEntry> kNavEntries = [
-  NavEntry(FarmIcon.sun, 'navMorningBriefing'),
-  NavEntry(FarmIcon.cow, 'navAnimals'),
-  NavEntry(FarmIcon.feedBag, 'navFeedInventory'),
-  NavEntry(FarmIcon.milkBottle, 'navMilk'),
-  NavEntry(FarmIcon.egg, 'navEggs'),
-  NavEntry(FarmIcon.stethoscope, 'navHealth'),
-  NavEntry(FarmIcon.harvestBasket, 'navProduce'),
-  NavEntry(FarmIcon.money, 'navSales'),
-  NavEntry(FarmIcon.task, 'navTasks'),
-  NavEntry(FarmIcon.settings, 'navSettings'),
-];
+  /// Tints this destination's roundel in the More sheet. It names the
+  /// subject — milk is blue wherever milk appears — so the grid is
+  /// findable by colour, not only by reading ten labels.
+  final Color accent;
+}
 
 /// Left navigation rail (tech spec §7 / component-spec.md "SidebarNav").
 class NavRail extends StatelessWidget {
   const NavRail({
     super.key,
+    required this.entries,
     required this.selectedIndex,
     required this.onSelect,
     this.compact = false,
   });
 
+  /// The entries this user may see, already filtered by their module
+  /// permissions — see `app/nav_config.dart`.
+  final List<NavEntry> entries;
   final int selectedIndex;
   final ValueChanged<int> onSelect;
   final bool compact;
@@ -72,9 +71,9 @@ class NavRail extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: kNavEntries.length,
+              itemCount: entries.length,
               itemBuilder: (context, i) {
-                final entry = kNavEntries[i];
+                final entry = entries[i];
                 final selected = i == selectedIndex;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
@@ -123,7 +122,7 @@ class NavRail extends StatelessWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      const BekaaBackdrop(),
+                      const BekaaBackdrop(scene: BekaaScene.panorama),
                       Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(

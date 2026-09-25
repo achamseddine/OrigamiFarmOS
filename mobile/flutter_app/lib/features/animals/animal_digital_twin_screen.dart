@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
@@ -10,24 +11,109 @@ import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/top_bar.dart';
-import '../../data/demo/demo_data.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
-import '../../domain/entities/recommendation.dart';
+import '../../domain/entities/livestock.dart';
+import '../../domain/entities/production_records.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/livestock_provider.dart';
+import '../../providers/production_provider.dart';
+import 'animal_feeding_section.dart';
+import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
+import 'capability_chips.dart';
+import '../../core/widgets/directional_icon.dart';
+
+const _months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+String _shortDate(DateTime? d) => d == null ? '—' : '${_months[d.month - 1]} ${d.day}';
 
 /// Screen 4 — Animal Digital Twin. Pushed as a focused full-screen route
 /// (no nav rail) — the Option C mockup itself drops the sidebar here in
 /// favour of a "Back to Herd" header, so [AnimalDigitalTwinScreen] is a
 /// plain [MaterialPageRoute] destination rather than an [AppShell] tab.
-class AnimalDigitalTwinScreen extends StatelessWidget {
+///
+/// The base [Animal] profile comes from [AnimalsProvider] (already loaded
+/// at startup), but the observation/event/recommendation history shown
+/// here is per-animal and isn't part of that farm-wide list — so this
+/// screen additionally fetches the backend's digital-twin endpoint
+/// (`GET /animals/{id}`) itself, fetch-in-initState style.
+class AnimalDigitalTwinScreen extends StatefulWidget {
   const AnimalDigitalTwinScreen({super.key, required this.animalId});
 
   final String animalId;
 
   @override
+  State<AnimalDigitalTwinScreen> createState() => _AnimalDigitalTwinScreenState();
+}
+
+class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
+  Map<String, dynamic>? _twin;
+  bool _twinLoading = true;
+  String? _twinError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTwin();
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimalDigitalTwinScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.animalId != widget.animalId) _loadTwin();
+  }
+
+  Future<void> _loadTwin() async {
+    setState(() {
+      _twinLoading = true;
+      _twinError = null;
+    });
+    try {
+      final twin = await context.read<AnimalsProvider>().fetchDigitalTwin(widget.animalId);
+      if (!mounted) return;
+      setState(() {
+        _twin = twin;
+        _twinLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _twinError = "Could not load this animal's history.";
+        _twinLoading = false;
+      });
+    }
+  }
+
+  /// Refreshes both the farm-wide list (the header's primary id) and the
+  /// twin (the identifier list) after an identifier is added or retired.
+  Future<void> _refreshRecord() async {
+    await context.read<AnimalsProvider>().load();
+    if (mounted) await _loadTwin();
+  }
+
+  /// What this animal can do. The server's answer travels with the twin;
+  /// until it arrives — or for an animal registered offline a moment ago,
+  /// which the server has never seen — the device resolves it from the
+  /// same cached rules, and the two are proven to agree.
+  CapabilitySet _capabilities(BuildContext context, Animal animal) {
+    final fromTwin = _twin?['capabilities'];
+    if (fromTwin is Map<String, dynamic> && (fromTwin['capabilities'] as List<dynamic>? ?? const []).isNotEmpty) {
+      return CapabilitySet.fromJson(fromTwin);
+    }
+    return context.watch<LivestockProvider>().resolve(
+          species: animal.species,
+          sex: animal.sex,
+          lifeStage: animal.lifeStage,
+          managementProfile: animal.managementProfile,
+        );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final animal = context.watch<AnimalsProvider>().byId(animalId);
+    final animal = context.watch<AnimalsProvider>().byId(widget.animalId);
+    final caps = _capabilities(context, animal);
 
     return Scaffold(
       backgroundColor: FarmColors.stone,
@@ -41,7 +127,7 @@ class AnimalDigitalTwinScreen extends StatelessWidget {
                 children: [
                   TextButton.icon(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.chevron_left),
+                    icon: const BackChevron(),
                     label: Text(context.t('backToHerd')),
                   ),
                   const Spacer(),
@@ -52,9 +138,9 @@ class AnimalDigitalTwinScreen extends StatelessWidget {
                 child: SingleChildScrollView(
                   child: LayoutBuilder(builder: (context, constraints) {
                     final wide = constraints.maxWidth > kTabletBreakpoint;
-                    final left = _ProfileColumn(animal: animal);
-                    final center = _HistoryColumn(animal: animal);
-                    final right = _InsightsColumn(animal: animal);
+                    final left = _ProfileColumn(animal: animal, caps: caps, onRecordChanged: _refreshRecord);
+                    final center = _HistoryColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading, twinError: _twinError);
+                    final right = _InsightsColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading);
                     if (!wide) {
                       return Column(children: [left, const SizedBox(height: FarmSpacing.md), center, const SizedBox(height: FarmSpacing.md), right]);
                     }
@@ -81,18 +167,39 @@ class AnimalDigitalTwinScreen extends StatelessWidget {
   }
 }
 
+/// The identity card. Everything species-specific on it — the name of the
+/// species, what a female of it is called, whether a pregnancy line can
+/// exist, which identifiers it carries — comes from the catalog and the
+/// resolved capabilities (§8), so this column draws a mare and a hen with
+/// the same code it draws a cow.
 class _ProfileColumn extends StatelessWidget {
-  const _ProfileColumn({required this.animal});
+  const _ProfileColumn({required this.animal, required this.caps, required this.onRecordChanged});
   final Animal animal;
+  final CapabilitySet caps;
+  final Future<void> Function() onRecordChanged;
 
   @override
   Widget build(BuildContext context) {
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
+    final speciesName = livestock.speciesName(animal.species, lang);
+    final canEdit = context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.edit);
+    final identifiers = animal.activeIdentifiers;
+    final stage = livestock.lifeStageLabel(animal.species, animal.lifeStage, lang);
+    final profile = livestock.profileLabel(animal.species, animal.managementProfile, lang);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            Text('${animal.name} #${animal.tag}', style: FarmTypography.display(size: 24)),
+            Flexible(
+              child: Text(
+                animal.primaryId.isEmpty ? animal.name : '${animal.name} #${animal.primaryId}',
+                style: FarmTypography.display(size: 24),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             const SizedBox(width: 8),
             StatusPill(label: context.t('active'), level: FarmStatusLevel.good, dense: true),
           ],
@@ -100,30 +207,110 @@ class _ProfileColumn extends StatelessWidget {
         const SizedBox(height: FarmSpacing.sm),
         AspectRatio(
           aspectRatio: 1.1,
-          child: PhotoSlot(filePath: animal.photoPath, icon: _iconForSpecies(animal.species), label: animal.species.label),
+          child: PhotoSlot(
+            filePath: animal.photoPath,
+            icon: FarmIconMap.species(livestock.speciesIcon(animal.species)),
+            label: speciesName,
+          ),
         ),
         const SizedBox(height: FarmSpacing.md),
         SectionCard(
           padding: const EdgeInsets.all(FarmSpacing.md),
           child: Column(
             children: [
-              _fact(context, context.t('species'), animal.species.label),
-              _fact(context, context.t('breed'), animal.breed),
+              _fact(context, context.t('species'), speciesName),
+              if (animal.breed.isNotEmpty) _fact(context, context.t('breed'), animal.breed),
+              _fact(context, context.t('sex'), _sexLabel(context, lang)),
+              if (stage.isNotEmpty) _fact(context, context.t('lifeStage'), stage),
+              if (profile.isNotEmpty) _fact(context, context.t('managementProfile'), profile),
               _fact(context, context.t('age'), animal.ageLabel),
               _fact(context, context.t('location'), animal.location),
               _fact(context, context.t('healthScore'), '${animal.healthScore} / 100', valueColor: _scoreColor(animal.healthScore)),
-              if (animal.pregnant)
+              // Reproduction and lactation lines exist only where the
+              // resolver says they can — never on a bull, a hen or a
+              // gelding, whatever a stale flag on the record says.
+              if (caps.has(Cap.pregnancy) && animal.pregnant)
                 _fact(context, context.t('pregnancyStatus'), 'Confirmed (${animal.pregnancyDays} days)'),
-              if (animal.lactating)
+              if (caps.has(Cap.lactation) && animal.lactating)
                 _fact(context, context.t('lactationStatus'), 'Lactating — ${animal.lactationCycle ?? 1}'),
               const Divider(height: 20, color: FarmColors.border),
-              _fact(context, context.t('earTag'), animal.tag),
-              _fact(context, context.t('internalId'), 'COW-${animal.tag.padLeft(4, '0')}', last: true),
+              Row(children: [
+                Expanded(
+                  child: Text(
+                    context.t('identification'),
+                    style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4),
+                  ),
+                ),
+                if (canEdit)
+                  IconButton(
+                    tooltip: context.t('addIdentifier'),
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () async {
+                      final added = await showAddIdentifierDialog(context, animal: animal, caps: caps);
+                      if (added) await onRecordChanged();
+                    },
+                    icon: const Icon(Icons.add, size: 18),
+                  ),
+              ]),
+              if (identifiers.isEmpty) _fact(context, context.t('noIdentifiers'), '—'),
+              for (final i in identifiers)
+                _IdentifierRow(
+                  identifier: i,
+                  onRetire: canEdit && !i.isPrimary ? () => _retire(context, i) : null,
+                ),
+              _fact(context, context.t('internalId'), animal.id, last: true),
             ],
           ),
         ),
+        if (caps.capabilities.isNotEmpty) ...[
+          const SizedBox(height: FarmSpacing.md),
+          SectionCard(
+            title: context.t('tracked'),
+            child: CapabilityChips(caps: caps),
+          ),
+        ],
       ],
     );
+  }
+
+  /// "Female · Cow", "Male · Stallion": the generic word, then what this
+  /// farm calls one of this species.
+  String _sexLabel(BuildContext context, String lang) {
+    final code = animal.sex.trim().toUpperCase();
+    final base = switch (code) {
+      'F' || 'FEMALE' => context.t('female'),
+      'M' || 'MALE' => context.t('male'),
+      _ => context.t('unknownSex'),
+    };
+    final term = switch (code) {
+      'F' || 'FEMALE' => caps.term('female', lang),
+      'M' || 'MALE' => caps.term('male', lang),
+      _ => '',
+    };
+    return term.isEmpty ? base : '$base · $term';
+  }
+
+  /// Retiring keeps the row (§4: "retire, never delete") — a replaced ear
+  /// tag still finds the animal it was on.
+  Future<void> _retire(BuildContext context, AnimalIdentifier identifier) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.t('retireIdentifier')),
+        content: Text('${ctx.t('id_${identifier.type}')} ${identifier.value}\n\n${ctx.t('retireIdentifierBody')}'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: Text(ctx.t('cancel'))),
+          FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: Text(ctx.t('retire'))),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final result = await context.read<LivestockProvider>().retireIdentifier(animal.id, identifier.id);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.success ? context.t('identifierRetired') : (result.error ?? context.t('identifierRetired')))),
+    );
+    if (result.success) await onRecordChanged();
   }
 
   Widget _fact(BuildContext context, String label, String value, {Color? valueColor, bool last = false}) {
@@ -150,15 +337,45 @@ class _ProfileColumn extends StatelessWidget {
     if (score >= 60) return FarmColors.warning;
     return FarmColors.danger;
   }
+}
 
-  FarmIcon _iconForSpecies(AnimalSpecies s) => switch (s) {
-        AnimalSpecies.cow => FarmIcon.cow,
-        AnimalSpecies.goat => FarmIcon.goat,
-        AnimalSpecies.sheep => FarmIcon.sheep,
-        AnimalSpecies.horse => FarmIcon.horse,
-        AnimalSpecies.layerHen || AnimalSpecies.turkey => FarmIcon.poultry,
-        AnimalSpecies.duck => FarmIcon.duck,
-      };
+/// One identifier on the identity card: its type, its value (and issuer),
+/// a star on the primary one, and — for anyone who may edit animals — a
+/// way to retire a non-primary one.
+class _IdentifierRow extends StatelessWidget {
+  const _IdentifierRow({required this.identifier, this.onRetire});
+  final AnimalIdentifier identifier;
+  final VoidCallback? onRetire;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = context.t('id_${identifier.type}');
+    final issuer = identifier.issuingAuthority;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: Text(identifier.isPrimary ? '$label ★' : label, style: FarmTypography.textTheme.bodySmall)),
+          Flexible(
+            child: Text(
+              issuer == null || issuer.isEmpty ? identifier.value : '${identifier.value} · $issuer',
+              textAlign: TextAlign.right,
+              style: FarmTypography.textTheme.titleSmall,
+            ),
+          ),
+          if (onRetire != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: InkWell(
+                onTap: onRetire,
+                child: const Icon(Icons.remove_circle_outline, size: 16, color: FarmColors.muted),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _QuickAction {
@@ -169,19 +386,30 @@ class _QuickAction {
 }
 
 class _HistoryColumn extends StatelessWidget {
-  const _HistoryColumn({required this.animal});
+  const _HistoryColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading, required this.twinError});
   final Animal animal;
+  final CapabilitySet caps;
+  final Map<String, dynamic>? twin;
+  final bool twinLoading;
+  final String? twinError;
 
   @override
   Widget build(BuildContext context) {
+    // The quick actions follow the capabilities (§8): "Milk" is offered
+    // only to an animal that is milked. The server would refuse the
+    // record anyway; better not to show the button.
     final actions = <_QuickAction>[
       _QuickAction(FarmIcon.eye, 'observe', () => showObserveDialog(context, animal.id)),
       _QuickAction(FarmIcon.stethoscope, 'treat', () => showTreatDialog(context, animal)),
       _QuickAction(FarmIcon.feedBag, 'feed', () => showFeedDialog(context, animal)),
-      _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
+      if (caps.has(Cap.milkProduction)) _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
       _QuickAction(FarmIcon.location, 'move', () => showMoveDialog(context, animal)),
       _QuickAction(FarmIcon.calendar, 'viewHistory', () {}),
     ];
+
+    final events = (twin?['recent_events'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final observations = (twin?['recent_observations'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final treatments = context.watch<AnimalsProvider>().treatmentsFor(animal.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,10 +428,19 @@ class _HistoryColumn extends StatelessWidget {
           title: context.t('lifeHistory'),
           child: Column(
             children: [
-              for (final entry in _timelineFor(animal)) ...[
-                _TimelineRow(entry: entry),
-                const Divider(height: 18, color: FarmColors.border),
-              ],
+              _twinBody(
+                context,
+                empty: 'No recorded history yet.',
+                child: Column(
+                  children: [
+                    for (final e in events) ...[
+                      _TimelineRow(entry: _timelineEntryFor(e)),
+                      const Divider(height: 18, color: FarmColors.border),
+                    ],
+                  ],
+                ),
+                isEmpty: events.isEmpty,
+              ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(onPressed: () {}, child: Text(context.t('viewFullHistory'))),
@@ -217,28 +454,26 @@ class _HistoryColumn extends StatelessWidget {
           final health = SectionCard(
             title: context.t('healthHistory'),
             trailing: context.t('viewAll'),
-            child: Column(children: const [
-              _HistoryLine(label: 'Mastitis', status: 'Resolved', date: 'May 12'),
-              _HistoryLine(label: 'Lameness', status: 'Resolved', date: 'Apr 28'),
-              _HistoryLine(label: 'Fever', status: 'Resolved', date: 'Apr 10'),
-            ]),
+            child: treatments.isEmpty
+                ? Text('No treatments recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                : Column(children: [for (final t in treatments) _TreatmentLine(treatment: t)]),
           );
-          final breeding = SectionCard(
-            title: context.t('breeding'),
+          final observationsCard = SectionCard(
+            title: 'Recent Observations',
             trailing: context.t('viewAll'),
-            child: Column(children: [
-              _fact('AI Date', 'Feb 22, 2026'),
-              _fact('Bull', 'Orion-ET'),
-              _fact('Pregnancy', animal.pregnant ? 'Confirmed (${animal.pregnancyDays} days)' : '—'),
-              _fact('Due Date', 'Sep 20, 2026', last: true),
-            ]),
+            child: _twinBody(
+              context,
+              empty: 'No observations recorded yet.',
+              isEmpty: observations.isEmpty,
+              child: Column(children: [for (final o in observations.take(6)) _ObservationLine(obs: o)]),
+            ),
           );
-          if (!wide) return Column(children: [health, const SizedBox(height: FarmSpacing.md), breeding]);
+          if (!wide) return Column(children: [health, const SizedBox(height: FarmSpacing.md), observationsCard]);
           return IntrinsicHeight(
             child: Row(children: [
               Expanded(child: health),
               const SizedBox(width: FarmSpacing.md),
-              Expanded(child: breeding),
+              Expanded(child: observationsCard),
             ]),
           );
         }),
@@ -246,30 +481,61 @@ class _HistoryColumn extends StatelessWidget {
     );
   }
 
-  Widget _fact(String label, String value, {bool last = false}) => Padding(
-        padding: EdgeInsets.only(bottom: last ? 0 : 8),
-        child: Row(children: [
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12.5, color: FarmColors.muted))),
-          Text(value, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-        ]),
+  /// Shared loading/error/empty handling for the two sections backed by
+  /// the digital-twin fetch (Life History, Recent Observations).
+  Widget _twinBody(BuildContext context, {required Widget child, required bool isEmpty, required String empty}) {
+    if (twinLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
       );
+    }
+    if (twinError != null) {
+      return Text(twinError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5));
+    }
+    if (isEmpty) {
+      return Text(empty, style: FarmTypography.textTheme.bodySmall);
+    }
+    return child;
+  }
 
-  List<_TimelineEntry> _timelineFor(Animal a) {
-    final entries = <_TimelineEntry>[];
-    if (a.milkTodayL != null) {
-      entries.add(_TimelineEntry(FarmIcon.milkBottle, 'Milk recorded', '${a.milkTodayL!.toStringAsFixed(1)} L', 'Today, 7:15 AM'));
-    }
-    if (a.status == AnimalHealthStatus.underTreatment) {
-      entries.add(const _TimelineEntry(FarmIcon.heart, 'Treatment completed', 'Mastitis — 3 day course', '2 days ago'));
-    }
-    if (a.weightKg != null) {
-      entries.add(_TimelineEntry(FarmIcon.scale, 'Weight recorded', '${a.weightKg!.toStringAsFixed(0)} kg', '3 days ago'));
-    }
-    if (a.pregnant) {
-      entries.add(_TimelineEntry(FarmIcon.pregnancy, 'Pregnancy confirmed', '${a.pregnancyDays} days', '5 days ago'));
-    }
-    entries.add(const _TimelineEntry(FarmIcon.feedBag, 'Feed change', 'Higher energy mix started', '1 week ago'));
-    return entries;
+  _TimelineEntry _timelineEntryFor(Map<String, dynamic> e) {
+    final type = e['event_type'] as String? ?? 'event';
+    final payload = (e['payload'] as Map<String, dynamic>?) ?? const {};
+    final createdAt = e['created_at'] != null ? DateTime.tryParse(e['created_at'] as String) : null;
+    return _TimelineEntry(_iconForEvent(type), _titleForEvent(type), _valueForEvent(type, payload), _whenLabel(createdAt));
+  }
+
+  FarmIcon _iconForEvent(String type) => switch (type) {
+        'milk_recorded' => FarmIcon.milkBottle,
+        'observation_recorded' => FarmIcon.eye,
+        'treatment_recorded' => FarmIcon.stethoscope,
+        'animal_moved' => FarmIcon.location,
+        _ => FarmIcon.calendar,
+      };
+
+  String _titleForEvent(String type) => switch (type) {
+        'milk_recorded' => 'Milk recorded',
+        'observation_recorded' => 'Observation recorded',
+        'treatment_recorded' => 'Treatment recorded',
+        'animal_moved' => 'Location changed',
+        _ => type.replaceAll('_', ' '),
+      };
+
+  String _valueForEvent(String type, Map<String, dynamic> payload) => switch (type) {
+        'milk_recorded' => '${payload['liters'] ?? '—'} L',
+        'animal_moved' => '${payload['location_label'] ?? '—'}',
+        'treatment_recorded' => '${payload['medication'] ?? '—'}',
+        _ => '',
+      };
+
+  String _whenLabel(DateTime? when) {
+    if (when == null) return '—';
+    final diff = DateTime.now().difference(when);
+    if (diff.inDays <= 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    return _shortDate(when);
   }
 }
 
@@ -280,7 +546,7 @@ class _ActionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: FarmColors.card,
+      color: FarmColors.stone,
       borderRadius: BorderRadius.circular(FarmRadii.sm),
       child: InkWell(
         onTap: action.onTap,
@@ -288,7 +554,6 @@ class _ActionButton extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: kFarmTouchTarget),
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.border)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -342,120 +607,183 @@ class _TimelineRow extends StatelessWidget {
   }
 }
 
-class _HistoryLine extends StatelessWidget {
-  const _HistoryLine({required this.label, required this.status, required this.date});
-  final String label;
-  final String status;
-  final String date;
+class _TreatmentLine extends StatelessWidget {
+  const _TreatmentLine({required this.treatment});
+  final TreatmentRecord treatment;
 
   @override
   Widget build(BuildContext context) {
+    final resolved = treatment.status.toLowerCase() != 'active';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, size: 15, color: FarmColors.success),
+          Icon(resolved ? Icons.check_circle : Icons.radio_button_unchecked, size: 15, color: resolved ? FarmColors.success : FarmColors.warning),
           const SizedBox(width: 8),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600))),
-          Text(status, style: const TextStyle(fontSize: 11, color: FarmColors.success)),
+          Expanded(
+            child: Text(treatment.diagnosis ?? treatment.medication, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+          ),
+          Text(treatment.status, style: TextStyle(fontSize: 11, color: resolved ? FarmColors.success : FarmColors.warning)),
           const SizedBox(width: 8),
-          Text(date, style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
+          Text(_shortDate(treatment.startAt), style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
         ],
       ),
     );
   }
 }
 
-class _InsightsColumn extends StatelessWidget {
-  const _InsightsColumn({required this.animal});
-  final Animal animal;
+class _ObservationLine extends StatelessWidget {
+  const _ObservationLine({required this.obs});
+  final Map<String, dynamic> obs;
 
   @override
   Widget build(BuildContext context) {
-    final rec = DemoData.recommendations
-        .where((r) => r.entityLabel.contains(animal.name) || r.entityLabel.contains(animal.tag))
-        .toList();
+    final type = ((obs['observation_type'] as String?) ?? 'observation').replaceAll('_', ' ');
+    final severity = obs['severity'] as String?;
+    final observedAt = obs['observed_at'] != null ? DateTime.tryParse(obs['observed_at'] as String) : null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          Icon(Icons.circle, size: 8, color: _severityColor(severity)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(type, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+          if (severity != null) ...[
+            Text(severity, style: TextStyle(fontSize: 11, color: _severityColor(severity))),
+            const SizedBox(width: 8),
+          ],
+          Text(_shortDate(observedAt), style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
+        ],
+      ),
+    );
+  }
+
+  Color _severityColor(String? s) => switch (s) {
+        'severe' => FarmColors.danger,
+        'moderate' => FarmColors.warning,
+        _ => FarmColors.muted,
+      };
+}
+
+class _InsightsColumn extends StatelessWidget {
+  const _InsightsColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading});
+  final Animal animal;
+  final CapabilitySet caps;
+  final Map<String, dynamic>? twin;
+  final bool twinLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final milkRecords = context.watch<ProductionProvider>().milkRecords.where((r) => r.animalId == animal.id).toList();
+    final recs = (twin?['open_recommendations'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+    final feedModule = context.watch<AccessProvider>().isModuleAvailable(FarmModule.feedNutrition);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SectionCard(
-          title: context.t('milkTrend'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('${(animal.milkTodayL ?? 18.6).toStringAsFixed(1)} ${context.t('liters')}', style: FarmTypography.textTheme.headlineMedium),
-              const Text('-7.5% vs last 7 days', style: TextStyle(color: FarmColors.danger, fontSize: 12, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const LineTrendChart(values: [20.1, 19.8, 20.3, 19.4, 19.0, 18.8, 18.6], height: 90, showDots: false),
-            ],
+        // What this animal should be fed, from its own or its group's
+        // program (generic feed architecture §17) — for anyone who holds
+        // the feed module, whatever the species.
+        if (feedModule) ...[
+          AnimalFeedingSection(animal: animal),
+          const SizedBox(height: FarmSpacing.md),
+        ],
+        // A milk card only for an animal that is milked. A hen's or a
+        // horse's profile simply has no such section — which is the point
+        // of resolving capabilities rather than checking the species.
+        if (caps.has(Cap.milkProduction)) ...[
+          SectionCard(
+            title: context.t('milkTrend'),
+            child: milkRecords.isEmpty
+                ? Text('No milk records for this animal yet.', style: FarmTypography.textTheme.bodySmall)
+                : _MilkTrend(records: milkRecords),
           ),
-        ),
-        const SizedBox(height: FarmSpacing.md),
-        SectionCard(
-          title: context.t('feedIntake'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('17.2 kg', style: FarmTypography.textTheme.headlineMedium),
-              const Text('+2.4% vs last 7 days', style: TextStyle(color: FarmColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const LineTrendChart(values: [16.2, 16.5, 16.9, 16.6, 17.0, 16.8, 17.2], height: 90, showDots: false, color: FarmColors.olive),
-            ],
-          ),
-        ),
-        const SizedBox(height: FarmSpacing.md),
-        SectionCard(
-          title: context.t('financialSnapshot'),
-          child: Column(children: [
-            _money(context, 'Milk Revenue', 142.68),
-            _money(context, 'Cost (Feed + Care)', -58.34),
-            const Divider(height: 18, color: FarmColors.border),
-            _money(context, 'Net', 84.34, bold: true),
-          ]),
-        ),
-        const SizedBox(height: FarmSpacing.md),
+          const SizedBox(height: FarmSpacing.md),
+        ],
         SectionCard(
           title: context.t('aiRecommendation'),
-          child: rec.isEmpty
-              ? Text('No active recommendations for this animal.', style: FarmTypography.textTheme.bodySmall)
-              : _RecommendationSummary(rec: rec.first),
+          child: twinLoading
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))),
+                )
+              : recs.isEmpty
+                  ? Text('No active recommendations for this animal.', style: FarmTypography.textTheme.bodySmall)
+                  : _RecommendationSummary(rec: recs.first),
         ),
       ],
     );
   }
-
-  Widget _money(BuildContext context, String label, double value, {bool bold = false}) {
-    final positive = value >= 0;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        Expanded(child: Text(label, style: const TextStyle(fontSize: 12.5, color: FarmColors.muted))),
-        Text(
-          '${positive ? '' : '-'}\$${value.abs().toStringAsFixed(2)}',
-          style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600),
-        ),
-      ]),
-    );
-  }
 }
 
-class _RecommendationSummary extends StatelessWidget {
-  const _RecommendationSummary({required this.rec});
-  final Recommendation rec;
+/// Per-animal milk trend, bucketed client-side from [ProductionProvider]'s
+/// already-loaded milk records (the backend has no per-animal trend
+/// endpoint — this mirrors [ProductionProvider]'s own day-bucketing).
+class _MilkTrend extends StatelessWidget {
+  const _MilkTrend({required this.records});
+  final List<MilkRecord> records;
 
   @override
   Widget build(BuildContext context) {
+    final last7 = _byDay(7);
+    final prev7 = _byDay(14).sublist(0, 7);
+    final last7Sum = last7.fold(0.0, (a, b) => a + b);
+    final prev7Sum = prev7.fold(0.0, (a, b) => a + b);
+    final pctChange = prev7Sum > 0 ? ((last7Sum - prev7Sum) / prev7Sum * 100) : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('${last7Sum.toStringAsFixed(1)} ${context.t('liters')}', style: FarmTypography.textTheme.headlineMedium),
+        Text(
+          pctChange == null ? 'Last 7 days' : '${pctChange >= 0 ? '+' : ''}${pctChange.toStringAsFixed(1)}% vs previous 7 days',
+          style: TextStyle(
+            color: pctChange == null ? FarmColors.muted : (pctChange >= 0 ? FarmColors.success : FarmColors.danger),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        LineTrendChart(values: last7, height: 90, showDots: false),
+      ],
+    );
+  }
+
+  List<double> _byDay(int days) {
+    final today = DateTime.now();
+    final start = DateTime(today.year, today.month, today.day).subtract(Duration(days: days - 1));
+    final buckets = List<double>.filled(days, 0);
+    for (final r in records) {
+      final d = r.recordedAt;
+      final dayIndex = DateTime(d.year, d.month, d.day).difference(start).inDays;
+      if (dayIndex >= 0 && dayIndex < days) buckets[dayIndex] += r.liters;
+    }
+    return buckets;
+  }
+}
+
+/// Renders one of the animal's `open_recommendations` (from the
+/// digital-twin fetch) — a thinner shape than the full [Recommendation]
+/// entity (`{id, title, priority, confidence}`, no rationale/evidence),
+/// since that's all the backend's per-animal endpoint returns.
+class _RecommendationSummary extends StatelessWidget {
+  const _RecommendationSummary({required this.rec});
+  final Map<String, dynamic> rec;
+
+  @override
+  Widget build(BuildContext context) {
+    final confidence = (rec['confidence'] as num?)?.toDouble() ?? 0;
+    final confidencePct = (confidence * 100).round();
+    final priority = (rec['priority'] as String?) ?? 'medium';
+    final priorityLabel = priority.isEmpty ? priority : '${priority[0].toUpperCase()}${priority.substring(1)}';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
-          Expanded(child: Text(rec.title, style: FarmTypography.textTheme.titleSmall)),
-          StatusPill(label: '${rec.confidencePct}%', level: FarmStatusLevel.info, dense: true),
+          Expanded(child: Text((rec['title'] as String?) ?? '', style: FarmTypography.textTheme.titleSmall)),
+          StatusPill(label: '$confidencePct%', level: FarmStatusLevel.info, dense: true),
         ]),
         const SizedBox(height: 6),
-        Text(rec.rationale, style: FarmTypography.textTheme.bodySmall),
-        const SizedBox(height: 6),
-        Text('Recommendation: ${rec.suggestedAction}', style: FarmTypography.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700, color: FarmColors.ink)),
+        Text('Priority: $priorityLabel', style: FarmTypography.textTheme.bodySmall),
       ],
     );
   }

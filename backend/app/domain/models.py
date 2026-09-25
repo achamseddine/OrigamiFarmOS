@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -45,8 +45,122 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
     password_hash: Mapped[str] = mapped_column(String(200))
     role: Mapped[str] = mapped_column(String(30))
+    department: Mapped[str | None] = mapped_column(String(30), nullable=True)
     language: Mapped[str] = mapped_column(String(5), default="en")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Employee record (tech spec §8). Kept on `users` rather than a
+    # separate 1:1 `employees` table: every employee needs a login to do
+    # farm work, so splitting them would add a join to every screen
+    # without ever holding a row the other side lacks. The many-to-many
+    # part of the model that actually matters — who is responsible for
+    # what — lives in `user_module_permissions` below.
+    job_title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    employment_status: Mapped[str] = mapped_column(String(30), default="active")
+    start_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    working_days: Mapped[list | None] = mapped_column(JSON, nullable=True)  # ["mon","tue",...]
+    working_hours: Mapped[str | None] = mapped_column(String(100), nullable=True)  # "07:00-15:00"
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class UserModulePermission(Base):
+    """The flexible User ↔ Responsibility ↔ Module relationship (tech spec
+    §9/§11): one row per (user, module) the user is responsible for,
+    carrying the granular action flags for that module.
+
+    Many-to-many by construction — an employee can hold Animals +
+    Agriculture + Feed, or Mouneh + Sales, or any other combination, and
+    each with a different depth of access. Owners and managers hold no
+    rows here at all: `app/api/deps.py` grants them everything implicitly,
+    so a farm always has someone who can act even before any employee is
+    set up.
+    """
+
+    __tablename__ = "user_module_permissions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    module_code: Mapped[str] = mapped_column(String(40))
+    can_view: Mapped[bool] = mapped_column(Boolean, default=True)
+    can_create: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_edit: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_delete: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_approve: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_export: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_assign: Mapped[bool] = mapped_column(Boolean, default=False)
+    can_configure: Mapped[bool] = mapped_column(Boolean, default=False)
+    granted_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Notification(Base):
+    """A farm event worth surfacing in the bell menu (tech spec §3).
+
+    `user_id` null means farm-wide (every user who can see `module_code`);
+    a set `user_id` targets one person. `entity_type`/`entity_id` are what
+    make a notification actionable — the tablet turns them into a deep
+    link to the record that caused the alert, so tapping "Mastitis Risk —
+    Cow 744" opens Cow 744.
+    """
+
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    module_code: Mapped[str] = mapped_column(String(40))
+    notification_type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), default="medium")
+    entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Crop(Base):
+    """A crop type a farm actually grows. Deliberately a table, not an
+    enum: tech spec §16 — "The platform must not hard-code crop types",
+    an authorized user can add one at any time.
+    """
+
+    __tablename__ = "crops"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str | None] = mapped_column(String(60), nullable=True)  # vegetable/fruit/tree/herb
+    default_cycle_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CropPlanting(Base):
+    """One planting of a crop in a field (tech spec §16) — what is
+    actually growing where, so a harvest can be attributed to it.
+    """
+
+    __tablename__ = "crop_plantings"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    field_id: Mapped[str] = mapped_column(String(36), ForeignKey("fields.id"))
+    crop_id: Mapped[str] = mapped_column(String(36), ForeignKey("crops.id"))
+    variety: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    planted_area: Mapped[float | None] = mapped_column(Float, nullable=True)
+    area_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    planted_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_harvest_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_yield_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    stage: Mapped[str] = mapped_column(String(30), default="planted")
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Location(Base):
@@ -65,12 +179,25 @@ class Animal(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
-    tag: Mapped[str] = mapped_column(String(50))
+    # The primary identifier's value, kept here for display and search.
+    # Nullable on purpose (generic animal model §4): identity lives in
+    # `animal_identifiers`, and a mare with a microchip and no ear tag is
+    # as valid as a cow with one.
+    tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
     name: Mapped[str] = mapped_column(String(200))
-    species: Mapped[str] = mapped_column(String(30))
+    # A row in `species`, not a member of an enum — adding goats is data.
+    species: Mapped[str] = mapped_column(String(30), ForeignKey("species.code"))
     breed: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    breed_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("breeds.id"), nullable=True)
     sex: Mapped[str | None] = mapped_column(String(5), nullable=True)
     birth_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    birth_date_estimated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # With species and sex, these two decide what this animal can do —
+    # see services/capability_service.py.
+    life_stage: Mapped[str | None] = mapped_column(String(30), ForeignKey("life_stages.code"), nullable=True)
+    management_profile: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("management_profiles.code"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(30), default="healthy")
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -84,19 +211,49 @@ class Animal(Base):
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     group_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Full Add-Animal record (tech spec §13) — provenance, physical
+    # description and the financial fields a manager may record.
+    acquisition_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    acquisition_source: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    sire_tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    dam_tag: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    color_markings: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    purchase_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
+    identifiers: Mapped[list["AnimalIdentifier"]] = relationship(  # noqa: F821 - livestock_models
+        "AnimalIdentifier",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        order_by="AnimalIdentifier.created_at",
+    )
+
 
 class Flock(Base):
+    """A group managed as one unit — the generic model's `AnimalGroup`
+    (§7). Poultry usually; sheep and goats sometimes. Production, feed and
+    health can all attach here as well as to an individual animal."""
+
     __tablename__ = "flocks"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     name: Mapped[str] = mapped_column(String(200))
-    species: Mapped[str] = mapped_column(String(30))
+    species: Mapped[str] = mapped_column(String(30), ForeignKey("species.code"))
+    # flock | herd | batch | pen — what the farm calls it.
+    group_type: Mapped[str] = mapped_column(String(20), default="flock")
     count: Mapped[int] = mapped_column(Integer, default=0)
+    # female | male | mixed — a laying flock is female; the resolver will
+    # not claim a mixed flock lays.
+    sex_composition: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    life_stage: Mapped[str | None] = mapped_column(String(30), ForeignKey("life_stages.code"), nullable=True)
+    management_profile: Mapped[str | None] = mapped_column(
+        String(30), ForeignKey("management_profiles.code"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(30), default="healthy")
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -114,6 +271,13 @@ class Field(Base):
     stage: Mapped[str | None] = mapped_column(String(30), nullable=True)
     expected_harvest_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     est_yield_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Add-Field record (tech spec §15).
+    field_code: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    soil_type: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    irrigation_method: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class InventoryItem(Base):
@@ -143,6 +307,10 @@ class InventoryTransaction(Base):
     reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
     linked_entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     linked_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The feed lot this movement belongs to (feed architecture §26). Null
+    # for items that are not feed, and for movements made before lots
+    # existed; a feed movement always names its lot.
+    lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -361,6 +529,11 @@ class SyncQueueItem(Base):
 
 
 class AuditLog(Base):
+    """Accountability record (tech spec §23): who changed what, when, and
+    from what to what. `changes_json` holds `{field: {"from": x, "to": y}}`
+    so a manager can read the actual before/after, not just "updated".
+    """
+
     __tablename__ = "audit_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
@@ -371,3 +544,35 @@ class AuditLog(Base):
     entity_id: Mapped[str] = mapped_column(String(36))
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    module_code: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    summary: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    changes_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    device: Mapped[str | None] = mapped_column(String(120), nullable=True)
+
+
+class IdempotencyRecord(Base):
+    """One completed write, remembered by the key the tablet sent with it.
+
+    A tablet that records milk in a field queues the request and replays
+    it when it gets back in range. If the first attempt actually reached
+    the server and only the *response* was lost — a dropped connection at
+    the gate, a tablet that slept mid-request — the replay would record
+    the same milk twice. Storing the original response against the key
+    means the replay is answered with what the server said the first time
+    instead of writing anything.
+
+    Scoped by user as well as key: two tablets cannot collide, and a
+    replayed key can never return another account's response body.
+    """
+
+    __tablename__ = "idempotency_records"
+    __table_args__ = (UniqueConstraint("idempotency_key", "user_id", name="uq_idempotency_key_user"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    idempotency_key: Mapped[str] = mapped_column(String(100), index=True)
+    user_id: Mapped[str] = mapped_column(String(36))
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(300))
+    status_code: Mapped[int] = mapped_column(Integer)
+    response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

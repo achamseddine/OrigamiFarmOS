@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../auth/session_controller.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -10,45 +11,125 @@ import '../../core/widgets/charts/line_trend_chart.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
-import '../../data/demo/demo_data.dart';
-import '../../domain/entities/recommendation.dart';
+import '../../app/app_navigator.dart';
+import '../../domain/entities/access.dart';
+import '../../domain/entities/inventory.dart';
 import '../../domain/entities/task.dart';
+import '../../providers/feed_provider.dart';
+import '../../providers/notifications_provider.dart';
+import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
+import '../navigation/entity_router.dart';
+import '../priorities/priorities_screen.dart';
+import '../priorities/priority_card.dart';
+import '../../core/widgets/hero_band.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
 /// (tech spec §2 "Morning first: default route after login is Morning
 /// Briefing").
-class MorningBriefingScreen extends StatelessWidget {
-  const MorningBriefingScreen({super.key});
+///
+/// There is no dedicated provider for this screen (by design — one screen,
+/// one endpoint): it fetches `GET /morning-briefing` directly, the same
+/// "fetch in initState, store in local State, render with a loading
+/// fallback" pattern used by `SettingsScreen._loadFarm`. The KPI strip and
+/// priorities come straight from that response; the animal/feed alert cards
+/// and the milk/egg trend cards reuse the already-loaded `FeedProvider` /
+/// `ProductionProvider` instead of a second fetch. The old fabricated
+/// weekly-weather widget had no real backend source and is gone entirely;
+/// the fixed "Today's Timeline" schedule is now built from the briefing's
+/// own (real, farm-specific) `tasks` list sorted by due time.
+/// The farm's line, at the far end of the morning band — the one place
+/// in the app the brand speaks in its own voice, from the pack's hero
+/// mock-up. It is two lines because the first is the name of the thing
+/// and the second is what it does.
+class _Motto extends StatelessWidget {
+  const _Motto();
 
   @override
   Widget build(BuildContext context) {
-    final openAlerts = DemoData.recommendations
-        .where((r) => r.priority == RecommendationPriority.high || r.priority == RecommendationPriority.medium)
-        .length;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(context.t('heroMotto1'), style: FarmTypography.display(size: 24).copyWith(color: FarmColors.cedar)),
+        const SizedBox(height: 2),
+        Text(
+          context.t('heroMotto2'),
+          style: FarmTypography.textTheme.bodyMedium?.copyWith(color: FarmColors.cedar2, fontWeight: FontWeight.w600),
+        ),
+      ],
+    );
+  }
+}
+
+class MorningBriefingScreen extends StatefulWidget {
+  const MorningBriefingScreen({super.key});
+
+  @override
+  State<MorningBriefingScreen> createState() => _MorningBriefingScreenState();
+}
+
+class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
+  Map<String, dynamic>? _briefing;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final session = context.read<SessionController>();
+    try {
+      final farmId = session.user!.farmId;
+      final json = await session.apiClient.get('/morning-briefing', query: {'farm_id': farmId}) as Map<String, dynamic>;
+      if (!mounted) return;
+      setState(() {
+        _briefing = json;
+        _error = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = context.t('briefingLoadFailed'));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final briefing = _briefing;
+    if (briefing == null) {
+      return Center(child: Text(_error ?? context.t('loading'), style: FarmTypography.textTheme.bodyMedium));
+    }
+
+    final kpis = Map<String, dynamic>.from(briefing['kpis'] as Map? ?? {});
+    final priorities = List<Map<String, dynamic>>.from(briefing['priorities'] as List? ?? []);
+    final tasksTimeline = List<Map<String, dynamic>>.from(briefing['tasks'] as List? ?? []);
+    final session = context.read<SessionController>();
+    var managerName = (briefing['manager_name'] as String?)?.trim() ?? '';
+    if (managerName.isEmpty) managerName = session.user?.name ?? '';
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const AppIcon(FarmIcon.sun, size: 24, color: FarmColors.gold),
-              const SizedBox(width: 8),
-              Text('${context.t('goodMorning')}, ${DemoData.managerName}', style: FarmTypography.display(size: 26)),
-            ],
+          HeroBand(
+            title: managerName.isEmpty
+                ? context.t('goodMorning')
+                : '${context.t('goodMorning')}، $managerName',
+            subtitle: context.t('morningSubline'),
+            icon: FarmIcon.sun,
+            trailing: const _Motto(),
           ),
-          const SizedBox(height: 2),
-          Text(context.t('morningSubline'), style: FarmTypography.textTheme.bodyMedium),
           const SizedBox(height: FarmSpacing.lg),
-          _KpiStrip(openAlerts: openAlerts),
+          _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
           LayoutBuilder(builder: (context, constraints) {
             final wide = constraints.maxWidth > kTabletBreakpoint;
             final columns = <Widget>[
-              _PrioritiesCard(),
-              Column(children: const [_AnimalAlertsCard(), SizedBox(height: FarmSpacing.md), _FeedWarningsCard()]),
-              Column(children: const [_MilkTodayCard(), SizedBox(height: FarmSpacing.md), _EggProductionCard()]),
+              const _PrioritiesCard(),
+              Column(children: [_AnimalAlertsCard(priorities: priorities), const SizedBox(height: FarmSpacing.md), const _FeedWarningsCard()]),
+              const Column(children: [_MilkTodayCard(), SizedBox(height: FarmSpacing.md), _EggProductionCard()]),
               const _TasksCard(),
             ];
             if (!wide) {
@@ -72,22 +153,7 @@ class MorningBriefingScreen extends StatelessWidget {
             );
           }),
           const SizedBox(height: FarmSpacing.md),
-          LayoutBuilder(builder: (context, constraints) {
-            final wide = constraints.maxWidth > kTabletBreakpoint;
-            final weather = const _WeatherCard();
-            final timeline = const _TimelineCard();
-            if (!wide) {
-              return Column(children: [weather, const SizedBox(height: FarmSpacing.md), timeline]);
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 4, child: weather),
-                const SizedBox(width: FarmSpacing.md),
-                Expanded(flex: 6, child: timeline),
-              ],
-            );
-          }),
+          _TimelineCard(tasks: tasksTimeline),
         ],
       ),
     );
@@ -95,28 +161,70 @@ class MorningBriefingScreen extends StatelessWidget {
 }
 
 class _KpiStrip extends StatelessWidget {
-  const _KpiStrip({required this.openAlerts});
-  final int openAlerts;
+  const _KpiStrip({required this.kpis});
+  final Map<String, dynamic> kpis;
 
   @override
   Widget build(BuildContext context) {
-    final tasksDue = context.watch<TasksProvider>().openCount;
+    final animals = (kpis['animals'] as num?)?.toInt() ?? 0;
+    final milkToday = (kpis['milk_today_l'] as num?)?.toDouble() ?? 0;
+    final eggsToday = (kpis['eggs_today'] as num?)?.toInt() ?? 0;
+    final activeFields = (kpis['active_fields'] as num?)?.toInt() ?? 0;
+    final openAlerts = (kpis['open_alerts'] as num?)?.toInt() ?? 0;
+    final tasksDue = (kpis['tasks_due'] as num?)?.toInt() ?? 0;
     return LayoutBuilder(builder: (context, constraints) {
       final perRow = constraints.maxWidth > 1100 ? 6 : (constraints.maxWidth > 720 ? 3 : 2);
       final cardWidth = (constraints.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
+      // Each roundel is the colour of its subject, not of its mood, so
+      // the strip is findable by colour before it is read — the milk
+      // tile is the same blue as the milk tab and the milk sheet.
+      final navigator = context.read<AppNavigator>();
       final cards = [
-        KpiCard(icon: FarmIcon.cow, label: context.t('kpiAnimals'), value: '${DemoData.animalSummary['total']}'),
-        KpiCard(icon: FarmIcon.milkBottle, label: context.t('kpiMilkToday'), value: '592', unit: context.t('liters'), trendLabel: '+8%', trendUp: true),
-        KpiCard(icon: FarmIcon.egg, label: context.t('kpiEggsToday'), value: '5,842', trendLabel: '+12%', trendUp: true),
-        KpiCard(icon: FarmIcon.leaf, label: context.t('kpiActiveCrops'), value: '6'),
+        KpiCard(
+          icon: FarmIcon.cow,
+          label: context.t('kpiAnimals'),
+          value: '$animals',
+          accent: FarmColors.cedar,
+          onTap: () => navigator.goToModule(FarmModule.animals),
+        ),
+        KpiCard(
+          icon: FarmIcon.milkBottle,
+          label: context.t('kpiMilkToday'),
+          value: milkToday.toStringAsFixed(0),
+          unit: context.t('liters'),
+          accent: FarmColors.milkBlue,
+          onTap: () => navigator.goToModule(FarmModule.milkProduction),
+        ),
+        KpiCard(
+          icon: FarmIcon.egg,
+          label: context.t('kpiEggsToday'),
+          value: '$eggsToday',
+          accent: FarmColors.gold,
+          onTap: () => navigator.goToModule(FarmModule.eggProduction),
+        ),
+        KpiCard(
+          icon: FarmIcon.leaf,
+          label: context.t('kpiActiveCrops'),
+          value: '$activeFields',
+          accent: FarmColors.olive,
+          onTap: () => navigator.goToModule(FarmModule.agriculture),
+        ),
         KpiCard(
           icon: FarmIcon.warning,
           label: context.t('kpiOpenAlerts'),
           value: '$openAlerts',
-          tint: FarmColors.danger,
-          caption: context.t('needsAttention'),
+          accent: FarmColors.danger,
+          tint: openAlerts > 0 ? FarmColors.danger : null,
+          caption: openAlerts > 0 ? context.t('needsAttention') : null,
         ),
-        KpiCard(icon: FarmIcon.task, label: context.t('kpiTasksDue'), value: '$tasksDue', caption: context.t('today')),
+        KpiCard(
+          icon: FarmIcon.task,
+          label: context.t('kpiTasksDue'),
+          value: '$tasksDue',
+          caption: context.t('today'),
+          accent: FarmColors.cedar2,
+          onTap: () => navigator.goToModule(FarmModule.tasks),
+        ),
       ];
       return Wrap(
         spacing: FarmSpacing.md,
@@ -127,72 +235,108 @@ class _KpiStrip extends StatelessWidget {
   }
 }
 
+FarmIcon _iconForCategory(String category) => switch (category) {
+      'health' => FarmIcon.heart,
+      'feed' => FarmIcon.feedBag,
+      'egg' => FarmIcon.egg,
+      'withdrawal' => FarmIcon.warning,
+      'harvest' => FarmIcon.leaf,
+      'finance' => FarmIcon.money,
+      _ => FarmIcon.warning,
+    };
+
+FarmStatusLevel _levelForPriority(String priority) => switch (priority) {
+      'high' => FarmStatusLevel.alert,
+      'medium' => FarmStatusLevel.watch,
+      _ => FarmStatusLevel.good,
+    };
+
+/// Today's Priorities (tech spec §4/§5).
+///
+/// Reads the live priority feed rather than the briefing's own snapshot,
+/// so every card carries the `entityType`/`entityId` that makes it
+/// tappable, and "Expand" opens the full filtered list.
 class _PrioritiesCard extends StatelessWidget {
+  const _PrioritiesCard();
+
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<NotificationsProvider>();
+    final all = provider.priorities;
+    final top = all.take(4).toList();
+
     return SectionCard(
       title: context.t('todaysPriorities'),
-      child: Column(
-        children: [
-          for (final rec in DemoData.recommendations.take(4)) ...[
-            AlertCard(
-              icon: _iconFor(rec.category),
-              title: rec.title,
-              eyebrow: rec.entityLabel,
-              evidence: [rec.rationale.split('.').first],
-              level: _levelFor(rec.priority),
-              onTap: () {},
-            ),
-            const SizedBox(height: 8),
-          ],
-        ],
+      subtitle: all.length > top.length ? '${all.length} ${context.t('itemsTotal')}' : null,
+      trailing: context.t('expand'),
+      onTrailingTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PrioritiesScreen()),
       ),
+      child: top.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                const AppIcon(FarmIcon.check, size: 18, color: FarmColors.success),
+                const SizedBox(width: 8),
+                Text(context.t('nothingNeedsAttention'), style: FarmTypography.textTheme.bodySmall),
+              ]),
+            )
+          : Column(
+              children: [
+                for (final item in top) ...[
+                  PriorityCard(priority: item, dense: true),
+                  const SizedBox(height: 8),
+                ],
+                if (all.length > top.length)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const PrioritiesScreen()),
+                      ),
+                      icon: const Icon(Icons.open_in_full, size: 15),
+                      label: Text('${context.t('viewAll')} (${all.length})'),
+                    ),
+                  ),
+              ],
+            ),
     );
   }
-
-  FarmIcon _iconFor(RecommendationCategory c) => switch (c) {
-        RecommendationCategory.health => FarmIcon.heart,
-        RecommendationCategory.feed => FarmIcon.feedBag,
-        RecommendationCategory.egg => FarmIcon.egg,
-        RecommendationCategory.withdrawal => FarmIcon.warning,
-        RecommendationCategory.harvest => FarmIcon.leaf,
-        RecommendationCategory.finance => FarmIcon.money,
-      };
-
-  FarmStatusLevel _levelFor(RecommendationPriority p) => switch (p) {
-        RecommendationPriority.high => FarmStatusLevel.alert,
-        RecommendationPriority.medium => FarmStatusLevel.watch,
-        RecommendationPriority.low || RecommendationPriority.info => FarmStatusLevel.good,
-      };
 }
 
 class _AnimalAlertsCard extends StatelessWidget {
-  const _AnimalAlertsCard();
+  const _AnimalAlertsCard({required this.priorities});
+  final List<Map<String, dynamic>> priorities;
 
   @override
   Widget build(BuildContext context) {
+    final animalAlerts = priorities.where((p) => p['category'] == 'health').take(2).toList();
     return SectionCard(
       title: context.t('animalAlerts'),
       trailing: context.t('viewAll'),
-      child: Column(
-        children: const [
-          AlertCard(
-            icon: FarmIcon.cow,
-            title: 'Luna #214',
-            level: FarmStatusLevel.watch,
-            evidence: ['Low activity detected', 'Since 6:15 AM'],
-            trailingLabel: 'Low',
-          ),
-          SizedBox(height: 8),
-          AlertCard(
-            icon: FarmIcon.cow,
-            title: 'Rasha #189',
-            level: FarmStatusLevel.alert,
-            evidence: ['Health check overdue', 'Due since 2 days ago'],
-            trailingLabel: 'Overdue',
-          ),
-        ],
-      ),
+      onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.animalHealth),
+      child: animalAlerts.isEmpty
+          ? Text(context.t('noAnimalAlerts'), style: FarmTypography.textTheme.bodySmall)
+          : Column(
+              children: [
+                for (var i = 0; i < animalAlerts.length; i++) ...[
+                  AlertCard(
+                    icon: FarmIcon.cow,
+                    title: animalAlerts[i]['entity_label'] as String? ?? (animalAlerts[i]['title'] as String? ?? '—'),
+                    level: _levelForPriority(animalAlerts[i]['priority'] as String? ?? ''),
+                    evidence: [animalAlerts[i]['title'] as String? ?? ''],
+                    // The briefing's own priority rows are recommendations;
+                    // opening one shows the animal or record behind it.
+                    onTap: () => EntityRouter.openEntityOrExplain(
+                      context,
+                      'recommendation',
+                      animalAlerts[i]['id'] as String?,
+                    ),
+                  ),
+                  if (i != animalAlerts.length - 1) const SizedBox(height: 8),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -202,16 +346,20 @@ class _FeedWarningsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final item = DemoData.feedInventory.first;
+    final items = context.watch<FeedProvider>().items.where((i) => i.status != StockStatus.good).toList();
     return SectionCard(
       title: context.t('feedWarnings'),
       trailing: context.t('manageFeed'),
-      child: AlertCard(
-        icon: FarmIcon.feedBag,
-        title: 'Low feed: ${item.name}',
-        level: FarmStatusLevel.watch,
-        evidence: ['${item.currentQty.toStringAsFixed(1)} kg remaining', 'Reorder recommended'],
-      ),
+      onTrailingTap: () => context.read<AppNavigator>().goToModule(FarmModule.feedNutrition),
+      child: items.isEmpty
+          ? Text(context.t('noFeedWarnings'), style: FarmTypography.textTheme.bodySmall)
+          : AlertCard(
+              icon: FarmIcon.feedBag,
+              title: '${context.t('lowFeed')}: ${items.first.name}',
+              level: items.first.status == StockStatus.critical ? FarmStatusLevel.alert : FarmStatusLevel.watch,
+              evidence: ['${items.first.currentQty.toStringAsFixed(1)} ${items.first.unit} remaining', context.t('reorderRecommended')],
+              onTap: () => EntityRouter.openEntityOrExplain(context, 'inventory_item', items.first.id),
+            ),
     );
   }
 }
@@ -221,6 +369,11 @@ class _MilkTodayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final production = context.watch<ProductionProvider>();
+    final trend = production.milkByDay();
+    final today = production.milkTodayL;
+    final yesterday = trend.length > 1 ? trend[trend.length - 2] : 0.0;
+    final delta = today - yesterday;
     return SectionCard(
       title: context.t('milkToday'),
       trailing: context.t('viewMilkHistory'),
@@ -230,18 +383,17 @@ class _MilkTodayCard extends StatelessWidget {
           RichText(
             text: TextSpan(
               children: [
-                TextSpan(text: '592 ', style: FarmTypography.textTheme.headlineMedium),
+                TextSpan(text: '${today.toStringAsFixed(0)} ', style: FarmTypography.textTheme.headlineMedium),
                 TextSpan(text: context.t('liters'), style: FarmTypography.textTheme.bodyMedium),
               ],
             ),
           ),
-          Text('+47 L ${context.t('vsYesterday')}', style: const TextStyle(color: FarmColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          LineTrendChart(
-            values: List.generate(7, (i) => DemoData.milkLast7DaysMorning[i] + DemoData.milkLast7DaysEvening[i]),
-            height: 70,
-            showDots: false,
+          Text(
+            '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(0)} L ${context.t('vsYesterday')}',
+            style: TextStyle(color: delta >= 0 ? FarmColors.success : FarmColors.danger, fontSize: 12, fontWeight: FontWeight.w700),
           ),
+          const SizedBox(height: 8),
+          LineTrendChart(values: trend, height: 70, showDots: false),
         ],
       ),
     );
@@ -253,16 +405,24 @@ class _EggProductionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final production = context.watch<ProductionProvider>();
+    final trend = production.eggsByDay();
+    final today = production.eggsToday;
+    final yesterday = trend.length > 1 ? trend[trend.length - 2] : 0.0;
+    final delta = today - yesterday;
     return SectionCard(
       title: context.t('eggProduction'),
       trailing: context.t('viewEggHistory'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('312', style: FarmTypography.textTheme.headlineMedium),
-          Text('+8% ${context.t('vsLastWeek')}', style: const TextStyle(color: FarmColors.success, fontSize: 12, fontWeight: FontWeight.w700)),
+          Text('$today', style: FarmTypography.textTheme.headlineMedium),
+          Text(
+            '${delta >= 0 ? '+' : ''}${delta.toStringAsFixed(0)} ${context.t('vsYesterday')}',
+            style: TextStyle(color: delta >= 0 ? FarmColors.success : FarmColors.danger, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
           const SizedBox(height: 8),
-          const LineTrendChart(values: [260, 270, 265, 288, 275, 300, 312], height: 70, showDots: false, color: FarmColors.gold),
+          LineTrendChart(values: trend, height: 70, showDots: false, color: FarmColors.gold),
         ],
       ),
     );
@@ -278,14 +438,16 @@ class _TasksCard extends StatelessWidget {
     return SectionCard(
       title: context.t('todaysTasks'),
       trailing: context.t('viewAll'),
-      child: Column(
-        children: [
-          for (final task in tasks) ...[
-            _TaskRow(task: task),
-            const SizedBox(height: 4),
-          ],
-        ],
-      ),
+      child: tasks.isEmpty
+          ? Text(context.t('noTasksYet'), style: FarmTypography.textTheme.bodySmall)
+          : Column(
+              children: [
+                for (final task in tasks) ...[
+                  _TaskRow(task: task),
+                  const SizedBox(height: 4),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -337,106 +499,67 @@ class _TaskRow extends StatelessWidget {
   }
 }
 
-class _WeatherCard extends StatelessWidget {
-  const _WeatherCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return SectionCard(
-      title: context.t('weatherInBekaaValley'),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.wb_sunny, color: FarmColors.gold, size: 32),
-              Text('18°C', style: FarmTypography.textTheme.headlineMedium),
-              const Text('Sunny', style: TextStyle(color: FarmColors.muted)),
-              const Text('Feels like 18°', style: TextStyle(fontSize: 11, color: FarmColors.muted)),
-            ],
-          ),
-          const SizedBox(width: FarmSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(children: [
-                  Icon(Icons.air, size: 14, color: FarmColors.muted),
-                  SizedBox(width: 4),
-                  Text('Wind  8 km/h NE', style: TextStyle(fontSize: 12, color: FarmColors.muted)),
-                ]),
-                const SizedBox(height: 4),
-                const Row(children: [
-                  Icon(Icons.water_drop_outlined, size: 14, color: FarmColors.muted),
-                  SizedBox(width: 4),
-                  Text('Humidity  54%', style: TextStyle(fontSize: 12, color: FarmColors.muted)),
-                ]),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    for (final w in DemoData.weeklyWeather)
-                      Expanded(
-                        child: Column(
-                          children: [
-                            Text(w['day'] as String, style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
-                            Icon(
-                              w['condition'] == 'sun'
-                                  ? Icons.wb_sunny_outlined
-                                  : (w['condition'] == 'rain' ? Icons.water_drop_outlined : Icons.cloud_outlined),
-                              size: 16,
-                              color: FarmColors.cedar2,
-                            ),
-                            Text('${w['hi']}°/${w['lo']}°', style: const TextStyle(fontSize: 10.5)),
-                          ],
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// Real substitute for the old fixed "6 AM Milking / 9 AM Health Checks…"
+/// fabricated schedule: the briefing's own `tasks` (every not-done task for
+/// the farm today), sorted by due time.
 class _TimelineCard extends StatelessWidget {
-  const _TimelineCard();
+  const _TimelineCard({required this.tasks});
+  final List<Map<String, dynamic>> tasks;
 
   @override
   Widget build(BuildContext context) {
-    final timeline = DemoData.todaysTimeline;
+    final sorted = [...tasks]..sort((a, b) {
+        final ad = a['due_at'] as String?;
+        final bd = b['due_at'] as String?;
+        if (ad == null && bd == null) return 0;
+        if (ad == null) return 1;
+        if (bd == null) return -1;
+        return ad.compareTo(bd);
+      });
+    final shown = sorted.take(8).toList();
     return SectionCard(
       title: context.t('todaysTimeline'),
-      child: SizedBox(
-        height: 84,
-        child: Row(
-          children: [
-            for (var i = 0; i < timeline.length; i++) ...[
-              Expanded(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 34,
-                      height: 34,
-                      decoration: const BoxDecoration(color: FarmColors.mist, shape: BoxShape.circle),
-                      child: Center(child: Icon(Icons.circle, size: 8, color: FarmColors.cedar)),
+      child: shown.isEmpty
+          ? Text(context.t('noTasksToday'), style: FarmTypography.textTheme.bodySmall)
+          : SizedBox(
+              height: 84,
+              child: Row(
+                children: [
+                  for (var i = 0; i < shown.length; i++) ...[
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 34,
+                            height: 34,
+                            decoration: const BoxDecoration(color: FarmColors.mist, shape: BoxShape.circle),
+                            child: Center(child: Icon(Icons.circle, size: 8, color: FarmColors.cedar)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(_timeLabel(context, shown[i]['due_at'] as String?), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                          Text(
+                            shown[i]['title'] as String? ?? '',
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 10, color: FarmColors.muted),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(timeline[i]['time']!, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-                    Text(timeline[i]['label']!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: FarmColors.muted)),
+                    if (i != shown.length - 1) const SizedBox(width: 2, child: Divider(color: FarmColors.border, height: 1)),
                   ],
-                ),
+                ],
               ),
-              if (i != timeline.length - 1)
-                const SizedBox(width: 2, child: Divider(color: FarmColors.border, height: 1)),
-            ],
-          ],
-        ),
-      ),
+            ),
     );
+  }
+
+  String _timeLabel(BuildContext context, String? dueAt) {
+    if (dueAt == null) return '—';
+    final dt = DateTime.tryParse(dueAt);
+    if (dt == null) return '—';
+    return TimeOfDay.fromDateTime(dt).format(context);
   }
 }
