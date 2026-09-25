@@ -747,3 +747,394 @@ Chicken Feed Module
 ```
 
 Build one generic feeding architecture whose applicability changes according to the livestock subject and its current state.
+
+
+## 24. Feed Usage Policy, Species Restrictions & Authorized Use
+
+Every feed item, finished product and inventory lot may carry an enforceable usage policy. This is not informational metadata: it must be validated when a formula is authored, a batch is mixed, inventory is issued, and a feeding event is recorded.
+
+A policy may define:
+- allowed/prohibited species;
+- allowed management/production profiles;
+- allowed life stages;
+- allowed physiological states;
+- minimum/maximum age or weight where relevant;
+- maximum inclusion rate;
+- whether an approved formula is mandatory;
+- whether cross-species transfer is permitted;
+- cost centre/funding/program restrictions;
+- veterinary or safety restrictions.
+
+Example:
+
+```text
+CATTLE-DAIRY-PREMIX
+Allowed species: CATTLE
+Allowed profiles: DAIRY
+Horse: BLOCKED
+Sheep: BLOCKED
+Goat: BLOCKED
+Maximum inclusion: configured %
+Approved formula required: YES
+Cross-species transfer: NO
+```
+
+Attempting to add this premix to a horse or sheep formula/batch must fail before inventory is consumed.
+
+Restrictions can exist at product level and be tightened at lot/allocation level. A lot-specific restriction may never broaden a stricter product safety restriction.
+
+## 25. Feed Allocation & Reservation
+
+Physical ownership of stock is different from authorization and availability.
+
+Origami must support reserving feed stock for:
+- species;
+- livestock group;
+- feeding program;
+- farm/site/location;
+- cost centre;
+- project/funding source;
+- production purpose.
+
+Example:
+
+```text
+500 kg Cattle Premix
+├── 400 kg reserved: Lactating Dairy Cows
+└── 100 kg available: General Cattle Use
+Cross-species transfer: prohibited
+```
+
+The inventory engine must expose at least:
+
+```text
+On Hand
+- Quarantined
+- Blocked
+- Reserved
+= Available to Promise / Available for Use
+```
+
+A user must not be able to consume reserved stock for another purpose unless a permitted reallocation workflow is completed.
+
+## 26. Purchase-to-Consumption Quantity Control
+
+Feed quantity must be traceable end-to-end:
+
+```text
+Purchase Order
+    ↓
+Goods Receipt
+    ↓
+Feed/Ingredient Lot
+    ↓
+Storage / Reservation
+    ↓
+Issue to Mixing or Direct Feeding
+    ↓
+Actual Batch Consumption
+    ↓
+Feed Offered
+    ↓
+Consumption Estimate/Measurement
+    ↓
+Waste / Return / Adjustment
+    ↓
+Remaining Stock
+```
+
+Origami must distinguish:
+- ordered quantity;
+- received quantity;
+- accepted quantity;
+- rejected/quarantined quantity;
+- on-hand quantity;
+- reserved quantity;
+- available quantity;
+- issued quantity;
+- batch-consumed quantity;
+- directly fed quantity;
+- offered quantity;
+- consumed quantity where measured/estimated;
+- returned quantity;
+- wasted quantity;
+- adjusted quantity.
+
+Inventory balances must be derived from auditable inventory transactions rather than editable summary fields.
+
+## 27. Feed Reconciliation & Variance Control
+
+The system must reconcile procurement, inventory and usage.
+
+Example:
+
+```text
+Premix received                     500 kg
+Recorded in approved cattle batches 420 kg
+Documented waste                     10 kg
+Current physical/system stock        45 kg
+Expected accounted quantity         475 kg
+Unexplained variance                 25 kg
+```
+
+Configurable variance thresholds should trigger review.
+
+Reconciliation must support:
+- book stock vs physical count;
+- issued vs actually used in batch;
+- formula target vs actual ingredient usage;
+- batch produced vs batch issued/fed;
+- feed offered vs leftovers/refusals where tracked;
+- species/program allocation vs actual use.
+
+An unexplained difference is a variance, not automatically waste.
+
+## 28. Reorder, Days-of-Cover & Feed Inventory Forecasting
+
+Origami must support both simple and demand-aware replenishment.
+
+### 28.1 Static replenishment
+
+Each item/location may define:
+- minimum stock;
+- reorder point;
+- safety stock;
+- preferred reorder quantity;
+- maximum stock;
+- supplier lead time.
+
+When available stock crosses a configured threshold, Origami raises a replenishment alert.
+
+### 28.2 Days of cover
+
+```text
+Days of Cover = Available Usable Stock / Forecast Daily Requirement
+```
+
+The calculation must use compatible units and should consider only stock that can legally/operationally be used for the relevant demand.
+
+Example:
+
+```text
+Cattle premix available: 50 kg
+Forecast cattle demand: 12 kg/day
+Days of cover: 4.2
+Supplier lead time: 7 days
+=> STOCKOUT RISK
+```
+
+### 28.3 Demand-aware forecast
+
+Forecast demand should be derived where possible from:
+
+```text
+Active Feeding Programs
+× Current/Projected Animal or Group Counts
+× Formula Ingredient Requirements
+× Planning Horizon
++ Safety Stock
+- Eligible Available Stock
+- Confirmed Incoming Supply
+= Projected Procurement Requirement
+```
+
+Forecasting must respect usage policies. Horse-eligible premix cannot satisfy cattle demand unless the same stock is explicitly eligible for cattle, and cattle-only premix cannot satisfy horse demand.
+
+## 29. Restocking Workflow & Farm Manager Notifications
+
+Suggested workflow:
+
+```text
+Forecast / Inventory Evaluation
+          ↓
+Threshold or Days-of-Cover Breach
+          ↓
+FeedReorderRequired
+          ↓
+Notify Farm Manager / Authorized Role
+          ↓
+Suggested Quantity + Reason + Demand Forecast
+          ↓
+Review
+          ↓
+Purchase Requisition
+          ↓
+Procurement Workflow
+```
+
+Notifications should include:
+- feed item/product;
+- site/storage location;
+- current on-hand and available quantity;
+- reserved quantity;
+- projected daily demand;
+- days of cover;
+- supplier lead time if known;
+- expected stockout date;
+- suggested reorder quantity;
+- livestock/programs affected.
+
+Duplicate alerts should be suppressed/aggregated while an active replenishment action already covers the shortage.
+
+## 30. Suggested Additional Database Objects
+
+```text
+feed_usage_policy
+- id UUID PK
+- feed_item_id nullable
+- feed_product_id nullable
+- policy_name
+- requires_approved_formula
+- cross_species_transfer_allowed
+- status
+- effective_from
+- effective_to nullable
+
+feed_usage_policy_rule
+- id UUID PK
+- policy_id FK
+- rule_type
+- species_id nullable
+- management_profile_id nullable
+- life_stage_id nullable
+- reproductive_state nullable
+- max_inclusion nullable
+- uom_id nullable
+- effect ENUM(ALLOW, BLOCK, LIMIT)
+
+feed_allocation
+- id UUID PK
+- inventory_lot_id FK
+- species_id nullable
+- livestock_subject_id nullable
+- feeding_program_id nullable
+- location_id nullable
+- cost_centre_id nullable
+- allocated_quantity
+- consumed_quantity
+- uom_id
+- transferable boolean
+- status
+
+feed_reorder_policy
+- id UUID PK
+- feed_item_id nullable
+- feed_product_id nullable
+- location_id
+- minimum_stock nullable
+- reorder_point nullable
+- safety_stock nullable
+- preferred_reorder_quantity nullable
+- maximum_stock nullable
+- lead_time_days nullable
+- uom_id
+- active
+
+feed_demand_forecast
+- id UUID PK
+- item_or_product_type
+- item_or_product_id
+- location_id
+- forecast_from
+- forecast_to
+- forecast_quantity
+- uom_id
+- generated_at
+- basis_json
+
+feed_reconciliation
+- id UUID PK
+- inventory_lot_id FK
+- period_from
+- period_to
+- opening_quantity
+- received_quantity
+- issued_quantity
+- waste_quantity
+- adjustment_quantity
+- expected_closing_quantity
+- counted_closing_quantity nullable
+- variance_quantity nullable
+- status
+```
+
+Where generic Inventory/Procurement already owns equivalent entities, extend/reference those models rather than creating duplicate ledgers.
+
+## 31. Additional APIs
+
+```http
+GET  /api/v1/feed-products/{id}/usage-policy
+POST /api/v1/feed-products/{id}/usage-policy/validate
+
+POST /api/v1/feed-allocations
+GET  /api/v1/feed-allocations
+
+GET  /api/v1/feed-inventory/availability
+GET  /api/v1/feed-inventory/days-of-cover
+GET  /api/v1/feed-inventory/forecast
+GET  /api/v1/feed-inventory/reorder-recommendations
+
+POST /api/v1/feed-reconciliations
+GET  /api/v1/feed-reconciliations/{id}
+```
+
+A validation response should explain why use is allowed or blocked.
+
+## 32. Additional Events
+
+```text
+FeedUsageBlocked
+FeedAllocationCreated
+FeedAllocationReleased
+FeedAllocationTransferRequested
+FeedAllocationTransferred
+FeedStockBelowReorderPoint
+FeedStockoutRiskDetected
+FeedReorderRequired
+FeedReorderAcknowledged
+FeedReconciliationCompleted
+FeedInventoryVarianceDetected
+```
+
+## 33. Additional Validation Rules
+
+- A species-restricted feed cannot be included in a formula for a prohibited species.
+- The same restriction must be revalidated when the physical batch is created.
+- Direct feeding must validate feed eligibility against the livestock subject.
+- Allocation/reservation must reduce usable availability for competing purposes.
+- A restricted allocation cannot be transferred without authorized workflow.
+- Reorder calculations use usable available stock, not gross on-hand stock.
+- Forecast calculations must not count ineligible stock against demand.
+- Inventory consumption must identify lot/batch where lot traceability is required.
+- Physical count corrections require auditable adjustment transactions.
+- Unexplained variance cannot be silently posted as feed consumption or waste.
+- Purchase quantity, receipt quantity and accepted quantity must remain separately auditable.
+- Replenishment recommendations do not automatically create/approve a purchase order unless an explicitly authorized procurement automation exists.
+
+## 34. Additional Acceptance Criteria
+
+The feed architecture is additionally accepted when:
+- 500 kg of cattle-only premix can be purchased, received and tracked by lot;
+- that premix can be reserved wholly or partly for dairy cattle;
+- a horse/sheep formula cannot consume cattle-only premix;
+- a prohibited direct feeding transaction is blocked;
+- every kilogram can be reconciled among stock, approved mixing/feeding, waste, returns and adjustments;
+- unexplained variance is visible and actionable;
+- available stock excludes quarantine, blocked and reserved quantities;
+- Origami can calculate days of cover from eligible stock and forecast demand;
+- a farm manager is notified before projected stockout according to reorder/lead-time rules;
+- the alert identifies the livestock/program at risk;
+- a replenishment recommendation can flow into the Procurement workflow without bypassing approval controls.
+
+## 35. Extended Non-Negotiable Control Rule
+
+**Physical possession of a feed item does not imply permission to use it.**
+
+Every feed transaction must answer four questions:
+
+1. **Do we have it?** — inventory availability.
+2. **Is this stock allocated/reserved?** — allocation control.
+3. **Is it permitted for this species/profile/program?** — usage policy.
+4. **Will enough remain to meet upcoming demand?** — forecasting/replenishment.
+
+The system must prevent unauthorized cross-species use at transaction time and must provide auditable reconciliation afterward.
