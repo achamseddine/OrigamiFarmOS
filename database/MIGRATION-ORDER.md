@@ -10,7 +10,7 @@
 8. inventory.
 9. feed.
 10. reproduction.
-11. health/veterinary and medicine/pharmacy masters/policies.
+11. health/veterinary, medicine/pharmacy masters/policies, and veterinarian-approved emergency protocol/clinical decision-support structures.
 12. production.
 13. supplier/procurement.
 14. operational costing.
