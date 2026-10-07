@@ -102,7 +102,7 @@ treatment_action (
 ```
 
 ## medication_administration
-Medication product is a canonical inventory item; future pharmaceutical master metadata can extend it.
+Medication product is a canonical inventory item extended by `MEDICINE-PHARMACY-SCHEMA.md`. Pharmacy stock, essential-medicine thresholds, lot/expiry/storage controls and replenishment are managed there; this section owns the clinical administration fact.
 ```sql
 medication_administration (
  id uuid primary key,
