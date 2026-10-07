@@ -48,7 +48,7 @@ feed
 └─ feeding events
 ```
 
-Later schemas add reproduction, health, production, procurement, crops, assets, laboratory, finance and compliance.
+Later schemas add reproduction, health, production, procurement, crops, assets, laboratory, finance and compliance. Medicine/pharmacy management extends Inventory + Health with `medicine_product`, pharmaceutical lot metadata, farm essential-stock policies, stock alerts and replenishment without creating a second stock ledger.
 
 ## Physical design decision: LivestockSubject
 `LivestockSubject` remains a conceptual interface. Pass 1 does **not** create a generic polymorphic livestock_subject table. Domain association tables use explicit `animal_id` / `animal_group_id` with a CHECK requiring exactly one where both are supported. This avoids weak polymorphic foreign keys while retaining the conceptual model.
