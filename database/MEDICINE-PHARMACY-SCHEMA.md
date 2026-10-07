@@ -183,7 +183,7 @@ Farm users can configure their own essential list. Dashboard exposes:
 - open reorder;
 - stock status: OK / LOW / CRITICAL / OUT.
 
-Examples such as fever-support products, colic-support products and IV fluids are configurable categories/products; Origami does not recommend that a specific medicine be administered merely because it is stocked.
+Examples such as fever-support products, colic-support products and IV fluids are configurable categories/products. Stock alone never authorizes treatment; however, the Emergency Protocol Engine may select a specific stocked medicine when that drug/dose/route is explicitly defined by a current applicable veterinarian-approved protocol.
 
 ## 11. Treatment integration
 Treatment prescription/action selects the medicine product. Administration selects the actual eligible lot and atomically:
@@ -195,10 +195,13 @@ Treatment prescription/action selects the medicine product. Administration selec
 6. emits MedicationAdministered;
 7. recalculates pharmacy threshold status.
 
-## 12. Events
+## 12. Emergency protocol integration
+`CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md` may query eligible pharmacy stock while evaluating an approved medication step. It must reject expired/recalled/quarantined/storage-noncompliant lots, calculate only protocol-defined doses, and bind actual administration to the selected lot.
+
+## 13. Events
 MedicineProductConfigured, EssentialMedicinePolicyChanged, MedicineStockBelowMinimum, MedicineStockCritical, MedicineOutOfStock, MedicineExpiringSoon, MedicineExpired, MedicineRecallAffected, MedicineStorageExceptionDetected, MedicineReorderRequired, MedicineStockRecovered.
 
-## 13. Acceptance
+## 14. Acceptance
 1. A farm can maintain medicine stock even when no animal is currently sick.
 2. Each receipt records medicine lot and expiry.
 3. Farm manager sets minimum/target quantities per medicine/location.
