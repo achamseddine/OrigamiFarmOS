@@ -26,7 +26,7 @@ If documents conflict, stop and surface the conflict. Do not silently invent a n
 - Plans/recommendations are never stored as actual transactions.
 - Preserve history. Use versions, effective dating, reversals/corrections and audit records.
 - External IDs are never internal PKs.
-- AI may recommend; it does not become authoritative domain truth or bypass approvals.
+- AI may recommend and actively orchestrate veterinarian-approved emergency protocols. It may match protocols, calculate doses only from approved rules, check eligibility/stock, notify, schedule reassessment and escalate. It must never invent a prescription/dose/route, turn an unsupported inference into authoritative diagnosis, or bypass protocol/approval boundaries.
 
 ## Engineering approach
 Origami starts as a **modular monolith**, not microservices. Modules have explicit boundaries and may communicate through application services and domain events. Do not directly mutate another module's tables.
