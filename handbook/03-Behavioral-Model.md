@@ -39,6 +39,8 @@ Observation/Alert → Health Case → Examination → Diagnosis → Treatment �
 ```
 Medication validates product, dose/unit, subject and restrictions/withdrawal. Observation is not automatically diagnosis.
 
+Emergency decision support follows `database/CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md`: observations → triage → AI/rule protocol matching → animal eligibility/contraindication check → approved protocol instructions/dose calculation → medicine-stock check → manager/veterinarian notification → confirmed administration → reassessment → recovery/escalation. Specific drug/dose/route instructions must originate from a current veterinarian-approved protocol or prescription; outside those boundaries AI escalates rather than improvises.
+
 ## 5. Feed formula and batch
 ```text
 Draft Formula → Validate Compatibility → Review/Approval → Activate Version → Mixing → Retire
@@ -163,7 +165,7 @@ Drafts may be edited. Posted ledger transactions use reversal/correction; final 
 Every command validates principal, farm/site scope, permission/role, domain authority, entity status and segregation-of-duties rules. Frontend hiding is convenience only.
 
 ## 19. AI
-AI may detect anomalies, summarize, recommend feed review, forecast stock and suggest reorder quantities. AI may not independently diagnose, approve procurement, finalize lab results, silently change feeding, post inventory adjustments or bypass usage restrictions.
+AI may detect anomalies, triage urgent health observations, match and explain current veterinarian-approved emergency protocols, calculate doses where the approved protocol defines the formula and limits, check animal eligibility/contraindications and pharmacy stock, notify responsible people, schedule reassessment and escalate. AI may also summarize, recommend feed review, forecast stock and suggest reorder quantities. AI may not invent a prescription/drug/dose/route, convert an unsupported inference into an authoritative diagnosis, approve procurement, finalize lab results, silently change feeding, post inventory adjustments or bypass protocol/usage/authorization restrictions.
 
 ## 20. Cross-domain behavior
 ```text
@@ -192,7 +194,7 @@ Domains react through controlled services/events rather than rewriting another d
 13. Species restrictions are enforced transactionally.
 14. Missing is not zero.
 15. External data is validated before becoming internal truth.
-16. AI cannot bypass authority.
+16. AI cannot bypass authority; active AI orchestration is permitted only inside explicit approved protocol/workflow boundaries.
 
 ## 22. Acceptance criteria
 Capabilities dynamically govern animal actions; invalid species/state workflows are rejected server-side; lifecycle events can trigger feeding reviews without deleting history; purchased and farm-mixed feed converge downstream; cattle-only premix cannot be used for horses/sheep; feed mixing consumes exact lots and creates traceable output; group feeding supports individual overrides; reservations affect availability; shortages generate explainable farm-manager alerts before stockout; reconciliation exposes unexplained variance; retries do not duplicate transactions; cross-domain reactions use controlled events/services; approvals/corrections/exceptions remain auditable; AI recommendations remain distinct from authorized decisions.
