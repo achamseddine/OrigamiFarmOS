@@ -87,3 +87,10 @@ Do not attempt the entire ERP at once.
 11. Procurement/costing and broader modules.
 
 See `architecture/IMPLEMENTATION-ROADMAP.md`.
+
+## Feed mix identity rule
+- Every locally crushed/mixed feed production run is a uniquely numbered Feed Batch/Mix. Use one farm-level immutable sequential mix number plus UUID; do not create dairy/horse/sheep/chicken batch tables or separate species sequences.
+- Intended species/management profile is metadata validated by feed-usage policy. Repeating the same formula on another run always creates a new mix number/output lot.
+- Preserve mix → formula/version → actual ingredient quantities/lots/suppliers → production date/operator → output lot → dated feeding usage/animal or group/quantity → remaining ledger stock → cost/performance lineage.
+- Never store an editable “remaining mix” balance; derive it from inventory transactions. Never renumber or overwrite a historical mix.
+
