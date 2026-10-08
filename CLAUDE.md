@@ -22,6 +22,7 @@ If documents conflict, stop and surface the conflict. Do not silently invent a n
 - Feed Item, Feed Formula, Formula Version, Feed Batch, Feed Product/Lot, Feeding Program and Feeding Event are distinct concepts.
 - Purchased and farm-mixed feed converge on common downstream inventory/feeding interfaces.
 - Enforce feed species/use restrictions server-side.
+- Preserve supplier + ingredient-lot → actual feed batch → output lot → feeding event → animal/group → production lineage. Feed Performance Intelligence must use canonical facts, explicit baselines/confounders/confidence and must not create a shadow feed/production truth.
 - Inventory is ledger-driven. On-hand is not necessarily available; reservations/quarantine/blocks matter.
 - Plans/recommendations are never stored as actual transactions.
 - Preserve history. Use versions, effective dating, reversals/corrections and audit records.
