@@ -16,3 +16,7 @@ The database implements the semantics in `handbook/02-Ontology.md`, behavior in 
 
 ## Baseline rule
 Database Baseline v1 is the consolidated starting point for executable development. Do not infer a different physical schema merely because a conceptual entity exists in the ontology. Schema changes require reviewed migrations, tests and documentation updates. Projections are non-authoritative; posted ledgers/history are immutable.
+
+## Feed Performance Intelligence
+Read `FEED-PERFORMANCE-INTELLIGENCE.md` after Feed, Procurement, Production and Health schemas. It defines analytical projections/assessments over canonical supplier-lot → batch → feeding → production lineage. These tables never become a shadow feed, inventory, production or health ledger.
+
