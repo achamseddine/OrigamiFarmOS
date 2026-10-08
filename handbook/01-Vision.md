@@ -18,3 +18,7 @@ Origami FarmOS will become the digital operating system of Origami Farms. It wil
 FarmOS will not replace the farmer, the veterinarian, or the farm manager. It will support them. The product philosophy is:
 
 **FarmOS does not replace the farmer’s experience. It amplifies it.**
+
+## Feed as a continuous learning loop
+Origami is intended to learn operationally from the full feed chain: what was bought and from which supplier/lot, what was actually crushed/mixed, what was fed, what animals produced afterward, and what that output cost. Feed Performance Intelligence continuously monitors milk/other production against explicit baselines while considering available health, lifecycle, group and environmental context. Its purpose is early, explainable detection of feed/batch/lot/supplier performance signals—not unsupported causal claims. See `database/FEED-PERFORMANCE-INTELLIGENCE.md`.
+
