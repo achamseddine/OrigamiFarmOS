@@ -60,3 +60,14 @@ Revisit only if implementation evidence demonstrates a strong need for a shared 
 - Cross-domain FKs reference canonical identity; modules do not duplicate masters.
 - No module directly edits another module's authoritative ledger/history.
 - Read projections may denormalize but are never authoritative.
+
+### Feed Performance Intelligence / Analytics
+- feed_performance_monitor
+- feed_exposure_window (rebuildable analytical projection)
+- feed_performance_assessment
+- feed_batch_performance_score (rebuildable projection)
+- supplier_feed_performance (versioned analytical projection)
+- feed_performance_alert
+
+These depend on Feed + Inventory + Procurement/Supplier + Livestock + Production + Health + Costing and therefore belong after those authoritative domains in migration/implementation order.
+
