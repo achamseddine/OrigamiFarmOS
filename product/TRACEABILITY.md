@@ -173,3 +173,7 @@ both inventory and Mouneh finished-goods stock, profitability).
 See `mobile/flutter_app/README.md` and `backend/README.md` "What's
 complete / mocked / remaining" sections for the current implementation
 boundary (per tech spec Definition of Done).
+
+## Feed Performance Intelligence traceability requirement
+Canonical requirement: `database/FEED-PERFORMANCE-INTELLIGENCE.md`. Implementation must trace Supplier → receipt/ingredient lot → actual FeedBatchComponent → FeedBatch/output lot → FeedingEvent → Animal/AnimalGroup → Production/Milk, while joining Health/Lifecycle/Cost context analytically. Required outputs include explicit-baseline assessments, formula-compliance deviations, confidence-scored batch/ingredient/supplier signals, deduplicated alerts and feed-cost/output metrics. Until corresponding backend/database/mobile work is implemented and tested, this remains a required architecture capability and must not be represented as completed functionality.
+
