@@ -1138,3 +1138,7 @@ Every feed transaction must answer four questions:
 4. **Will enough remain to meet upcoming demand?** — forecasting/replenishment.
 
 The system must prevent unauthorized cross-species use at transaction time and must provide auditable reconciliation afterward.
+
+## Continuous Feed Performance Intelligence
+The generic feed model must preserve enough lineage for continuous downstream learning: supplier/receipt lot → ingredient lot → actual batch component → finished feed lot → feeding event → animal/group → production and context. Different suppliers and lots of the same grain, vitamin, mineral, premix or additive remain analytically distinguishable after local crushing/mixing. The AI layer evaluates milk/production against explicit subject/group baselines, actual formula compliance, intake/refusal, health/lactation/group changes and available environmental evidence; it produces confidence-scored assessments and persistent alerts. It may identify candidate batch/ingredient/supplier associations and recommend review or sampling, but cannot silently change formulas/programs or assert causation from correlation. Canonical implementation model: `database/FEED-PERFORMANCE-INTELLIGENCE.md`.
+
