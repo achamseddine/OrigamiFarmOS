@@ -408,3 +408,33 @@ FeedFormulaVersionActivated, FeedBatchStarted, FeedBatchCompleted, FeedBatchQuar
 - Ingredient lot → exposed animals/groups traceability is queryable.
 - Supplier and lot identity survive local crushing/mixing so downstream production performance can be analyzed.
 - Formula/program versions used historically are immutable.
+
+## 20. Numbered feed mix / batch identity and usage monitoring
+Every locally crushed or mixed feed preparation is a `feed_batch` and must receive a human-readable, farm-unique sequential mix number in addition to its UUID. This applies to dairy cattle, dry cattle, calves, horses, sheep, goats, chickens, ducks, turkeys and any future species/profile; species names must not create separate tables.
+
+Required additions/semantics:
+```sql
+feed_batch (
+ mix_number bigint not null,
+ mix_code varchar(120) not null,
+ intended_species_id uuid references species(id),
+ intended_management_profile_id uuid references management_profile(id),
+ production_date timestamptz not null,
+ use_by_date timestamptz,
+ operator_id uuid references user_account(id),
+ mixer_asset_id uuid,
+ notes text,
+ unique (farm_id, mix_number),
+ unique (farm_id, mix_code)
+)
+```
+Example display codes may be `MIX-000001`, `MIX-000002`; the immutable numeric sequence is the identity and the display format is configurable. Do not restart numbering by species. Intended species/profile is classification and policy context, not identity.
+
+For every numbered mix the system must retain: formula + immutable formula version; target and actual quantity of every component; exact ingredient inventory lots/suppliers; operator; production/start/completion timestamps; intended species/profile; mixer/equipment when recorded; target and actual output; output inventory lot; unit/batch cost; quality/lab evidence; quarantine/release status; waste/variance/reconciliation; and notes/evidence.
+
+Usage is monitored from the output lot through `feeding_event_component.inventory_lot_id`. Therefore every issue of a numbered mix must identify date/time, animal/group, head count, offered quantity, consumed estimate when available, waste/refusal, user, feeding program/assignment and inventory transaction. Remaining quantity is derived from the inventory ledger; it is never an editable batch balance.
+
+A numbered mix is not reusable: repeating the same dairy/horse/sheep/chicken formula tomorrow creates a new mix number and new output lot. Corrections use reversal/amendment and never renumber or overwrite the historical mix.
+
+Required query/dashboard behavior for each mix: produced quantity; quantity issued/fed; estimated consumed; waste; current eligible remaining stock; first/last use date; animals/groups exposed; days used; formula variance; cost/kg; production response link; and alert/performance status. Reverse trace must answer both “what went into MIX-N?” and “who ate MIX-N, when and how much?”.
+
