@@ -424,3 +424,9 @@ covers the offline effects and outbox labels.
 4. **Is stock ever counted twice or drawn from a lot that may not be fed?**
    No — one ledger, lots as the only physical quantities, availability net
    of unusable and reserved, and policies enforced at consumption.
+
+## 26. Continuous Feed Performance Intelligence — required extension
+The canonical target architecture now includes `database/FEED-PERFORMANCE-INTELLIGENCE.md`. Existing feed implementation already provides much of the required lineage (supplier/lot, actual batch components, feeding events and milk-linked costs), but continuous baseline evaluation, confounder-aware AI assessments, supplier/batch performance projections and persistent feed-performance alerts are a separate implementation increment and must not be considered complete merely because traceability exists.
+
+The required analytical chain is Supplier/ingredient lot → actual local mix → output lot → feeding exposure → animal/group → milk/production + health/lifecycle/context → performance assessment. Different suppliers/lots remain distinguishable. AI must expose evidence, baseline, missing context and confidence; association never becomes causation automatically.
+
