@@ -18,6 +18,6 @@
 16. assets/maintenance.
 17. customer/sales.
 18. operational finance/AR/cash.
-19. analytics/projections.
+19. analytics/projections, including feed performance intelligence projections/assessments/alerts after feed + procurement + production + health dependencies are available.
 
 Each slice gets reviewed migration SQL and automated migration tests. Never create duplicate masters to break dependency order. Conceptual LivestockSubject remains explicit animal_id/animal_group_id FKs with exactly-one checks where applicable.
