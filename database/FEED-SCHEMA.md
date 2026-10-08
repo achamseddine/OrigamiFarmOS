@@ -391,10 +391,13 @@ Supplier/Receipt Lot
 ```
 Reverse query must identify exposed animals/groups from any ingredient/output lot.
 
-## 17. Events
+## 17. Feed performance intelligence
+Continuous downstream evaluation of supplier/ingredient lots, actual local mixing, feed batches, feeding exposure, milk/production response, health/context and economics is defined in `FEED-PERFORMANCE-INTELLIGENCE.md`. The intelligence layer consumes this schema's canonical lineage and never creates a competing feed or production truth.
+
+## 18. Events
 FeedFormulaVersionActivated, FeedBatchStarted, FeedBatchCompleted, FeedBatchQuarantined, FeedLotReceived, FeedUsageBlocked, FeedAllocationCreated, FeedAllocationReleased, FeedingProgramActivated, FeedingProgramAssigned, FeedingProgramReviewRequired, FeedingEventRecorded, FeedInventoryConsumed, FeedAnalysisReceived, FeedReconciliationCompleted, FeedInventoryVarianceDetected.
 
-## 18. Acceptance
+## 19. Acceptance
 - Formula != batch != feeding program != feeding event.
 - Purchased and produced feeds share downstream lot/feeding behavior.
 - Actual batch ingredients drive stock/cost.
@@ -403,4 +406,5 @@ FeedFormulaVersionActivated, FeedBatchStarted, FeedBatchCompleted, FeedBatchQuar
 - Offered quantity is not falsely recorded as consumed.
 - All feed stock uses inventory ledger, not shadow balances.
 - Ingredient lot → exposed animals/groups traceability is queryable.
+- Supplier and lot identity survive local crushing/mixing so downstream production performance can be analyzed.
 - Formula/program versions used historically are immutable.
