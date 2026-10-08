@@ -135,39 +135,42 @@ Active Feeding Programs / Forecast Demand
 ```
 Forecasts respect species/use eligibility. Ineligible stock cannot satisfy demand. Adequately covered shortages suppress duplicate alerts.
 
-## 12. Procurement
+## 12. Feed performance intelligence
+`database/FEED-PERFORMANCE-INTELLIGENCE.md` continuously connects supplier/ingredient lots → actual feed batches → feeding exposure → milk/other production → health/lifecycle/context → economics. Event-driven and scheduled analysis detects persistent performance changes, formula deviations, ingredient/supplier-lot anomalies and feed cost/output changes. AI records baseline method, evidence, confounders and confidence; temporal association is never silently promoted to causation. Recommendations may request inspection, sampling, lab analysis or ration review but do not silently change approved formulas/programs or supplier/inventory status.
+
+## 13. Procurement
 Need/Reorder Signal → Requisition → Approval → Purchase Order → Supplier → Receipt → Acceptance/Rejection → Inventory → Cost reconciliation. Automated recommendations never bypass approval authority.
 
-## 13. Production, movement and mortality
+## 14. Production, movement and mortality
 Milk/egg/wool records require corresponding capability. Production may trigger analytics/feed review but not silently change feeding.
 
 Animal movement validates source/destination, records effective history, updates current projection, emits an event and evaluates group/program consequences.
 
 Death/disposal is explicit, closes incompatible active assignments, blocks future ordinary production/feeding and retains all history.
 
-## 14. Laboratory and maintenance
+## 15. Laboratory and maintenance
 Lab: Test Order → Sample → Chain of Custody → Test → Result → Validation → Report → Domain Consumer. Final lab result does not itself diagnose an animal or release a product.
 
 Maintenance: Trigger → Work Order → Assignment → Work → Verification → Completion → Next Due. Invalid calibration can block instrument use where configured.
 
-## 15. Workflow and approval
+## 16. Workflow and approval
 Workflow orchestrates durable processes and supports tasks, delegation, SLA and escalation. Approval evaluates authority at decision time and records actor, basis, timestamp, decision and evidence. Workflow completion cannot falsely mark a failed domain transaction successful.
 
-## 16. Events, notifications and offline
+## 17. Events, notifications and offline
 Events emit only after successful authoritative change; consumers are idempotent. Notifications are consequences, not systems of record; acknowledging an alert does not resolve the condition.
 
 Offline operations retain stable operation ID, actor/device, occurrence time and payload. Sync authenticates, deduplicates, validates authoritative state and applies or creates a conflict. Offline mode grants no additional authority.
 
-## 17. Corrections and concurrency
+## 18. Corrections and concurrency
 Drafts may be edited. Posted ledger transactions use reversal/correction; final results use amendments; completed feed batches retain actual composition. Backdating preserves recorded-at time. Retryable commands use idempotency keys. Optimistic concurrency protects conflicting updates.
 
-## 18. Authorization
+## 19. Authorization
 Every command validates principal, farm/site scope, permission/role, domain authority, entity status and segregation-of-duties rules. Frontend hiding is convenience only.
 
-## 19. AI
-AI may detect anomalies, triage urgent health observations, match and explain current veterinarian-approved emergency protocols, calculate doses where the approved protocol defines the formula and limits, check animal eligibility/contraindications and pharmacy stock, notify responsible people, schedule reassessment and escalate. AI may also summarize, recommend feed review, forecast stock and suggest reorder quantities. AI may not invent a prescription/drug/dose/route, convert an unsupported inference into an authoritative diagnosis, approve procurement, finalize lab results, silently change feeding, post inventory adjustments or bypass protocol/usage/authorization restrictions.
+## 20. AI
+AI may detect anomalies, triage urgent health observations, match and explain current veterinarian-approved emergency protocols, calculate doses where the approved protocol defines the formula and limits, check animal eligibility/contraindications and pharmacy stock, notify responsible people, schedule reassessment and escalate. AI may also continuously evaluate feed performance against milk/production baselines, trace anomalies to actual feed batches and supplier ingredient lots, detect formula-compliance deviations, compare supplier-lot performance, summarize confounders, recommend feed review, forecast stock and suggest reorder quantities. AI may not invent a prescription/drug/dose/route, convert an unsupported inference into an authoritative diagnosis, approve procurement, finalize lab results, silently change feeding, post inventory adjustments or bypass protocol/usage/authorization restrictions.
 
-## 20. Cross-domain behavior
+## 21. Cross-domain behavior
 ```text
 Calving Domain records Calving
  → CalvingRecorded
@@ -178,7 +181,7 @@ Calving Domain records Calving
 ```
 Domains react through controlled services/events rather than rewriting another domain's authoritative records.
 
-## 21. Behavioral invariants
+## 22. Behavioral invariants
 1. Validate before mutation.
 2. Authorize at API/domain boundary.
 3. Persist before publishing success.
@@ -196,5 +199,5 @@ Domains react through controlled services/events rather than rewriting another d
 15. External data is validated before becoming internal truth.
 16. AI cannot bypass authority; active AI orchestration is permitted only inside explicit approved protocol/workflow boundaries.
 
-## 22. Acceptance criteria
+## 23. Acceptance criteria
 Capabilities dynamically govern animal actions; invalid species/state workflows are rejected server-side; lifecycle events can trigger feeding reviews without deleting history; purchased and farm-mixed feed converge downstream; cattle-only premix cannot be used for horses/sheep; feed mixing consumes exact lots and creates traceable output; group feeding supports individual overrides; reservations affect availability; shortages generate explainable farm-manager alerts before stockout; reconciliation exposes unexplained variance; retries do not duplicate transactions; cross-domain reactions use controlled events/services; approvals/corrections/exceptions remain auditable; AI recommendations remain distinct from authorized decisions.
