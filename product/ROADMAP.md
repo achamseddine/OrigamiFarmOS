@@ -26,3 +26,12 @@ Outputs: Daily use on farm, Worker feedback, Bug fixing, Workflow refinement, Fe
 
 ## Phase 8: Commercial Readiness
 Outputs: Multi-farm support, Onboarding flow, Farm templates, Subscription model, Customer support model, Commercial documentation
+
+## Feed Performance Intelligence roadmap
+1. Preserve supplier/lot and actual mixing lineage in all feed transactions.
+2. Establish milk/production baseline monitoring and persistent anomaly detection.
+3. Add formula-compliance and batch performance scoring.
+4. Add ingredient-lot and supplier-specific performance comparisons with confidence thresholds.
+5. Add feed cost/output and effective supplier-value analytics.
+6. Add versioned AI/statistical models with explicit confounders, explanations and review workflows.
+
