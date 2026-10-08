@@ -339,3 +339,11 @@ FeedPerformanceEvaluated, FeedPerformanceAnomalyDetected, FeedPerformanceRecover
 10. Feed cost/litre and effective supplier value can combine commercial cost with downstream performance.
 11. Alerts are persistent/deduplicated rather than generated for ordinary daily noise.
 12. AI recommendations never silently change authoritative formulas, feeding programs, supplier status or inventory.
+
+## Numbered mix as the primary local-manufacturing analytical unit
+Every locally manufactured/crushed preparation must carry the immutable farm-level `mix_number` / `mix_code` defined in `FEED-SCHEMA.md`. Feed Performance Intelligence must retain that identity in exposure lineage and assessments so a manager can compare, for example, Dairy Mix 41 vs 42 or Horse/Sheep/Chicken mixes without losing the exact ingredients and suppliers behind each preparation.
+
+The analytical unit is the numbered mix/output lot, not merely the formula name. Multiple batches using the same formula/version remain separate observations because actual ingredient lots, quantities, manufacturing date, operator, cost, quality and downstream performance can differ.
+
+For each mix the intelligence layer must be able to monitor: production date; first/last feeding date; quantity produced/issued/remaining; target species/profile; exposed animals/groups and head-days; formula-vs-actual deviations; ingredient supplier/lot lineage; cost; refusals/waste; milk/egg/growth or other applicable production response; health/context changes; and assessment/alert history. Supplier and ingredient effects may be aggregated across multiple numbered mixes only with preserved drill-down to the originating mixes.
+
