@@ -18,6 +18,7 @@ from app.api.v1 import (
     employees,
     farms,
     feed,
+    feed_performance,
     feeding,
     health,
     livestock,
@@ -105,6 +106,7 @@ app.include_router(sales.router, prefix=api_prefix)
 app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
 app.include_router(feeding.router, prefix=api_prefix)
+app.include_router(feed_performance.router, prefix=api_prefix)
 
 
 @app.exception_handler(FeedError)

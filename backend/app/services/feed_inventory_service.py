@@ -772,8 +772,8 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
         batch = db.get(fm.FeedBatch, comp.batch_id)
         if batch is None:
             continue
-        downstream_batches.append({"batch_id": batch.id, "batch_code": batch.batch_code, "status": batch.status,
-                                   "quantity_used": comp.actual_quantity, "unit": comp.unit, "output_lot_id": batch.output_lot_id})
+        downstream_batches.append({"batch_id": batch.id, "batch_code": batch.batch_code, "mix_number": batch.mix_number, "mix_code": batch.mix_code,
+                                   "status": batch.status, "quantity_used": comp.actual_quantity, "unit": comp.unit, "output_lot_id": batch.output_lot_id})
         # Second hop: feedings of the lot this batch produced.
         if batch.output_lot_id:
             out_lot = db.get(fm.FeedLot, batch.output_lot_id)
@@ -786,9 +786,11 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
                     entry["events"] += e["events"]
                 events_out.extend(nested["feeding_events"])
     upstream = []
+    mix = None
     if lot.feed_batch_id:
         batch = db.get(fm.FeedBatch, lot.feed_batch_id)
         if batch is not None:
+            mix = {"batch_id": batch.id, "mix_number": batch.mix_number, "mix_code": batch.mix_code, "intended_species_code": batch.intended_species_code}
             for comp in batch.components:
                 src = db.get(fm.FeedLot, comp.lot_id) if comp.lot_id else None
                 upstream.append({"feed_product_id": comp.feed_product_id, "lot_id": comp.lot_id, "lot_code": src.lot_code if src else None,
@@ -801,6 +803,7 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
         "lot": {"id": lot.id, "lot_code": lot.lot_code, "feed_product_id": lot.feed_product_id, "status": lot.status,
                 "source_type": lot.source_type, "supplier_label": lot.supplier_label, "received_at": lot.received_at,
                 "quantity_on_hand": lot.quantity_on_hand, "unit": lot.unit, "feed_batch_id": lot.feed_batch_id},
+        "mix": mix,
         "upstream_ingredient_lots": upstream,
         "downstream_batches": downstream_batches,
         "feeding_events": sorted(events_out, key=lambda e: e["occurred_at"]),

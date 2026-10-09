@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../domain/entities/feed_performance.dart';
 import '../domain/entities/feeding.dart';
 
 /// The feed workspace's data (generic feed architecture): products and
@@ -29,6 +30,14 @@ class FeedingProvider extends ChangeNotifier {
   List<FeedReconciliation> reconciliations = [];
   FeedCostSummary costs = FeedCostSummary.empty;
   List<NutrientDef> nutrients = [];
+
+  // Feed performance intelligence: the server's explanations, read-only
+  // here except for acknowledging and closing alerts and asking for a run.
+  FeedPerformanceSummary performance = FeedPerformanceSummary.empty;
+  List<FeedPerformanceMonitor> monitors = [];
+  List<FeedPerformanceAlert> performanceAlerts = [];
+  List<FeedBatchScore> batchScores = [];
+  List<SupplierPerformance> supplierScores = [];
   final Map<String, FeedingPlan> _plans = {};
   bool loading = false;
   bool get isLoaded => products.isNotEmpty;
@@ -66,12 +75,47 @@ class FeedingProvider extends ChangeNotifier {
         _fetch('/feed-reconciliations', (j) => reconciliations = [for (final r in j as List<dynamic>) FeedReconciliation.fromJson(r as Map<String, dynamic>)]),
         _fetch('/feed-costs', (j) => costs = FeedCostSummary.fromJson(j as Map<String, dynamic>), query: {'days': 30}),
         _fetch('/feed-nutrients', (j) => nutrients = [for (final n in j as List<dynamic>) NutrientDef.fromJson(n as Map<String, dynamic>)]),
+        ..._performanceFetches(),
       ]);
     } finally {
       loading = false;
       notifyListeners();
     }
   }
+
+  List<Future<void>> _performanceFetches() => [
+        _fetch('/feed-performance/summary', (j) => performance = FeedPerformanceSummary.fromJson(j as Map<String, dynamic>)),
+        _fetch('/feed-performance/monitors', (j) => monitors = [for (final m in j as List<dynamic>) FeedPerformanceMonitor.fromJson(m as Map<String, dynamic>)]),
+        _fetch('/feed-performance/alerts', (j) => performanceAlerts = [for (final a in j as List<dynamic>) FeedPerformanceAlert.fromJson(a as Map<String, dynamic>)]),
+        _fetch('/feed-performance/batches', (j) => batchScores = [for (final b in j as List<dynamic>) FeedBatchScore.fromJson(b as Map<String, dynamic>)]),
+        _fetch('/feed-performance/suppliers', (j) => supplierScores = [for (final s in j as List<dynamic>) SupplierPerformance.fromJson(s as Map<String, dynamic>)]),
+      ];
+
+  Future<void> reloadPerformance() async {
+    await Future.wait(_performanceFetches());
+    notifyListeners();
+  }
+
+  /// Alerts a person has not yet seen — what the tab counts in red.
+  List<FeedPerformanceAlert> get unseenPerformanceAlerts => [for (final a in performanceAlerts) if (a.isOpen) a];
+
+  FeedBatchScore? scoreForBatch(String batchId) {
+    for (final s in batchScores) {
+      if (s.feedBatchId == batchId) return s;
+    }
+    return null;
+  }
+
+  // ------------------------------------------------- performance writes
+  /// Runs the cycle now (§12). Queued offline like any write; the server
+  /// evaluates when it arrives and the lists reload after.
+  Future<WriteResult> evaluatePerformance() => _write(() => _api.post('/feed-performance/evaluate'), then: reloadPerformance);
+  Future<WriteResult> acknowledgePerformanceAlert(String alertId) =>
+      _write(() => _api.post('/feed-performance/alerts/$alertId/acknowledge'), then: reloadPerformance);
+  Future<WriteResult> resolvePerformanceAlert(String alertId, String note) =>
+      _write(() => _api.post('/feed-performance/alerts/$alertId/resolve', body: {'note': note}), then: reloadPerformance);
+  Future<WriteResult> createPerformanceMonitor(Map<String, dynamic> body) =>
+      _write(() => _api.post('/feed-performance/monitors', body: body), then: reloadPerformance);
 
   /// What a write to stock changes: products (availability), lots, cover,
   /// the reorder list and today's plan totals.
@@ -105,6 +149,16 @@ class FeedingProvider extends ChangeNotifier {
       return plan;
     } catch (_) {
       return _plans[subjectId];
+    }
+  }
+
+  /// The numbered mix's life, from the server: never cached, because the
+  /// remaining quantity is the lot's ledger balance at the moment asked.
+  Future<MixUsage?> mixUsage(String batchId) async {
+    try {
+      return MixUsage.fromJson(await _api.get('/feed-batches/$batchId/usage') as Map<String, dynamic>);
+    } catch (_) {
+      return null;
     }
   }
 

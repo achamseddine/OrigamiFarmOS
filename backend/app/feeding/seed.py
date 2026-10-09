@@ -23,6 +23,7 @@ from app.feeding.catalog import ensure_feed_reference_data
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
 from app.services import feed_inventory_service as inv
+from app.services import feed_performance_service as perf
 from app.services import feed_policy_service as policy
 from app.services import feeding_program_service as programs
 
@@ -175,7 +176,8 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     formula.id  # noqa: B018 — keep the reference
     v1 = formula.versions[0]
     batch = batches.start_batch(db, farm_id, formula_version_id=v1.id, formula_id=None, batch_code="MIX-2609-01", target_quantity=1000, unit="kg",
-                                notes="Morning mix, mixer wagon 2.", user_id=u)
+                                notes="Morning mix, mixer wagon 2.", intended_species_code="cow", intended_management_profile="dairy",
+                                mixer_asset_id="Mixer wagon 2", user_id=u)
     batch.started_at = _days_ago(10, hour=5)
     batches.complete_batch(
         db, batch, actual_quantity=1000, produced_at=_days_ago(10, hour=6),
@@ -196,7 +198,8 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
         activate=True, user_id=u,
     )
     v2.effective_from = _days_ago(3)
-    open_batch = batches.start_batch(db, farm_id, formula_version_id=v2.id, formula_id=None, batch_code="MIX-2609-02", target_quantity=800, unit="kg", notes=None, user_id=u)
+    open_batch = batches.start_batch(db, farm_id, formula_version_id=v2.id, formula_id=None, batch_code="MIX-2609-02", target_quantity=800, unit="kg", notes=None,
+                                     intended_species_code="cow", intended_management_profile="dairy", mixer_asset_id="Mixer wagon 2", user_id=u)
     open_batch.id  # noqa: B018
 
     # ------------------------------------------------------------ programs
@@ -354,4 +357,12 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     # §27: the premix count is 25 kg short of the ledger — a variance, open.
     forecast.reconcile(db, farm_id, premix, lot=premix_lot, period_from=_days_ago(14), period_to=_now(),
                        counted_closing_quantity=round(premix_lot.quantity_on_hand - 25, 1), explanation=None, user_id=u)
+    db.flush()
+
+    # ------------------------------------------- performance intelligence
+    # FEED-PERFORMANCE-INTELLIGENCE.md: a monitor per milking cow and per
+    # egg flock, the exposure projection, the first mix scores and supplier
+    # rows. Everything the cycle writes is rebuildable from the facts above.
+    perf.ensure_default_monitors(db, farm_id, user_id=u)
+    perf.run_cycle(db, farm_id, user_id=u)
     db.flush()

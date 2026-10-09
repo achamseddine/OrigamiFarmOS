@@ -47,6 +47,40 @@ void main() {
       expect(dairy.active!.components.map((c) => c.targetQuantity).fold(0.0, (a, b) => a + b), closeTo(dairy.active!.batchSize, 0.01));
     });
 
+    test('a batch is a numbered mix; a start still queued offline has no number yet', () {
+      final raw = rows('GET /feed-batches').first;
+      final numbered = FeedBatch.fromJson({
+        ...raw, 'mix_number': 42, 'mix_code': 'MIX-000042', 'intended_species_code': 'cow', 'intended_management_profile': 'dairy',
+        'production_date': '2026-10-01T06:00:00Z', 'operator_name': 'Rami', 'mixer_asset_id': 'Mixer wagon 2', 'output_lot_code': 'MIX-000042',
+      });
+      expect(numbered.mixNumber, 42);
+      expect(numbered.label, 'MIX-000042');
+      expect(numbered.numberPending, isFalse);
+      expect(numbered.intendedSpeciesCode, 'cow');
+      expect(numbered.productionDate, isNotNull);
+      final queued = FeedBatch.fromJson({...raw, 'mix_number': 0, 'mix_code': null, 'batch_code': 'MIX-…'});
+      expect(queued.numberPending, isTrue);
+      expect(queued.label, 'MIX-…', reason: 'the server assigns the number when the start syncs');
+    });
+
+    test('a mix timeline parses its quantities and keeps the remainder as the ledger figure', () {
+      final usage = MixUsage.fromJson({
+        'batch_id': 'b1', 'mix_number': 2, 'mix_code': 'MIX-000002', 'status': 'completed', 'unit': 'kg',
+        'produced_quantity': 800, 'issued_quantity': 30, 'consumed_estimate': null, 'refused_quantity': 2, 'waste_quantity': 5,
+        'other_issued_quantity': 0, 'returned_quantity': 0, 'remaining_quantity': 765, 'eligible_remaining_quantity': 765,
+        'first_use_at': '2026-10-02T06:00:00Z', 'last_use_at': '2026-10-02T06:00:00Z', 'days_used': 1, 'head_days': 3,
+        'components': [{'feed_product_id': 'fp-barley', 'lot_code': 'BAR-1', 'target_quantity': 40, 'actual_quantity': 40, 'unit': 'kg'}],
+        'variance': [], 'issues': [{'feeding_event_id': 'e1', 'occurred_at': '2026-10-02T06:00:00Z', 'event_type': 'delivered', 'status': 'recorded',
+                                    'subject_type': 'group', 'subject_id': 'grp-dairy-herd', 'quantity_offered': 30, 'unit': 'kg'}],
+        'ledger_adjustments': [{'reason': 'waste', 'direction': 'out', 'quantity': 5, 'occurred_at': '2026-10-02T07:00:00Z'}],
+        'exposed_subjects': [{'subject_id': 'grp-dairy-herd', 'quantity': 30, 'events': 1}],
+      });
+      expect(usage.remainingQuantity, 765);
+      expect(usage.consumedEstimate, isNull, reason: 'never measured is not zero');
+      expect(usage.issues.single['subject_id'], 'grp-dairy-herd');
+      expect(usage.daysUsed, 1);
+    });
+
     test('a completed batch has actuals, a cost and an output lot; an open one has none', () {
       final batches = [for (final b in rows('GET /feed-batches')) FeedBatch.fromJson(b)];
       final done = batches.singleWhere((b) => b.batchCode == 'MIX-2609-01');

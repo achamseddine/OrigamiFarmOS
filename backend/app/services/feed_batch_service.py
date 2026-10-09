@@ -11,13 +11,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain import feed_models as fm
-from app.domain import models
+from app.domain import livestock_models, models
 from app.feeding import catalog, uom
-from app.repositories.base import new_id, now, write_event
+from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services import feed_inventory_service as inv
 from app.services import feed_policy_service as policy
 from app.services.feed_inventory_service import FeedError
@@ -178,6 +178,42 @@ def _unique_batch_code(db: Session, farm_id: str, base: str) -> str:
     return code
 
 
+def mix_code_for(code_format: str, number: int) -> str:
+    try:
+        return code_format.format(n=number)
+    except (KeyError, ValueError, IndexError):
+        return f"MIX-{number:06d}"
+
+
+def next_mix_number(db: Session, farm_id: str) -> tuple[int, str]:
+    """The next number of the farm's one mix sequence (FEED-SCHEMA §20).
+    Taken under the sequence row's lock so concurrent starts serialise;
+    the number is consumed even if the batch is later cancelled — a gap is
+    honest, a reused number is not."""
+    seq = db.execute(select(fm.FeedMixSequence).where(fm.FeedMixSequence.farm_id == farm_id).with_for_update()).scalar_one_or_none()
+    if seq is None:
+        # A farm that mixed before the sequence existed continues after its
+        # highest number rather than restarting at one.
+        highest = db.scalar(select(func.max(fm.FeedBatch.mix_number)).where(fm.FeedBatch.farm_id == farm_id)) or 0
+        seq = fm.FeedMixSequence(farm_id=farm_id, last_number=highest)
+        db.add(seq)
+        db.flush()
+    seq.last_number += 1
+    db.flush()
+    return seq.last_number, mix_code_for(seq.code_format, seq.last_number)
+
+
+def batch_by_mix_number(db: Session, farm_id: str, mix_number: int) -> fm.FeedBatch | None:
+    return db.scalar(select(fm.FeedBatch).where(fm.FeedBatch.farm_id == farm_id, fm.FeedBatch.mix_number == mix_number))
+
+
+def _intended_target(formula: fm.FeedFormula | None, species_code: str | None, profile: str | None, label: str) -> policy.Target:
+    """What the components are checked against: the intended use when the
+    mixer said one, else the formula's own species. Partial, because a mix
+    knows its species and profile but not the animal's life stage."""
+    return policy.Target(species_code=species_code or (formula.species_code if formula else None), management_profile=profile, label=label, partial=True)
+
+
 def start_batch(
     db: Session,
     farm_id: str,
@@ -188,11 +224,18 @@ def start_batch(
     target_quantity: float,
     unit: str | None,
     notes: str | None,
+    intended_species_code: str | None = None,
+    intended_management_profile: str | None = None,
+    mixer_asset_id: str | None = None,
+    production_date: datetime | None = None,
     user_id: str,
 ) -> fm.FeedBatch:
     """Opens a mixing batch from the active formula version, with scaled
-    targets. Re-runs the usage-policy check on every component (§33: the
-    restriction is revalidated when the physical batch is created)."""
+    targets, and gives it the farm's next mix number. Re-runs the
+    usage-policy check on every component against the intended use (§33:
+    the restriction is revalidated when the physical batch is created)."""
+    if intended_species_code and db.get(livestock_models.Species, intended_species_code) is None:
+        raise FeedError(f"Unknown species '{intended_species_code}'.")
     version: fm.FeedFormulaVersion | None = None
     if formula_version_id:
         version = db.get(fm.FeedFormulaVersion, formula_version_id)
@@ -213,16 +256,25 @@ def start_batch(
     formula = version.formula
     product = db.get(fm.FeedProduct, formula.feed_product_id)
     when = now()
+    species = intended_species_code or formula.species_code
+    target = _intended_target(formula, intended_species_code, intended_management_profile, f"batch of {formula.name}")
+    # The policy check comes before the number is taken, so a refused mix
+    # does not burn a number.
+    lines = scale(version, target_quantity, unit)
+    for line in lines:
+        component = inv.get_product(db, line["feed_product_id"], farm_id)
+        policy.check_or_raise(db, component, target, inclusion_pct=line["target_percentage"], through_formula=True, context="batch_start", user_id=user_id)
+    number, code = next_mix_number(db, farm_id)
     batch = fm.FeedBatch(
         id=new_id(), farm_id=farm_id, feed_product_id=product.id, formula_version_id=version.id,
-        batch_code=_unique_batch_code(db, farm_id, batch_code or f"MIX-{when:%Y%m%d}-{formula.code}"),
+        batch_code=_unique_batch_code(db, farm_id, batch_code or code), mix_number=number, mix_code=code,
+        intended_species_code=species, intended_management_profile=intended_management_profile,
+        production_date=production_date or when, mixer_asset_id=mixer_asset_id,
         status="in_progress", target_quantity=target_quantity, unit=unit, planned_cost=planned_cost(db, version, target_quantity, unit),
         started_at=when, mixed_by=user_id, notes=notes, created_at=when,
     )
-    for line in scale(version, target_quantity, unit):
-        component = inv.get_product(db, line["feed_product_id"], farm_id)
-        policy.check_or_raise(db, component, policy.Target(species_code=formula.species_code, label=f"batch of {formula.name}", partial=True),
-                              inclusion_pct=line["target_percentage"], through_formula=True, context="batch_start", user_id=user_id)
+    for line in lines:
+        component = db.get(fm.FeedProduct, line["feed_product_id"])
         batch.components.append(fm.FeedBatchComponent(
             id=new_id(), feed_product_id=component.id, target_quantity=line["target_quantity"], unit=line["unit"],
             unit_cost=inv.unit_cost_of(None, component, db.get(models.InventoryItem, component.inventory_item_id)),
@@ -231,7 +283,8 @@ def start_batch(
     db.flush()
     write_event(
         db, farm_id=farm_id, entity_type="feed_batch", entity_id=batch.id, event_type="feed_batch_started",
-        payload={"batch_code": batch.batch_code, "formula": formula.code, "version": version.version, "target_quantity": target_quantity, "unit": unit},
+        payload={"batch_code": batch.batch_code, "mix_number": number, "mix_code": code, "formula": formula.code, "version": version.version,
+                 "target_quantity": target_quantity, "unit": unit, "intended_species_code": species, "intended_management_profile": intended_management_profile},
         created_by=user_id,
     )
     return batch
@@ -280,7 +333,7 @@ def complete_batch(
             raise FeedError(f"Actual quantity for {product.name} cannot be negative.")
         in_batch_unit = uom.convert(qty, unit, batch.unit)
         pct = in_batch_unit / actual_quantity * 100 if actual_quantity else None
-        policy.check_or_raise(db, product, policy.Target(species_code=formula.species_code if formula else None, label=f"batch {batch.batch_code}", partial=True),
+        policy.check_or_raise(db, product, _intended_target(formula, batch.intended_species_code, batch.intended_management_profile, f"mix {batch.mix_code}"),
                               inclusion_pct=pct, through_formula=True, context="batch_complete", user_id=user_id)
         if qty == 0:
             new_components.append(fm.FeedBatchComponent(id=new_id(), feed_product_id=product.id, lot_id=None, target_quantity=target.target_quantity if target else None, actual_quantity=0, unit=unit, unit_cost=None, cost=0))
@@ -308,22 +361,27 @@ def complete_batch(
     batch.actual_cost = round(total_cost, 4) if cost_known else None
     batch.unit_cost = round(total_cost / actual_quantity, 6) if cost_known else None
     batch.produced_at = when
+    batch.production_date = when
+    batch.use_by_date = expiry_date
     batch.status = "completed"
     if notes:
         batch.notes = (batch.notes + "\n" if batch.notes else "") + notes
     if version is not None:
         version.locked = True
     output = db.get(fm.FeedProduct, batch.feed_product_id)
+    # The output lot carries the mix code, so "who ate MIX-000042" is one
+    # lookup on the lot the feeding events name.
     lot = inv.receive(
-        db, output, quantity=actual_quantity, unit=batch.unit, unit_cost=batch.unit_cost, lot_code=lot_code or batch.batch_code,
+        db, output, quantity=actual_quantity, unit=batch.unit, unit_cost=batch.unit_cost, lot_code=lot_code or batch.mix_code or batch.batch_code,
         source_type="farm_produced", expiry_date=expiry_date, feed_batch_id=batch.id, received_at=when,
-        notes=f"Produced by batch {batch.batch_code}", user_id=user_id,
+        notes=f"Produced by mix {batch.mix_code} ({batch.batch_code})", user_id=user_id,
     )
     batch.output_lot_id = lot.id
     write_event(
         db, farm_id=batch.farm_id, entity_type="feed_batch", entity_id=batch.id, event_type="feed_batch_completed",
-        payload={"batch_code": batch.batch_code, "actual_quantity": actual_quantity, "unit": batch.unit, "actual_cost": batch.actual_cost,
-                 "unit_cost": batch.unit_cost, "output_lot_id": lot.id, "formula_version_id": batch.formula_version_id},
+        payload={"batch_code": batch.batch_code, "mix_number": batch.mix_number, "mix_code": batch.mix_code, "actual_quantity": actual_quantity,
+                 "unit": batch.unit, "actual_cost": batch.actual_cost, "unit_cost": batch.unit_cost, "output_lot_id": lot.id,
+                 "formula_version_id": batch.formula_version_id, "intended_species_code": batch.intended_species_code},
         created_by=user_id,
     )
     return batch
@@ -340,6 +398,129 @@ def quarantine_batch(db: Session, batch: fm.FeedBatch, *, reason: str, user_id: 
     write_event(db, farm_id=batch.farm_id, entity_type="feed_batch", entity_id=batch.id, event_type="feed_batch_quarantined",
                 payload={"reason": reason}, created_by=user_id)
     return batch
+
+
+def _subject_label(db: Session, subject_type: str, subject_id: str) -> tuple[str | None, str | None]:
+    subj = db.get(models.Animal, subject_id) if subject_type == "animal" else db.get(models.Flock, subject_id)
+    return getattr(subj, "name", None), getattr(subj, "species", None)
+
+
+def _user_name(db: Session, user_id: str | None) -> str | None:
+    user = db.get(models.User, user_id) if user_id else None
+    return user.name if user else None
+
+
+def mix_usage(db: Session, batch: fm.FeedBatch) -> dict:
+    """The numbered mix's whole life (FEED-SCHEMA §20): what went into it,
+    what came out, every dated issue to an animal or group through the
+    output lot, waste and corrections on that lot, and the remaining
+    quantity — which is the lot's ledger balance, never a figure kept on
+    the batch. Answers "what was in MIX-N?" and "who ate MIX-N, when, how
+    much, and what is left?" from one call."""
+    lot = db.get(fm.FeedLot, batch.output_lot_id) if batch.output_lot_id else None
+    if lot is not None:
+        inv.refresh_lot_status(lot)
+    version = db.get(fm.FeedFormulaVersion, batch.formula_version_id) if batch.formula_version_id else None
+    formula = version.formula if version else None
+    product = db.get(fm.FeedProduct, batch.feed_product_id)
+
+    components = []
+    for c in batch.components:
+        src = db.get(fm.FeedLot, c.lot_id) if c.lot_id else None
+        comp_product = db.get(fm.FeedProduct, c.feed_product_id)
+        components.append({
+            "feed_product_id": c.feed_product_id, "product_name": comp_product.name if comp_product else None,
+            "lot_id": c.lot_id, "lot_code": src.lot_code if src else None, "supplier_id": src.supplier_id if src else None,
+            "supplier_label": src.supplier_label if src else None, "lot_source_type": src.source_type if src else None,
+            "target_quantity": c.target_quantity, "actual_quantity": c.actual_quantity, "unit": c.unit,
+            "unit_cost": c.unit_cost, "cost": c.cost,
+        })
+
+    issues: list[dict] = []
+    ledger: list[dict] = []
+    issued = consumed = refused = waste = other_out = returned = 0.0
+    consumed_known = False
+    use_dates: set = set()
+    head_days: dict[tuple, int] = {}
+    first_use = last_use = None
+    if lot is not None:
+        comps = db.scalars(select(fm.FeedingEventComponent).where(fm.FeedingEventComponent.lot_id == lot.id)).all()
+        for c in comps:
+            e = db.get(fm.FeedingEvent, c.event_id)
+            if e is None:
+                continue
+            name, species = _subject_label(db, e.subject_type, e.subject_id)
+            tx = db.scalar(select(models.InventoryTransaction).where(
+                models.InventoryTransaction.linked_entity_type == "feeding_event", models.InventoryTransaction.linked_entity_id == e.id,
+                models.InventoryTransaction.lot_id == lot.id,
+            ))
+            pv = db.get(fm.FeedingProgramVersion, e.program_version_id) if e.program_version_id else None
+            issues.append({
+                "feeding_event_id": e.id, "occurred_at": e.occurred_at, "event_type": e.event_type, "status": e.status,
+                "reversal_of_id": e.reversal_of_id, "subject_type": e.subject_type, "subject_id": e.subject_id, "subject_name": name,
+                "species": species, "head_count": e.head_count, "quantity_offered": c.quantity_offered, "quantity_consumed": c.quantity_consumed,
+                "unit": c.unit, "cost": c.cost, "recorded_by": e.recorded_by, "recorded_by_name": _user_name(db, e.recorded_by),
+                "program_version_id": e.program_version_id, "program_code": pv.program.code if pv else None,
+                "inventory_transaction_id": tx.id if tx else None,
+            })
+            if e.status != "recorded":
+                continue  # reversed originals and the reversals themselves net to zero
+            if e.event_type in ("offered", "delivered"):
+                issued += c.quantity_offered
+                if c.quantity_consumed is not None:
+                    consumed += c.quantity_consumed
+                    consumed_known = True
+                day = ensure_utc(e.occurred_at).date()
+                use_dates.add(day)
+                head_days[(day, e.subject_type, e.subject_id)] = max(head_days.get((day, e.subject_type, e.subject_id), 0), e.head_count or 1)
+                first_use = e.occurred_at if first_use is None or e.occurred_at < first_use else first_use
+                last_use = e.occurred_at if last_use is None or e.occurred_at > last_use else last_use
+            elif e.event_type == "consumed_estimate":
+                consumed += c.quantity_consumed if c.quantity_consumed is not None else c.quantity_offered
+                consumed_known = True
+            elif e.event_type == "refusal":
+                refused += c.quantity_offered
+        # Everything else that touched the output lot: waste, corrections,
+        # reconciliation adjustments, returns.
+        for tx in db.scalars(select(models.InventoryTransaction).where(models.InventoryTransaction.lot_id == lot.id).order_by(models.InventoryTransaction.created_at)):
+            if tx.reason in ("feeding", "feeding_reversal", "production", "purchase", "opening_balance"):
+                continue
+            ledger.append({"inventory_transaction_id": tx.id, "occurred_at": tx.created_at, "direction": tx.direction, "quantity": tx.quantity,
+                           "reason": tx.reason, "linked_entity_type": tx.linked_entity_type, "linked_entity_id": tx.linked_entity_id})
+            if tx.direction == "out" and tx.reason == "waste":
+                waste += tx.quantity
+            elif tx.direction == "out":
+                other_out += tx.quantity
+            else:
+                returned += tx.quantity
+    issues.sort(key=lambda i: ensure_utc(i["occurred_at"]))
+    trace = inv.lot_trace(db, lot) if lot is not None else None
+    produced = lot.accepted_quantity if lot is not None else (batch.actual_quantity or 0)
+    remaining = lot.quantity_on_hand if lot is not None else 0.0
+    variance = batch_variance(batch) if batch.status in ("completed", "quarantined") else []
+    worst = max((abs(v["variance_pct"]) for v in variance if v.get("variance_pct") is not None), default=None)
+    return {
+        "batch_id": batch.id, "mix_number": batch.mix_number, "mix_code": batch.mix_code, "batch_code": batch.batch_code, "status": batch.status,
+        "feed_product_id": batch.feed_product_id, "product_name": product.name if product else None,
+        "formula_id": formula.id if formula else None, "formula_code": formula.code if formula else None, "formula_name": formula.name if formula else None,
+        "formula_version": version.version if version else None, "formula_version_id": batch.formula_version_id,
+        "intended_species_code": batch.intended_species_code, "intended_management_profile": batch.intended_management_profile,
+        "production_date": batch.production_date, "started_at": batch.started_at, "produced_at": batch.produced_at, "use_by_date": batch.use_by_date,
+        "operator_id": batch.mixed_by, "operator_name": _user_name(db, batch.mixed_by), "mixer_asset_id": batch.mixer_asset_id, "notes": batch.notes,
+        "target_quantity": batch.target_quantity, "actual_quantity": batch.actual_quantity, "unit": batch.unit,
+        "planned_cost": batch.planned_cost, "actual_cost": batch.actual_cost, "cost_per_unit": batch.unit_cost,
+        "output_lot": None if lot is None else {"id": lot.id, "lot_code": lot.lot_code, "status": lot.status, "quantity_on_hand": round(lot.quantity_on_hand, 3),
+                                                "expiry_date": lot.expiry_date, "unit": lot.unit},
+        "components": components,
+        "variance": variance, "worst_variance_pct": worst,
+        "produced_quantity": round(produced, 3), "issued_quantity": round(issued, 3),
+        "consumed_estimate": round(consumed, 3) if consumed_known else None, "refused_quantity": round(refused, 3),
+        "waste_quantity": round(waste, 3), "other_issued_quantity": round(other_out, 3), "returned_quantity": round(returned, 3),
+        "remaining_quantity": round(remaining, 3), "eligible_remaining_quantity": round(remaining, 3) if lot is not None and inv.lot_usable(lot) else 0.0,
+        "first_use_at": first_use, "last_use_at": last_use, "days_used": len(use_dates), "head_days": sum(head_days.values()),
+        "exposed_subjects": trace["exposed_subjects"] if trace else [],
+        "issues": issues, "ledger_adjustments": ledger,
+    }
 
 
 def batch_variance(batch: fm.FeedBatch) -> list[dict]:

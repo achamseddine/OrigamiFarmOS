@@ -23,7 +23,7 @@ from app.domain import feed_models as fm
 from app.domain import models, mouneh_models
 from app.domain import visits_models as vm
 from app.repositories.base import ensure_utc, now
-from app.services import feed_forecast_service
+from app.services import feed_forecast_service, feed_performance_service
 
 # Recommendation categories -> the module a user must hold to see them.
 _RECOMMENDATION_MODULE = {
@@ -326,7 +326,7 @@ def collect_signals(db: Session, farm_id: str) -> list[Signal]:
     never to an error page.
     """
     signals: list[Signal] = []
-    for source in (*_SOURCES, feed_forecast_service.reorder_signals, feed_forecast_service.variance_signals):
+    for source in (*_SOURCES, feed_forecast_service.reorder_signals, feed_forecast_service.variance_signals, feed_performance_service.performance_signals):
         try:
             signals.extend(source(db, farm_id))
         except Exception:  # noqa: BLE001 - one bad source must not break the feed

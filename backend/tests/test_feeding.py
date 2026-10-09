@@ -593,3 +593,117 @@ class TestForecastAndReconciliation:
         rec = r.json()
         assert rec["received_quantity"] == 2000 and rec["issued_to_batches"] == 347
         assert rec["expected_closing_quantity"] == 1534 and rec["variance_quantity"] == 0
+
+
+# ---------------------------------------------------------- numbered mixes
+class TestNumberedMixes:
+    """FEED-SCHEMA §20 / CLAUDE.md "Feed mix identity rule": one farm-wide
+    immutable sequence for every locally mixed preparation, intended use as
+    policy-checked metadata, and the whole usage of a mix readable from its
+    output lot."""
+
+    def _start(self, client: TestClient, formula_id: str, **extra) -> dict:
+        r = client.post(f"{API}/feed-batches", json={"formula_id": formula_id, "target_quantity": 500, **extra}, headers=_h(client))
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    def _goat_formula(self, client: TestClient) -> dict:
+        r = client.post(f"{API}/feed-products", json={"name": "Goat Mix 16", "code": "GOAT-MIX-16", "source_type": "farm_produced",
+                                                      "is_ingredient": False, "is_feedable": True, "category": "complete_feed"}, headers=_h(client))
+        assert r.status_code == 201, r.text
+        r = client.post(f"{API}/feed-formulas", json={
+            "name": "Goat Mix 16", "feed_product_id": r.json()["id"], "species_code": "goat", "batch_size": 500, "unit": "kg",
+            "components": [{"feed_product_id": BARLEY, "target_quantity": 300}, {"feed_product_id": ALFALFA, "target_quantity": 185},
+                           {"feed_product_id": "fp-minerals", "target_quantity": 15}],
+        }, headers=_h(client))
+        assert r.status_code == 201, r.text
+        return r.json()
+
+    def test_every_mix_takes_the_next_farm_wide_number_whatever_its_species(self, client: TestClient):
+        seeded = client.get(f"{API}/feed-batches", headers=_h(client)).json()
+        assert sorted(b["mix_number"] for b in seeded) == [1, 2]
+        assert {b["mix_code"] for b in seeded} == {"MIX-000001", "MIX-000002"}
+        assert all(b["intended_species_code"] == "cow" and b["production_date"] for b in seeded)
+        # A goat mix does not start its own sequence; it is simply the next number.
+        goat = self._start(client, self._goat_formula(client)["id"], intended_species_code="goat", mixer_asset_id="Small mixer")
+        assert (goat["mix_number"], goat["mix_code"], goat["intended_species_code"], goat["mixer_asset_id"]) == (3, "MIX-000003", "goat", "Small mixer")
+        # Repeating the dairy formula tomorrow is a new mix, not a reopened one.
+        again = self._start(client, _formula(client)["id"])
+        assert (again["mix_number"], again["mix_code"]) == (4, "MIX-000004")
+        assert again["intended_species_code"] == "cow", "the formula's species is the default intended use"
+        # Lookup by the number the farm uses.
+        r = client.get(f"{API}/feed-batches", params={"mix_number": 4}, headers=_h(client))
+        assert [b["id"] for b in r.json()] == [again["id"]]
+        r = client.get(f"{API}/feed-batches", params={"search": "000003"}, headers=_h(client))
+        assert [b["id"] for b in r.json()] == [goat["id"]]
+        assert client.get(f"{API}/feed-mixes/999", headers=_h(client)).status_code == 404
+
+    def test_intended_use_is_checked_against_the_usage_policy(self, client: TestClient):
+        # The dairy formula carries the cattle-only premix: saying this run is
+        # for horses is refused before a number is taken.
+        f = _formula(client)
+        r = client.post(f"{API}/feed-batches", json={"formula_id": f["id"], "target_quantity": 500, "intended_species_code": "horse"}, headers=_h(client))
+        assert r.status_code == 422, r.text
+        assert "premix" in r.json()["detail"].lower()
+        r = client.post(f"{API}/feed-batches", json={"formula_id": f["id"], "target_quantity": 500, "intended_species_code": "unicorn"}, headers=_h(client))
+        assert r.status_code == 422
+        nxt = self._start(client, f["id"])
+        assert nxt["mix_number"] == 3, "a refused start must not consume a mix number"
+
+    def test_mix_usage_is_read_from_the_output_lot(self, client: TestClient):
+        batches_ = client.get(f"{API}/feed-batches", headers=_h(client)).json()
+        open_batch = next(b for b in batches_ if b["status"] == "in_progress")
+        r = client.post(f"{API}/feed-batches/{open_batch['id']}/complete", json={
+            "actual_quantity": 800,
+            "actuals": [{"feed_product_id": c["feed_product_id"], "actual_quantity": c["target_quantity"]} for c in open_batch["components"]],
+        }, headers=_h(client))
+        assert r.status_code == 200, r.text
+        done = r.json()
+        assert done["output_lot_code"] == done["mix_code"] == "MIX-000002"
+        lot_id = done["output_lot_id"]
+
+        r = client.post(f"{API}/feeding-events", json={"subject_type": "group", "subject_id": HERD, "event_type": "delivered",
+                                                      "components": [{"feed_product_id": DAIRY_MIX, "quantity_offered": 30, "lot_id": lot_id}]}, headers=_h(client))
+        assert r.status_code == 201, r.text
+        fed = r.json()
+        r = client.post(f"{API}/feeding-events", json={"subject_type": "group", "subject_id": HERD, "event_type": "refusal",
+                                                      "components": [{"feed_product_id": DAIRY_MIX, "quantity_offered": 2, "lot_id": lot_id}]}, headers=_h(client))
+        assert r.status_code == 201, r.text
+        r = client.post(f"{API}/feed-inventory/adjustments", json={"feed_product_id": DAIRY_MIX, "lot_id": lot_id, "delta": -5, "reason": "waste",
+                                                                  "explanation": "Spilled at the bunk"}, headers=_h(client))
+        assert r.status_code == 201, r.text
+
+        usage = client.get(f"{API}/feed-mixes/2", headers=_h(client)).json()
+        assert usage["batch_id"] == open_batch["id"] and usage["mix_code"] == "MIX-000002"
+        assert usage["produced_quantity"] == 800 and usage["issued_quantity"] == 30 and usage["refused_quantity"] == 2 and usage["waste_quantity"] == 5
+        assert usage["remaining_quantity"] == 765, "remaining is the lot's ledger balance, not a stored figure"
+        assert usage["first_use_at"] and usage["last_use_at"] and usage["days_used"] == 1 and usage["head_days"] >= 1
+        assert [s["subject_id"] for s in usage["exposed_subjects"]] == [HERD]
+        issue = next(i for i in usage["issues"] if i["event_type"] == "delivered")
+        assert issue["subject_name"] == "Dairy Herd" and issue["inventory_transaction_id"] and issue["recorded_by_name"]
+        assert usage["ledger_adjustments"][0]["reason"] == "waste"
+        assert usage["cost_per_unit"] is not None and len(usage["components"]) == 5 and all(c["lot_code"] for c in usage["components"])
+        assert usage["formula_version"] == 2 and usage["intended_species_code"] == "cow"
+        # The same view by batch id, and the trace from the lot still answers "who ate it".
+        assert client.get(f"{API}/feed-batches/{open_batch['id']}/usage", headers=_h(client)).json()["issued_quantity"] == 30
+        trace = client.get(f"{API}/feed-lots/{lot_id}/trace", headers=_h(client)).json()
+        assert trace["exposed_subjects"][0]["subject_id"] == HERD
+
+        # A reversal puts the quantity back and keeps the mix number and history.
+        r = client.post(f"{API}/feeding-events/{fed['id']}/reverse", json={"reason": "Wrong group"}, headers=_h(client))
+        assert r.status_code == 201, r.text
+        usage = client.get(f"{API}/feed-mixes/2", headers=_h(client)).json()
+        assert usage["issued_quantity"] == 0 and usage["remaining_quantity"] == 795 and usage["mix_number"] == 2
+        assert {i["status"] for i in usage["issues"]} >= {"reversed", "reversal"}
+
+    def test_a_replayed_start_does_not_take_a_second_number(self, client: TestClient):
+        f = _formula(client)
+        headers = {**_h(client), "Idempotency-Key": "mix-start-replay-1"}
+        body = {"formula_id": f["id"], "target_quantity": 400, "notes": "queued offline"}
+        first = client.post(f"{API}/feed-batches", json=body, headers=headers)
+        assert first.status_code == 201, first.text
+        second = client.post(f"{API}/feed-batches", json=body, headers=headers)
+        assert second.status_code == 201 and second.json()["mix_number"] == first.json()["mix_number"]
+        assert second.headers.get("Idempotency-Replayed") == "true"
+        r = client.get(f"{API}/feed-batches", params={"mix_number": first.json()["mix_number"]}, headers=_h(client))
+        assert len(r.json()) == 1

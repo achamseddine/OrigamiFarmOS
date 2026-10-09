@@ -261,6 +261,12 @@ class BatchStart(BaseModel):
     target_quantity: float = Field(gt=0)
     unit: str | None = None
     notes: str | None = None
+    # §20: intended use is metadata validated by the usage policy, never a
+    # separate table or numbering sequence.
+    intended_species_code: str | None = None
+    intended_management_profile: str | None = None
+    mixer_asset_id: str | None = None
+    production_date: datetime | None = None
 
 
 class BatchActualIn(BaseModel):
@@ -306,6 +312,15 @@ class BatchOut(BaseModel):
     formula_code: str | None = None
     formula_version: int | None = None
     batch_code: str
+    mix_number: int
+    mix_code: str
+    intended_species_code: str | None = None
+    intended_management_profile: str | None = None
+    production_date: datetime
+    use_by_date: datetime | None = None
+    operator_id: str | None = None
+    operator_name: str | None = None
+    mixer_asset_id: str | None = None
     status: str
     target_quantity: float | None = None
     actual_quantity: float | None = None
@@ -314,6 +329,7 @@ class BatchOut(BaseModel):
     actual_cost: float | None = None
     unit_cost: float | None = None
     output_lot_id: str | None = None
+    output_lot_code: str | None = None
     started_at: datetime
     produced_at: datetime | None = None
     mixed_by: str | None = None
@@ -681,3 +697,35 @@ class InventoryMovementOut(BaseModel):
     linked_entity_type: str | None = None
     linked_entity_id: str | None = None
     occurred_at: datetime
+
+
+# ------------------------------------------- feed performance intelligence
+class FeedPerformanceMonitorIn(BaseModel):
+    subject_type: str  # animal | group
+    subject_id: str
+    production_metric_code: str = "milk_l_per_day"  # milk_l_per_day | eggs_per_day
+    baseline_method_code: str = "rolling_subject"  # rolling_subject | previous_period
+    baseline_window_days: int = Field(14, ge=2, le=365)
+    evaluation_window_days: int = Field(3, ge=1, le=60)
+    evaluation_frequency_code: str = "daily"
+    minimum_exposure_days: float = Field(2.0, ge=0)
+    minimum_observations: int = Field(3, ge=1)
+    alert_threshold_percent: float = Field(5.0, gt=0)
+    active: bool = True
+    configuration: dict = {}
+
+
+class FeedPerformanceMonitorPatch(BaseModel):
+    baseline_method_code: str | None = None
+    baseline_window_days: int | None = Field(None, ge=2, le=365)
+    evaluation_window_days: int | None = Field(None, ge=1, le=60)
+    evaluation_frequency_code: str | None = None
+    minimum_exposure_days: float | None = Field(None, ge=0)
+    minimum_observations: int | None = Field(None, ge=1)
+    alert_threshold_percent: float | None = Field(None, gt=0)
+    active: bool | None = None
+    configuration: dict | None = None
+
+
+class FeedPerformanceAlertClose(BaseModel):
+    note: str

@@ -274,12 +274,28 @@ void main() {
       expect(effect.patch, {'status': 'quarantined'});
     });
 
-    test('a batch moves planned → mixing → completed', () {
+    test('a batch moves planned → mixing → completed, and a start queued offline has no mix number', () {
       final started = effectsFor('POST', '/feed-batches', {'formula_id': 'f1', 'target_quantity': 1000}, localId: 'b1').single as AppendRecord;
       expect(started.record['status'], 'in_progress');
+      // The farm-wide mix sequence is the server's; the tablet never guesses a number.
+      expect(started.record['mix_number'], 0);
+      expect(started.record['mix_code'], isNull);
       final done = effectsFor('POST', '/feed-batches/b1/complete', {'actual_quantity': 990}, localId: 'x').single as MergeRecord;
       expect(done.patch['status'], 'completed');
       expect(done.patch['actual_quantity'], 990);
+    });
+
+    test('acknowledging a performance alert marks it; closing it with a reason resolves it', () {
+      final seen = effectsFor('POST', '/feed-performance/alerts/al-1/acknowledge', null, localId: 'x').single as MergeRecord;
+      expect(seen.collectionPath, '/feed-performance/alerts');
+      expect(seen.id, 'al-1');
+      expect(seen.patch['status'], 'acknowledged');
+      expect(seen.patch['acknowledged_at'], isNotNull);
+      final closed = effectsFor('POST', '/feed-performance/alerts/al-1/resolve', {'note': 'Authorised substitution'}, localId: 'x').single as MergeRecord;
+      expect(closed.patch['status'], 'resolved');
+      expect(closed.patch['resolution_note'], 'Authorised substitution');
+      // Running the cycle changes nothing the tablet can predict.
+      expect(effectsFor('POST', '/feed-performance/evaluate', null, localId: 'x'), isEmpty);
     });
 
     test('an explicit assignment lands on the subject; ending it keeps the row', () {

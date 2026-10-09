@@ -32,6 +32,7 @@ from app.schemas.feeding import (
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
 from app.services import feed_inventory_service as inv
+from app.services import feed_performance_service as perf
 from app.services import feed_policy_service as policy
 from app.services import feeding_program_service as programs
 from app.services.feed_inventory_service import FeedError
@@ -104,13 +105,18 @@ def _batch_out(db: Session, b: fm.FeedBatch) -> dict:
         comps.append({"id": c.id, "feed_product_id": c.feed_product_id, "product_name": _name(db, c.feed_product_id), "lot_id": c.lot_id,
                       "lot_code": lot.lot_code if lot else None, "target_quantity": c.target_quantity, "actual_quantity": c.actual_quantity,
                       "unit": c.unit, "unit_cost": c.unit_cost, "cost": c.cost})
+    out_lot = db.get(fm.FeedLot, b.output_lot_id) if b.output_lot_id else None
+    operator = db.get(models.User, b.mixed_by) if b.mixed_by else None
     return {
         "id": b.id, "farm_id": b.farm_id, "feed_product_id": b.feed_product_id, "product_name": _name(db, b.feed_product_id),
         "formula_version_id": b.formula_version_id, "formula_code": version.formula.code if version else None,
-        "formula_version": version.version if version else None, "batch_code": b.batch_code, "status": b.status,
+        "formula_version": version.version if version else None, "batch_code": b.batch_code,
+        "mix_number": b.mix_number, "mix_code": b.mix_code, "intended_species_code": b.intended_species_code,
+        "intended_management_profile": b.intended_management_profile, "production_date": b.production_date, "use_by_date": b.use_by_date,
+        "operator_id": b.mixed_by, "operator_name": operator.name if operator else None, "mixer_asset_id": b.mixer_asset_id, "status": b.status,
         "target_quantity": b.target_quantity, "actual_quantity": b.actual_quantity, "unit": b.unit, "planned_cost": b.planned_cost,
-        "actual_cost": b.actual_cost, "unit_cost": b.unit_cost, "output_lot_id": b.output_lot_id, "started_at": b.started_at,
-        "produced_at": b.produced_at, "mixed_by": b.mixed_by, "notes": b.notes, "components": comps,
+        "actual_cost": b.actual_cost, "unit_cost": b.unit_cost, "output_lot_id": b.output_lot_id, "output_lot_code": out_lot.lot_code if out_lot else None,
+        "started_at": b.started_at, "produced_at": b.produced_at, "mixed_by": b.mixed_by, "notes": b.notes, "components": comps,
         "variance": batches.batch_variance(b) if b.status in ("completed", "quarantined") else [],
     }
 
@@ -400,19 +406,45 @@ def formula_version_nutrients(formula_id: str, version: int, basis: str = "as_fe
 
 # ---------------------------------------------------------------- batches
 @router.get("/feed-batches", response_model=list[BatchOut])
-def list_batches(batch_status: str | None = Query(None, alias="status"), db: Session = Depends(get_db), user: models.User = Depends(_view)):
+def list_batches(batch_status: str | None = Query(None, alias="status"), mix_number: int | None = None, search: str | None = None,
+                 intended_species_code: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_view)):
+    """Numbered mixes, newest first. `mix_number` finds one; `search`
+    matches the mix code or batch code; `intended_species_code` filters by
+    intended use — a classification, never a separate list."""
     stmt = select(fm.FeedBatch).where(fm.FeedBatch.farm_id == user.farm_id)
     if batch_status:
         stmt = stmt.where(fm.FeedBatch.status == batch_status)
-    return [_batch_out(db, b) for b in db.scalars(stmt.order_by(fm.FeedBatch.started_at.desc()))]
+    if mix_number is not None:
+        stmt = stmt.where(fm.FeedBatch.mix_number == mix_number)
+    if search:
+        like = f"%{search.strip()}%"
+        stmt = stmt.where((fm.FeedBatch.mix_code.ilike(like)) | (fm.FeedBatch.batch_code.ilike(like)))
+    if intended_species_code:
+        stmt = stmt.where(fm.FeedBatch.intended_species_code == intended_species_code)
+    return [_batch_out(db, b) for b in db.scalars(stmt.order_by(fm.FeedBatch.mix_number.desc()))]
 
 
 @router.post("/feed-batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
 def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     batch = batches.start_batch(db, user.farm_id, formula_version_id=payload.formula_version_id, formula_id=payload.formula_id, batch_code=payload.batch_code,
-                                target_quantity=payload.target_quantity, unit=payload.unit, notes=payload.notes, user_id=user.id)
+                                target_quantity=payload.target_quantity, unit=payload.unit, notes=payload.notes,
+                                intended_species_code=payload.intended_species_code, intended_management_profile=payload.intended_management_profile,
+                                mixer_asset_id=payload.mixer_asset_id, production_date=ensure_utc(payload.production_date) if payload.production_date else None,
+                                user_id=user.id)
     _commit(db, batch)
     return _batch_out(db, batch)
+
+
+@router.get("/feed-mixes/{mix_number}")
+def mix_by_number(mix_number: int, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    """The numbered mix's whole life, looked up by the number the farm
+    uses: ingredients and their lots, output lot, every dated issue to an
+    animal or group, waste and corrections, ledger-derived remaining
+    stock, first/last use, exposure."""
+    batch = batches.batch_by_mix_number(db, user.farm_id, mix_number)
+    if batch is None:
+        raise FeedError(f"No mix number {mix_number} on this farm.", 404)
+    return {**batches.mix_usage(db, batch), "performance": perf.batch_performance_summary(db, batch)}
 
 
 def _batch_or_404(db: Session, batch_id: str, farm_id: str) -> fm.FeedBatch:
@@ -427,11 +459,21 @@ def get_batch(batch_id: str, db: Session = Depends(get_db), user: models.User = 
     return _batch_out(db, _batch_or_404(db, batch_id, user.farm_id))
 
 
+@router.get("/feed-batches/{batch_id}/usage")
+def batch_usage(batch_id: str, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    """Same as GET /feed-mixes/{mix_number}, by batch id."""
+    batch = _batch_or_404(db, batch_id, user.farm_id)
+    return {**batches.mix_usage(db, batch), "performance": perf.batch_performance_summary(db, batch)}
+
+
 @router.post("/feed-batches/{batch_id}/complete", response_model=BatchOut)
 def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     batch = _batch_or_404(db, batch_id, user.farm_id)
     batches.complete_batch(db, batch, actuals=[a.model_dump() for a in payload.actuals], actual_quantity=payload.actual_quantity, produced_at=payload.produced_at,
                            lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, allow_negative=payload.allow_negative, user_id=user.id)
+    # FEED-PERFORMANCE-INTELLIGENCE §12: re-evaluate after FeedBatchCompleted —
+    # the formula-compliance check is the first thing a manager should see.
+    perf.on_batch_completed(db, batch, user_id=user.id)
     _commit(db, batch)
     return _batch_out(db, batch)
 

@@ -338,6 +338,15 @@ class FeedBatch {
     this.formulaCode,
     this.formulaVersion,
     required this.batchCode,
+    this.mixNumber = 0,
+    this.mixCode,
+    this.intendedSpeciesCode,
+    this.intendedManagementProfile,
+    this.productionDate,
+    this.useByDate,
+    this.operatorName,
+    this.mixerAssetId,
+    this.outputLotCode,
     required this.status,
     this.targetQuantity,
     this.actualQuantity,
@@ -361,6 +370,19 @@ class FeedBatch {
   final int? formulaVersion;
   final String batchCode;
 
+  /// The farm-wide mix number (FEED-SCHEMA §20): one sequence for every
+  /// species, assigned by the server when the batch is opened and never
+  /// changed. 0 while a start recorded offline is still queued.
+  final int mixNumber;
+  final String? mixCode;
+  final String? intendedSpeciesCode;
+  final String? intendedManagementProfile;
+  final DateTime? productionDate;
+  final DateTime? useByDate;
+  final String? operatorName;
+  final String? mixerAssetId;
+  final String? outputLotCode;
+
   /// planned | in_progress | completed | quarantined | cancelled
   final String status;
   final double? targetQuantity;
@@ -377,6 +399,11 @@ class FeedBatch {
   final List<Map<String, dynamic>> variance;
 
   bool get isOpen => status == 'planned' || status == 'in_progress';
+  bool get numberPending => mixNumber <= 0;
+
+  /// What the farm calls this mix: its code, or the batch code until the
+  /// server has numbered it.
+  String get label => mixCode ?? batchCode;
 
   factory FeedBatch.fromJson(Map<String, dynamic> json) => FeedBatch(
         id: json['id'] as String,
@@ -385,7 +412,16 @@ class FeedBatch {
         formulaVersionId: json['formula_version_id'] as String?,
         formulaCode: json['formula_code'] as String?,
         formulaVersion: (json['formula_version'] as num?)?.toInt(),
-        batchCode: json['batch_code'] as String,
+        batchCode: json['batch_code'] as String? ?? json['mix_code'] as String? ?? '',
+        mixNumber: _i(json['mix_number']),
+        mixCode: json['mix_code'] as String?,
+        intendedSpeciesCode: json['intended_species_code'] as String?,
+        intendedManagementProfile: json['intended_management_profile'] as String?,
+        productionDate: _dt(json['production_date']),
+        useByDate: _dt(json['use_by_date']),
+        operatorName: json['operator_name'] as String?,
+        mixerAssetId: json['mixer_asset_id'] as String?,
+        outputLotCode: json['output_lot_code'] as String?,
         status: json['status'] as String? ?? 'planned',
         targetQuantity: _dn(json['target_quantity']),
         actualQuantity: _dn(json['actual_quantity']),
@@ -399,6 +435,146 @@ class FeedBatch {
         notes: json['notes'] as String?,
         components: [for (final c in _maps(json['components'])) BatchComponent.fromJson(c)],
         variance: _maps(json['variance']),
+      );
+}
+
+/// `GET /feed-mixes/{n}` / `GET /feed-batches/{id}/usage` — the numbered
+/// mix from manufacture to depletion (FEED-SCHEMA §20): what went in, what
+/// came out, every dated issue to an animal or group, waste and
+/// corrections on the output lot, and the ledger-derived remainder.
+class MixUsage {
+  const MixUsage({
+    required this.batchId,
+    required this.mixNumber,
+    required this.mixCode,
+    required this.status,
+    this.productName,
+    this.formulaCode,
+    this.formulaName,
+    this.formulaVersion,
+    this.intendedSpeciesCode,
+    this.intendedManagementProfile,
+    this.productionDate,
+    this.useByDate,
+    this.operatorName,
+    this.mixerAssetId,
+    this.notes,
+    required this.unit,
+    required this.producedQuantity,
+    required this.issuedQuantity,
+    this.consumedEstimate,
+    required this.refusedQuantity,
+    required this.wasteQuantity,
+    required this.otherIssuedQuantity,
+    required this.returnedQuantity,
+    required this.remainingQuantity,
+    required this.eligibleRemainingQuantity,
+    this.firstUseAt,
+    this.lastUseAt,
+    required this.daysUsed,
+    required this.headDays,
+    this.performance,
+    this.costPerUnit,
+    this.actualCost,
+    this.plannedCost,
+    this.worstVariancePct,
+    this.outputLot,
+    required this.components,
+    required this.variance,
+    required this.issues,
+    required this.ledgerAdjustments,
+    required this.exposedSubjects,
+  });
+
+  final String batchId;
+  final int mixNumber;
+  final String mixCode;
+  final String status;
+  final String? productName;
+  final String? formulaCode;
+  final String? formulaName;
+  final int? formulaVersion;
+  final String? intendedSpeciesCode;
+  final String? intendedManagementProfile;
+  final DateTime? productionDate;
+  final DateTime? useByDate;
+  final String? operatorName;
+  final String? mixerAssetId;
+  final String? notes;
+  final String unit;
+  final double producedQuantity;
+  final double issuedQuantity;
+
+  /// Null when no consumption was ever measured — never zero.
+  final double? consumedEstimate;
+  final double refusedQuantity;
+  final double wasteQuantity;
+  final double otherIssuedQuantity;
+  final double returnedQuantity;
+
+  /// The output lot's ledger balance; the mix keeps no balance of its own.
+  final double remainingQuantity;
+  final double eligibleRemainingQuantity;
+  final DateTime? firstUseAt;
+  final DateTime? lastUseAt;
+  final int daysUsed;
+  final int headDays;
+
+  /// The mix's performance summary (`overall_score`, `confidence_score`,
+  /// the dimension scores and `open_alerts`), when the cycle has scored it.
+  final Map<String, dynamic>? performance;
+  final double? costPerUnit;
+  final double? actualCost;
+  final double? plannedCost;
+  final double? worstVariancePct;
+  final Map<String, dynamic>? outputLot;
+  final List<Map<String, dynamic>> components;
+  final List<Map<String, dynamic>> variance;
+  final List<Map<String, dynamic>> issues;
+  final List<Map<String, dynamic>> ledgerAdjustments;
+  final List<Map<String, dynamic>> exposedSubjects;
+
+  factory MixUsage.fromJson(Map<String, dynamic> json) => MixUsage(
+        batchId: json['batch_id'] as String,
+        mixNumber: _i(json['mix_number']),
+        mixCode: json['mix_code'] as String? ?? '',
+        status: json['status'] as String? ?? 'planned',
+        productName: json['product_name'] as String?,
+        formulaCode: json['formula_code'] as String?,
+        formulaName: json['formula_name'] as String?,
+        formulaVersion: (json['formula_version'] as num?)?.toInt(),
+        intendedSpeciesCode: json['intended_species_code'] as String?,
+        intendedManagementProfile: json['intended_management_profile'] as String?,
+        productionDate: _dt(json['production_date']),
+        useByDate: _dt(json['use_by_date']),
+        operatorName: json['operator_name'] as String?,
+        mixerAssetId: json['mixer_asset_id'] as String?,
+        notes: json['notes'] as String?,
+        unit: json['unit'] as String? ?? 'kg',
+        producedQuantity: _d(json['produced_quantity']),
+        issuedQuantity: _d(json['issued_quantity']),
+        consumedEstimate: _dn(json['consumed_estimate']),
+        refusedQuantity: _d(json['refused_quantity']),
+        wasteQuantity: _d(json['waste_quantity']),
+        otherIssuedQuantity: _d(json['other_issued_quantity']),
+        returnedQuantity: _d(json['returned_quantity']),
+        remainingQuantity: _d(json['remaining_quantity']),
+        eligibleRemainingQuantity: _d(json['eligible_remaining_quantity']),
+        firstUseAt: _dt(json['first_use_at']),
+        lastUseAt: _dt(json['last_use_at']),
+        daysUsed: _i(json['days_used']),
+        headDays: _i(json['head_days']),
+        performance: json['performance'] as Map<String, dynamic>?,
+        costPerUnit: _dn(json['cost_per_unit']),
+        actualCost: _dn(json['actual_cost']),
+        plannedCost: _dn(json['planned_cost']),
+        worstVariancePct: _dn(json['worst_variance_pct']),
+        outputLot: json['output_lot'] as Map<String, dynamic>?,
+        components: _maps(json['components']),
+        variance: _maps(json['variance']),
+        issues: _maps(json['issues']),
+        ledgerAdjustments: _maps(json['ledger_adjustments']),
+        exposedSubjects: _maps(json['exposed_subjects']),
       );
 }
 

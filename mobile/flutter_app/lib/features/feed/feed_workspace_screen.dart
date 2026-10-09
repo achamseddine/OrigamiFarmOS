@@ -19,6 +19,7 @@ import 'tabs/feeds_and_lots_tab.dart';
 import 'tabs/formulas_tab.dart';
 import 'tabs/mixing_tab.dart';
 import 'tabs/nutrition_tab.dart';
+import 'tabs/performance_tab.dart';
 import 'tabs/programs_tab.dart';
 import 'tabs/traceability_tab.dart';
 
@@ -38,7 +39,7 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
 
   static const _tabs = [
     'feedTabInventory', 'feedTabFeeds', 'feedTabFormulas', 'feedTabMixing', 'feedTabPrograms',
-    'feedTabDaily', 'feedTabNutrition', 'feedTabCosts', 'feedTabTrace',
+    'feedTabDaily', 'feedTabNutrition', 'feedTabCosts', 'feedTabTrace', 'feedTabPerformance',
   ];
 
   @override
@@ -90,6 +91,7 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
               NutritionTab(),
               CostsTab(),
               TraceabilityTab(),
+              PerformanceTab(),
             ],
           ),
         ),

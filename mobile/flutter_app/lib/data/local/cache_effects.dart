@@ -221,7 +221,15 @@ final List<_Rule> _rules = [
   _Rule('PATCH', '/feed-lots/$_id/status', (m) => [MergeRecord('/feed-lots', m.ids[0], {'status': m.body['status']})]),
   ..._crud('/feed-products'),
   _Rule('POST', '/feed-formulas', (m) => [AppendRecord('/feed-formulas', _newRecord(m, extra: {'status': 'active'}))]),
-  _Rule('POST', '/feed-batches', (m) => [AppendRecord('/feed-batches', _newRecord(m, extra: {'status': 'in_progress', 'started_at': _now()}))]),
+  // A mix started offline has no number yet: the farm-wide sequence is the
+  // server's, handed out when the queued start syncs (the replay carries
+  // the same idempotency key, so one start is one number).
+  _Rule('POST', '/feed-batches', (m) => [
+        AppendRecord('/feed-batches', _newRecord(m, extra: {
+          'status': 'in_progress', 'started_at': _now(), 'production_date': m.body['production_date'] ?? _now(),
+          'mix_number': 0, 'mix_code': null, 'batch_code': m.body['batch_code'] ?? 'MIX-…',
+        })),
+      ]),
   _Rule('POST', '/feed-batches/$_id/complete', (m) => [
         MergeRecord('/feed-batches', m.ids[0], {
           'status': 'completed',
@@ -246,6 +254,13 @@ final List<_Rule> _rules = [
   _Rule('POST', '/feed-allocations/$_id/release', (m) => [MergeRecord('/feed-allocations', m.ids[0], const {'status': 'released'})]),
   _Rule('POST', '/feed-reconciliations', (m) => [AppendRecord('/feed-reconciliations', _newRecord(m, extra: {'status': 'open'}))]),
   _Rule('POST', '/feed-reconciliations/$_id/close', (m) => [MergeRecord('/feed-reconciliations', m.ids[0], {'status': 'closed', if (m.body['explanation'] != null) 'explanation': m.body['explanation']})]),
+  // Feed performance alerts: acknowledging never resolves — the alert stays
+  // in the list, marked; an explained manual close leaves the open list,
+  // as the server's default listing would show it.
+  _Rule('POST', '/feed-performance/alerts/$_id/acknowledge', (m) => [MergeRecord('/feed-performance/alerts', m.ids[0], {'status': 'acknowledged', 'acknowledged_at': _now()})]),
+  _Rule('POST', '/feed-performance/alerts/$_id/resolve', (m) => [
+        MergeRecord('/feed-performance/alerts', m.ids[0], {'status': 'resolved', 'resolved_at': _now(), if (m.body['note'] != null) 'resolution_note': m.body['note']}),
+      ]),
 
   // Recommendations: the decision is the patch.
   _Rule('PATCH', '/recommendations/$_id/decision', (m) => [MergeRecord('/recommendations', m.ids[0], m.body)]),

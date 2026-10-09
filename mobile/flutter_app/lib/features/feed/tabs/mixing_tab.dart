@@ -10,13 +10,16 @@ import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
+import '../../../providers/livestock_provider.dart';
 import '../feed_workspace_screen.dart';
+import 'mix_detail_sheet.dart';
 
-/// The mixing screen (§17): a batch is opened from the active formula at
-/// a chosen size — scaled targets, availability, planned cost — then
-/// completed with the weights actually used and the lots they came from.
-/// The actuals, not the targets, move stock and cost the batch; the
-/// variance stays visible.
+/// The mixing screen (§17, FEED-SCHEMA §20): every run is a numbered mix
+/// — one farm-wide sequence whatever it is intended for — opened from the
+/// active formula at a chosen size (scaled targets, availability, planned
+/// cost), then completed with the weights actually used and the lots they
+/// came from. The actuals, not the targets, move stock and cost the mix;
+/// the variance stays visible, and the mix timeline answers who ate it.
 class MixingTab extends StatelessWidget {
   const MixingTab({super.key});
 
@@ -64,17 +67,21 @@ class _BatchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final b = batch;
+    final lang = Localizations.localeOf(context).languageCode;
+    final livestock = context.watch<LivestockProvider>();
     return Container(
       decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-        title: Text('${b.batchCode} — ${b.productName ?? ''}', style: FarmTypography.textTheme.titleSmall),
+        title: Text('${b.numberPending ? context.t('pendingMixNumber') : b.label} — ${b.productName ?? ''}', style: FarmTypography.textTheme.titleSmall),
         subtitle: Text(
           [
             if (b.formulaCode != null) '${b.formulaCode} v${b.formulaVersion}',
+            if (b.intendedSpeciesCode != null) '${context.t('intendedFor')} ${livestock.speciesName(b.intendedSpeciesCode!, lang)}${b.intendedManagementProfile != null ? ' · ${b.intendedManagementProfile}' : ''}',
             '${feedNumber(b.actualQuantity ?? b.targetQuantity ?? 0)} ${b.unit}',
-            feedDate(b.producedAt ?? b.startedAt),
+            feedDate(b.productionDate ?? b.producedAt ?? b.startedAt),
+            if (b.operatorName != null) b.operatorName!,
             if (b.unitCost != null) '${feedMoney(b.unitCost!)}/${b.unit}',
           ].join(' · '),
           style: FarmTypography.textTheme.bodySmall,
@@ -101,9 +108,11 @@ class _BatchCard extends StatelessWidget {
           if (b.plannedCost != null) FeedKeyValue(context.t('plannedCost'), feedMoney(b.plannedCost!)),
           if (b.actualCost != null) FeedKeyValue(context.t('actualCost'), feedMoney(b.actualCost!), bold: true),
           const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
+          Wrap(spacing: 8, runSpacing: 8, children: [
             if (b.isOpen && canComplete)
               FilledButton.icon(onPressed: () => _showCompleteDialog(context, b), icon: const Icon(Icons.check, size: 16), label: Text(context.t('completeBatch'))),
+            if (!b.numberPending)
+              OutlinedButton.icon(onPressed: () => showMixDetailSheet(context, b), icon: const Icon(Icons.timeline, size: 16), label: Text(context.t('mixTimeline'))),
             if (b.status == 'completed' && canApprove)
               OutlinedButton.icon(onPressed: () => _quarantine(context, b), icon: const Icon(Icons.block, size: 16), label: Text(context.t('quarantine'))),
           ]),
@@ -118,7 +127,7 @@ class _BatchCard extends StatelessWidget {
       builder: (ctx) {
         final c = TextEditingController();
         return AlertDialog(
-          title: Text('${ctx.t('quarantine')} — ${b.batchCode}'),
+          title: Text('${ctx.t('quarantine')} — ${b.label}'),
           content: TextField(controller: c, autofocus: true, decoration: InputDecoration(labelText: ctx.t('reasonPrompt'))),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.t('cancel'))),
@@ -145,8 +154,11 @@ class _StartBatchDialog extends StatefulWidget {
 
 class _StartBatchDialogState extends State<_StartBatchDialog> {
   String? _formulaId;
+  String? _speciesCode;
+  String? _profile;
   final _size = TextEditingController();
   final _code = TextEditingController();
+  final _mixer = TextEditingController();
   Map<String, dynamic>? _scaled;
   bool _saving = false;
   String? _error;
@@ -155,6 +167,7 @@ class _StartBatchDialogState extends State<_StartBatchDialog> {
   void dispose() {
     _size.dispose();
     _code.dispose();
+    _mixer.dispose();
     super.dispose();
   }
 
@@ -179,6 +192,9 @@ class _StartBatchDialogState extends State<_StartBatchDialog> {
     });
     final result = await context.read<FeedingProvider>().startBatch({
       'formula_id': _formulaId, 'target_quantity': size, if (_code.text.trim().isNotEmpty) 'batch_code': _code.text.trim(),
+      if (_speciesCode != null) 'intended_species_code': _speciesCode,
+      if (_profile != null) 'intended_management_profile': _profile,
+      if (_mixer.text.trim().isNotEmpty) 'mixer_asset_id': _mixer.text.trim(),
     });
     if (!mounted) return;
     if (result.success) {
@@ -195,8 +211,11 @@ class _StartBatchDialogState extends State<_StartBatchDialog> {
   @override
   Widget build(BuildContext context) {
     final feeding = context.watch<FeedingProvider>();
+    final livestock = context.watch<LivestockProvider>();
+    final lang = Localizations.localeOf(context).languageCode;
     final formulas = feeding.formulas.where((f) => f.active != null).toList();
     final lines = (_scaled?['components'] as List<dynamic>? ?? const []).cast<Map<String, dynamic>>();
+    final profiles = _speciesCode == null ? const <String>[] : (livestock.speciesByCode(_speciesCode!)?.profiles ?? const <String>[]);
     return AlertDialog(
       title: Text(context.t('startBatch')),
       content: SizedBox(
@@ -213,10 +232,44 @@ class _StartBatchDialogState extends State<_StartBatchDialog> {
                   _formulaId = v;
                   final f = formulas.where((x) => x.id == v).firstOrNull;
                   if (f != null && _size.text.isEmpty) _size.text = feedNumber(f.active!.batchSize);
+                  // The formula's species is the default intended use; the
+                  // mixer may narrow it (a profile) or say another species,
+                  // which the usage policy then checks on the server.
+                  if (f != null && f.speciesCode != null) {
+                    _speciesCode = f.speciesCode;
+                    _profile = null;
+                  }
                 });
                 _preview();
               },
             ),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _speciesCode,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: context.t('intendedFor')),
+                  items: [for (final s in livestock.species) DropdownMenuItem(value: s.code, child: Text(s.name(lang), overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) => setState(() {
+                    _speciesCode = v;
+                    _profile = null;
+                  }),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: profiles.contains(_profile) ? _profile : null,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: context.t('managementProfile')),
+                  items: [for (final p in profiles) DropdownMenuItem(value: p, child: Text(p, overflow: TextOverflow.ellipsis))],
+                  onChanged: profiles.isEmpty ? null : (v) => setState(() => _profile = v),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            TextField(controller: _mixer, decoration: InputDecoration(labelText: context.t('mixer'))),
             const SizedBox(height: 10),
             Row(children: [
               Expanded(
@@ -324,7 +377,7 @@ class _CompleteBatchDialogState extends State<_CompleteBatchDialog> {
     final feeding = context.watch<FeedingProvider>();
     final output = double.tryParse(_output.text) ?? 0;
     return AlertDialog(
-      title: Text('${context.t('completeBatch')} — ${widget.batch.batchCode}'),
+      title: Text('${context.t('completeBatch')} — ${widget.batch.label}'),
       content: SizedBox(
         width: 560,
         child: SingleChildScrollView(

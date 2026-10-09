@@ -166,7 +166,19 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/feed-products/{pid}", None) for pid in feed_product_ids]
     paths += [(f"/feed-formulas/{fid}", None) for fid in formula_ids]
     paths += [(f"/feed-batches/{bid}", None) for bid in batch_ids]
+    paths += [(f"/feed-batches/{bid}/usage", None) for bid in batch_ids]
     paths += [(f"/feed-lots/{lid}/trace", None) for lid in lot_ids]
+    # Numbered mixes (FEED-SCHEMA §20) and feed performance intelligence:
+    # the mix timeline by number and the Performance tab's reads.
+    mix_numbers = [b.mix_number for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all() if b.mix_number]
+    paths += [(f"/feed-mixes/{n}", None) for n in mix_numbers]
+    paths += [
+        ("/feed-performance/summary", None), ("/feed-performance/monitors", None), ("/feed-performance/assessments", None),
+        ("/feed-performance/exposures", None), ("/feed-performance/alerts", None), ("/feed-performance/alerts", {"status": "all"}),
+        ("/feed-performance/batches", None), ("/feed-performance/suppliers", None),
+    ]
+    scored_ids = [b.id for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all() if b.status in ("completed", "quarantined")]
+    paths += [(f"/feed-performance/batches/{bid}", None) for bid in scored_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-plan", None) for sid in animal_ids + group_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-history", None) for sid in animal_ids + group_ids]
     return paths

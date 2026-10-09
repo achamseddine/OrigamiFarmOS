@@ -183,13 +183,31 @@ class FeedBatch(Base):
     — not the targets — drive inventory consumption and cost (§7)."""
 
     __tablename__ = "feed_batches"
-    __table_args__ = (UniqueConstraint("farm_id", "batch_code", name="uq_feed_batch_farm_code"),)
+    __table_args__ = (
+        UniqueConstraint("farm_id", "batch_code", name="uq_feed_batch_farm_code"),
+        UniqueConstraint("farm_id", "mix_number", name="uq_feed_batch_farm_mix_number"),
+        UniqueConstraint("farm_id", "mix_code", name="uq_feed_batch_farm_mix_code"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     feed_product_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_products.id"))
     formula_version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_formula_versions.id"), nullable=True)
     batch_code: Mapped[str] = mapped_column(String(80))
+    # The numbered mix (FEED-SCHEMA §20): one immutable, farm-wide sequence
+    # for every locally mixed preparation, whatever it is intended for. A
+    # dairy mix, a horse mix and a chicken mix take consecutive numbers from
+    # the same counter; the number is assigned when the batch is opened and
+    # is never reused or changed. `mix_code` is its display form.
+    mix_number: Mapped[int] = mapped_column(Integer)
+    mix_code: Mapped[str] = mapped_column(String(120))
+    # Intended use is classification and policy context, not identity: it
+    # is the target the components' usage policies are checked against.
+    intended_species_code: Mapped[str | None] = mapped_column(String(30), ForeignKey("species.code"), nullable=True)
+    intended_management_profile: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    production_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    use_by_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mixer_asset_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # planned | in_progress | completed | quarantined | cancelled
     status: Mapped[str] = mapped_column(String(20), default="planned")
     target_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -210,6 +228,19 @@ class FeedBatch(Base):
     components: Mapped[list["FeedBatchComponent"]] = relationship(
         back_populates="batch", lazy="selectin", cascade="all, delete-orphan"
     )
+
+
+class FeedMixSequence(Base):
+    """The farm's one mix counter (§20). A row per farm, incremented under
+    the row lock, so two tablets syncing at the same moment cannot both be
+    handed mix 42. `code_format` is the display rule the farm chose; the
+    integer is the identity."""
+
+    __tablename__ = "feed_mix_sequences"
+
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"), primary_key=True)
+    last_number: Mapped[int] = mapped_column(Integer, default=0)
+    code_format: Mapped[str] = mapped_column(String(60), default="MIX-{n:06d}")
 
 
 class FeedBatchComponent(Base):
@@ -616,3 +647,173 @@ class FeedReconciliation(Base):
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ------------------------------------------- feed performance intelligence
+# database/FEED-PERFORMANCE-INTELLIGENCE.md. An analytical layer over the
+# canonical facts above: it reads lots, batches, feeding events, milk and
+# health records and writes only its own projections — monitors, exposure
+# windows, assessments, scores and alerts. Nothing here is a second feed,
+# stock, production or health truth; every row is rebuildable from them.
+class FeedPerformanceMonitor(Base):
+    """What the farm continuously evaluates: one subject, one production
+    metric, one explicit baseline method and the thresholds that decide
+    when a change is worth a person's attention (§3)."""
+
+    __tablename__ = "feed_performance_monitors"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    subject_type: Mapped[str] = mapped_column(String(10))  # animal | group
+    subject_id: Mapped[str] = mapped_column(String(36))
+    production_metric_code: Mapped[str] = mapped_column(String(60), default="milk_l_per_day")
+    # rolling_subject | previous_period
+    baseline_method_code: Mapped[str] = mapped_column(String(60), default="rolling_subject")
+    baseline_window_days: Mapped[int] = mapped_column(Integer, default=14)
+    evaluation_window_days: Mapped[int] = mapped_column(Integer, default=3)
+    evaluation_frequency_code: Mapped[str] = mapped_column(String(30), default="daily")
+    minimum_exposure_days: Mapped[float] = mapped_column(Float, default=2.0)
+    minimum_observations: Mapped[int] = mapped_column(Integer, default=3)
+    alert_threshold_percent: Mapped[float] = mapped_column(Float, default=5.0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    configuration_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class FeedExposureWindow(Base):
+    """A reproducible projection of feeding events (§4): one row per
+    subject × product × lot, from the first issue to the last, with the
+    lineage snapshot (mix, supplier, ingredient lots) frozen at the time
+    it was built. Rebuilt whole; never edited."""
+
+    __tablename__ = "feed_exposure_windows"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    subject_type: Mapped[str] = mapped_column(String(10))
+    subject_id: Mapped[str] = mapped_column(String(36))
+    feed_product_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_products.id"))
+    lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
+    feed_batch_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_batches.id"), nullable=True)
+    exposure_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    exposure_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    offered_quantity: Mapped[float] = mapped_column(Float, default=0)
+    consumed_estimate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feeding_event_count: Mapped[int] = mapped_column(Integer, default=0)
+    lineage_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class FeedPerformanceAssessment(Base):
+    """One evaluation of one monitor (§5): the explicit baseline, what was
+    observed, the variance, the feed-related likelihood, the confidence,
+    and the evidence and confounders it rests on. Versioned by the model
+    reference; never overwritten by a later evaluation."""
+
+    __tablename__ = "feed_performance_assessments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    monitor_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_performance_monitors.id"))
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    baseline_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    observed_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    variance_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    variance_percent: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # LOW | MODERATE | HIGH | INSUFFICIENT_EVIDENCE — an association, never a diagnosis
+    feed_related_likelihood: Mapped[str] = mapped_column(String(30), default="INSUFFICIENT_EVIDENCE")
+    confidence_score: Mapped[float] = mapped_column(Float, default=0)
+    model_reference: Mapped[str] = mapped_column(String(150))
+    model_version: Mapped[str] = mapped_column(String(100))
+    evidence_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    confounders_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    explanation: Mapped[str] = mapped_column(Text)
+    # normal | anomaly | insufficient
+    status: Mapped[str] = mapped_column(String(30), default="normal")
+
+
+class FeedBatchPerformanceScore(Base):
+    """A rebuildable score per numbered mix (§7) for the manager's
+    dashboard. Explanatory only: it never changes a lot's status."""
+
+    __tablename__ = "feed_batch_performance_scores"
+
+    feed_batch_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_batches.id"), primary_key=True)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    exposed_head_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exposure_days: Mapped[float | None] = mapped_column(Float, nullable=True)
+    formula_compliance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    intake_response_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    production_response_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    health_signal_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    consistency_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    economic_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    overall_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0)
+    evidence_json: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class SupplierFeedPerformance(Base):
+    """Supplier × ingredient, from that supplier's actual lots and what
+    happened downstream of them (§9). Ingredient-specific on purpose: a
+    supplier's barley and its premix are never one number."""
+
+    __tablename__ = "supplier_feed_performance"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    supplier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("suppliers.id"), nullable=True)
+    supplier_label: Mapped[str] = mapped_column(String(200))
+    inventory_item_id: Mapped[str] = mapped_column(String(36), ForeignKey("inventory_items.id"))
+    feed_product_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_products.id"))
+    evaluation_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    evaluation_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    lot_count: Mapped[int] = mapped_column(Integer, default=0)
+    feed_batch_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    purchase_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    average_unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality_consistency_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    downstream_performance_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    incident_count: Mapped[int] = mapped_column(Integer, default=0)
+    confidence_score: Mapped[float] = mapped_column(Float, default=0)
+    methodology_code: Mapped[str] = mapped_column(String(60))
+    methodology_version: Mapped[str] = mapped_column(String(40))
+    evidence_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class FeedPerformanceAlert(Base):
+    """A persistent, deduplicated finding (§11). It stays open while the
+    condition holds, is acknowledged by a person, and resolves itself when
+    the condition clears — acknowledging never resolves it."""
+
+    __tablename__ = "feed_performance_alerts"
+    __table_args__ = (UniqueConstraint("farm_id", "deduplication_key", "detected_at", name="uq_feed_perf_alert_dedup"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    assessment_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_performance_assessments.id"), nullable=True)
+    feed_batch_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_batches.id"), nullable=True)
+    feed_product_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_products.id"), nullable=True)
+    subject_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    subject_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    alert_type: Mapped[str] = mapped_column(String(60))
+    # critical | high | medium | low | info — the bell's priorities
+    severity: Mapped[str] = mapped_column(String(20), default="medium")
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    title: Mapped[str] = mapped_column(String(200))
+    explanation: Mapped[str] = mapped_column(Text)
+    evidence_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # open | acknowledged | resolved
+    status: Mapped[str] = mapped_column(String(30), default="open")
+    deduplication_key: Mapped[str] = mapped_column(String(255))
+    acknowledged_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
