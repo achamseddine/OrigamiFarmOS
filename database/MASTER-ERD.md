@@ -28,3 +28,18 @@ flowchart LR
 ```
 
 This is a dependency/navigation map, not permission for direct cross-module mutation. Detailed columns and constraints remain in the domain schema documents.
+
+## Feed Performance Intelligence dependency view
+```text
+Supplier → Ingredient Inventory Lot → Feed Batch Component → Feed Batch/Output Lot
+                                                        ↓
+                                                Feeding Event/Exposure
+                                                        ↓
+Animal/Group → Production/Milk ← Health/Lifecycle/Context
+                                                        ↓
+                                      Feed Performance Assessment/Alert
+                                                        ↓
+                                   Supplier/Batch Performance + Economics
+```
+All arrows into the intelligence layer are analytical dependencies; intelligence output does not overwrite upstream facts.
+

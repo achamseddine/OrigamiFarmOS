@@ -75,7 +75,7 @@ diagnosis (
  supersedes_diagnosis_id uuid references diagnosis(id)
 )
 ```
-AI suggestions never insert confirmed diagnoses directly.
+AI pattern recognition may create an emergency assessment and match a veterinarian-approved protocol, but it never inserts an unsupported confirmed diagnosis. See `CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md`.
 
 ## treatment_plan / treatment_action
 ```sql
@@ -102,7 +102,7 @@ treatment_action (
 ```
 
 ## medication_administration
-Medication product is a canonical inventory item; future pharmaceutical master metadata can extend it.
+Medication product is a canonical inventory item extended by `MEDICINE-PHARMACY-SCHEMA.md`. Pharmacy stock, essential-medicine thresholds, lot/expiry/storage controls and replenishment are managed there; this section owns the clinical administration fact.
 ```sql
 medication_administration (
  id uuid primary key,
@@ -181,4 +181,4 @@ welfare_assessment (
 HealthCaseOpened, HealthObservationRecorded, ClinicalExaminationRecorded, DiagnosisRecorded, TreatmentPrescribed, TreatmentPerformed, MedicationAdministered, WithdrawalStarted, WithdrawalEnded, VaccinationRecorded, WelfareConcernDetected, HealthCaseClosed.
 
 ## Acceptance
-Worker observations remain distinct from veterinary diagnosis; medication use consumes traceable lot inventory; withdrawals can block affected production; group treatment is supported without fake animals; history is immutable/correctable; AI cannot autonomously diagnose/prescribe/administer.
+Worker observations remain distinct from veterinary diagnosis; medication use consumes traceable lot inventory; withdrawals can block affected production; group treatment is supported without fake animals; history is immutable/correctable; AI can actively orchestrate current veterinarian-approved emergency protocols but cannot invent prescriptions or record administration without the required confirmation/authority.

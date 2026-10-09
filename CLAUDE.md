@@ -22,11 +22,12 @@ If documents conflict, stop and surface the conflict. Do not silently invent a n
 - Feed Item, Feed Formula, Formula Version, Feed Batch, Feed Product/Lot, Feeding Program and Feeding Event are distinct concepts.
 - Purchased and farm-mixed feed converge on common downstream inventory/feeding interfaces.
 - Enforce feed species/use restrictions server-side.
+- Preserve supplier + ingredient-lot → actual feed batch → output lot → feeding event → animal/group → production lineage. Feed Performance Intelligence must use canonical facts, explicit baselines/confounders/confidence and must not create a shadow feed/production truth.
 - Inventory is ledger-driven. On-hand is not necessarily available; reservations/quarantine/blocks matter.
 - Plans/recommendations are never stored as actual transactions.
 - Preserve history. Use versions, effective dating, reversals/corrections and audit records.
 - External IDs are never internal PKs.
-- AI may recommend; it does not become authoritative domain truth or bypass approvals.
+- AI may recommend and actively orchestrate veterinarian-approved emergency protocols. It may match protocols, calculate doses only from approved rules, check eligibility/stock, notify, schedule reassessment and escalate. It must never invent a prescription/dose/route, turn an unsupported inference into authoritative diagnosis, or bypass protocol/approval boundaries.
 
 ## Engineering approach
 Origami starts as a **modular monolith**, not microservices. Modules have explicit boundaries and may communicate through application services and domain events. Do not directly mutate another module's tables.
@@ -86,3 +87,10 @@ Do not attempt the entire ERP at once.
 11. Procurement/costing and broader modules.
 
 See `architecture/IMPLEMENTATION-ROADMAP.md`.
+
+## Feed mix identity rule
+- Every locally crushed/mixed feed production run is a uniquely numbered Feed Batch/Mix. Use one farm-level immutable sequential mix number plus UUID; do not create dairy/horse/sheep/chicken batch tables or separate species sequences.
+- Intended species/management profile is metadata validated by feed-usage policy. Repeating the same formula on another run always creates a new mix number/output lot.
+- Preserve mix → formula/version → actual ingredient quantities/lots/suppliers → production date/operator → output lot → dated feeding usage/animal or group/quantity → remaining ledger stock → cost/performance lineage.
+- Never store an editable “remaining mix” balance; derive it from inventory transactions. Never renumber or overwrite a historical mix.
+

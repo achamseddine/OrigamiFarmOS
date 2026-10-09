@@ -61,3 +61,7 @@ The MVP will not include:
 * Blockchain traceability
 
 These features may be considered in later phases.
+
+## Feed intelligence scope clarification
+The product baseline must preserve supplier/ingredient-lot → actual local mixing → feeding exposure → production lineage even before advanced AI is enabled. Continuous Feed Performance Intelligence is incremental: first traceability, formula-compliance and baseline monitoring; then confidence-scored batch/lot/supplier performance analysis as sufficient production/context history accumulates. It must never claim causation from timing alone or silently change approved feeding decisions.
+

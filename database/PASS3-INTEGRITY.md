@@ -42,3 +42,14 @@ Ledger rows retain unit cost where known. Feed batch actual cost derives from ac
 
 ## Immutability
 Posted ledger rows, completed feed batches, historical formula versions, activated historical feeding-program versions and posted feeding events cannot be edited in place. Corrections use explicit reversal/amendment/version mechanisms.
+
+## Numbered mix integrity
+- Every locally crushed/mixed feed preparation has exactly one immutable farm-unique sequential mix number and one output inventory lot.
+- Mix numbering is global within the farm; dairy, horse, sheep, chicken and other intended-use classifications do not create separate identity sequences or species-specific batch tables.
+- Repeating a formula creates a new numbered mix; a historical mix is never reopened to represent a new production run.
+- Actual ingredient quantities and exact source lots/suppliers are mandatory before completion.
+- All usage of a numbered mix is recorded through dated feeding-event/inventory transactions against its output lot and livestock subject.
+- Remaining mix quantity is ledger-derived; no editable shadow balance is permitted.
+- Reversal/correction preserves the original mix number and history.
+- A completed mix must be traceable ingredient/supplier → mix → output lot → feeding date/quantity → animal/group → downstream performance.
+

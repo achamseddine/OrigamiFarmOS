@@ -137,3 +137,7 @@ AI recommendation is not authoritative business truth.
 
 ## 15. Acceptance criteria
 A new species can be added mainly through configuration; generic Animal supports cattle, horses, sheep, goats and individual poultry; flock operations need no fake individual animals; cattle-only premix can be blocked from horse/sheep use; inventory, procurement and feeding share lot/quantity semantics; canonical masters are reused across modules; history/provenance remain queryable; and workflow/AI can orchestrate or recommend without becoming the authoritative domain record.
+
+## Feed Performance Intelligence ontology extension
+Feed Performance Intelligence is an analytical domain over canonical facts, not a competing system of record. Its principal concepts are **FeedPerformanceMonitor**, **FeedExposureWindow**, **FeedPerformanceAssessment**, **FeedBatchPerformanceScore**, **SupplierFeedPerformance**, and **FeedPerformanceAlert**. Their evidence resolves back to Supplier, InventoryItem/Lot, FeedFormulaVersion, FeedBatch/Component, FeedingEvent/Component, Animal/AnimalGroup, Production records, Health/Lifecycle context and Cost facts. Analytical association, likelihood, score and confidence are derived knowledge and never replace those authoritative objects.
+

@@ -9,8 +9,9 @@ This file defines the non-negotiable principles of FarmOS.
 * Workers do not diagnose.
 * Farm managers decide.
 * Veterinarians diagnose and prescribe.
-* AI explains.
-* AI never replaces professional judgement.
+* AI explains, detects risk and actively orchestrates approved workflows.
+* AI may operationalize current veterinarian-approved emergency protocols, including protocol-defined dose calculations, eligibility checks, stock checks, notifications, reassessment and escalation.
+* AI never invents a prescription or replaces veterinarian authority; outside approved protocol boundaries it escalates.
 * Every recommendation requires evidence.
 * Every recommendation has confidence.
 * Every object has one digital twin.

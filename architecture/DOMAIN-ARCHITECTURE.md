@@ -26,3 +26,9 @@ Usage policy and allocation are enforced transactionally.
 
 ## Domain ownership
 Livestock owns identity/lifecycle master state. Reproduction owns breeding/pregnancy/birth records. Health owns clinical records. Feed owns formulas/programs/feeding records. Inventory owns stock ledger. Procurement owns purchasing. Production owns measured output. Workflow orchestrates but does not own domain truth.
+
+## Feed Performance Intelligence boundary
+**Consumes:** supplier/procurement facts, ingredient and feed lot lineage, actual feed batches, feeding events, livestock/group state, production, health/lifecycle context and costing.  
+**Owns:** performance monitor configuration, reproducible exposure projections, analytical assessments, batch/supplier performance projections and feed-performance alerts.  
+**Does not own:** inventory balances, feed formulas/batches/events, supplier master status, milk/production facts, diagnoses or approved feeding programs. Analytical outputs may trigger review workflows but cannot mutate owning-domain truth directly.
+

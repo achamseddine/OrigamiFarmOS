@@ -424,3 +424,14 @@ covers the offline effects and outbox labels.
 4. **Is stock ever counted twice or drawn from a lot that may not be fed?**
    No — one ledger, lots as the only physical quantities, availability net
    of unusable and reserved, and policies enforced at consumption.
+
+## 26. Continuous Feed Performance Intelligence — required extension
+The canonical target architecture now includes `database/FEED-PERFORMANCE-INTELLIGENCE.md`. Existing feed implementation already provides much of the required lineage (supplier/lot, actual batch components, feeding events and milk-linked costs), but continuous baseline evaluation, confounder-aware AI assessments, supplier/batch performance projections and persistent feed-performance alerts are a separate implementation increment and must not be considered complete merely because traceability exists.
+
+The required analytical chain is Supplier/ingredient lot → actual local mix → output lot → feeding exposure → animal/group → milk/production + health/lifecycle/context → performance assessment. Different suppliers/lots remain distinguishable. AI must expose evidence, baseline, missing context and confidence; association never becomes causation automatically.
+
+## 27. Numbered mix control
+Every local feed production run must have a farm-unique sequential mix number plus its UUID/output lot. The number is assigned once and never reused or changed. Intended dairy/horse/sheep/chicken/etc. use is metadata resolved through species/profile rules, not separate batch tables or independent numbering systems.
+
+The mix detail/timeline must expose formula/version, production date, operator, actual ingredient quantities and lots/suppliers, output quantity/lot/cost/status, every dated feeding issue with animal/group and quantity, waste/refusal, ledger-derived remaining stock, first/last use, and downstream performance/alerts. Repeating the same formula creates a new mix number. This numbered mix is the principal operational drill-down for local feed manufacturing and Feed Performance Intelligence.
+

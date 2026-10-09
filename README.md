@@ -205,3 +205,7 @@ one "Farm Visits" nav entry, a Dart port of the analytics engine, and the
 same offline queue as the rest of the app. Horse
 Ride and the weekend-only opening calendar are demo data only; see
 `product/TRACEABILITY.md` for the full requirement-to-code map.
+## Continuous Feed Performance Intelligence
+
+Origami's feed architecture extends beyond stock, ration and traceability. It preserves supplier + ingredient lot → actual locally crushed/mixed batch → finished lot → feeding event → animal/group → milk/production lineage so Feed Performance Intelligence can continuously evaluate performance. The analytical layer compares explicit production baselines with observed results, accounts for available health/lactation/group/environment context, detects formula-compliance and supplier-lot anomalies, and connects feed cost to output. Findings are confidence-scored associations, not automatic claims of causation, and never silently change approved formulas, programs, supplier status or stock. Canonical specification: `database/FEED-PERFORMANCE-INTELLIGENCE.md`.
+

@@ -10,7 +10,7 @@
 8. inventory.
 9. feed.
 10. reproduction.
-11. health/veterinary.
+11. health/veterinary, medicine/pharmacy masters/policies, and veterinarian-approved emergency protocol/clinical decision-support structures.
 12. production.
 13. supplier/procurement.
 14. operational costing.
@@ -18,6 +18,6 @@
 16. assets/maintenance.
 17. customer/sales.
 18. operational finance/AR/cash.
-19. analytics/projections.
+19. analytics/projections, including feed performance intelligence projections/assessments/alerts after feed + procurement + production + health dependencies are available.
 
 Each slice gets reviewed migration SQL and automated migration tests. Never create duplicate masters to break dependency order. Conceptual LivestockSubject remains explicit animal_id/animal_group_id FKs with exactly-one checks where applicable.

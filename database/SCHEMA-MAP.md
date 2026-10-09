@@ -48,7 +48,7 @@ feed
 └─ feeding events
 ```
 
-Later schemas add reproduction, health, production, procurement, crops, assets, laboratory, finance and compliance.
+Later schemas add reproduction, health, production, procurement, crops, assets, laboratory, finance and compliance. Medicine/pharmacy management extends Inventory + Health with `medicine_product`, pharmaceutical lot metadata, farm essential-stock policies, stock alerts and replenishment without creating a second stock ledger.
 
 ## Physical design decision: LivestockSubject
 `LivestockSubject` remains a conceptual interface. Pass 1 does **not** create a generic polymorphic livestock_subject table. Domain association tables use explicit `animal_id` / `animal_group_id` with a CHECK requiring exactly one where both are supported. This avoids weak polymorphic foreign keys while retaining the conceptual model.
@@ -60,3 +60,14 @@ Revisit only if implementation evidence demonstrates a strong need for a shared 
 - Cross-domain FKs reference canonical identity; modules do not duplicate masters.
 - No module directly edits another module's authoritative ledger/history.
 - Read projections may denormalize but are never authoritative.
+
+### Feed Performance Intelligence / Analytics
+- feed_performance_monitor
+- feed_exposure_window (rebuildable analytical projection)
+- feed_performance_assessment
+- feed_batch_performance_score (rebuildable projection)
+- supplier_feed_performance (versioned analytical projection)
+- feed_performance_alert
+
+These depend on Feed + Inventory + Procurement/Supplier + Livestock + Production + Health + Costing and therefore belong after those authoritative domains in migration/implementation order.
+

@@ -38,3 +38,7 @@ Crops, assets/maintenance, laboratory/quality, sales, finance, compliance, advan
 For each slice: requirement → ADR if needed → schema/migration → domain rules → API/OpenAPI → event/audit → web/mobile workflow → automated tests → acceptance review.
 
 Do not proceed to the next phase while foundational invariants are failing.
+
+## Feed Performance Intelligence implementation gate
+Feed Performance Intelligence is intentionally implemented only after the authoritative lineage it depends on exists. Required sequence: supplier/receipt lot identity → inventory lot genealogy → actual feed-batch components → feeding events/exposure → milk/production records → relevant health/lifecycle context → costing → analytical monitors/assessments/alerts. Feed vertical slices must preserve these keys from day one. Initial intelligence should begin with deterministic baselines/formula deviation/traceability, then add versioned statistical/AI models without changing authoritative domain semantics.
+

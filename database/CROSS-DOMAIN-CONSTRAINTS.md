@@ -4,7 +4,10 @@
 - Animal is generic; AnimalGroup is first-class; capabilities gate behavior.
 - Inventory ledger is the only physical stock truth; on-hand, reserved and available differ.
 - Feed possession does not imply permission; formula, batch, program and feeding event remain distinct.
+- Supplier/ingredient-lot identity and actual batch composition must survive local crushing/mixing through feeding exposure so downstream production performance remains traceable.
+- Feed-performance AI consumes authoritative feed/production/health/procurement facts; analytical association/score never becomes causation or silently changes formulas, supplier status, stock eligibility or production truth.
 - Observation != diagnosis != treatment != administration; medication use and stock consumption are atomic.
+- Medicine/pharmacy stock uses the canonical inventory ledger. Expired/recalled/quarantined/noncompliant lots do not satisfy essential-stock thresholds; user-configured minimum/critical/target policies drive logistics alerts, never clinical treatment advice.
 - Requisition != PO != receipt; sales order != delivery != invoice != payment.
 - Only accepted receipt posts stock in; only posted stock delivery posts stock out.
 - Planned field operations do not consume stock; harvest enters inventory exactly once.

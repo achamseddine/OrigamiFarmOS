@@ -25,3 +25,7 @@ Mobile critical workflows must work without connectivity. Local operations recei
 
 ## Scalability
 Prefer stateless API nodes, indexed relational queries, asynchronous processing for slow side effects and read projections for heavy dashboards. Do not introduce distributed complexity until measured requirements justify it.
+
+## Feed Performance Intelligence subsystem
+Feed Performance Intelligence is implemented as an analytical/application capability inside the modular monolith, consuming canonical domain events and read models from Feed, Inventory, Procurement, Livestock, Production, Health and Costing. It does not own feed stock, milk records or clinical truth. Event-driven evaluation plus scheduled analytical cycles create versioned assessments/alerts with evidence, baseline method, confounders, model/methodology version and confidence. See `database/FEED-PERFORMANCE-INTELLIGENCE.md`.
+
