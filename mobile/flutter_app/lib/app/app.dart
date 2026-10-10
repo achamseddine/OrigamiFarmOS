@@ -14,6 +14,8 @@ import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/feeding_provider.dart';
+import '../providers/emergency_provider.dart';
+import '../providers/pharmacy_provider.dart';
 import '../providers/livestock_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/notifications_provider.dart';
@@ -98,6 +100,8 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => EmergencyProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => RecommendationsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => SalesProvider(apiClient: api, farmId: user.farmId)),
@@ -191,6 +195,11 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       // The generic feed architecture: products, lots, formulas, programs,
       // today's plan. Same module as the stock screen it sits behind.
       ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedingProvider>().load()),
+      // The farm pharmacy sits between stock and animal health: whoever
+      // can see either gets the essential-medicine dashboard.
+      if (access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) quietly(() => context.read<PharmacyProvider>().load()),
+      // Emergency triage and approved protocols: animal health.
+      if (access.isModuleAvailable('animal_health')) quietly(() => context.read<EmergencyProvider>().load()),
       ifAllowed(FarmModuleShortcuts.produce, () => context.read<ProductionProvider>().load()),
       ifAllowed(FarmModuleShortcuts.agriculture, () => context.read<AgricultureProvider>().load()),
       ifAllowed(FarmModuleShortcuts.ai, () => context.read<RecommendationsProvider>().load()),

@@ -179,6 +179,30 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     ]
     scored_ids = [b.id for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all() if b.status in ("completed", "quarantined")]
     paths += [(f"/feed-performance/batches/{bid}", None) for bid in scored_ids]
+    # Farm pharmacy (MEDICINE-PHARMACY-SCHEMA.md): the essential-medicine
+    # dashboard, every medicine's detail, lots, policies, alerts and the
+    # administrations bound to their lots.
+    from app.domain import pharmacy_models  # local: keeps the module's import list to what the snapshot itself needs
+
+    medicine_ids = [p.inventory_item_id for p in db.query(pharmacy_models.MedicineProduct).filter_by(farm_id=FARM_ID).all()]
+    paths += [
+        ("/pharmacy/summary", None), ("/pharmacy/medicines", None), ("/pharmacy/lots", None), ("/pharmacy/policies", None),
+        ("/pharmacy/alerts", None), ("/pharmacy/alerts", {"status": "all"}), ("/pharmacy/administrations", None),
+        ("/pharmacy/categories", None), ("/pharmacy/ingredients", None),
+    ]
+    paths += [(f"/pharmacy/medicines/{mid}", None) for mid in medicine_ids]
+    # Emergency protocol engine (CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md):
+    # the approved protocols, the live cases and the offline package.
+    from app.domain import emergency_models  # local, as above
+
+    protocol_ids = [p.id for p in db.query(emergency_models.EmergencyProtocol).filter_by(farm_id=FARM_ID).all()]
+    assessment_ids = [a.id for a in db.query(emergency_models.EmergencyAssessment).filter_by(farm_id=FARM_ID).all()]
+    paths += [
+        ("/emergency/summary", None), ("/emergency/protocols", None), ("/emergency/assessments", None), ("/emergency/assessments", {"status": "active"}),
+        ("/emergency/runs", None), ("/emergency/sign-codes", None), ("/emergency/offline-package", None),
+    ]
+    paths += [(f"/emergency/protocols/{pid}", None) for pid in protocol_ids]
+    paths += [(f"/emergency/assessments/{aid}", None) for aid in assessment_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-plan", None) for sid in animal_ids + group_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-history", None) for sid in animal_ids + group_ids]
     return paths

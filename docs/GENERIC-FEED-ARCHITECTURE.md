@@ -430,8 +430,27 @@ The canonical target architecture now includes `database/FEED-PERFORMANCE-INTELL
 
 The required analytical chain is Supplier/ingredient lot → actual local mix → output lot → feeding exposure → animal/group → milk/production + health/lifecycle/context → performance assessment. Different suppliers/lots remain distinguishable. AI must expose evidence, baseline, missing context and confidence; association never becomes causation automatically.
 
+### 26.1 Implementation status — deterministic first increment (implemented)
+Implemented in `backend/app/services/feed_performance_service.py`, `backend/app/api/v1/feed_performance.py`, migration `d2f4a6c8e0b1` and the tablet's Feed → Performance tab:
+
+- **Projections, not truth.** Six tables — `feed_performance_monitors`, `feed_exposure_windows`, `feed_performance_assessments`, `feed_batch_performance_scores`, `supplier_feed_performance`, `feed_performance_alerts` — all rebuildable from feeding events, lots, batches, milk/egg records and health records. Nothing in them is a second feed, stock, production or health fact.
+- **Exposure windows** are projected from recorded feeding events per subject × product × lot and carry the lineage snapshot (mix number/code, formula version, ingredient lots and their suppliers).
+- **Monitors** name an explicit baseline (`rolling_subject` or `previous_period`), windows, minimum observations/exposure and a threshold. Default monitors are created for every group with milk or egg records; animal monitors are added by the farm.
+- **Assessments** record baseline, observed value, variance, persistence, the feed changes in the lookback with their lineage, the confounders checked (health events, milked-head changes, refusals, withdrawal, lactation/pregnancy), the context the farm cannot see (named, and lowering the confidence), a likelihood label `LOW | MODERATE | HIGH | INSUFFICIENT_EVIDENCE` and a confidence. Missing data is insufficient evidence, never "no change". The model reference `origami.feed_performance.deterministic` 1.0 is on every row.
+- **Mix score cards** (per numbered mix): formula compliance, intake, production response, health signal, consistency, economics; a dimension without evidence stays null and lowers the confidence. Formula compliance deviation is its own alert, kept apart from any ingredient or supplier question.
+- **Supplier rows** are supplier × ingredient from that supplier's actual lots and the mixes downstream of them; a supplier's barley and its premix are never one number.
+- **Alerts** are deduplicated per condition, stay open while the condition holds, can be acknowledged (which never resolves) and resolve themselves on recovery; a manual close needs a reason and approve rights. A HIGH-likelihood decline opens a review task. Open alerts reach the notification bell.
+- **Hooks:** batch completion scores the mix; milk and egg records re-evaluate the subject's monitors; `POST /feed-performance/evaluate` runs the whole cycle (also at seed time).
+
+Not yet implemented (next increments): versioned statistical/AI models beyond the deterministic one; environment, milk-component and weight-change context (not recorded by the app yet, so they are listed as missing context on every assessment); ingredient-lot anomaly attribution across farms.
+
 ## 27. Numbered mix control
 Every local feed production run must have a farm-unique sequential mix number plus its UUID/output lot. The number is assigned once and never reused or changed. Intended dairy/horse/sheep/chicken/etc. use is metadata resolved through species/profile rules, not separate batch tables or independent numbering systems.
 
 The mix detail/timeline must expose formula/version, production date, operator, actual ingredient quantities and lots/suppliers, output quantity/lot/cost/status, every dated feeding issue with animal/group and quantity, waste/refusal, ledger-derived remaining stock, first/last use, and downstream performance/alerts. Repeating the same formula creates a new mix number. This numbered mix is the principal operational drill-down for local feed manufacturing and Feed Performance Intelligence.
+
+### 27.1 Implementation status (implemented)
+- `feed_mix_sequences` holds one counter per farm; `feed_batch_service.next_mix_number` takes it under a row lock, after the usage-policy checks, so a refused start never consumes a number and an idempotent replay returns the same one. `feed_batches` gained `mix_number`, `mix_code` (`MIX-000042`), `intended_species_code`, `intended_management_profile`, `production_date`, `use_by_date` and `mixer_asset_id`, with farm-level unique constraints; migration `c9e1a7b2d4f6` numbers existing batches in start order.
+- The output lot's code is the mix code. `GET /feed-mixes/{n}` and `GET /feed-batches/{id}/usage` return the whole life of the mix from the lot ledger: components with their lots and suppliers, produced / issued / consumed / refused / waste / returned quantities, every dated issue with subject, head count and recorder, ledger adjustments, exposed subjects, first/last use, days used, head-days, cost per unit and the mix's performance score card. Remaining stock is the lot's ledger balance; nothing stores it.
+- Tablet: mix numbers on the Mixing tab, intended use and mixer on the start dialog, the mix timeline sheet; a mix started offline shows no number until the server hands one out.
 

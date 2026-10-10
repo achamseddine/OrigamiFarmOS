@@ -36,7 +36,9 @@ class TestBootstrapAndAnimals:
         assert len(body["animals"]) == 12
         # 7 original items + the feed architecture's barley, concentrate,
         # premix and broiler grower (app/feeding/seed.py).
-        assert len(body["inventory_items"]) == 11
+        # 11 feed and supply items plus the six medicines the farm pharmacy
+        # stocks (MEDICINE-PHARMACY-SCHEMA.md): one inventory, one ledger.
+        assert len(body["inventory_items"]) == 17
 
     def test_list_animals_filters_by_species(self, client):
         headers = auth_headers(client)
@@ -54,9 +56,13 @@ class TestBootstrapAndAnimals:
         assert body["name"] == "Bella"
         assert len(body["recent_observations"]) >= 1
         # Observations/treatments in seed data don't write events directly;
-        # the only events on Bella are her feeding supplement and the
-        # feeding that delivered it (app/feeding/seed.py).
-        assert {e["event_type"] for e in body["recent_events"]} <= {"feeding_event_recorded", "feeding_program_assigned"}
+        # the events on Bella are her feeding supplement, the feeding that
+        # delivered it (app/feeding/seed.py) and the emergency triage her
+        # fever opened (app/emergency/seed.py).
+        assert {e["event_type"] for e in body["recent_events"]} <= {
+            "feeding_event_recorded", "feeding_program_assigned",
+            "emergency_assessment_started", "emergency_pattern_detected", "emergency_protocol_matched",
+        }
 
     def test_get_unknown_animal_returns_404(self, client):
         headers = auth_headers(client)

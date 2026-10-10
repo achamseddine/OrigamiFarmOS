@@ -18,7 +18,9 @@ from app.api.v1 import (
     employees,
     farms,
     feed,
+    emergency,
     feed_performance,
+    pharmacy,
     feeding,
     health,
     livestock,
@@ -41,6 +43,8 @@ from app.core.idempotency import IdempotencyMiddleware
 from app.services.feed_inventory_service import FeedError
 from app.db.base import Base, engine
 from app.domain import feed_models  # noqa: F401 - ensures the feed architecture's tables are registered on Base.metadata
+from app.domain import pharmacy_models  # noqa: F401 - medicine products, inventory lots, pharmacy policies and alerts
+from app.domain import emergency_models  # noqa: F401 - emergency protocols, assessments and runs
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
@@ -107,6 +111,8 @@ app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
 app.include_router(feeding.router, prefix=api_prefix)
 app.include_router(feed_performance.router, prefix=api_prefix)
+app.include_router(pharmacy.router, prefix=api_prefix)
+app.include_router(emergency.router, prefix=api_prefix)
 
 
 @app.exception_handler(FeedError)

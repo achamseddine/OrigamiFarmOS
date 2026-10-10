@@ -254,6 +254,55 @@ final List<_Rule> _rules = [
   _Rule('POST', '/feed-allocations/$_id/release', (m) => [MergeRecord('/feed-allocations', m.ids[0], const {'status': 'released'})]),
   _Rule('POST', '/feed-reconciliations', (m) => [AppendRecord('/feed-reconciliations', _newRecord(m, extra: {'status': 'open'}))]),
   _Rule('POST', '/feed-reconciliations/$_id/close', (m) => [MergeRecord('/feed-reconciliations', m.ids[0], {'status': 'closed', if (m.body['explanation'] != null) 'explanation': m.body['explanation']})]),
+  // Farm pharmacy (MEDICINE-PHARMACY-SCHEMA.md). A receipt is a lot the
+  // worker sees at once; eligibility is the server's to compute, so the
+  // prediction only says what the receipt itself declared.
+  _Rule('POST', '/pharmacy/lots/receive', (m) {
+    final qty = (m.body['quantity'] as num?)?.toDouble() ?? 0;
+    final rejected = (m.body['rejected_quantity'] as num?)?.toDouble() ?? 0;
+    final exception = m.body['storage_status'] == 'EXCEPTION' || m.body['cold_chain_exception'] == true;
+    return [
+      AppendRecord('/pharmacy/lots', _newRecord(m, extra: {
+        'received_quantity': qty, 'accepted_quantity': qty - rejected, 'rejected_quantity': rejected, 'quantity_on_hand': qty - rejected,
+        'status': 'active', 'eligible': !exception, 'ineligible_reason': exception ? 'storage_exception' : null,
+        'storage_status': m.body['storage_status'] ?? 'COMPLIANT', 'received_at': m.body['received_at'] ?? _now(),
+      })),
+    ];
+  }),
+  _Rule('PATCH', '/pharmacy/lots/$_id/status', (m) => [MergeRecord('/pharmacy/lots', m.ids[0], {'status': m.body['status'], 'eligible': m.body['status'] == 'active', 'ineligible_reason': m.body['status'] == 'active' ? null : m.body['status']})]),
+  _Rule('POST', '/pharmacy/alerts/$_id/acknowledge', (m) => [MergeRecord('/pharmacy/alerts', m.ids[0], {'status': 'acknowledged', 'acknowledged_at': _now()})]),
+  _Rule('POST', '/pharmacy/alerts/$_id/resolve', (m) => [
+        MergeRecord('/pharmacy/alerts', m.ids[0], {'status': 'resolved', 'resolved_at': _now(), if (m.body['note'] != null) 'resolution_note': m.body['note']}),
+      ]),
+  // A dose given offline is on the tablet with its lot (or "first expiry
+  // first" for the server to resolve); the withdrawal dates come back
+  // with the server's copy, from the product's authorised rule.
+  _Rule('POST', '/pharmacy/administrations', (m) {
+    final dose = (m.body['dose_quantity'] as num?)?.toDouble() ?? 0;
+    final heads = (m.body['head_count'] as num?)?.toInt() ?? 1;
+    return [
+      AppendRecord('/pharmacy/administrations', _newRecord(m, extra: {
+        'status': 'recorded', 'administered_at': m.body['administered_at'] ?? _now(), 'head_count': heads,
+        'quantity_consumed': m.body['quantity_consumed'] ?? dose * heads, 'unit': m.body['dose_unit'], 'inventory_lot_id': m.body['lot_id'] ?? '',
+      })),
+    ];
+  }),
+  _Rule('POST', '/pharmacy/administrations/$_id/reverse', (m) => [MergeRecord('/pharmacy/administrations', m.ids[0], {'status': 'reversed', 'reversed_at': _now(), 'reversal_reason': m.body['reason']})]),
+
+  // Emergency triage (CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md §14).
+  // Offline, the tablet records the signs and queues them; it never
+  // matches a protocol or shows a drug on its own — the server triages
+  // when the queue drains, and the case appears as "queued" until then.
+  _Rule('POST', '/emergency/assessments', (m) => [
+        AppendRecord('/emergency/assessments', _newRecord(m, extra: {
+          'status': 'queued', 'triage_level': 'PENDING', 'started_at': _now(), 'observed_signs': m.body['signs'] ?? const [],
+          'matches': const [], 'escalation_reasons': const [], 'explanation': '', 'selected_match_id': null,
+        })),
+      ]),
+  _Rule('POST', '/emergency/assessments/$_id/close', (m) => [MergeRecord('/emergency/assessments', m.ids[0], {'status': 'resolved', 'closed_at': _now()})]),
+  _Rule('POST', '/emergency/runs/$_id/escalate', (m) => [MergeRecord('/emergency/runs', m.ids[0], {'status': 'escalated', 'escalated_at': _now(), 'escalation_reason': m.body['reason']})]),
+  _Rule('POST', '/emergency/runs/$_id/resolve', (m) => [MergeRecord('/emergency/runs', m.ids[0], {'status': 'completed', 'completed_at': _now(), 'outcome': m.body['outcome']})]),
+
   // Feed performance alerts: acknowledging never resolves — the alert stays
   // in the list, marked; an explained manual close leaves the open list,
   // as the server's default listing would show it.

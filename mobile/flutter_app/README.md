@@ -161,6 +161,27 @@ row — Mouneh's 7 screens (tech spec v0.5 §6) and Visits' 10 (v0.6 §6).
 Nothing in either hard-codes a product type, an activity or an opening
 day.
 
+The Feed workspace's **Performance** tab (`features/feed/tabs/performance_tab.dart`)
+shows the server's feed-performance explanations: open alerts (acknowledge
+without resolving; close only with a reason), what is being watched against
+which explicit baseline, each numbered mix's score card and the supplier
+rows per ingredient. The **Mixing** tab numbers every mix and opens its
+timeline (`mix_detail_sheet.dart`).
+
+The Health screen gained two tabs. **Pharmacy** (`features/health/pharmacy_tab.dart`)
+is the essential-medicine dashboard — eligible against on hand, the
+manager's thresholds, lots with the reason they do not count, alerts with
+acknowledge / draft requisition / close-with-reason, receipt with lot and
+expiry, a dose bound to a lot (first expiry first unless a lot is chosen),
+and the recent administrations with their withdrawal dates. **Emergency**
+(`features/health/emergency_tab.dart`) records the signs the person sees and
+shows what the server decided: the triage, the matched veterinarian-approved
+protocol with its evidence, warnings and approval reference, or a red
+escalation banner with the reasons; a run lists its steps, prepares a
+medication dose from the approved rule and the exact lot, and the person
+confirms, skips (optional steps only), reassesses, escalates or resolves.
+The tablet never computes a dose or matches a protocol by itself.
+
 ## Data entry
 
 Every module's responsible employee can actually run their area, not just
@@ -346,6 +367,10 @@ a stale entity shape in `produce_harvest_screen.dart`). Each was fixed and
 the following run produced an installable release APK, published to the
 rolling `tablet-apk-latest` GitHub Release.
 
-The backend's 227 tests do run here and all pass, including the
-permission, employee, notification, priority, audit and agriculture
-suites that back these screens.
+The backend's full test suite does run here and passes, including the
+permission, employee, notification, priority, audit, agriculture, feed,
+feed-performance, pharmacy and emergency suites that back these screens.
+The Flutter SDK was later made available in the development session, so
+`flutter analyze` and `flutter test` (142 tests: entity parsing against
+the bundled snapshot, offline cache effects, visit rules) also run before
+each push.

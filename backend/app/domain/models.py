@@ -311,6 +311,9 @@ class InventoryTransaction(Base):
     # for items that are not feed, and for movements made before lots
     # existed; a feed movement always names its lot.
     lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
+    # The canonical (non-feed) lot this movement belongs to — a medicine
+    # lot today (pharmacy schema §6). A pharmacy movement always names it.
+    inventory_lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("inventory_lots.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

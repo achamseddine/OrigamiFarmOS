@@ -26,6 +26,8 @@ from app.domain import livestock_models  # noqa: F401 - species / capability / i
 from app.domain import feed_models  # noqa: F401 - feed products / formulas / programs tables
 from app.feeding.catalog import ensure_feed_reference_data
 from app.feeding.seed import seed_feed_demo_data
+from app.pharmacy.seed import seed_pharmacy_demo_data
+from app.emergency.seed import seed_emergency_demo_data
 from app.livestock.reference import ensure_reference_data
 from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
@@ -353,6 +355,8 @@ def seed_demo_data(db: Session) -> None:
     # feedings — built on the inventory items and animals seeded above.
     db.flush()
     seed_feed_demo_data(db, FARM_ID)
+    seed_pharmacy_demo_data(db, FARM_ID)
+    seed_emergency_demo_data(db, FARM_ID)
     seed_mouneh_demo_data(db, FARM_ID)
     db.flush()
     seed_visits_demo_data(db, FARM_ID)

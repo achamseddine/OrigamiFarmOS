@@ -9,6 +9,7 @@ from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import new_id, now, write_event
 from app.schemas.observations import ObservationCreate, ObservationOut
+from app.services import emergency_service
 
 router = APIRouter(prefix="/observations", tags=["observations"])
 
@@ -59,6 +60,10 @@ def create_observation(
         payload={"observation_type": payload.observation_type, "severity": payload.severity},
         created_by=current_user.id,
     )
+    db.flush()
+    # A severe observation starts emergency triage by itself (clinical
+    # decision support §12): pattern recognition, never a diagnosis.
+    emergency_service.on_observation(db, observation, user_id=current_user.id)
     db.commit()
     db.refresh(observation)
     return observation

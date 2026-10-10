@@ -285,6 +285,48 @@ void main() {
       expect(done.patch['actual_quantity'], 990);
     });
 
+    test('a medicine receipt is a lot at once, and eligibility follows what the receipt declared', () {
+      final clean = effectsFor('POST', '/pharmacy/lots/receive', {'inventory_item_id': 'med-nacl', 'quantity': 12, 'lot_code': 'NACL-2612', 'expiry_date': '2027-10-09T23:59:00Z'}, localId: 'lot-1').single as AppendRecord;
+      expect(clean.collectionPath, '/pharmacy/lots');
+      expect(clean.record['quantity_on_hand'], 12.0);
+      expect(clean.record['eligible'], isTrue);
+      final held = effectsFor('POST', '/pharmacy/lots/receive', {'inventory_item_id': 'med-vaccine', 'quantity': 40, 'lot_code': 'V1', 'expiry_date': '2027-01-01T00:00:00Z', 'storage_status': 'EXCEPTION', 'cold_chain_exception': true}, localId: 'lot-2').single as AppendRecord;
+      expect(held.record['eligible'], isFalse);
+      expect(held.record['ineligible_reason'], 'storage_exception');
+      final quarantined = effectsFor('PATCH', '/pharmacy/lots/lot-1/status', {'status': 'quarantined', 'reason': 'Discoloured'}, localId: 'x').single as MergeRecord;
+      expect(quarantined.patch['eligible'], isFalse);
+      expect(quarantined.patch['ineligible_reason'], 'quarantined');
+    });
+
+    test('a dose given offline is on the tablet with its lot; a reversal keeps the row', () {
+      final dose = effectsFor('POST', '/pharmacy/administrations', {'subject_type': 'group', 'subject_id': 'flock-duck', 'inventory_item_id': 'med-electrolyte', 'dose_quantity': 1, 'dose_unit': 'sachet', 'route_code': 'PO', 'head_count': 5}, localId: 'adm-1').single as AppendRecord;
+      expect(dose.collectionPath, '/pharmacy/administrations');
+      expect(dose.record['quantity_consumed'], 5.0);
+      expect(dose.record['status'], 'recorded');
+      expect(dose.record['inventory_lot_id'], '', reason: 'first expiry first: the server picks the lot');
+      final reversed = effectsFor('POST', '/pharmacy/administrations/adm-1/reverse', {'reason': 'Wrong flock'}, localId: 'x').single as MergeRecord;
+      expect(reversed.patch['status'], 'reversed');
+      expect(reversed.patch['reversal_reason'], 'Wrong flock');
+      final seen = effectsFor('POST', '/pharmacy/alerts/al-9/acknowledge', null, localId: 'x').single as MergeRecord;
+      expect(seen.collectionPath, '/pharmacy/alerts');
+      expect(seen.patch['status'], 'acknowledged');
+    });
+
+    test('an emergency triage queued offline never carries a match or a drug', () {
+      final queued = effectsFor('POST', '/emergency/assessments', {'subject_type': 'animal', 'subject_id': 'cow-744', 'signs': [{'code': 'temperature_c', 'value_numeric': 40.2}]}, localId: 'as-1').single as AppendRecord;
+      expect(queued.collectionPath, '/emergency/assessments');
+      expect(queued.record['status'], 'queued');
+      expect(queued.record['triage_level'], 'PENDING');
+      expect(queued.record['matches'], isEmpty);
+      expect(queued.record['selected_match_id'], isNull);
+      // Starting a protocol, preparing or confirming a dose has no offline prediction: the server decides.
+      expect(effectsFor('POST', '/emergency/assessments/as-1/start', {'confirmed': true}, localId: 'x'), isEmpty);
+      expect(effectsFor('POST', '/emergency/runs/r1/steps/s3/confirm', {}, localId: 'x'), isEmpty);
+      final escalated = effectsFor('POST', '/emergency/runs/r1/escalate', {'reason': 'Not improving'}, localId: 'x').single as MergeRecord;
+      expect(escalated.collectionPath, '/emergency/runs');
+      expect(escalated.patch['status'], 'escalated');
+    });
+
     test('acknowledging a performance alert marks it; closing it with a reason resolves it', () {
       final seen = effectsFor('POST', '/feed-performance/alerts/al-1/acknowledge', null, localId: 'x').single as MergeRecord;
       expect(seen.collectionPath, '/feed-performance/alerts');

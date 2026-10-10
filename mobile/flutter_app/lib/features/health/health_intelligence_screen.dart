@@ -9,9 +9,13 @@ import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/recommendation.dart';
+import '../../providers/emergency_provider.dart';
+import '../../providers/pharmacy_provider.dart';
 import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../../core/widgets/directional_icon.dart';
+import 'emergency_tab.dart';
+import 'pharmacy_tab.dart';
 
 class HealthIntelligenceScreen extends StatefulWidget {
   const HealthIntelligenceScreen({super.key});
@@ -30,6 +34,8 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
     final selected = alerts.isEmpty ? null : alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
     final tasksProvider = context.watch<TasksProvider>();
     final taskCreated = selected != null && tasksProvider.tasks.any((t) => t.sourceId == selected.id);
+    final pharmacyUnseen = context.watch<PharmacyProvider>().unseenAlerts.length;
+    final emergencyLive = context.watch<EmergencyProvider>().escalated.length;
 
     return SingleChildScrollView(
       child: Column(
@@ -50,10 +56,18 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
               _Tab(label: context.t('trends'), selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
               const SizedBox(width: FarmSpacing.lg),
               _Tab(label: context.t('insights'), selected: _tab == 3, onTap: () => setState(() => _tab = 3)),
+              const SizedBox(width: FarmSpacing.lg),
+              // The farm pharmacy (MEDICINE-PHARMACY-SCHEMA.md): stock kept
+              // whether or not anyone is sick; the badge is alerts unseen.
+              _Tab(label: context.t('phTab'), count: pharmacyUnseen == 0 ? null : pharmacyUnseen, selected: _tab == 4, onTap: () => setState(() => _tab = 4)),
+              const SizedBox(width: FarmSpacing.lg),
+              // Emergency triage and approved protocols; the badge is the
+              // cases escalated to the veterinarian.
+              _Tab(label: context.t('emTab'), count: emergencyLive == 0 ? null : emergencyLive, selected: _tab == 5, onTap: () => setState(() => _tab = 5)),
             ],
           ),
           const Divider(height: 24, color: FarmColors.border),
-          if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
+          if (_tab == 5) const EmergencyTab() else if (_tab == 4) const PharmacyTab() else if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
             if (alerts.isEmpty)
               SectionCard(
                 child: Padding(
