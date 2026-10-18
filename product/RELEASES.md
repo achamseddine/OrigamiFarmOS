@@ -1,5 +1,23 @@
 # Releases
 
+## v0.4.0 — Feed intelligence, farm pharmacy, emergency protocols and the specification gap closure
+
+Adds the generic animal and feed architectures' later increments (numbered
+mixes, feed performance intelligence), the medicine & pharmacy module, the
+clinical decision support / emergency protocol engine, and then closes every
+gap the merged database specifications (PR #10) still listed against them.
+
+**Delivered:**
+- Backend: `units_of_measure`, `farm_assets`, `notification_routes`, `scheduled_job_runs`, `health_cases`, `diagnoses`, `treatment_plans`, `animal_health_conditions`, `animal_weight_records`, `purchase_requisitions` (+ lines, approvals), `inventory_reservations` and the referencing columns on feed batches, feeding events, lots, administrations, treatments, observations and emergency tables (migration `a7c9e1f3b5d7`, downgradable). New routers: `/units-of-measure`, `/assets`, `/notification-routes`, `/scheduler`, `/health/cases`, `/animals/{id}/conditions`, `/animals/{id}/weights`, `/procurement/requisitions`; `/pharmacy/reservations`, `/pharmacy/transfers`; `/emergency/offline-runs`, `/emergency/reassessments/check`; `/feed-mix-settings`; `/feed-performance/ingredient-lots`, `/feed-performance/effective-feed-value`.
+- Feed performance 2.0: lactation-curve, peer-group and production-curve baselines, the full alert catalogue with structured suggested actions, effective feed value, ingredient-lot and supplier signals, re-evaluation on every feeding, lot and context change, a daily scheduled cycle. Pharmacy: unit-referenced quantities, reservations that reduce eligible stock, paired-transaction transfers, requisitions that go through submit / approve / reject with the approving authority snapshotted and that count as incoming supply, prescription-product binding on administrations, per-person routed notifications, a daily expiry scan. Emergency: the engine opens and closes its own health cases, reads recorded allergies and open diagnoses, refuses a weight older than the protocol allows, routes its tasks by role, checks reassessments every 15 minutes, and revalidates protocols executed offline from the signed package, recording every discrepancy.
+- Cross-cutting: `database/schema.sql` is rendered from the ORM (`python -m app.export_schema`), `api/openapi.yaml` exported from the application (`python -m app.export_openapi`), and both are checked by tests; `tests/test_migrations.py` proves migration ↔ ORM parity, the demo seed and a downgrade/upgrade round trip on SQLite and on PostgreSQL 16; a backend CI workflow runs the suite with a PostgreSQL service on every push. Found and fixed on the way: boolean literals in two migrations and foreign-key ordering in the seeders that only PostgreSQL rejects, a notification id column too narrow for routed copies, and SQLAlchemy 2.1's change of default PostgreSQL driver (now pinned by the application).
+- Tablet: Give medicine and Assess animal from the animal profile; the care record on the Digital Twin (doses with their lots, withdrawal in force, standing conditions, latest weight, open case, live emergency); entity routes for every pharmacy, emergency, health-case, feed and procurement record, with the Health screen opening the right tab; **offline protocol execution** — triage on the device from the signed package with the server's own scoring, eligibility and dose arithmetic (`lib/emergency/offline_engine.dart`), the protocol walked step by step at the animal, and the run queued for the server's revalidation. 176 Flutter tests.
+
+**Next:**
+- Versioned statistical / AI feed-performance models behind the same assessment, evidence and confidence contract.
+- Push / SMS channels on notification routes; a separate worker when the API runs as more than one process.
+- Procurement beyond requisitions (purchase orders, receipts, invoices) and costing attribution.
+
 ## v0.3.0 — Farm Visits & Agri-Tourism Module
 
 Adds the license-gated Farm Visits & Agri-Tourism module (tech spec v0.6)

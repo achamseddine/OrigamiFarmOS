@@ -19,6 +19,9 @@ import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
+import '../health/emergency_tab.dart' show showAssessDialog;
+import '../health/pharmacy_tab.dart' show showAdministerDialog;
+import 'animal_care_section.dart';
 import 'animal_feeding_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
@@ -397,10 +400,18 @@ class _HistoryColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     // The quick actions follow the capabilities (§8): "Milk" is offered
     // only to an animal that is milked. The server would refuse the
-    // record anyway; better not to show the button.
+    // record anyway; better not to show the button. The pharmacy and the
+    // emergency engine are reached from here too, for anyone who holds
+    // the health module: a dose is given, and a triage started, at the
+    // animal rather than from a list on another screen.
+    final access = context.watch<AccessProvider>();
+    final health = access.isModuleAvailable(FarmModule.animalHealth);
+    final canCare = health && access.canCreate(FarmModule.animalHealth);
     final actions = <_QuickAction>[
       _QuickAction(FarmIcon.eye, 'observe', () => showObserveDialog(context, animal.id)),
       _QuickAction(FarmIcon.stethoscope, 'treat', () => showTreatDialog(context, animal)),
+      if (canCare) _QuickAction(FarmIcon.syringe, 'phAdminister', () => showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id)),
+      if (canCare) _QuickAction(FarmIcon.bell, 'emAssess', () => showAssessDialog(context, subjectType: 'animal', subjectId: animal.id)),
       _QuickAction(FarmIcon.feedBag, 'feed', () => showFeedDialog(context, animal)),
       if (caps.has(Cap.milkProduction)) _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
       _QuickAction(FarmIcon.location, 'move', () => showMoveDialog(context, animal)),
@@ -477,6 +488,13 @@ class _HistoryColumn extends StatelessWidget {
             ]),
           );
         }),
+        // The care record: doses and their lots, the withdrawal in force,
+        // standing conditions, the latest weight, the open case and the
+        // live emergency — for anyone who holds the health module.
+        if (health) ...[
+          const SizedBox(height: FarmSpacing.md),
+          AnimalCareSection(twin: twin, loading: twinLoading),
+        ],
       ],
     );
   }
@@ -509,8 +527,13 @@ class _HistoryColumn extends StatelessWidget {
   FarmIcon _iconForEvent(String type) => switch (type) {
         'milk_recorded' => FarmIcon.milkBottle,
         'observation_recorded' => FarmIcon.eye,
-        'treatment_recorded' => FarmIcon.stethoscope,
+        'treatment_recorded' || 'treatment_prescribed' || 'health_case_opened' || 'health_case_closed' || 'diagnosis_recorded' => FarmIcon.stethoscope,
+        'medication_administered' || 'medication_administration_reversed' || 'protocol_medication_prepared' || 'protocol_step_completed' => FarmIcon.syringe,
+        'withdrawal_started' => FarmIcon.warning,
+        'animal_weight_recorded' => FarmIcon.scale,
+        'feeding_recorded' => FarmIcon.feedBag,
         'animal_moved' => FarmIcon.location,
+        _ when type.startsWith('emergency_') => FarmIcon.bell,
         _ => FarmIcon.calendar,
       };
 
@@ -518,6 +541,22 @@ class _HistoryColumn extends StatelessWidget {
         'milk_recorded' => 'Milk recorded',
         'observation_recorded' => 'Observation recorded',
         'treatment_recorded' => 'Treatment recorded',
+        'treatment_prescribed' => 'Treatment prescribed',
+        'medication_administered' => 'Medicine given',
+        'medication_administration_reversed' => 'Dose reversed',
+        'withdrawal_started' => 'Withdrawal started',
+        'animal_weight_recorded' => 'Weight recorded',
+        'health_case_opened' => 'Health case opened',
+        'health_case_closed' => 'Health case closed',
+        'diagnosis_recorded' => 'Diagnosis recorded',
+        'emergency_assessment_started' => 'Emergency triage',
+        'emergency_protocol_matched' => 'Protocol matched',
+        'emergency_protocol_started' => 'Protocol started',
+        'emergency_escalated' || 'emergency_protocol_blocked' => 'Emergency escalated',
+        'emergency_reassessed' => 'Reassessed',
+        'emergency_resolved' => 'Emergency resolved',
+        'emergency_offline_synced' => 'Offline emergency synced',
+        'protocol_step_completed' => 'Protocol step done',
         'animal_moved' => 'Location changed',
         _ => type.replaceAll('_', ' '),
       };
@@ -525,7 +564,12 @@ class _HistoryColumn extends StatelessWidget {
   String _valueForEvent(String type, Map<String, dynamic> payload) => switch (type) {
         'milk_recorded' => '${payload['liters'] ?? '—'} L',
         'animal_moved' => '${payload['location_label'] ?? '—'}',
-        'treatment_recorded' => '${payload['medication'] ?? '—'}',
+        'treatment_recorded' || 'treatment_prescribed' => '${payload['medication'] ?? '—'}',
+        'medication_administered' => '${payload['medicine'] ?? payload['medicine_name'] ?? ''}${payload['dose'] != null ? ' ${payload['dose']} ${payload['dose_unit'] ?? ''}' : ''}'.trim(),
+        'animal_weight_recorded' => '${payload['weight_kg'] ?? '—'} kg',
+        'emergency_protocol_matched' || 'emergency_protocol_started' => '${payload['protocol'] ?? ''}',
+        'emergency_escalated' || 'emergency_protocol_blocked' => '${payload['triage'] ?? ''}',
+        'diagnosis_recorded' => '${payload['diagnosis_code'] ?? ''}',
         _ => '',
       };
 

@@ -534,6 +534,10 @@ def assign(
     if assignment_type == "explicit":
         for task in db.scalars(select(models.Task).where(models.Task.source_type == "feeding_review", models.Task.source_id == subject.id, models.Task.status != "done")):
             task.status = "done"
+    # FEED-PERFORMANCE-INTELLIGENCE §12: re-evaluate after FeedingProgramAssigned/changed.
+    from app.services import feed_performance_service as perf  # local import: perf imports this module
+
+    perf.on_context_changed(db, subject_type, subject, trigger="program_assigned", user_id=user_id)
     return row
 
 
@@ -547,6 +551,11 @@ def end_assignment(db: Session, assignment: fm.FeedingAssignment, *, user_id: st
         event_type="feeding_program_changed", payload={"assignment_id": assignment.id, "ended": assignment.assignment_type, "reason": reason},
         created_by=user_id,
     )
+    from app.services import feed_performance_service as perf  # local import: perf imports this module
+
+    subject = db.get(models.Animal, assignment.subject_id) if assignment.subject_type == "animal" else db.get(models.Flock, assignment.subject_id)
+    if subject is not None:
+        perf.on_context_changed(db, assignment.subject_type, subject, trigger="program_changed", user_id=user_id)
     return assignment
 
 
@@ -600,6 +609,9 @@ def record_feeding(
     event = fm.FeedingEvent(
         id=new_id(), farm_id=farm_id, subject_type=subject_type, subject_id=subject.id,
         program_version_id=program_version_id or (assignment.program_version_id if assignment else None),
+        # FEED-SCHEMA §20: every issue names the assignment in force —
+        # the subject's own or the group's it inherits from.
+        assignment_id=assignment.id if assignment else None,
         occurred_at=when, event_type=event_type, head_count=head_count if head_count is not None else (state.head_count if subject_type == "group" else 1),
         recorded_by=user_id, notes=notes, status="recorded", created_at=now(),
     )
@@ -649,11 +661,15 @@ def record_feeding(
     event.total_cost = round(total_cost, 4) if moves_stock else None
     write_event(
         db, farm_id=farm_id, entity_type=subject_type, entity_id=subject.id, event_type="feeding_event_recorded",
-        payload={"feeding_event_id": event.id, "event_type": event_type, "head_count": event.head_count,
+        payload={"feeding_event_id": event.id, "event_type": event_type, "head_count": event.head_count, "assignment_id": event.assignment_id,
                  "components": [{"feed_product_id": c.feed_product_id, "quantity": c.quantity_offered, "unit": c.unit, "lot_id": c.lot_id} for c in event.components],
                  "cost": event.total_cost},
         created_by=user_id,
     )
+    # FEED-PERFORMANCE-INTELLIGENCE §12: re-evaluate after FeedingEventRecorded.
+    from app.services import feed_performance_service as perf  # local import: perf imports this module
+
+    perf.on_feeding_recorded(db, subject_type, subject, user_id=user_id)
     return event
 
 

@@ -23,7 +23,10 @@ from app.api.v1 import (
     pharmacy,
     feeding,
     health,
+    health_cases,
     livestock,
+    platform,
+    procurement,
     modules,
     mouneh,
     notifications,
@@ -38,6 +41,7 @@ from app.api.v1 import (
     users,
     visits,
 )
+from app.core import scheduler
 from app.core.config import get_settings
 from app.core.idempotency import IdempotencyMiddleware
 from app.services.feed_inventory_service import FeedError
@@ -45,6 +49,9 @@ from app.db.base import Base, engine
 from app.domain import feed_models  # noqa: F401 - ensures the feed architecture's tables are registered on Base.metadata
 from app.domain import pharmacy_models  # noqa: F401 - medicine products, inventory lots, pharmacy policies and alerts
 from app.domain import emergency_models  # noqa: F401 - emergency protocols, assessments and runs
+from app.domain import platform_models  # noqa: F401 - units of measure, assets, notification routes, scheduled job runs
+from app.domain import health_models  # noqa: F401 - health cases, diagnoses, treatment plans, conditions, weight records
+from app.domain import procurement_models  # noqa: F401 - purchase requisitions and approvals
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
@@ -57,7 +64,14 @@ async def lifespan(_app: FastAPI):
     # Dev/demo convenience: create tables if they don't exist yet. Real
     # deployments use the Alembic migrations in database/migrations/.
     Base.metadata.create_all(bind=engine)
-    yield
+    # The daily feed-performance cycle, pharmacy scan and reassessment
+    # check (app/core/scheduler.py). Off when FARMOS_SCHEDULER=false.
+    task = scheduler.start()
+    try:
+        yield
+    finally:
+        if task is not None:
+            task.cancel()
 
 
 app = FastAPI(
@@ -113,6 +127,9 @@ app.include_router(feeding.router, prefix=api_prefix)
 app.include_router(feed_performance.router, prefix=api_prefix)
 app.include_router(pharmacy.router, prefix=api_prefix)
 app.include_router(emergency.router, prefix=api_prefix)
+app.include_router(health_cases.router, prefix=api_prefix)
+app.include_router(procurement.router, prefix=api_prefix)
+app.include_router(platform.router, prefix=api_prefix)
 
 
 @app.exception_handler(FeedError)

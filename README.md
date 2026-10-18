@@ -29,8 +29,8 @@ origami-farmos/
   Branding kit/                         Full Option C UI kit: mockup screenshots, tokens, icons, styleguide
   mobile/flutter_app/                   Tablet app (Flutter) — see mobile/flutter_app/README.md
   backend/                              API (FastAPI) — see backend/README.md
-  database/                             schema.sql (PostgreSQL DDL), migrations/ (Alembic), seed_demo_data.sql
-  api/openapi.yaml                      Generated OpenAPI 3.1 spec for the backend
+  database/                             migrations/ (Alembic — the deployment path), schema.sql (PostgreSQL DDL rendered from the ORM), seed_demo_data.sql
+  api/openapi.yaml                      OpenAPI 3.1 contract exported from the backend (`python -m app.export_openapi`)
 ```
 
 ## Getting Started

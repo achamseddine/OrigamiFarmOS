@@ -25,7 +25,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -204,10 +204,14 @@ class FeedBatch(Base):
     # Intended use is classification and policy context, not identity: it
     # is the target the components' usage policies are checked against.
     intended_species_code: Mapped[str | None] = mapped_column(String(30), ForeignKey("species.code"), nullable=True)
-    intended_management_profile: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    intended_management_profile: Mapped[str | None] = mapped_column(String(40), ForeignKey("management_profiles.code"), nullable=True)
     production_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     use_by_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    mixer_asset_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # The person who physically mixed (FEED-SCHEMA §20 operator_id); may
+    # differ from `mixed_by`, the account that opened the batch.
+    operator_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    # The mixer / equipment, when recorded: a farm asset, not free text.
+    mixer_asset_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("farm_assets.id"), nullable=True)
     # planned | in_progress | completed | quarantined | cancelled
     status: Mapped[str] = mapped_column(String(20), default="planned")
     target_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -419,6 +423,7 @@ class FeedingAssignment(Base):
     the group program underneath it (§9, §16)."""
 
     __tablename__ = "feeding_assignments"
+    __table_args__ = (Index("ix_feeding_assignments_subject", "subject_type", "subject_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -448,12 +453,17 @@ class FeedingEvent(Base):
     first, never by editing (§16)."""
 
     __tablename__ = "feeding_events"
+    __table_args__ = (Index("ix_feeding_events_subject", "subject_type", "subject_id", "occurred_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     subject_type: Mapped[str] = mapped_column(String(10))
     subject_id: Mapped[str] = mapped_column(String(36))
     program_version_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feeding_program_versions.id"), nullable=True)
+    # The assignment in force when the feed was issued (FEED-SCHEMA §20:
+    # every issue of a numbered mix identifies its feeding program /
+    # assignment). Inherited from the group when the animal has none.
+    assignment_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feeding_assignments.id"), nullable=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     # offered | delivered | consumed_estimate | refusal
     event_type: Mapped[str] = mapped_column(String(20), default="offered")
@@ -611,7 +621,7 @@ class FeedDemandForecast(Base):
     suggested_reorder_quantity: Mapped[float] = mapped_column(Float, default=0)
     unit: Mapped[str] = mapped_column(String(20), default="kg")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    basis_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    basis_json: Mapped[dict | None] = mapped_column(JSON, default=dict, nullable=True)
 
 
 # -------------------------------------------------------- reconciliation
@@ -661,6 +671,7 @@ class FeedPerformanceMonitor(Base):
     when a change is worth a person's attention (§3)."""
 
     __tablename__ = "feed_performance_monitors"
+    __table_args__ = (Index("ix_feed_perf_monitor_subject", "farm_id", "subject_type", "subject_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -688,6 +699,10 @@ class FeedExposureWindow(Base):
     it was built. Rebuilt whole; never edited."""
 
     __tablename__ = "feed_exposure_windows"
+    __table_args__ = (
+        Index("ix_feed_exposure_subject", "farm_id", "subject_type", "subject_id"),
+        Index("ix_feed_exposure_batch", "feed_batch_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -712,6 +727,7 @@ class FeedPerformanceAssessment(Base):
     reference; never overwritten by a later evaluation."""
 
     __tablename__ = "feed_performance_assessments"
+    __table_args__ = (Index("ix_feed_perf_assessment_monitor", "monitor_id", "evaluated_at"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -763,6 +779,7 @@ class SupplierFeedPerformance(Base):
     supplier's barley and its premix are never one number."""
 
     __tablename__ = "supplier_feed_performance"
+    __table_args__ = (Index("ix_supplier_feed_perf_farm", "farm_id", "supplier_label"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -792,7 +809,10 @@ class FeedPerformanceAlert(Base):
     the condition clears — acknowledging never resolves it."""
 
     __tablename__ = "feed_performance_alerts"
-    __table_args__ = (UniqueConstraint("farm_id", "deduplication_key", "detected_at", name="uq_feed_perf_alert_dedup"),)
+    __table_args__ = (
+        UniqueConstraint("farm_id", "deduplication_key", "detected_at", name="uq_feed_perf_alert_dedup"),
+        Index("ix_feed_perf_alert_status", "farm_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))

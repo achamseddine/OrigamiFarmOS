@@ -99,6 +99,44 @@ class MedicineLotReceive(BaseModel):
     received_at: datetime | None = None
     storage_status: str = "COMPLIANT"
     cold_chain_exception: bool = False
+    # INVENTORY-SCHEMA §3 lot facts
+    supplier_lot_code: str | None = None
+    manufactured_at: datetime | None = None
+    currency: str | None = None
+    # The purchase requisition this delivery fulfils, if any — closes it.
+    source_reference_type: str | None = None
+    source_reference_id: str | None = None
+
+
+class ReservationIn(BaseModel):
+    """`POST /pharmacy/reservations` — hold eligible stock for a purpose
+    (INVENTORY-SCHEMA §5). Reservation is not consumption."""
+
+    inventory_item_id: str
+    quantity: float
+    unit: str | None = None
+    lot_id: str | None = None
+    location_id: str | None = None
+    purpose_type: str = "other"
+    purpose_id: str | None = None
+    purpose_label: str | None = None
+    valid_to: datetime | None = None
+
+
+class ReservationRelease(BaseModel):
+    reason: str | None = None
+
+
+class TransferIn(BaseModel):
+    """`POST /pharmacy/transfers` — part of a lot moves between locations
+    as a paired OUT / IN (INVENTORY-SCHEMA §4)."""
+
+    inventory_item_id: str
+    lot_id: str
+    quantity: float
+    to_location_id: str
+    from_location_id: str | None = None
+    reason: str | None = None
 
 
 class MedicineLotStatus(BaseModel):
@@ -167,6 +205,9 @@ class MedicationAdministrationIn(BaseModel):
     administered_at: datetime | None = None
     reason: str | None = None
     notes: str | None = None
+    # The reservation this dose draws on, and where it was issued from.
+    reservation_id: str | None = None
+    location_id: str | None = None
 
 
 class AdministrationReverse(BaseModel):

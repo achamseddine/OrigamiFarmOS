@@ -67,6 +67,10 @@ def seed_mouneh_demo_data(db: Session, farm_id: str) -> None:
         activated_by=super_user_id,
     )
     db.add(license_row)
+    # Parents are flushed before their children: the unit of work orders
+    # INSERTs by relationship(), not by a bare ForeignKey column, and
+    # PostgreSQL enforces the keys SQLite only declares.
+    db.flush()
 
     # ---- Raw materials + packaging -----------------------------------
     materials_def = [
@@ -87,6 +91,7 @@ def seed_mouneh_demo_data(db: Session, farm_id: str) -> None:
                 unit=unit, default_unit_cost=cost, current_stock=stock, loss_percent_default=loss,
             )
         )
+    db.flush()
 
     # ---- Product (Dynamic Product Builder) -----------------------------
     product = mouneh_models.MounehProduct(
@@ -106,6 +111,7 @@ def seed_mouneh_demo_data(db: Session, farm_id: str) -> None:
         created_by=super_user_id,
     )
     db.add(product)
+    db.flush()
 
     # ---- Recipe (Bill of Materials, per a 100-jar batch) ----------------
     recipe = mouneh_models.MounehRecipe(
@@ -113,6 +119,7 @@ def seed_mouneh_demo_data(db: Session, farm_id: str) -> None:
         notes="Standard Makdous recipe — baby eggplant stuffed with walnuts, red pepper paste and garlic, cured in olive oil.",
     )
     db.add(recipe)
+    db.flush()
 
     recipe_items_def = [
         ("mat-eggplant", 45, "kg", 6),

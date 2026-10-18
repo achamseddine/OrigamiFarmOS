@@ -312,6 +312,34 @@ void main() {
       expect(seen.patch['status'], 'acknowledged');
     });
 
+    test('a dose given to an animal lands on its Digital Twin as well as the pharmacy list', () {
+      final effects = effectsFor('POST', '/pharmacy/administrations', {'subject_type': 'animal', 'subject_id': 'cow-744', 'inventory_item_id': 'med-flunixin', 'dose_quantity': 22, 'dose_unit': 'ml', 'route_code': 'IM'}, localId: 'adm-2');
+      expect(effects.map((e) => e.collectionPath), ['/pharmacy/administrations', '/animals/cow-744']);
+      expect((effects.last as AppendRecord).listKey, 'recent_administrations');
+      expect((effects.last as AppendRecord).record['status'], 'recorded');
+    });
+
+    test('a protocol executed offline from the package appears as an offline case, with what was shown', () {
+      final run = effectsFor('POST', '/emergency/offline-runs', {
+        'operation_id': 'op-1', 'package_signature': 'sig', 'subject_type': 'animal', 'subject_id': 'cow-744', 'occurred_at': '2026-10-18T07:00:00Z',
+        'signs': [{'code': 'temperature_c', 'value_numeric': 40.2}],
+        'shown': {'protocol_version_id': 'v1', 'match_score': 1.0, 'triage_level': 'HIGH', 'escalated': false, 'escalation_reasons': []},
+        'steps': [{'protocol_step_id': 's1', 'status': 'completed'}],
+      }, localId: 'off-1').single as AppendRecord;
+      expect(run.collectionPath, '/emergency/assessments');
+      expect(run.record['status'], 'offline');
+      expect(run.record['source'], 'offline');
+      expect(run.record['triage_level'], 'HIGH');
+      expect(run.record['offline_operation_id'], 'op-1');
+      expect(run.record['matches'], isEmpty, reason: 'the server builds the match record at sync');
+      final escalated = effectsFor('POST', '/emergency/offline-runs', {
+        'operation_id': 'op-2', 'subject_type': 'animal', 'subject_id': 'goat-189', 'signs': [],
+        'shown': {'protocol_version_id': null, 'triage_level': 'LOW', 'escalated': true, 'escalation_reasons': ['no protocol']},
+      }, localId: 'off-2').single as AppendRecord;
+      expect(escalated.record['status'], 'escalated');
+      expect(escalated.record['escalation_reasons'], ['no protocol']);
+    });
+
     test('an emergency triage queued offline never carries a match or a drug', () {
       final queued = effectsFor('POST', '/emergency/assessments', {'subject_type': 'animal', 'subject_id': 'cow-744', 'signs': [{'code': 'temperature_c', 'value_numeric': 40.2}]}, localId: 'as-1').single as AppendRecord;
       expect(queued.collectionPath, '/emergency/assessments');
@@ -371,6 +399,13 @@ void main() {
 
     test('an unknown path still gets a readable label', () {
       expect(describeWrite('/something-new').labelKey, 'outboxChange');
+    });
+
+    test('an offline protocol run, a health case and a requisition read as what they are', () {
+      expect(describeWrite('/emergency/offline-runs').labelKey, 'outboxEmergencyOffline');
+      expect(describeWrite('/emergency/assessments').labelKey, 'outboxEmergency');
+      expect(describeWrite('/health/cases/c1/close').labelKey, 'outboxHealthCase');
+      expect(describeWrite('/procurement/requisitions').labelKey, 'outboxRequisition');
     });
 
     test('feed architecture writes read as what they are about', () {

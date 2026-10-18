@@ -130,6 +130,7 @@ def seed_visits_demo_data(db: Session, farm_id: str = FARM_ID) -> None:
         capacity=60, status="completed", created_by=super_user_id,
     )
     db.add_all([session_upcoming, session_upcoming_2, session_past])
+    db.flush()  # rosters, costs and bookings reference the sessions; PostgreSQL enforces that
 
     # ---- Staff roster for the upcoming Saturday (special weekend rates) --
     db.add_all([

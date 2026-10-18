@@ -25,7 +25,7 @@ from app.schemas.feeding import (
     AdjustmentCreate, AllocationCreate, AllocationOut, AllocationTransfer, AssignmentCreate, AssignmentOut, BatchComplete,
     BatchOut, BatchQuarantine, BatchStart, FeedAvailabilityOut, FeedingEventCreate, FeedingEventOut, FeedingEventReverse, FeedProductCreate,
     FeedProductOut, FeedProductUpdate, FormulaCreate, FormulaOut, FormulaVersionCreate, FormulaVersionOut, FeedLotOut,
-    LotReceive, LotStatusUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
+    LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
 )
@@ -106,14 +106,15 @@ def _batch_out(db: Session, b: fm.FeedBatch) -> dict:
                       "lot_code": lot.lot_code if lot else None, "target_quantity": c.target_quantity, "actual_quantity": c.actual_quantity,
                       "unit": c.unit, "unit_cost": c.unit_cost, "cost": c.cost})
     out_lot = db.get(fm.FeedLot, b.output_lot_id) if b.output_lot_id else None
-    operator = db.get(models.User, b.mixed_by) if b.mixed_by else None
+    operator = db.get(models.User, b.operator_id or b.mixed_by) if (b.operator_id or b.mixed_by) else None
     return {
         "id": b.id, "farm_id": b.farm_id, "feed_product_id": b.feed_product_id, "product_name": _name(db, b.feed_product_id),
         "formula_version_id": b.formula_version_id, "formula_code": version.formula.code if version else None,
         "formula_version": version.version if version else None, "batch_code": b.batch_code,
         "mix_number": b.mix_number, "mix_code": b.mix_code, "intended_species_code": b.intended_species_code,
         "intended_management_profile": b.intended_management_profile, "production_date": b.production_date, "use_by_date": b.use_by_date,
-        "operator_id": b.mixed_by, "operator_name": operator.name if operator else None, "mixer_asset_id": b.mixer_asset_id, "status": b.status,
+        "operator_id": b.operator_id or b.mixed_by, "operator_name": operator.name if operator else None, "mixer_asset_id": b.mixer_asset_id,
+        "mixer_asset_name": batches._asset_name(db, b.mixer_asset_id), "status": b.status,
         "target_quantity": b.target_quantity, "actual_quantity": b.actual_quantity, "unit": b.unit, "planned_cost": b.planned_cost,
         "actual_cost": b.actual_cost, "unit_cost": b.unit_cost, "output_lot_id": b.output_lot_id, "output_lot_code": out_lot.lot_code if out_lot else None,
         "started_at": b.started_at, "produced_at": b.produced_at, "mixed_by": b.mixed_by, "notes": b.notes, "components": comps,
@@ -429,10 +430,28 @@ def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models
     batch = batches.start_batch(db, user.farm_id, formula_version_id=payload.formula_version_id, formula_id=payload.formula_id, batch_code=payload.batch_code,
                                 target_quantity=payload.target_quantity, unit=payload.unit, notes=payload.notes,
                                 intended_species_code=payload.intended_species_code, intended_management_profile=payload.intended_management_profile,
-                                mixer_asset_id=payload.mixer_asset_id, production_date=ensure_utc(payload.production_date) if payload.production_date else None,
-                                user_id=user.id)
+                                mixer_asset_id=payload.mixer_asset_id, operator_id=payload.operator_id,
+                                production_date=ensure_utc(payload.production_date) if payload.production_date else None, user_id=user.id)
     _commit(db, batch)
     return _batch_out(db, batch)
+
+
+@router.get("/feed-mix-settings", response_model=MixSettingsOut)
+def get_mix_settings(db: Session = Depends(get_db), user: models.User = Depends(_view)):
+    """The farm's one mix sequence (FEED-SCHEMA §20): last number, next
+    number and the display format the next mix code will take."""
+    seq = batches.mix_settings(db, user.farm_id)
+    db.commit()
+    return batches.mix_settings_dict(seq)
+
+
+@router.put("/feed-mix-settings", response_model=MixSettingsOut)
+def update_mix_settings(payload: MixSettingsUpdate, db: Session = Depends(get_db), user: models.User = Depends(require_permission(perms.FEED_NUTRITION, perms.CONFIGURE))):
+    """Changes the display format for future mixes. The number is the
+    identity: it is never restarted, and existing mixes keep their codes."""
+    seq = batches.set_mix_code_format(db, user.farm_id, code_format=payload.code_format, user_id=user.id)
+    db.commit()
+    return batches.mix_settings_dict(seq)
 
 
 @router.get("/feed-mixes/{mix_number}")
@@ -470,7 +489,8 @@ def batch_usage(batch_id: str, db: Session = Depends(get_db), user: models.User 
 def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     batch = _batch_or_404(db, batch_id, user.farm_id)
     batches.complete_batch(db, batch, actuals=[a.model_dump() for a in payload.actuals], actual_quantity=payload.actual_quantity, produced_at=payload.produced_at,
-                           lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, allow_negative=payload.allow_negative, user_id=user.id)
+                           lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, allow_negative=payload.allow_negative,
+                           operator_id=payload.operator_id, mixer_asset_id=payload.mixer_asset_id, user_id=user.id)
     # FEED-PERFORMANCE-INTELLIGENCE §12: re-evaluate after FeedBatchCompleted —
     # the formula-compliance check is the first thing a manager should see.
     perf.on_batch_completed(db, batch, user_id=user.id)

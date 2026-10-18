@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.domain import feed_models as fm
 from app.domain import models
 from app.feeding.catalog import ensure_feed_reference_data
+from app.services import asset_service as assets
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
 from app.services import feed_inventory_service as inv
@@ -175,9 +176,12 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     )
     formula.id  # noqa: B018 — keep the reference
     v1 = formula.versions[0]
+    # The mixer is a farm asset (ASSET-MAINTENANCE §2), named on every mix.
+    mixer = assets.create_asset(db, farm_id, asset_id="asset-mixer-2", code="mixer-wagon-2", name="Mixer wagon 2", asset_type="mixer", manufacturer="Kuhn",
+                                model="Profile 14.1", user_id=u)
     batch = batches.start_batch(db, farm_id, formula_version_id=v1.id, formula_id=None, batch_code="MIX-2609-01", target_quantity=1000, unit="kg",
                                 notes="Morning mix, mixer wagon 2.", intended_species_code="cow", intended_management_profile="dairy",
-                                mixer_asset_id="Mixer wagon 2", user_id=u)
+                                mixer_asset_id=mixer.id, operator_id="user-worker-1", user_id=u)
     batch.started_at = _days_ago(10, hour=5)
     batches.complete_batch(
         db, batch, actual_quantity=1000, produced_at=_days_ago(10, hour=6),
@@ -199,7 +203,7 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     )
     v2.effective_from = _days_ago(3)
     open_batch = batches.start_batch(db, farm_id, formula_version_id=v2.id, formula_id=None, batch_code="MIX-2609-02", target_quantity=800, unit="kg", notes=None,
-                                     intended_species_code="cow", intended_management_profile="dairy", mixer_asset_id="Mixer wagon 2", user_id=u)
+                                     intended_species_code="cow", intended_management_profile="dairy", mixer_asset_id=mixer.id, operator_id="user-worker-1", user_id=u)
     open_batch.id  # noqa: B018
 
     # ------------------------------------------------------------ programs

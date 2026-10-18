@@ -35,7 +35,42 @@ class EntityRouter {
     'sale': FarmModule.finance,
     'expense': FarmModule.finance,
     'employee': FarmModule.employees,
+    // The farm pharmacy and the emergency engine live on the Health
+    // screen (its Pharmacy and Emergency tabs); a stock alert, a medicine,
+    // a lot, a triage, a run or a health case all open there and the
+    // screen picks the tab from the entity type.
+    'medicine_product': FarmModule.animalHealth,
+    'pharmacy_stock_alert': FarmModule.animalHealth,
+    'inventory_lot': FarmModule.animalHealth,
+    'medication_administration': FarmModule.animalHealth,
+    'treatment': FarmModule.animalHealth,
+    'health_case': FarmModule.animalHealth,
+    'emergency_assessment': FarmModule.animalHealth,
+    'emergency_run': FarmModule.animalHealth,
+    'emergency_protocol': FarmModule.animalHealth,
+    // Numbered mixes, lots, products and the performance findings open the
+    // feed workspace, which focuses the matching tab.
+    'feed_batch': FarmModule.feedNutrition,
+    'feed_mix': FarmModule.feedNutrition,
+    'feed_lot': FarmModule.feedNutrition,
+    'feed_product': FarmModule.feedNutrition,
+    'feed_formula': FarmModule.feedNutrition,
+    'feeding_program': FarmModule.feedNutrition,
+    'feed_performance_alert': FarmModule.feedNutrition,
+    'feed_performance_monitor': FarmModule.feedNutrition,
+    'supplier': FarmModule.feedNutrition,
+    'purchase_requisition': FarmModule.inventory,
+    'farm_asset': FarmModule.settings,
+    'unit_of_measure': FarmModule.settings,
+    'animal_group': FarmModule.animals,
+    'group': FarmModule.animals,
   };
+
+  /// Entity types the Health screen's Pharmacy tab serves.
+  static const Set<String> pharmacyEntities = {'medicine_product', 'pharmacy_stock_alert', 'inventory_lot', 'medication_administration'};
+
+  /// Entity types the Health screen's Emergency tab serves.
+  static const Set<String> emergencyEntities = {'health_case', 'emergency_assessment', 'emergency_run', 'emergency_protocol'};
 
   static String? moduleFor(String entityType) => _moduleForEntity[entityType];
 

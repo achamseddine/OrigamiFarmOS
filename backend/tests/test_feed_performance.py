@@ -148,7 +148,10 @@ class TestAssessments:
         tasks = db.scalars(select(models.Task).where(models.Task.source_type == "feed_performance_review", models.Task.source_id == alert["id"])).all()
         assert len(tasks) == 1 and tasks[0].status == "open" and tasks[0].priority == "high"
         bell = client.get(f"{API}/notifications", headers=_h(client)).json()["notifications"]
-        assert any(n["source_type"] == "feed_performance_alert" and n["source_id"] == alert["id"] for n in bell)
+        # Routed to the manager personally (one bell row per recipient), so
+        # the source id carries the alert and the person.
+        mine = [n for n in bell if n["source_type"] == "feed_performance_alert" and n["source_id"].startswith(alert["id"])]
+        assert len(mine) == 1 and mine[0]["user_id"] == "user-rami" and mine[0]["entity_type"] == "animal" and mine[0]["entity_id"] == GIGI
         client.post(f"{API}/feed-performance/monitors/{monitor['id']}/evaluate", headers=_h(client))
         assert len([x for x in _alerts(client) if x["subject_id"] == GIGI]) == 1
         assert len(client.get(f"{API}/feed-performance/assessments", params={"monitor_id": monitor["id"]}, headers=_h(client)).json()) == 2, "every evaluation is kept"
@@ -159,7 +162,7 @@ class TestAssessments:
         assert r.json()["status"] == "acknowledged" and r.json()["acknowledged_by"]
         assert [x["status"] for x in _alerts(client) if x["subject_id"] == GIGI] == ["acknowledged"]
         bell = client.get(f"{API}/notifications", headers=_h(client)).json()["notifications"]
-        assert not any(n["source_id"] == alert["id"] for n in bell), "acknowledged alerts leave the bell"
+        assert not any(n["source_id"].startswith(alert["id"]) for n in bell), "acknowledged alerts leave the bell"
 
         # Milk comes back within the threshold: the alert resolves itself and its task closes.
         _milk(db, GIGI, {1: 2.9, 2: 2.9, 3: 2.9})

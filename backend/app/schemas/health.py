@@ -24,6 +24,11 @@ class TreatmentCreate(BaseModel):
     route: str
     responsible_user_id: str
     diagnosis: str | None = None
+    # The stocked medicine the prescription names (MEDICINE-PHARMACY §11),
+    # the case it belongs to and the plan it carries out.
+    medicine_product_id: str | None = None
+    health_case_id: str | None = None
+    treatment_plan_id: str | None = None
     start_at: datetime | None = None
     end_at: datetime | None = None
     withdrawal_until: datetime | None = None
@@ -45,6 +50,9 @@ class TreatmentOut(ORMModel):
     entity_id: str
     diagnosis: str | None = None
     medication: str
+    medicine_product_id: str | None = None
+    health_case_id: str | None = None
+    treatment_plan_id: str | None = None
     dose: str
     route: str
     start_at: datetime

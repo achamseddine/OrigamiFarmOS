@@ -23,7 +23,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -86,9 +86,9 @@ class MedicineProduct(Base):
     brand_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     dosage_form: Mapped[str] = mapped_column(String(60), default="injectable")
     strength_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # No UOM table in this codebase: a unit is a string the conversion
-    # catalogue resolves (feed architecture), e.g. "mg/ml", "IU/ml".
-    strength_uom: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # A unit is a row of `units_of_measure` (the schema's uom table): the
+    # natural-key code, e.g. "mg/ml", "iu/ml", "%".
+    strength_uom: Mapped[str | None] = mapped_column(String(30), ForeignKey("units_of_measure.code"), nullable=True)
     strength_basis: Mapped[str | None] = mapped_column(String(80), nullable=True)
     administration_routes: Mapped[list] = mapped_column(JSON, default=list)
     prescription_required: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -99,7 +99,7 @@ class MedicineProduct(Base):
     storage_max_c: Mapped[float | None] = mapped_column(Float, nullable=True)
     opened_shelf_life_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_pack_size: Mapped[float | None] = mapped_column(Float, nullable=True)
-    pack_uom: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    pack_uom: Mapped[str | None] = mapped_column(String(30), ForeignKey("units_of_measure.code"), nullable=True)
     manufacturer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     authorization_reference: Mapped[str | None] = mapped_column(String(150), nullable=True)
     # Species the product is authorised for; empty means any. Checked
@@ -129,7 +129,7 @@ class MedicineProductIngredient(Base):
     medicine_product_id: Mapped[str] = mapped_column(String(36), ForeignKey("medicine_products.inventory_item_id"), primary_key=True)
     active_ingredient_id: Mapped[str] = mapped_column(String(36), ForeignKey("medicine_active_ingredients.id"), primary_key=True)
     concentration_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    concentration_uom: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    concentration_uom: Mapped[str | None] = mapped_column(String(30), ForeignKey("units_of_measure.code"), nullable=True)
     concentration_basis: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     product: Mapped["MedicineProduct"] = relationship(back_populates="ingredients")
@@ -154,16 +154,28 @@ class InventoryLot(Base):
     posted inventory transaction."""
 
     __tablename__ = "inventory_lots"
-    __table_args__ = (UniqueConstraint("inventory_item_id", "lot_code", name="uq_inventory_lot_item_code"),)
+    __table_args__ = (
+        UniqueConstraint("inventory_item_id", "lot_code", name="uq_inventory_lot_item_code"),
+        Index("ix_inventory_lots_item", "farm_id", "inventory_item_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     inventory_item_id: Mapped[str] = mapped_column(String(36), ForeignKey("inventory_items.id"))
     lot_code: Mapped[str] = mapped_column(String(120))
+    # The manufacturer's / supplier's own lot number when it differs from
+    # the farm's lot code (INVENTORY-SCHEMA §3).
+    supplier_lot_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    manufactured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # purchased | opening_balance | donation | return
     source_type: Mapped[str] = mapped_column(String(30), default="purchased")
+    # The commercial document the lot came from (goods receipt, requisition).
+    source_reference_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     supplier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("suppliers.id"), nullable=True)
     supplier_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The receiving location; later movements carry their own location on
+    # the transaction, and the per-location balance is derived from them.
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     expiry_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -171,15 +183,51 @@ class InventoryLot(Base):
     accepted_quantity: Mapped[float] = mapped_column(Float, default=0)
     rejected_quantity: Mapped[float] = mapped_column(Float, default=0)
     quantity_on_hand: Mapped[float] = mapped_column(Float, default=0)
-    unit: Mapped[str] = mapped_column(String(20), default="items")
+    unit: Mapped[str] = mapped_column(String(30), ForeignKey("units_of_measure.code"), default="items")
     unit_cost: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    # Availability: active | quarantined | blocked | recalled | expired | depleted
     status: Mapped[str] = mapped_column(String(20), default="active")
+    # Quality release: RELEASED | QUARANTINED | BLOCKED | RECALLED | EXPIRED
+    # (INVENTORY-SCHEMA §3) — kept in step with `status` by the service.
+    quality_status: Mapped[str] = mapped_column(String(30), default="RELEASED")
     reference: Mapped[str | None] = mapped_column(String(150), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     medicine: Mapped["MedicineLotDetail | None"] = relationship(back_populates="lot", uselist=False, cascade="all, delete-orphan")
+
+
+class InventoryReservation(Base):
+    """Stock held for a purpose (INVENTORY-SCHEMA §5): a protocol run, a
+    treatment course, a planned procedure. Reservation is not consumption:
+    it lowers what is available to everyone else, and the issue for that
+    purpose consumes it."""
+
+    __tablename__ = "inventory_reservations"
+    __table_args__ = (Index("ix_inventory_reservations_item", "farm_id", "inventory_item_id", "status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    inventory_item_id: Mapped[str] = mapped_column(String(36), ForeignKey("inventory_items.id"))
+    inventory_lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("inventory_lots.id"), nullable=True)
+    location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    quantity: Mapped[float] = mapped_column(Float)
+    consumed_quantity: Mapped[float] = mapped_column(Float, default=0)
+    unit: Mapped[str] = mapped_column(String(30), ForeignKey("units_of_measure.code"))
+    # emergency_run | treatment | planned_procedure | other
+    purpose_type: Mapped[str] = mapped_column(String(80))
+    purpose_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    purpose_label: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # active | consumed | released | expired
+    status: Mapped[str] = mapped_column(String(30), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    release_reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
 
 class MedicineLotDetail(Base):
@@ -238,7 +286,10 @@ class PharmacyStockAlert(Base):
     A stock alert is never treatment advice."""
 
     __tablename__ = "pharmacy_stock_alerts"
-    __table_args__ = (UniqueConstraint("farm_id", "deduplication_key", "detected_at", name="uq_pharmacy_alert_dedup"),)
+    __table_args__ = (
+        UniqueConstraint("farm_id", "deduplication_key", "detected_at", name="uq_pharmacy_alert_dedup"),
+        Index("ix_pharmacy_alerts_status", "farm_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -264,6 +315,9 @@ class PharmacyStockAlert(Base):
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     deduplication_key: Mapped[str] = mapped_column(String(255))
     requisition_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The DRAFT purchase requisition the shortage opened (PROCUREMENT §5);
+    # one per unresolved shortage, never approved from here.
+    requisition_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("purchase_requisitions.id"), nullable=True)
 
 
 # ------------------------------------------------------- administration
@@ -274,6 +328,7 @@ class MedicationAdministration(Base):
     a correction, never edited."""
 
     __tablename__ = "medication_administrations"
+    __table_args__ = (Index("ix_medication_admin_subject", "farm_id", "subject_type", "subject_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -284,12 +339,15 @@ class MedicationAdministration(Base):
     protocol_run_step_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     inventory_item_id: Mapped[str] = mapped_column(String(36), ForeignKey("medicine_products.inventory_item_id"))
     inventory_lot_id: Mapped[str] = mapped_column(String(36), ForeignKey("inventory_lots.id"))
+    # The reservation this dose drew on, when stock was held for the purpose.
+    reservation_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("inventory_reservations.id"), nullable=True)
+    location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     dose_quantity: Mapped[float] = mapped_column(Float)
-    dose_unit: Mapped[str] = mapped_column(String(20))
+    dose_unit: Mapped[str] = mapped_column(String(30), ForeignKey("units_of_measure.code"))
     route_code: Mapped[str] = mapped_column(String(40))
     head_count: Mapped[int] = mapped_column(Integer, default=1)
     quantity_consumed: Mapped[float] = mapped_column(Float)
-    unit: Mapped[str] = mapped_column(String(20))
+    unit: Mapped[str] = mapped_column(String(30), ForeignKey("units_of_measure.code"))
     administered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     administered_by: Mapped[str] = mapped_column(String(36))
     inventory_transaction_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

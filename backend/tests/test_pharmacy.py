@@ -211,17 +211,42 @@ class TestPolicyAndAlerts:
         r = client.post(f"{API}/pharmacy/alerts/{low['id']}/requisition", headers=_h(client))
         assert r.status_code == 200, r.text
         first = r.json()
-        assert first["created"] and first["status"] == "open" and "16 bag" in first["title"] and first["alert"]["requisition_task_id"] == first["task_id"]
+        assert first["created"] and first["status"] == "draft" and "16 bag" in first["title"] and first["alert"]["requisition_task_id"] == first["task_id"]
+        req = first["requisition"]
+        assert req["requisition_no"].startswith("REQ-") and req["purpose_code"] == "pharmacy_replenishment" and req["source_reference_id"] == low["id"]
+        assert req["lines"][0]["inventory_item_id"] == NACL and req["lines"][0]["requested_quantity"] == 16 and req["lines"][0]["uom_code"] == "bag"
+        assert first["alert"]["requisition_id"] == req["id"]
         r = client.post(f"{API}/pharmacy/alerts/{low['id']}/requisition", headers=_h(client))
-        assert r.json()["task_id"] == first["task_id"] and not r.json()["created"], "no duplicate drafts for one unresolved shortage"
+        assert r.json()["requisition_id"] == req["id"] and r.json()["task_id"] == first["task_id"] and not r.json()["created"], "no duplicate drafts for one unresolved shortage"
         task = db.get(models.Task, first["task_id"])
-        assert task.source_type == "pharmacy_requisition" and "Needs approval" in task.description
+        assert task.source_type == "pharmacy_requisition" and "approve" in task.description.lower() and task.assigned_to == "user-rami"
         assert _medicine(client, NACL)["open_requisition"]
-        # A manual close needs a reason.
-        r = client.post(f"{API}/pharmacy/alerts/{low['id']}/resolve", json={"note": " "}, headers=_h(client))
+        # The draft is a procurement document: it is submitted and approved
+        # there, never approved from the pharmacy; approval counts as
+        # confirmed incoming so the recommendation drops to zero.
+        r = client.post(f"{API}/procurement/requisitions/{req['id']}/submit", headers=_h(client))
+        assert r.status_code == 200 and r.json()["status"] == "submitted", r.text
+        r = client.post(f"{API}/procurement/requisitions/{req['id']}/approve", json={"comments": "ok"}, headers=_h(client))
+        assert r.status_code == 200 and r.json()["status"] == "approved" and r.json()["approvals"][0]["authority"]["basis"] == "role", r.text
+        m = _medicine(client, NACL)
+        assert m["confirmed_incoming"] == 16 and m["recommended_reorder"] == 0 and m["status"] == "LOW", "incoming supply is not stock: still LOW, nothing more to order"
+        # Delivery against the requisition closes it and clears the shortage.
+        r = client.post(f"{API}/pharmacy/lots/receive", json={"inventory_item_id": NACL, "quantity": 16, "lot_code": "NACL-2701", "expiry_date": _days(400),
+                                                            "supplier_lot_code": "MS-88211", "source_reference_type": "purchase_requisition", "source_reference_id": req["id"]}, headers=_h(client))
+        assert r.status_code == 201 and r.json()["supplier_lot_code"] == "MS-88211" and r.json()["source_reference_id"] == req["id"], r.text
+        r = client.get(f"{API}/procurement/requisitions/{req['id']}", headers=_h(client))
+        assert r.json()["status"] == "received"
+        m = _medicine(client, NACL)
+        assert m["status"] == "OK" and m["confirmed_incoming"] == 0 and not m["open_requisition"]
+        assert next(a for a in _alerts(client, NACL, "all") if a["id"] == low["id"])["status"] == "resolved", "the delivery resolved the shortage"
+        # A manual close needs a reason, and only an open condition can be closed.
+        other = next(a for a in _alerts(client, OXYTET) if a["alert_type"] == "EXPIRED_STOCK")
+        r = client.post(f"{API}/pharmacy/alerts/{other['id']}/resolve", json={"note": " "}, headers=_h(client))
         assert r.status_code == 422
-        r = client.post(f"{API}/pharmacy/alerts/{low['id']}/resolve", json={"note": "Order placed with MedSupply, due Friday"}, headers=_h(client))
+        r = client.post(f"{API}/pharmacy/alerts/{other['id']}/resolve", json={"note": "Expired lot disposed and recorded as waste"}, headers=_h(client))
         assert r.status_code == 200 and r.json()["status"] == "resolved"
+        r = client.post(f"{API}/pharmacy/alerts/{low['id']}/resolve", json={"note": "again"}, headers=_h(client))
+        assert r.status_code == 422 and "already resolved" in r.json()["detail"]
 
 
 class TestAdministration:

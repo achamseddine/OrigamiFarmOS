@@ -31,10 +31,14 @@ from sqlalchemy.orm import Session
 
 from app.core import permissions as perms
 from app.domain import emergency_models as em
+from app.domain import health_models as hm
 from app.domain import models
 from app.domain import pharmacy_models as pm
 from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.services import health_case_service as cases
 from app.services import pharmacy_service as ph
+from app.services import routing_service as routing
+from app.services import uom_service
 from app.services.feed_inventory_service import FeedError
 
 
@@ -43,11 +47,14 @@ class EmergencyError(FeedError):
 
 
 MODEL_REFERENCE = "origami.emergency.deterministic"
-MODEL_VERSION = "1.0"
+MODEL_VERSION = "1.1"
 OBSERVATION_LOOKBACK_HOURS = 24
 DUPLICATE_WINDOW_HOURS = 6
 ESCALATION_TASK = "emergency_escalation"
 NOTIFY_TASK = "emergency_notification"
+REASSESS_TASK = "emergency_reassessment"
+CASE_SEVERITY = {"CRITICAL": "critical", "HIGH": "high", "MODERATE": "moderate", "LOW": "low"}
+ALLERGY_TYPES = ("allergy", "adverse_reaction", "contraindication")
 
 # Standard sign vocabulary the tablet offers; protocols may add their own.
 STANDARD_SIGNS = (
@@ -178,6 +185,12 @@ def _validate_version_payload(db: Session, farm_id: str, *, trigger_rules: list[
             lo, hi = med.get("minimum_dose_quantity"), med.get("maximum_dose_quantity")
             if lo is not None and hi is not None and lo > hi:
                 raise EmergencyError("minimum_dose_quantity cannot exceed maximum_dose_quantity.")
+            # Units are references (FOUNDATION uom).
+            med["dose_unit"] = uom_service.require(db, med.get("dose_unit"), what="dose unit")
+            if med.get("weight_unit"):
+                med["weight_unit"] = uom_service.require(db, med["weight_unit"], what="weight unit")
+            if (med.get("weight_max_age_days") or 0) < 0:
+                raise EmergencyError("weight_max_age_days cannot be negative.")
         elif med:
             raise EmergencyError(f"Step {s['step_no']} is not a medication step but carries a medication instruction.")
 
@@ -297,6 +310,9 @@ def current_versions(db: Session, farm_id: str, *, at: datetime | None = None) -
 
 # ------------------------------------------------------------------ facts
 def _animal_facts(db: Session, subject_type: str, subject) -> dict:
+    """The authoritative facts the eligibility rules read (§5): the
+    animal record, its dated weight, open diagnoses, recorded allergies /
+    adverse reactions / conditions, recent medication and withdrawal."""
     at = now()
     if subject_type == "animal":
         a: models.Animal = subject
@@ -305,17 +321,29 @@ def _animal_facts(db: Session, subject_type: str, subject) -> dict:
             pm.MedicationAdministration.subject_id == a.id, pm.MedicationAdministration.status == "recorded",
             pm.MedicationAdministration.administered_at >= at - timedelta(days=7))).all()
         treatments = db.scalar(select(func.count(models.Treatment.id)).where(models.Treatment.entity_type == "animal", models.Treatment.entity_id == a.id, models.Treatment.status == "active")) or 0
+        weight, weight_age = cases.weight_age_days(db, a.id)
+        if weight is None and a.weight_kg is not None:
+            weight = a.weight_kg
+        conditions = cases.active_conditions(db, a.id)
+        case = cases.current_case(db, "animal", a.id)
         return {
             "subject_type": "animal", "species": a.species, "sex": a.sex, "life_stage": a.life_stage, "management_profile": a.management_profile,
-            "weight_kg": a.weight_kg, "weight_known": a.weight_kg is not None, "pregnant": bool(a.pregnant), "lactating": bool(a.lactating),
+            "weight_kg": weight, "weight_known": weight is not None, "weight_age_days": weight_age, "weight_source": "record" if weight_age is not None else ("animal_record" if weight is not None else None),
+            "pregnant": bool(a.pregnant), "lactating": bool(a.lactating),
             "withdrawal_active": bool(a.withdrawal_until and ensure_utc(a.withdrawal_until) > at), "withdrawal_until": a.withdrawal_until.isoformat() if a.withdrawal_until else None,
             "status": a.status, "age_days": age_days, "health_score": a.health_score, "active_treatments": treatments,
             "recent_medications": [{"inventory_item_id": r.inventory_item_id, "administered_at": r.administered_at.isoformat(), "route": r.route_code} for r in recent],
+            "active_diagnoses": cases.active_diagnosis_codes(db, "animal", a.id), "health_case_id": case.id if case else None,
+            "allergies": sorted({c.code for c in conditions if c.condition_type in ALLERGY_TYPES}),
+            "conditions": sorted({c.code for c in conditions if c.condition_type == "chronic_condition"}),
         }
     g: models.Flock = subject
+    case = cases.current_case(db, "group", g.id)
     return {"subject_type": "group", "species": g.species, "sex": getattr(g, "sex_composition", None), "life_stage": getattr(g, "life_stage", None),
-            "management_profile": getattr(g, "management_profile", None), "weight_kg": None, "weight_known": False, "pregnant": False, "lactating": False,
-            "withdrawal_active": False, "status": getattr(g, "status", None), "age_days": None, "count": g.count, "active_treatments": 0, "recent_medications": []}
+            "management_profile": getattr(g, "management_profile", None), "weight_kg": None, "weight_known": False, "weight_age_days": None, "weight_source": None,
+            "pregnant": False, "lactating": False, "withdrawal_active": False, "status": getattr(g, "status", None), "age_days": None, "count": g.count,
+            "active_treatments": 0, "recent_medications": [], "active_diagnoses": cases.active_diagnosis_codes(db, "group", g.id), "health_case_id": case.id if case else None,
+            "allergies": [], "conditions": []}
 
 
 def _normalise_code(code: str) -> str:
@@ -421,18 +449,44 @@ def _eval_eligibility(version: em.EmergencyProtocolVersion, facts: dict) -> tupl
             product = p.get("not")
             cutoff = now() - timedelta(hours=within)
             passed = not any(m["inventory_item_id"] == product and ensure_utc(datetime.fromisoformat(m["administered_at"])) >= cutoff for m in facts.get("recent_medications", []))
+        elif r.rule_type in ("active_diagnosis", "allergy", "condition"):
+            # Authoritative clinical facts (HEALTH-VETERINARY-SCHEMA): the
+            # codes on open diagnoses, recorded allergies / adverse reactions
+            # / contraindications, and chronic conditions.
+            have = {str(x).lower() for x in (facts.get({"active_diagnosis": "active_diagnoses", "allergy": "allergies", "condition": "conditions"}[r.rule_type]) or [])}
+            listed = {str(x).lower() for x in (p.get("not_in") or ([p["not"]] if p.get("not") else []))}
+            wanted = {str(x).lower() for x in (p.get("in") or [])}
+            if listed:
+                passed = not (have & listed)
+            elif wanted:
+                passed = bool(have & wanted)
+            elif "any" in p:
+                passed = bool(have) == bool(p["any"])
+            else:
+                passed = not have
+            value = sorted(have)
+        elif r.rule_type == "weight_age_days":
+            age = facts.get("weight_age_days")
+            if age is None:
+                passed = not p.get("required", True)
+            else:
+                passed = age <= float(p.get("max", 30))
+            value = age
         outcomes.append({"rule_type": r.rule_type, "passed": passed, "failure_action": r.failure_action, "message": r.message or f"{r.rule_type} check {'passed' if passed else 'failed'}",
-                         "fact": value if not isinstance(value, list) else len(value)})
+                         "fact": value if not isinstance(value, list) else (value if r.rule_type in ("active_diagnosis", "allergy", "condition") else len(value))})
     result = _worst([o["failure_action"] for o in outcomes if not o["passed"]])
     return result, outcomes
 
 
 # ------------------------------------------------------------- assessment
 def assess(db: Session, farm_id: str, *, subject_type: str, subject_id: str, signs: list, source: str = "worker", notes: str | None = None,
-           parent_run_id: str | None = None, only_version: em.EmergencyProtocolVersion | None = None, user_id: str) -> em.EmergencyAssessment:
+           parent_run_id: str | None = None, only_version: em.EmergencyProtocolVersion | None = None, user_id: str,
+           started_at: datetime | None = None, device_id: str | None = None, offline_operation_id: str | None = None,
+           package_signature: str | None = None, health_case_id: str | None = None) -> em.EmergencyAssessment:
     """Triage (§12): score every current approved protocol, check
     eligibility, rank urgency, select or escalate. Everything used is
-    kept on the assessment for audit (§15)."""
+    kept on the assessment for audit (§15). An escalation opens (or
+    joins) the subject's health case."""
     subject = _subject(db, subject_type, subject_id, farm_id)
     at = now()
     sign_map = _sign_values(db, subject_type, subject, signs)
@@ -442,8 +496,9 @@ def assess(db: Session, farm_id: str, *, subject_type: str, subject_id: str, sig
 
     assessment = em.EmergencyAssessment(
         id=new_id(), farm_id=farm_id, animal_id=subject_id if subject_type == "animal" else None, animal_group_id=subject_id if subject_type == "group" else None,
-        parent_run_id=parent_run_id, started_at=at, source=source, observed_signs=list(sign_map.values()), animal_facts=facts,
-        ai_model_reference=MODEL_REFERENCE, status="open", created_by=user_id,
+        parent_run_id=parent_run_id, started_at=ensure_utc(started_at) if started_at else at, source=source, observed_signs=list(sign_map.values()), animal_facts=facts,
+        ai_model_reference=MODEL_REFERENCE, status="open", created_by=user_id, device_id=device_id, offline_operation_id=offline_operation_id,
+        package_signature=package_signature, health_case_id=health_case_id or facts.get("health_case_id"),
     )
     db.add(assessment)
     db.flush()
@@ -526,20 +581,43 @@ def assess(db: Session, farm_id: str, *, subject_type: str, subject_id: str, sig
     return assessment
 
 
+def _ensure_case(db: Session, assessment: em.EmergencyAssessment, subject_type: str, subject, *, source_type: str, problem: str | None, user_id: str,
+                 floor: str = "low") -> hm.HealthCase:
+    """The clinical episode (HEALTH-VETERINARY-SCHEMA health_case) the
+    emergency belongs to: the subject's open case, or one the engine
+    opens — never a twin. The engine records no diagnosis on it. `floor`
+    is the least severity the case opens at: an escalation ("call the
+    veterinarian now") is never a low-severity episode, whatever the
+    triage said about the signs."""
+    severity = CASE_SEVERITY.get(assessment.triage_level, "moderate")
+    if cases._severity_rank(severity) < cases._severity_rank(floor):
+        severity = floor
+    case = cases.open_or_current_case(db, assessment.farm_id, subject_type=subject_type, subject_id=subject.id, user_id=user_id,
+                                      severity_code=severity, primary_problem_code=problem,
+                                      source_type=source_type, source_id=assessment.id)
+    assessment.health_case_id = case.id
+    return case
+
+
 def _escalate_assessment(db: Session, assessment: em.EmergencyAssessment, subject_type: str, subject, reasons: list[str], *, user_id: str) -> None:
     """Escalate rather than improvise (§13): the user is told, visibly,
-    to contact the veterinarian / manager; a task carries it."""
+    to contact the veterinarian / manager; a task to the routed person
+    carries it; the health case is open."""
     assessment.status = "escalated"
     assessment.escalation_reasons = reasons
     name = getattr(subject, "name", assessment.animal_id or assessment.animal_group_id)
     assessment.explanation = (f"{name}: ESCALATE — contact the veterinarian / manager now. " + " | ".join(reasons)
                               + ". No drug, dose or route is shown because no current approved protocol applies.")
+    recipient = routing.primary_recipient(db, assessment.farm_id, "emergency_escalation", prefer_role="veterinarian")
     task = models.Task(id=new_id(), farm_id=assessment.farm_id, title=f"EMERGENCY: {name} — call the veterinarian", description=assessment.explanation[:1500],
-                       due_at=now(), priority="high", status="open", source_type=ESCALATION_TASK, source_id=assessment.id)
+                       assigned_to=recipient.id if recipient else None, due_at=now(), priority="high", status="open", source_type=ESCALATION_TASK, source_id=assessment.id)
     db.add(task)
     db.flush()
+    if assessment.source != "reassessment":
+        _ensure_case(db, assessment, subject_type, subject, source_type="emergency_assessment", problem=None, user_id=user_id, floor="moderate")
     write_event(db, farm_id=assessment.farm_id, entity_type=subject_type, entity_id=subject.id, event_type="emergency_protocol_blocked" if any("blocked" in r or "requires" in r for r in reasons) else "emergency_escalated",
-                payload={"assessment_id": assessment.id, "reasons": reasons, "task_id": task.id, "triage": assessment.triage_level}, created_by=user_id)
+                payload={"assessment_id": assessment.id, "reasons": reasons, "task_id": task.id, "assigned_to": task.assigned_to, "triage": assessment.triage_level,
+                         "health_case_id": assessment.health_case_id}, created_by=user_id)
 
 
 def on_observation(db: Session, observation: models.Observation, *, user_id: str) -> em.EmergencyAssessment | None:
@@ -564,7 +642,8 @@ def on_observation(db: Session, observation: models.Observation, *, user_id: str
 
 
 # -------------------------------------------------------------------- run
-def start_run(db: Session, assessment: em.EmergencyAssessment, *, match_id: str | None = None, confirmed: bool = True, user_id: str, device_id: str | None = None) -> em.EmergencyProtocolRun:
+def start_run(db: Session, assessment: em.EmergencyAssessment, *, match_id: str | None = None, confirmed: bool = True, user_id: str, device_id: str | None = None,
+              started_at: datetime | None = None, offline_operation_id: str | None = None, package_signature: str | None = None) -> em.EmergencyProtocolRun:
     if assessment.status != "open":
         raise EmergencyError(f"This assessment is {assessment.status}; a protocol can only start from an open, matched assessment.")
     match = next((m for m in assessment.matches if (m.id == match_id if match_id else m.selected)), None)
@@ -580,10 +659,14 @@ def start_run(db: Session, assessment: em.EmergencyAssessment, *, match_id: str 
         raise EmergencyError("The matched protocol version is no longer current; the case has been escalated.")
     if version.requires_pre_action_confirmation and not confirmed:
         raise EmergencyError("This protocol requires the person at the animal to confirm before any action.")
-    at = now()
+    at = ensure_utc(started_at) if started_at else now()
+    subject_type = "animal" if assessment.animal_id else "group"
+    subject = _subject(db, subject_type, assessment.animal_id or assessment.animal_group_id, assessment.farm_id)
+    case = _ensure_case(db, assessment, subject_type, subject, source_type="emergency_run", problem=version.protocol.condition_family_code, user_id=user_id)
     run = em.EmergencyProtocolRun(
         id=new_id(), farm_id=assessment.farm_id, emergency_assessment_id=assessment.id, protocol_version_id=version.id, animal_id=assessment.animal_id,
-        animal_group_id=assessment.animal_group_id, started_at=at, started_by=user_id, status="in_progress", device_id=device_id,
+        animal_group_id=assessment.animal_group_id, health_case_id=case.id, started_at=at, started_by=user_id, status="in_progress", device_id=device_id,
+        offline=bool(offline_operation_id), offline_operation_id=offline_operation_id, package_signature=package_signature,
     )
     for i, s in enumerate(version.steps):
         run.steps.append(em.ProtocolRunStep(id=new_id(), protocol_step_id=s.id, sequence=i, status="pending",
@@ -596,33 +679,38 @@ def start_run(db: Session, assessment: em.EmergencyAssessment, *, match_id: str 
     db.add(run)
     assessment.status = "protocol_started"
     db.flush()
-    subject_type = "animal" if run.animal_id else "group"
     subject_id = run.animal_id or run.animal_group_id
-    subject = _subject(db, subject_type, subject_id, run.farm_id)
     write_event(db, farm_id=run.farm_id, entity_type=subject_type, entity_id=subject_id, event_type="emergency_protocol_started",
-                payload={"run_id": run.id, "assessment_id": assessment.id, "protocol": version.protocol.code, "version_no": version.version_no, "steps": len(version.steps)}, created_by=user_id)
+                payload={"run_id": run.id, "assessment_id": assessment.id, "protocol": version.protocol.code, "version_no": version.version_no, "steps": len(version.steps),
+                         "health_case_id": case.id, "offline": run.offline, "device_id": device_id}, created_by=user_id)
     _notify(db, run, version, subject, user_id=user_id)
     return run
 
 
 def _notify(db: Session, run: em.EmergencyProtocolRun, version: em.EmergencyProtocolVersion, subject, *, user_id: str) -> None:
     """Manager / veterinarian notification as the version requires
-    (acceptance 5): a task each, and the timestamps on the run."""
+    (acceptance 5): a task to the person each route names (the farm's
+    notification routes, or managers / veterinarians by default), the
+    timestamps on the run, and the events."""
     name = getattr(subject, "name", "")
     at = now()
     subject_type = "animal" if run.animal_id else "group"
-    for flag, who, field, event in (
-        (version.requires_manager_notification, "manager", "manager_notified_at", "emergency_manager_notified"),
-        (version.requires_vet_notification, "veterinarian", "veterinarian_notified_at", "emergency_veterinarian_notified"),
+    for flag, who, route, field, event in (
+        (version.requires_manager_notification, "manager", "emergency_manager", "manager_notified_at", "emergency_manager_notified"),
+        (version.requires_vet_notification, "veterinarian", "emergency_veterinarian", "veterinarian_notified_at", "emergency_veterinarian_notified"),
     ):
         if not flag:
             continue
+        recipient = routing.primary_recipient(db, run.farm_id, route, prefer_role=who)
+        description = f"{version.protocol.code} v{version.version_no} started at {at:%H:%M} by the person at the animal. Review the case."
+        if recipient is None:
+            description += f" No {who} account is routed for this farm — set a notification route under Settings."
         db.add(models.Task(id=new_id(), farm_id=run.farm_id, title=f"Emergency protocol started: {name} — {version.protocol.title} ({who})",
-                           description=f"{version.protocol.code} v{version.version_no} started at {at:%H:%M} by the person at the animal. Review the case.",
-                           due_at=at, priority="high", status="open", source_type=NOTIFY_TASK, source_id=run.id))
+                           description=description, assigned_to=recipient.id if recipient else None, due_at=at, priority="high", status="open",
+                           source_type=NOTIFY_TASK, source_id=run.id))
         setattr(run, field, at)
         write_event(db, farm_id=run.farm_id, entity_type=subject_type, entity_id=run.animal_id or run.animal_group_id, event_type=event,
-                    payload={"run_id": run.id, "protocol": version.protocol.code}, created_by=user_id)
+                    payload={"run_id": run.id, "protocol": version.protocol.code, "recipient_id": recipient.id if recipient else None, "route": route}, created_by=user_id)
     db.flush()
 
 
@@ -657,16 +745,45 @@ def prepare_step(db: Session, run: em.EmergencyProtocolRun, run_step_id: str, *,
         item = ph.item_of(db, product)
         heads = head_count if head_count is not None else (1 if subject_type == "animal" else max(1, int(getattr(subject, "count", 1) or 1)))
         problems: list[str] = []
+        # Authoritative clinical facts first: a recorded allergy / adverse
+        # reaction / contraindication to this product or its ingredients
+        # blocks the step whatever the protocol says.
+        if subject_type == "animal":
+            allergies = {c.code for c in cases.active_conditions(db, subject.id) if c.condition_type in ALLERGY_TYPES}
+            ingredient_codes = {i.ingredient.code for i in product.ingredients} | {product.inventory_item_id.lower()}
+            hit = allergies & ingredient_codes
+            if hit:
+                problems.append(f"{subject.name} has a recorded allergy / adverse reaction to {', '.join(sorted(hit))}")
         if med.dose_rule_type == "FIXED":
             dose = med.fixed_dose_quantity
-            weight_used, weight_source = None, None
+            weight_used, weight_source, weight_age = None, None, None
         else:
-            weight_used = weight_kg if weight_kg is not None else getattr(subject, "weight_kg", None)
-            weight_source = "entered now" if weight_kg is not None else ("animal record" if weight_used is not None else None)
+            # Acceptance 3: the authoritative / recent weight according to
+            # the protocol's rule. Entered now → recorded as a dated weight;
+            # else the latest dated record, refused when older than the
+            # protocol allows.
+            weight_age = None
+            if weight_kg is not None:
+                if subject_type == "animal":
+                    cases.record_weight(db, run.farm_id, subject, weight_kg=weight_kg, method="point_of_care", source_type="emergency_run_step", source_id=rs.id, user_id=user_id)
+                weight_used, weight_source, weight_age = weight_kg, "entered now", 0
+            elif subject_type == "animal":
+                weight_used, weight_age = cases.weight_age_days(db, subject.id)
+                if weight_used is None and getattr(subject, "weight_kg", None) is not None:
+                    weight_used, weight_source = subject.weight_kg, "animal record (undated)"
+                elif weight_used is not None:
+                    weight_source = f"weight record {weight_age} day(s) old"
+                else:
+                    weight_source = None
+            else:
+                weight_used, weight_source = None, None
             if weight_used is None:
                 problems.append("weight unknown — a per-weight dose cannot be calculated")
                 dose = None
             else:
+                if med.weight_max_age_days is not None and (weight_age is None or weight_age > med.weight_max_age_days):
+                    problems.append(f"the protocol requires a weight no older than {med.weight_max_age_days} day(s); the recorded weight is "
+                                    + (f"{weight_age} day(s) old" if weight_age is not None else "undated") + " — weigh the animal and enter the weight")
                 dose = round(med.dose_per_weight_quantity * weight_used, 3)
         if dose is not None:
             if med.minimum_dose_quantity is not None and dose < med.minimum_dose_quantity:
@@ -693,11 +810,11 @@ def prepare_step(db: Session, run: em.EmergencyProtocolRun, run_step_id: str, *,
                                     f"expired {bd['expired']:g}, quarantined {bd['quarantined']:g}, storage exception {bd['storage_exception']:g})")
         payload.update({
             "medicine_product_id": product.inventory_item_id, "medicine_name": item.name, "route_code": med.route_code, "dose_rule_type": med.dose_rule_type,
-            "dose_quantity": dose, "dose_unit": med.dose_unit, "weight_used_kg": weight_used, "weight_source": weight_source, "head_count": heads,
+            "dose_quantity": dose, "dose_unit": med.dose_unit, "weight_used_kg": weight_used, "weight_source": weight_source, "weight_age_days": weight_age, "head_count": heads,
             "quantity_consumed": needed, "stock_unit": item.unit, "lot_id": lot.id if lot else None, "lot_code": lot.lot_code if lot else None,
             "lot_expiry": lot.expiry_date.isoformat() if lot and lot.expiry_date else None, "approved_min": med.minimum_dose_quantity, "approved_max": med.maximum_dose_quantity,
             "withdrawal_rule": med.withdrawal_rule_payload or product.withdrawal_rules_json, "problems": problems,
-            "source": f"{run.steps[0].run.protocol_version_id}" if False else "approved protocol parameters",
+            "source": "approved protocol parameters",
         })
         if problems:
             rs.status = "blocked"
@@ -739,12 +856,14 @@ def confirm_step(db: Session, run: em.EmergencyProtocolRun, run_step_id: str, *,
         p = rs.result_payload
         product = ph.get_product(db, p["medicine_product_id"], run.farm_id)
         item = ph.item_of(db, product)
+        plan = _run_plan(db, run, version, user_id=user_id)
         treatment_id = next((s.result_payload.get("treatment_id") for s in run.steps if s.result_payload and s.result_payload.get("treatment_id") and s.result_payload.get("medicine_product_id") == product.inventory_item_id), None)
         if treatment_id is None:
             t = models.Treatment(
                 id=new_id(), entity_type="animal" if subject_type == "animal" else "flock", entity_id=subject.id,
                 diagnosis=f"Emergency protocol {version.protocol.code} v{version.version_no} — {version.protocol.title}",
-                medication=f"{item.name} ({version.protocol.code} v{version.version_no} step {step.step_no})",
+                medication=f"{item.name} ({version.protocol.code} v{version.version_no} step {step.step_no})", medicine_product_id=product.inventory_item_id,
+                health_case_id=run.health_case_id, treatment_plan_id=plan.id if plan else None,
                 dose=f"{p['dose_quantity']:g} {p['dose_unit']}" + (f" per head × {p['head_count']}" if p["head_count"] > 1 else ""), route=p["route_code"], start_at=at,
                 vet_id=version.approved_by_veterinarian_id, responsible_user_id=user_id, status="active",
                 notes=f"Prescription provenance: veterinarian-approved protocol (approval ref {version.approval_reference}). Dose rule {p['dose_rule_type']}, weight {p.get('weight_used_kg')} kg.",
@@ -783,6 +902,24 @@ def confirm_step(db: Session, run: em.EmergencyProtocolRun, run_step_id: str, *,
     else:
         _maybe_complete(db, run, user_id=user_id)
     return rs
+
+
+def _run_plan(db: Session, run: em.EmergencyProtocolRun, version: em.EmergencyProtocolVersion, *, user_id: str) -> hm.TreatmentPlan | None:
+    """The treatment plan the run's prescriptions sit under
+    (HEALTH-VETERINARY-SCHEMA treatment_plan): prescribed by the
+    veterinarian who approved the protocol version, on the run's case."""
+    if not run.health_case_id:
+        return None
+    plan = db.scalar(select(hm.TreatmentPlan).where(hm.TreatmentPlan.source_type == "emergency_run", hm.TreatmentPlan.source_id == run.id))
+    if plan is None:
+        plan = hm.TreatmentPlan(id=new_id(), health_case_id=run.health_case_id, status="active", prescribed_at=now(), prescribed_by=version.approved_by_veterinarian_id,
+                                instructions=f"{version.protocol.title} ({version.protocol.code} v{version.version_no}, approval {version.approval_reference}) — the approved steps of the protocol.",
+                                source_type="emergency_run", source_id=run.id, created_at=now())
+        db.add(plan)
+        db.flush()
+        write_event(db, farm_id=run.farm_id, entity_type="health_case", entity_id=run.health_case_id, event_type="treatment_prescribed",
+                    payload={"plan_id": plan.id, "source": "emergency_run", "run_id": run.id, "prescribed_by": version.approved_by_veterinarian_id}, created_by=user_id)
+    return plan
 
 
 def skip_step(db: Session, run: em.EmergencyProtocolRun, run_step_id: str, *, reason: str, user_id: str) -> em.ProtocolRunStep:
@@ -849,11 +986,18 @@ def escalate_run(db: Session, run: em.EmergencyProtocolRun, *, reason: str, user
     assessment.status = "escalated"
     assessment.escalation_reasons = [*(assessment.escalation_reasons or []), reason]
     name = getattr(subject, "name", "")
+    recipient = routing.primary_recipient(db, run.farm_id, "emergency_escalation", prefer_role="veterinarian")
     db.add(models.Task(id=new_id(), farm_id=run.farm_id, title=f"EMERGENCY: {name} — call the veterinarian", description=f"Protocol run escalated: {reason}"[:1500],
-                       due_at=now(), priority="high", status="open", source_type=ESCALATION_TASK, source_id=run.id))
+                       assigned_to=recipient.id if recipient else None, due_at=now(), priority="high", status="open", source_type=ESCALATION_TASK, source_id=run.id))
+    for t in db.scalars(select(models.Task).where(models.Task.source_type == REASSESS_TASK, models.Task.source_id == run.id, models.Task.status == "open")):
+        t.status = "done"
+    if run.health_case_id:
+        case = db.get(hm.HealthCase, run.health_case_id)
+        if case is not None and case.status in cases.OPEN_STATUSES and cases._severity_rank(case.severity_code) < cases._severity_rank("high"):
+            case.severity_code = "high"
     db.flush()
     write_event(db, farm_id=run.farm_id, entity_type=subject_type, entity_id=subject.id, event_type="emergency_escalated",
-                payload={"run_id": run.id, "assessment_id": run.emergency_assessment_id, "reason": reason}, created_by=user_id)
+                payload={"run_id": run.id, "assessment_id": run.emergency_assessment_id, "reason": reason, "assigned_to": recipient.id if recipient else None}, created_by=user_id)
     return run
 
 
@@ -869,11 +1013,22 @@ def resolve_run(db: Session, run: em.EmergencyProtocolRun, *, outcome: str, user
     assessment = get_assessment(db, run.emergency_assessment_id, run.farm_id)
     assessment.status = "resolved"
     assessment.closed_at = now()
-    for t in db.scalars(select(models.Task).where(models.Task.source_type.in_((ESCALATION_TASK, NOTIFY_TASK)), models.Task.source_id.in_((run.id, assessment.id)), models.Task.status == "open")):
+    for t in db.scalars(select(models.Task).where(models.Task.source_type.in_((ESCALATION_TASK, NOTIFY_TASK, REASSESS_TASK)), models.Task.source_id.in_((run.id, assessment.id)), models.Task.status == "open")):
         t.status = "done"
+    _close_engine_case(db, run.health_case_id, outcome=f"Emergency protocol {run.id}: {outcome.strip()}", user_id=user_id)
     write_event(db, farm_id=run.farm_id, entity_type=subject_type, entity_id=subject.id, event_type="emergency_resolved",
-                payload={"run_id": run.id, "assessment_id": assessment.id, "outcome": outcome}, created_by=user_id)
+                payload={"run_id": run.id, "assessment_id": assessment.id, "outcome": outcome, "health_case_id": run.health_case_id}, created_by=user_id)
     return run
+
+
+def _close_engine_case(db: Session, case_id: str | None, *, outcome: str, user_id: str) -> None:
+    """A case the engine opened closes with the emergency; a case a
+    person opened stays theirs to close."""
+    if not case_id:
+        return
+    case = db.get(hm.HealthCase, case_id)
+    if case is not None and case.status in cases.OPEN_STATUSES and (case.source_type or "").startswith("emergency"):
+        cases.close_case(db, case, outcome=outcome, user_id=user_id)
 
 
 def close_assessment(db: Session, assessment: em.EmergencyAssessment, *, outcome: str, user_id: str) -> em.EmergencyAssessment:
@@ -888,10 +1043,142 @@ def close_assessment(db: Session, assessment: em.EmergencyAssessment, *, outcome
     assessment.explanation = (assessment.explanation + f" Outcome: {outcome.strip()}").strip()
     for t in db.scalars(select(models.Task).where(models.Task.source_type == ESCALATION_TASK, models.Task.source_id == assessment.id, models.Task.status == "open")):
         t.status = "done"
+    _close_engine_case(db, assessment.health_case_id, outcome=f"Emergency assessment {assessment.id}: {outcome.strip()}", user_id=user_id)
     subject_type = "animal" if assessment.animal_id else "group"
     write_event(db, farm_id=assessment.farm_id, entity_type=subject_type, entity_id=assessment.animal_id or assessment.animal_group_id, event_type="emergency_resolved",
-                payload={"assessment_id": assessment.id, "outcome": outcome}, created_by=user_id)
+                payload={"assessment_id": assessment.id, "outcome": outcome, "health_case_id": assessment.health_case_id}, created_by=user_id)
     return assessment
+
+
+def check_overdue_reassessments(db: Session, farm_id: str, *, user_id: str = "system") -> dict:
+    """The scheduled reassessment check (§12 "schedule reassessment"):
+    every run past its reassessment time gets one open task to the person
+    who started it (and the bell), deduplicated per run. It never
+    escalates by itself — a missed reassessment is a reminder, failure to
+    improve is the escalation."""
+    runs = db.scalars(select(em.EmergencyProtocolRun).where(em.EmergencyProtocolRun.farm_id == farm_id, em.EmergencyProtocolRun.status == "awaiting_reassessment")).all()
+    overdue, opened = 0, 0
+    for r in runs:
+        if not r.next_reassessment_at or ensure_utc(r.next_reassessment_at) >= now():
+            continue
+        overdue += 1
+        if db.scalar(select(models.Task.id).where(models.Task.source_type == REASSESS_TASK, models.Task.source_id == r.id, models.Task.status == "open")):
+            continue
+        subject_type, subject = _run_subject(db, r)
+        version = db.get(em.EmergencyProtocolVersion, r.protocol_version_id)
+        recipient = db.get(models.User, r.started_by) if r.started_by else None
+        if recipient is None or not recipient.active:
+            recipient = routing.primary_recipient(db, farm_id, "emergency_reassessment")
+        db.add(models.Task(id=new_id(), farm_id=farm_id, title=f"Reassess {getattr(subject, 'name', '')} now — {version.protocol.title if version else 'protocol'}",
+                           description=f"The reassessment was due at {ensure_utc(r.next_reassessment_at):%H:%M}. Re-take the signs; no improvement escalates to the veterinarian.",
+                           assigned_to=recipient.id if recipient else None, due_at=r.next_reassessment_at, priority="high", status="open", source_type=REASSESS_TASK, source_id=r.id))
+        opened += 1
+        write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject.id, event_type="emergency_reassessment_due",
+                    payload={"run_id": r.id, "due_at": ensure_utc(r.next_reassessment_at).isoformat(), "overdue": True, "assigned_to": recipient.id if recipient else None}, created_by=user_id)
+    db.flush()
+    return {"awaiting_reassessment": len(runs), "overdue": overdue, "tasks_opened": opened}
+
+
+# ---------------------------------------------------------------- offline sync
+def record_offline_run(db: Session, farm_id: str, payload: dict, *, user_id: str) -> dict:
+    """Sync of an emergency executed on the tablet from the signed offline
+    package (§14, acceptance 9). The server re-runs triage against the
+    same facts as of now, pinned to the version the tablet used, records
+    what the tablet showed and did exactly as it happened — device, actor,
+    occurrence times, operation id — and lists every difference it finds
+    rather than silently changing anything. A stale or withdrawn version,
+    a dose the current rules refuse or a lot that is no longer eligible
+    becomes a discrepancy and an escalation, never a rewritten record.
+    Idempotent on the operation id."""
+    op_id = (payload.get("operation_id") or "").strip()
+    if not op_id:
+        raise EmergencyError("An offline operation needs an operation_id.")
+    existing = db.scalar(select(em.EmergencyAssessment).where(em.EmergencyAssessment.offline_operation_id == op_id))
+    if existing is not None:
+        run = db.scalar(select(em.EmergencyProtocolRun).where(em.EmergencyProtocolRun.emergency_assessment_id == existing.id))
+        return {"assessment": assessment_dict(db, existing), "run": run_dict(db, run) if run else None, "discrepancies": existing.offline_discrepancies, "replayed": True}
+    subject_type, subject_id = payload["subject_type"], payload["subject_id"]
+    subject = _subject(db, subject_type, subject_id, farm_id)
+    device_id = payload.get("device_id")
+    signature = payload.get("package_signature")
+    shown = payload.get("shown") or {}
+    occurred = payload.get("occurred_at")
+    discrepancies: list[dict] = []
+    current = offline_package(db, farm_id)
+    if signature and signature != current["signature"]:
+        discrepancies.append({"code": "package_stale", "detail": "the tablet's protocol package differs from the farm's current package; the version used is checked below"})
+    shown_version = db.get(em.EmergencyProtocolVersion, shown["protocol_version_id"]) if shown.get("protocol_version_id") else None
+    if shown.get("protocol_version_id") and (shown_version is None or shown_version.protocol.farm_id != farm_id):
+        raise EmergencyError("The protocol version the tablet used is unknown on this farm.", 404)
+    pinned = shown_version if shown_version is not None and shown_version.offline_eligible else None
+    assessment = assess(db, farm_id, subject_type=subject_type, subject_id=subject_id, signs=payload.get("signs") or [], source="offline", notes=payload.get("notes"),
+                        only_version=pinned, user_id=user_id, started_at=datetime.fromisoformat(occurred) if occurred else None, device_id=device_id,
+                        offline_operation_id=op_id, package_signature=signature)
+    server_match = next((m for m in assessment.matches if m.selected), None)
+    if shown.get("escalated"):
+        if assessment.status != "escalated":
+            discrepancies.append({"code": "tablet_escalated_server_matched", "detail": "the tablet escalated; the server now finds a match — the escalation stands as recorded"})
+            _escalate_assessment(db, assessment, subject_type, subject, ["offline execution escalated at the animal: " + "; ".join(shown.get("escalation_reasons") or [])], user_id=user_id)
+    elif shown.get("protocol_version_id"):
+        if shown_version is not None and not shown_version.offline_eligible:
+            discrepancies.append({"code": "version_not_offline_eligible", "detail": f"{shown_version.protocol.code} v{shown_version.version_no} was never offline-eligible"})
+        if shown_version is not None and not version_is_current(shown_version):
+            discrepancies.append({"code": "version_not_current", "detail": f"{shown_version.protocol.code} v{shown_version.version_no} is {shown_version.status} / no longer current"})
+        if server_match is None or server_match.protocol_version_id != shown.get("protocol_version_id"):
+            discrepancies.append({"code": "match_differs", "detail": "the server's triage of the same signs does not select the version the tablet showed",
+                                  "server_status": assessment.status, "server_reasons": assessment.escalation_reasons})
+    run = None
+    steps_done = payload.get("steps") or []
+    if shown.get("protocol_version_id") and not shown.get("escalated") and steps_done:
+        if assessment.status != "open" or server_match is None:
+            # What the tablet did is recorded against the version it used; the
+            # case is escalated because the server could not confirm it.
+            assessment.status = "open"
+            match = next((m for m in assessment.matches if m.protocol_version_id == shown["protocol_version_id"]), None)
+            if match is None:
+                match = em.ProtocolMatch(id=new_id(), emergency_assessment_id=assessment.id, protocol_version_id=shown["protocol_version_id"], match_score=shown.get("match_score"),
+                                         match_explanation={"source": "offline_tablet", "note": "recorded as shown on the device"}, eligibility_result="ELIGIBLE", selected=True, evaluated_at=now())
+                db.add(match)
+                db.flush()
+            match.selected = True
+            server_match = match
+        try:
+            run = start_run(db, assessment, match_id=server_match.id, confirmed=True, user_id=user_id, device_id=device_id,
+                            started_at=datetime.fromisoformat(occurred) if occurred else None, offline_operation_id=op_id, package_signature=signature)
+        except EmergencyError as exc:
+            discrepancies.append({"code": "run_refused_at_sync", "detail": str(exc)})
+        if run is not None:
+            by_step = {s.protocol_step_id: s for s in run.steps}
+            for done in steps_done:
+                rs = by_step.get(done.get("protocol_step_id"))
+                if rs is None:
+                    discrepancies.append({"code": "unknown_step", "detail": f"step {done.get('protocol_step_id')} is not on the version"})
+                    continue
+                if done.get("status") == "skipped":
+                    try:
+                        skip_step(db, run, rs.id, reason=done.get("skip_reason") or "skipped offline", user_id=user_id)
+                    except EmergencyError as exc:
+                        discrepancies.append({"code": "skip_refused_at_sync", "step_no": rs.step.step_no, "detail": str(exc)})
+                    continue
+                med = done.get("medication") or {}
+                try:
+                    confirm_step(db, run, rs.id, weight_kg=med.get("weight_used_kg"), head_count=med.get("head_count"), lot_id=med.get("lot_id"),
+                                 result={**(done.get("result") or {}), "offline": True, "occurred_at": done.get("occurred_at"), "device_id": device_id}, notes=done.get("notes"), user_id=user_id)
+                except EmergencyError as exc:
+                    discrepancies.append({"code": "step_refused_at_sync", "step_no": rs.step.step_no, "detail": str(exc), "as_shown": med or done.get("result")})
+                    if run.status != "escalated":
+                        escalate_run(db, run, reason=f"offline step {rs.step.step_no} could not be confirmed at sync: {exc}", user_id=user_id)
+            if run.status not in ("escalated", "completed", "cancelled") and any(d["code"] in ("version_not_current", "match_differs", "version_not_offline_eligible") for d in discrepancies):
+                escalate_run(db, run, reason="offline execution revalidated with differences: " + "; ".join(d["code"] for d in discrepancies), user_id=user_id)
+    elif discrepancies and assessment.status == "open":
+        _escalate_assessment(db, assessment, subject_type, subject, ["offline execution revalidated with differences: " + "; ".join(d["code"] for d in discrepancies)], user_id=user_id)
+    assessment.offline_discrepancies = discrepancies
+    if run is not None:
+        run.offline_discrepancies = discrepancies
+    write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject_id, event_type="emergency_offline_synced",
+                payload={"operation_id": op_id, "device_id": device_id, "assessment_id": assessment.id, "run_id": run.id if run else None,
+                         "discrepancies": discrepancies, "actor": user_id}, created_by=user_id)
+    return {"assessment": assessment_dict(db, assessment), "run": run_dict(db, run) if run else None, "discrepancies": discrepancies, "replayed": False}
 
 
 # ---------------------------------------------------------------- offline
@@ -899,10 +1186,29 @@ def offline_package(db: Session, farm_id: str) -> dict:
     """Only versions marked offline-eligible travel to the tablet (§14),
     with their rules, steps and medicine mapping, signed by content so a
     stale or altered package is detectable when it syncs."""
-    versions = [version_dict(db, v) for v in current_versions(db, farm_id) if v.offline_eligible]
+    # The protocol's species and scope travel with the version: the tablet
+    # filters candidates exactly as `assess` does.
+    versions = [{**version_dict(db, v), "species_code": v.protocol.species_code, "subject_scope": v.protocol.subject_scope}
+                for v in current_versions(db, farm_id) if v.offline_eligible]
     body = json.dumps(versions, sort_keys=True, default=str)
+    # The medicine mapping the medication steps need offline: the product,
+    # its stock unit and the eligible lots as of now (FEFO order). Stock is a
+    # snapshot — the sync revalidates the lot actually used.
+    product_ids = {s["medication"]["medicine_product_id"] for v in versions for s in v["steps"] if s.get("medication")}
+    medicines = []
+    for pid in sorted(product_ids):
+        product = db.get(pm.MedicineProduct, pid)
+        if product is None:
+            continue
+        item = ph.item_of(db, product)
+        medicines.append({"medicine_product_id": pid, "name": item.name, "unit": item.unit, "administration_routes": product.administration_routes or [],
+                          "species_codes": product.species_codes or [], "prescription_required": product.prescription_required,
+                          "ingredient_codes": [i.ingredient.code for i in product.ingredients], "withdrawal_rules": product.withdrawal_rules_json or {},
+                          "eligible_lots": [{"lot_id": l.id, "lot_code": l.lot_code, "quantity_on_hand": l.quantity_on_hand, "free_quantity": ph.lot_free_quantity(db, product, l),
+                                             "expiry_date": l.expiry_date.isoformat() if l.expiry_date else None} for l in ph.eligible_lots(db, product)]})
     return {"generated_at": now(), "farm_id": farm_id, "model_reference": MODEL_REFERENCE, "model_version": MODEL_VERSION,
-            "signature": hashlib.sha256(body.encode("utf-8")).hexdigest(), "versions": versions, "sign_codes": sign_codes(db, farm_id)}
+            "signature": hashlib.sha256(body.encode("utf-8")).hexdigest(), "versions": versions, "sign_codes": sign_codes(db, farm_id), "medicines": medicines,
+            "stock_as_of": now(), "note": "Only offline-eligible approved versions. Execution offline records version, device, actor, time and operation id; sync revalidates."}
 
 
 def sign_codes(db: Session, farm_id: str) -> list[dict]:
@@ -933,7 +1239,8 @@ def step_dict(db: Session, s: em.ProtocolStep) -> dict:
         out["medication"] = {"medicine_product_id": med.medicine_product_id, "medicine_name": item.name if item else None, "route_code": med.route_code,
                              "dose_rule_type": med.dose_rule_type, "fixed_dose_quantity": med.fixed_dose_quantity, "dose_per_weight_quantity": med.dose_per_weight_quantity,
                              "dose_unit": med.dose_unit, "weight_unit": med.weight_unit, "minimum_dose_quantity": med.minimum_dose_quantity, "maximum_dose_quantity": med.maximum_dose_quantity,
-                             "repeat_interval_minutes": med.repeat_interval_minutes, "maximum_administrations": med.maximum_administrations, "withdrawal_rule_payload": med.withdrawal_rule_payload}
+                             "repeat_interval_minutes": med.repeat_interval_minutes, "maximum_administrations": med.maximum_administrations,
+                             "weight_max_age_days": med.weight_max_age_days, "withdrawal_rule_payload": med.withdrawal_rule_payload}
     return out
 
 
@@ -977,9 +1284,11 @@ def assessment_dict(db: Session, a: em.EmergencyAssessment) -> dict:
     task = db.scalar(select(models.Task).where(models.Task.source_type == ESCALATION_TASK, models.Task.source_id == a.id).order_by(models.Task.due_at.desc()))
     return {
         "id": a.id, "subject_type": subject_type, "subject_id": a.animal_id or a.animal_group_id, "subject_name": getattr(subject, "name", None), "species": getattr(subject, "species", None),
-        "parent_run_id": a.parent_run_id, "started_at": a.started_at, "source": a.source, "observed_signs": a.observed_signs, "animal_facts": a.animal_facts, "triage_level": a.triage_level,
+        "parent_run_id": a.parent_run_id, "health_case_id": a.health_case_id, "started_at": a.started_at, "source": a.source, "observed_signs": a.observed_signs,
+        "animal_facts": a.animal_facts, "triage_level": a.triage_level,
         "ai_model_reference": a.ai_model_reference, "ai_model_version": MODEL_VERSION, "ai_confidence": a.ai_confidence, "status": a.status, "escalation_reasons": a.escalation_reasons,
         "explanation": a.explanation, "created_by": a.created_by, "created_by_name": _user_name(db, a.created_by), "closed_at": a.closed_at,
+        "device_id": a.device_id, "offline_operation_id": a.offline_operation_id, "package_signature": a.package_signature, "offline_discrepancies": a.offline_discrepancies or [],
         "matches": [match_dict(db, m) for m in a.matches], "selected_match_id": next((m.id for m in a.matches if m.selected), None),
         "run_id": run.id if run else None, "run_status": run.status if run else None, "escalation_task_id": task.id if task else None,
     }
@@ -998,6 +1307,8 @@ def run_dict(db: Session, r: em.EmergencyProtocolRun) -> dict:
         "id": r.id, "assessment_id": r.emergency_assessment_id, "protocol_version_id": r.protocol_version_id, "protocol_code": v.protocol.code if v else None,
         "protocol_title": v.protocol.title if v else None, "version_no": v.version_no if v else None, "approval_reference": v.approval_reference if v else None,
         "subject_type": "animal" if r.animal_id else "group", "subject_id": r.animal_id or r.animal_group_id, "subject_name": getattr(subject, "name", None),
+        "health_case_id": r.health_case_id, "device_id": r.device_id, "offline": r.offline, "offline_operation_id": r.offline_operation_id,
+        "offline_discrepancies": r.offline_discrepancies or [],
         "started_at": r.started_at, "started_by": r.started_by, "started_by_name": _user_name(db, r.started_by), "status": r.status, "manager_notified_at": r.manager_notified_at,
         "veterinarian_notified_at": r.veterinarian_notified_at, "next_reassessment_at": r.next_reassessment_at,
         "reassessment_overdue": bool(r.next_reassessment_at and ensure_utc(r.next_reassessment_at) < now() and r.status == "awaiting_reassessment"),
@@ -1022,22 +1333,33 @@ def emergency_signals(db: Session, farm_id: str) -> list:
     protocol awaiting confirmation does too, so the manager sees it."""
     from app.services.signals_service import Signal  # local import: signals imports this module
 
+    from app.services.signals_service import routed
+
     out = []
     since = now() - timedelta(days=7)
     for a in db.scalars(select(em.EmergencyAssessment).where(em.EmergencyAssessment.farm_id == farm_id, em.EmergencyAssessment.status.in_(("escalated", "open")), em.EmergencyAssessment.started_at >= since)):
         subject = db.get(models.Animal, a.animal_id) if a.animal_id else db.get(models.Flock, a.animal_group_id)
         name = getattr(subject, "name", "")
         escalated = a.status == "escalated"
-        out.append(Signal(source_type="emergency_assessment", source_id=a.id, module_code=perms.ANIMAL_HEALTH,
-                          notification_type="emergency_escalated" if escalated else "emergency_protocol_matched",
-                          title=(f"EMERGENCY: {name} — call the veterinarian" if escalated else f"{name}: protocol matched, awaiting confirmation"),
-                          description=a.explanation[:300], priority="critical" if escalated else "high",
-                          entity_type="animal" if a.animal_id else "flock", entity_id=a.animal_id or a.animal_group_id,
-                          metadata={"assessment_id": a.id, "triage": a.triage_level, "confidence": a.ai_confidence}))
+        base = Signal(source_type="emergency_assessment", source_id=a.id, module_code=perms.ANIMAL_HEALTH,
+                      notification_type="emergency_escalated" if escalated else "emergency_protocol_matched",
+                      title=(f"EMERGENCY: {name} — call the veterinarian" if escalated else f"{name}: protocol matched, awaiting confirmation"),
+                      description=a.explanation[:300], priority="critical" if escalated else "high",
+                      entity_type="animal" if a.animal_id else "flock", entity_id=a.animal_id or a.animal_group_id,
+                      metadata={"assessment_id": a.id, "triage": a.triage_level, "confidence": a.ai_confidence, "health_case_id": a.health_case_id})
+        out.extend(routed(db, farm_id, "emergency_escalation" if escalated else "emergency_manager", base))
     for r in db.scalars(select(em.EmergencyProtocolRun).where(em.EmergencyProtocolRun.farm_id == farm_id, em.EmergencyProtocolRun.status == "awaiting_reassessment")):
         if r.next_reassessment_at and ensure_utc(r.next_reassessment_at) < now():
             subject = db.get(models.Animal, r.animal_id) if r.animal_id else db.get(models.Flock, r.animal_group_id)
-            out.append(Signal(source_type="emergency_run", source_id=r.id, module_code=perms.ANIMAL_HEALTH, notification_type="emergency_reassessment_due",
-                              title=f"{getattr(subject, 'name', '')}: reassessment overdue", description="The protocol's reassessment time has passed. Re-take the signs now.",
-                              priority="high", entity_type="animal" if r.animal_id else "flock", entity_id=r.animal_id or r.animal_group_id, metadata={"run_id": r.id}))
+            base = Signal(source_type="emergency_run", source_id=r.id, module_code=perms.ANIMAL_HEALTH, notification_type="emergency_reassessment_due",
+                          title=f"{getattr(subject, 'name', '')}: reassessment overdue", description="The protocol's reassessment time has passed. Re-take the signs now.",
+                          priority="high", entity_type="animal" if r.animal_id else "flock", entity_id=r.animal_id or r.animal_group_id, metadata={"run_id": r.id})
+            # The person who started the run first, then the routed managers.
+            copies = routed(db, farm_id, "emergency_reassessment", base)
+            starter = db.get(models.User, r.started_by) if r.started_by else None
+            if starter is not None and starter.active and not any(c.assigned_to == starter.id for c in copies):
+                from dataclasses import replace
+
+                copies.insert(0, replace(base, source_id=f"{base.source_id}|{starter.id}", assigned_to=starter.id))
+            out.extend(copies)
     return out

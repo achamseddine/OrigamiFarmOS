@@ -377,6 +377,12 @@ def receive(
                  "rejected": rejected, "source_type": source_type, "unit": product.unit},
         created_by=user_id or "system",
     )
+    if source_type == "purchased":
+        # FEED-PERFORMANCE-INTELLIGENCE §12: a supplier receipt or cost
+        # update refreshes the supplier rows and the cost picture.
+        from app.services import feed_performance_service as perf  # local import: perf imports this module
+
+        perf.on_receipt(db, product.farm_id, user_id=user_id or "system")
     return lot
 
 
@@ -395,6 +401,11 @@ def set_lot_status(db: Session, lot: fm.FeedLot, status: str, *, reason: str | N
         db, farm_id=lot.farm_id, entity_type="feed_lot", entity_id=lot.id, event_type=event,
         payload={"from": previous, "to": lot.status, "reason": reason}, created_by=user_id,
     )
+    # FEED-PERFORMANCE-INTELLIGENCE §12: an ingredient / output lot change
+    # re-scores the mixes that used it and the subjects that received it.
+    from app.services import feed_performance_service as perf  # local import: perf imports this module
+
+    perf.on_lot_status_changed(db, lot, user_id=user_id)
     return lot
 
 

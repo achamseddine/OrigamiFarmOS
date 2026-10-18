@@ -265,8 +265,23 @@ class BatchStart(BaseModel):
     # separate table or numbering sequence.
     intended_species_code: str | None = None
     intended_management_profile: str | None = None
+    # A farm asset (GET /assets), not free text; the operator defaults to
+    # the account opening the batch.
     mixer_asset_id: str | None = None
+    operator_id: str | None = None
     production_date: datetime | None = None
+
+
+class MixSettingsOut(BaseModel):
+    farm_id: str
+    code_format: str
+    last_number: int
+    next_number: int
+    next_code: str
+
+
+class MixSettingsUpdate(BaseModel):
+    code_format: str
 
 
 class BatchActualIn(BaseModel):
@@ -284,6 +299,8 @@ class BatchComplete(BaseModel):
     expiry_date: datetime | None = None
     notes: str | None = None
     allow_negative: bool = False
+    operator_id: str | None = None
+    mixer_asset_id: str | None = None
 
 
 class BatchQuarantine(BaseModel):
@@ -321,6 +338,7 @@ class BatchOut(BaseModel):
     operator_id: str | None = None
     operator_name: str | None = None
     mixer_asset_id: str | None = None
+    mixer_asset_name: str | None = None
     status: str
     target_quantity: float | None = None
     actual_quantity: float | None = None

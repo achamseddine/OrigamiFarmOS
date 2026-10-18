@@ -31,11 +31,23 @@ from app.domain import pharmacy_models as pm
 from app.feeding import uom
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services import feeding_program_service as programs
+from app.services import procurement_service as procurement
+from app.services import routing_service as routing
+from app.services import uom_service
 from app.services.feed_inventory_service import FeedError
 
 
 class PharmacyError(FeedError):
     """A pharmacy rule refused the operation; answered like a feed rule."""
+
+
+RESERVATION_PURPOSES = ("emergency_run", "treatment", "planned_procedure", "other")
+QUALITY_FOR_STATUS = {"quarantined": "QUARANTINED", "blocked": "BLOCKED", "recalled": "RECALLED", "expired": "EXPIRED"}
+# Which notification route each alert type travels (MEDICINE-NOTIFICATION-RULES).
+ROUTE_FOR_ALERT = {
+    "OUT_OF_STOCK": "pharmacy_critical", "CRITICAL_STOCK": "pharmacy_critical", "BELOW_MINIMUM_STOCK": "pharmacy_stock", "LOW_DAYS_COVER": "pharmacy_stock",
+    "EXPIRED_STOCK": "pharmacy_expiry", "EXPIRING_SOON": "pharmacy_expiry", "RECALL_AFFECTED": "pharmacy_critical", "STORAGE_EXCEPTION": "pharmacy_critical",
+}
 
 
 CATEGORIES = (
@@ -117,6 +129,9 @@ def _apply_product_fields(db: Session, product: pm.MedicineProduct, fields: dict
     for k, v in fields.items():
         if k in simple and v is not None:
             setattr(product, k, v)
+    # Units are references (FOUNDATION uom): the code must exist.
+    product.strength_uom = uom_service.optional(db, product.strength_uom, what="strength unit")
+    product.pack_uom = uom_service.optional(db, product.pack_uom, what="pack unit")
     if fields.get("withdrawal_rules") is not None:
         rules = fields["withdrawal_rules"]
         for key in ("milk_days", "meat_days", "egg_days"):
@@ -139,7 +154,7 @@ def _apply_product_fields(db: Session, product: pm.MedicineProduct, fields: dict
             row = ingredient_by_code(db, ing["code"], ing.get("name"))
             product.ingredients.append(pm.MedicineProductIngredient(
                 active_ingredient_id=row.id, concentration_value=ing.get("concentration_value"),
-                concentration_uom=ing.get("concentration_uom"), concentration_basis=ing.get("concentration_basis"),
+                concentration_uom=uom_service.optional(db, ing.get("concentration_uom"), what="concentration unit"), concentration_basis=ing.get("concentration_basis"),
             ))
 
 
@@ -157,10 +172,11 @@ def create_product(db: Session, farm_id: str, *, inventory_item_id: str | None =
         if name:
             item.name = name
         item.category = "medicine"
+        item.unit = uom_service.require(db, item.unit, what="stock unit")
     else:
         if not name or not name.strip():
             raise PharmacyError("A medicine needs a name")
-        item = models.InventoryItem(id=new_id(), farm_id=farm_id, name=name.strip(), category="medicine", unit=unit or "items",
+        item = models.InventoryItem(id=new_id(), farm_id=farm_id, name=name.strip(), category="medicine", unit=uom_service.require(db, unit or "items", what="stock unit"),
                                     current_qty=0, reorder_level=0, supplier_label=supplier_label, unit_cost=unit_cost)
         db.add(item)
         db.flush()
@@ -207,13 +223,15 @@ def lot_expired(lot: pm.InventoryLot, at: datetime | None = None) -> bool:
 
 def refresh_lot_status(lot: pm.InventoryLot, at: datetime | None = None) -> None:
     """Expiry and depletion are facts, reflected on read (as feed lots do),
-    so a lot that expired overnight is ineligible this morning untouched."""
+    so a lot that expired overnight is ineligible this morning untouched.
+    The quality status (INVENTORY-SCHEMA §3) follows."""
     if lot.status == "active" and lot_expired(lot, at):
         lot.status = "expired"
     elif lot.status == "active" and lot.quantity_on_hand <= 0.0005:
         lot.status = "depleted"
     elif lot.status == "depleted" and lot.quantity_on_hand > 0.0005:
         lot.status = "active"
+    lot.quality_status = QUALITY_FOR_STATUS.get(lot.status, "RELEASED")
 
 
 def ineligibility(lot: pm.InventoryLot, at: datetime | None = None) -> str | None:
@@ -244,9 +262,11 @@ def receive_lot(db: Session, product: pm.MedicineProduct, *, quantity: float, un
                 expiry_date: datetime | None = None, unit_cost: float | None = None, supplier_id: str | None = None, supplier_label: str | None = None,
                 location_id: str | None = None, rejected_quantity: float = 0, source_type: str = "purchased", reference: str | None = None,
                 notes: str | None = None, received_at: datetime | None = None, storage_status: str = "COMPLIANT", cold_chain_exception: bool = False,
-                user_id: str) -> pm.InventoryLot:
+                supplier_lot_code: str | None = None, manufactured_at: datetime | None = None, currency: str | None = None,
+                source_reference_type: str | None = None, source_reference_id: str | None = None, user_id: str) -> pm.InventoryLot:
     """Goods receipt: each receipt records the medicine lot and expiry
-    (acceptance 2) unless the product carries a recorded exception."""
+    (acceptance 2) unless the product carries a recorded exception. A
+    receipt that names its purchase requisition closes it."""
     item = item_of(db, product)
     if quantity <= 0:
         raise PharmacyError("Received quantity must be greater than zero.")
@@ -261,20 +281,34 @@ def receive_lot(db: Session, product: pm.MedicineProduct, *, quantity: float, un
         raise PharmacyError(f"storage_status must be one of {list(pm.STORAGE_STATUSES)}")
     if source_type not in ("purchased", "opening_balance", "donation", "return"):
         raise PharmacyError("source_type must be purchased, opening_balance, donation or return")
+    if location_id and db.get(models.Location, location_id) is None:
+        raise PharmacyError("Location not found", 404)
+    if manufactured_at is not None and expiry_date is not None and ensure_utc(manufactured_at) >= ensure_utc(expiry_date):
+        raise PharmacyError("The manufacture date must be before the expiry date.")
+    stock_unit = uom_service.require(db, item.unit, what="stock unit")
+    entered_unit = uom_service.require(db, unit or stock_unit, what="unit")
     try:
-        qty = uom.convert(quantity, unit or item.unit, item.unit)
-        rejected = uom.convert(rejected_quantity, unit or item.unit, item.unit)
+        qty = uom_service.convert(db, quantity, entered_unit, stock_unit)
+        rejected = uom_service.convert(db, rejected_quantity, entered_unit, stock_unit)
     except uom.IncompatibleUnits as e:
         raise PharmacyError(str(e)) from e
+    requisition = None
+    if source_reference_type == "purchase_requisition" and source_reference_id:
+        requisition = procurement.get_requisition(db, source_reference_id, product.farm_id)
+        if not any(l.inventory_item_id == item.id for l in requisition.lines):
+            raise PharmacyError(f"Requisition {requisition.requisition_no} has no line for {item.name}.")
     accepted = qty - rejected
     when = ensure_utc(received_at) if received_at else now()
     lot = pm.InventoryLot(
         id=new_id(), farm_id=product.farm_id, inventory_item_id=item.id,
         lot_code=_unique_lot_code(db, item.id, (lot_code or f"{item.name[:20].upper()}-{when:%Y%m%d}").strip()),
-        source_type=source_type, supplier_id=supplier_id, supplier_label=supplier_label or item.supplier_label, location_id=location_id,
+        supplier_lot_code=(supplier_lot_code or "").strip() or None, manufactured_at=ensure_utc(manufactured_at) if manufactured_at else None,
+        source_type=source_type, source_reference_type=source_reference_type, source_reference_id=source_reference_id,
+        supplier_id=supplier_id, supplier_label=supplier_label or item.supplier_label, location_id=location_id,
         received_at=when, expiry_date=ensure_utc(expiry_date) if expiry_date else None, received_quantity=qty, accepted_quantity=accepted,
-        rejected_quantity=rejected, quantity_on_hand=accepted, unit=item.unit, unit_cost=unit_cost if unit_cost is not None else item.unit_cost,
-        status="active" if accepted > 0 else "depleted", reference=reference, notes=notes, created_by=user_id, created_at=now(),
+        rejected_quantity=rejected, quantity_on_hand=accepted, unit=stock_unit, unit_cost=unit_cost if unit_cost is not None else item.unit_cost,
+        currency=currency or _farm_currency(db, product.farm_id), status="active" if accepted > 0 else "depleted", quality_status="RELEASED",
+        reference=reference, notes=notes, created_by=user_id, created_at=now(),
     )
     lot.medicine = pm.MedicineLotDetail(storage_status=storage_status, cold_chain_exception=cold_chain_exception)
     db.add(lot)
@@ -287,7 +321,7 @@ def receive_lot(db: Session, product: pm.MedicineProduct, *, quantity: float, un
         db.add(models.InventoryTransaction(
             id=new_id(), item_id=item.id, direction="in", quantity=accepted, unit_cost=lot.unit_cost,
             reason={"purchased": "purchase", "opening_balance": "opening_balance"}.get(source_type, source_type),
-            linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, created_at=when,
+            linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, location_id=location_id, created_at=when,
         ))
         item.current_qty = (item.current_qty or 0) + accepted
         if source_type == "purchased":
@@ -295,13 +329,184 @@ def receive_lot(db: Session, product: pm.MedicineProduct, *, quantity: float, un
             if unit_cost is not None:
                 item.unit_cost = unit_cost
     write_event(db, farm_id=product.farm_id, entity_type="inventory_lot", entity_id=lot.id, event_type="medicine_lot_received",
-                payload={"inventory_item_id": item.id, "lot_code": lot.lot_code, "received": qty, "accepted": accepted, "rejected": rejected,
-                         "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None, "unit": item.unit}, created_by=user_id)
+                payload={"inventory_item_id": item.id, "lot_code": lot.lot_code, "supplier_lot_code": lot.supplier_lot_code, "received": qty, "accepted": accepted,
+                         "rejected": rejected, "expiry_date": lot.expiry_date.isoformat() if lot.expiry_date else None, "unit": stock_unit,
+                         "location_id": location_id, "requisition_id": requisition.id if requisition else None}, created_by=user_id)
     if storage_status != "COMPLIANT" or cold_chain_exception:
         write_event(db, farm_id=product.farm_id, entity_type="inventory_lot", entity_id=lot.id, event_type="medicine_storage_exception_detected",
                     payload={"lot_code": lot.lot_code, "storage_status": storage_status, "cold_chain_exception": cold_chain_exception}, created_by=user_id)
+    if requisition is not None:
+        procurement.mark_received(db, requisition, inventory_item_id=item.id, user_id=user_id)
     evaluate_item(db, product, user_id=user_id)
     return lot
+
+
+def _farm_currency(db: Session, farm_id: str) -> str | None:
+    farm = db.get(models.Farm, farm_id)
+    return farm.default_currency if farm else None
+
+
+# ----------------------------------------------------------- reservations
+def active_reservations(db: Session, product: pm.MedicineProduct, *, lot: pm.InventoryLot | None = None, location_id: str | None = None) -> list[pm.InventoryReservation]:
+    at = now()
+    rows = db.scalars(select(pm.InventoryReservation).where(
+        pm.InventoryReservation.inventory_item_id == product.inventory_item_id, pm.InventoryReservation.status == "active")).all()
+    out = []
+    for r in rows:
+        if r.valid_to is not None and ensure_utc(r.valid_to) <= at:
+            r.status = "expired"
+            r.released_at = at
+            r.release_reason = "validity ended"
+            continue
+        if lot is not None and r.inventory_lot_id not in (None, lot.id):
+            continue
+        if location_id is not None and r.location_id not in (None, location_id):
+            continue
+        out.append(r)
+    return out
+
+
+def reservation_remaining(r: pm.InventoryReservation) -> float:
+    return max(r.quantity - (r.consumed_quantity or 0), 0.0)
+
+
+def reserved_quantity(db: Session, product: pm.MedicineProduct, *, lot: pm.InventoryLot | None = None, location_id: str | None = None,
+                      exclude: pm.InventoryReservation | None = None) -> float:
+    """Stock held for another purpose (§7 "reserved for another protected
+    purpose"), in the item's unit."""
+    item = item_of(db, product)
+    total = 0.0
+    for r in active_reservations(db, product, lot=lot, location_id=location_id):
+        if exclude is not None and r.id == exclude.id:
+            continue
+        total += uom_service.convert(db, reservation_remaining(r), r.unit, item.unit)
+    return round(total, 6)
+
+
+def reserve(db: Session, product: pm.MedicineProduct, *, quantity: float, unit: str | None = None, lot: pm.InventoryLot | None = None, location_id: str | None = None,
+            purpose_type: str, purpose_id: str | None = None, purpose_label: str | None = None, valid_to: datetime | None = None, user_id: str) -> pm.InventoryReservation:
+    """Holds eligible stock for a purpose (INVENTORY-SCHEMA §5, §8): never
+    more than is eligible and unreserved, never ineligible stock."""
+    item = item_of(db, product)
+    if purpose_type not in RESERVATION_PURPOSES:
+        raise PharmacyError(f"purpose_type must be one of {list(RESERVATION_PURPOSES)}")
+    if quantity <= 0:
+        raise PharmacyError("Reserved quantity must be greater than zero.")
+    unit_code = uom_service.require(db, unit or item.unit, what="unit")
+    try:
+        qty = uom_service.convert(db, quantity, unit_code, item.unit)
+    except uom.IncompatibleUnits as e:
+        raise PharmacyError(str(e)) from e
+    if lot is not None:
+        if lot.inventory_item_id != product.inventory_item_id:
+            raise PharmacyError("That lot belongs to another medicine.")
+        why = ineligibility(lot)
+        if why is not None:
+            raise PharmacyError(f"Lot {lot.lot_code} is not eligible ({why.replace('_', ' ')}) and cannot be reserved.")
+        free = lot.quantity_on_hand - reserved_quantity(db, product, lot=lot)
+    else:
+        bd = stock_breakdown(db, product, location_id=location_id)
+        free = bd["eligible"]
+    if qty > free + 0.0005:
+        raise PharmacyError(f"Only {max(free, 0):g} {item.unit} of {item.name} is eligible and unreserved; {qty:g} cannot be held.")
+    r = pm.InventoryReservation(id=new_id(), farm_id=product.farm_id, inventory_item_id=item.id, inventory_lot_id=lot.id if lot else None, location_id=location_id,
+                                quantity=qty, consumed_quantity=0, unit=item.unit, purpose_type=purpose_type, purpose_id=purpose_id, purpose_label=purpose_label,
+                                valid_from=now(), valid_to=ensure_utc(valid_to) if valid_to else None, status="active", created_at=now(), created_by=user_id)
+    db.add(r)
+    db.flush()
+    write_event(db, farm_id=product.farm_id, entity_type="medicine_product", entity_id=product.inventory_item_id, event_type="inventory_reserved",
+                payload={"reservation_id": r.id, "quantity": qty, "unit": item.unit, "lot_id": r.inventory_lot_id, "purpose_type": purpose_type, "purpose_id": purpose_id}, created_by=user_id)
+    evaluate_item(db, product, user_id=user_id)
+    return r
+
+
+def release_reservation(db: Session, r: pm.InventoryReservation, *, reason: str | None, user_id: str) -> pm.InventoryReservation:
+    if r.status != "active":
+        return r
+    r.status = "released"
+    r.released_at = now()
+    r.release_reason = (reason or "released").strip()
+    product = get_product(db, r.inventory_item_id, r.farm_id)
+    write_event(db, farm_id=r.farm_id, entity_type="medicine_product", entity_id=r.inventory_item_id, event_type="inventory_reservation_released",
+                payload={"reservation_id": r.id, "remaining": reservation_remaining(r), "reason": r.release_reason}, created_by=user_id)
+    evaluate_item(db, product, user_id=user_id)
+    return r
+
+
+def get_reservation(db: Session, reservation_id: str, farm_id: str) -> pm.InventoryReservation:
+    r = db.get(pm.InventoryReservation, reservation_id)
+    if r is None or r.farm_id != farm_id:
+        raise PharmacyError("Reservation not found", 404)
+    return r
+
+
+def reservation_dict(db: Session, r: pm.InventoryReservation) -> dict:
+    item = db.get(models.InventoryItem, r.inventory_item_id)
+    lot = db.get(pm.InventoryLot, r.inventory_lot_id) if r.inventory_lot_id else None
+    return {"id": r.id, "inventory_item_id": r.inventory_item_id, "medicine_name": item.name if item else None, "inventory_lot_id": r.inventory_lot_id,
+            "lot_code": lot.lot_code if lot else None, "location_id": r.location_id, "quantity": r.quantity, "consumed_quantity": r.consumed_quantity,
+            "remaining": reservation_remaining(r), "unit": r.unit, "purpose_type": r.purpose_type, "purpose_id": r.purpose_id, "purpose_label": r.purpose_label,
+            "valid_from": r.valid_from, "valid_to": r.valid_to, "status": r.status, "created_at": r.created_at, "created_by": r.created_by,
+            "released_at": r.released_at, "release_reason": r.release_reason}
+
+
+# -------------------------------------------------------------- transfers
+def lot_location_balances(db: Session, lot: pm.InventoryLot) -> dict[str | None, float]:
+    """The lot's quantity per location, derived from its movements
+    (INVENTORY-SCHEMA §7): a movement without a location is at the lot's
+    receiving location. Never a location flipped on the lot."""
+    balances: dict[str | None, float] = {}
+    for tx in db.scalars(select(models.InventoryTransaction).where(models.InventoryTransaction.inventory_lot_id == lot.id).order_by(models.InventoryTransaction.created_at)):
+        loc = tx.location_id or lot.location_id
+        balances[loc] = round(balances.get(loc, 0.0) + (tx.quantity if tx.direction == "in" else -tx.quantity), 6)
+    return {k: v for k, v in balances.items() if abs(v) > 0.0005} or ({lot.location_id: lot.quantity_on_hand} if lot.quantity_on_hand > 0.0005 else {})
+
+
+def lot_quantity_at(db: Session, lot: pm.InventoryLot, location_id: str | None) -> float:
+    return lot_location_balances(db, lot).get(location_id, 0.0)
+
+
+def _default_issue_location(db: Session, lot: pm.InventoryLot) -> str | None:
+    balances = {k: v for k, v in lot_location_balances(db, lot).items() if v > 0.0005}
+    if not balances:
+        return lot.location_id
+    if lot.location_id in balances:
+        return lot.location_id
+    return max(balances, key=balances.get)
+
+
+def transfer(db: Session, product: pm.MedicineProduct, *, lot: pm.InventoryLot, quantity: float, to_location_id: str, from_location_id: str | None = None,
+             reason: str | None = None, user_id: str) -> dict:
+    """Moves part of a lot between locations as a paired OUT / IN sharing
+    one correlation id (INVENTORY-SCHEMA §4). On-hand is unchanged; the
+    per-location picture, and any per-location policy, changes."""
+    item = item_of(db, product)
+    if lot.inventory_item_id != product.inventory_item_id:
+        raise PharmacyError("That lot belongs to another medicine.")
+    if quantity <= 0:
+        raise PharmacyError("Transfer quantity must be greater than zero.")
+    if db.get(models.Location, to_location_id) is None:
+        raise PharmacyError("Destination location not found", 404)
+    source = from_location_id if from_location_id is not None else _default_issue_location(db, lot)
+    if source == to_location_id:
+        raise PharmacyError("The lot is already at that location.")
+    at_source = lot_quantity_at(db, lot, source)
+    if quantity > at_source + 0.0005:
+        raise PharmacyError(f"Only {at_source:g} {item.unit} of lot {lot.lot_code} is at the source location.")
+    correlation = new_id()
+    at = now()
+    out_tx = models.InventoryTransaction(id=new_id(), item_id=item.id, direction="out", quantity=quantity, unit_cost=lot.unit_cost, reason="transfer_out",
+                                         linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, location_id=source, correlation_id=correlation, created_at=at)
+    in_tx = models.InventoryTransaction(id=new_id(), item_id=item.id, direction="in", quantity=quantity, unit_cost=lot.unit_cost, reason="transfer_in",
+                                        linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, location_id=to_location_id, correlation_id=correlation, created_at=at)
+    db.add_all([out_tx, in_tx])
+    db.flush()
+    write_event(db, farm_id=product.farm_id, entity_type="inventory_lot", entity_id=lot.id, event_type="inventory_transferred",
+                payload={"lot_code": lot.lot_code, "quantity": quantity, "unit": item.unit, "from_location_id": source, "to_location_id": to_location_id,
+                         "correlation_id": correlation, "reason": reason}, created_by=user_id)
+    evaluate_item(db, product, user_id=user_id)
+    return {"correlation_id": correlation, "out_transaction_id": out_tx.id, "in_transaction_id": in_tx.id, "from_location_id": source, "to_location_id": to_location_id,
+            "quantity": quantity, "unit": item.unit, "balances": lot_location_balances(db, lot)}
 
 
 def set_lot_status(db: Session, lot: pm.InventoryLot, status: str, *, reason: str | None, recall_reference: str | None = None, user_id: str) -> pm.InventoryLot:
@@ -312,6 +517,7 @@ def set_lot_status(db: Session, lot: pm.InventoryLot, status: str, *, reason: st
     previous = lot.status
     d = _detail(lot)
     lot.status = status
+    lot.quality_status = QUALITY_FOR_STATUS.get(status, "RELEASED")
     if status == "quarantined":
         d.quarantine_reason = reason
     elif status == "recalled":
@@ -320,6 +526,13 @@ def set_lot_status(db: Session, lot: pm.InventoryLot, status: str, *, reason: st
     elif status == "active":
         d.quarantine_reason = None
         refresh_lot_status(lot)
+    if status in ("quarantined", "blocked", "recalled"):
+        # Held stock cannot stay promised to anyone.
+        for r in active_reservations(db, get_product(db, lot.inventory_item_id, lot.farm_id), lot=lot):
+            if r.inventory_lot_id == lot.id:
+                r.status = "released"
+                r.released_at = now()
+                r.release_reason = f"lot {status}"
     event = {"quarantined": "medicine_lot_quarantined", "recalled": "medicine_lot_recalled", "blocked": "medicine_lot_blocked", "active": "medicine_lot_released"}[status]
     write_event(db, farm_id=lot.farm_id, entity_type="inventory_lot", entity_id=lot.id, event_type=event,
                 payload={"from": previous, "to": lot.status, "reason": reason, "recall_reference": recall_reference}, created_by=user_id)
@@ -373,11 +586,12 @@ def adjust(db: Session, product: pm.MedicineProduct, *, lot: pm.InventoryLot, de
     if lot.quantity_on_hand + delta < -0.0005:
         raise PharmacyError(f"Only {lot.quantity_on_hand:g} {lot.unit} on hand in lot {lot.lot_code}; stock cannot go negative.")
     item = item_of(db, product)
+    location = _default_issue_location(db, lot) if delta < 0 else lot.location_id
     lot.quantity_on_hand = round(lot.quantity_on_hand + delta, 6)
     refresh_lot_status(lot)
     tx = models.InventoryTransaction(
         id=new_id(), item_id=item.id, direction="in" if delta > 0 else "out", quantity=abs(delta), unit_cost=lot.unit_cost, reason=reason,
-        linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, created_at=now(),
+        linked_entity_type="inventory_lot", linked_entity_id=lot.id, inventory_lot_id=lot.id, location_id=location, created_at=now(),
     )
     db.add(tx)
     item.current_qty = (item.current_qty or 0) + delta
@@ -390,12 +604,18 @@ def adjust(db: Session, product: pm.MedicineProduct, *, lot: pm.InventoryLot, de
 def lot_dict(db: Session, lot: pm.InventoryLot) -> dict:
     d = lot.medicine
     why = ineligibility(lot)
+    product = db.get(pm.MedicineProduct, lot.inventory_item_id)
+    reserved = reserved_quantity(db, product, lot=lot) if product is not None else 0.0
     return {
-        "id": lot.id, "inventory_item_id": lot.inventory_item_id, "lot_code": lot.lot_code, "source_type": lot.source_type,
+        "id": lot.id, "inventory_item_id": lot.inventory_item_id, "lot_code": lot.lot_code, "supplier_lot_code": lot.supplier_lot_code, "source_type": lot.source_type,
+        "source_reference_type": lot.source_reference_type, "source_reference_id": lot.source_reference_id, "manufactured_at": lot.manufactured_at,
         "supplier_id": lot.supplier_id, "supplier_label": lot.supplier_label, "location_id": lot.location_id, "received_at": lot.received_at,
         "expiry_date": lot.expiry_date, "received_quantity": lot.received_quantity, "accepted_quantity": lot.accepted_quantity,
-        "rejected_quantity": lot.rejected_quantity, "quantity_on_hand": lot.quantity_on_hand, "unit": lot.unit, "unit_cost": lot.unit_cost,
-        "status": lot.status, "eligible": why is None, "ineligible_reason": why, "reference": lot.reference, "notes": lot.notes,
+        "rejected_quantity": lot.rejected_quantity, "quantity_on_hand": lot.quantity_on_hand, "unit": lot.unit, "unit_cost": lot.unit_cost, "currency": lot.currency,
+        "status": lot.status, "quality_status": lot.quality_status, "eligible": why is None, "ineligible_reason": why, "reserved_quantity": reserved,
+        "free_quantity": round(max(lot.quantity_on_hand - reserved, 0.0), 6) if why is None else 0.0,
+        "location_balances": [{"location_id": k, "quantity": v} for k, v in lot_location_balances(db, lot).items()],
+        "reference": lot.reference, "notes": lot.notes,
         "opened_at": d.opened_at if d else None, "use_by_after_opening": d.use_by_after_opening if d else None,
         "storage_status": d.storage_status if d else "COMPLIANT", "cold_chain_exception": bool(d.cold_chain_exception) if d else False,
         "storage_note": d.storage_note if d else None, "quarantine_reason": d.quarantine_reason if d else None,
@@ -408,12 +628,13 @@ def stock_breakdown(db: Session, product: pm.MedicineProduct, *, location_id: st
     """On hand against eligible (§7), with every excluded quantity named
     and the expiry picture the dashboard shows (§10)."""
     at = at or now()
-    lots = [l for l in product.lots if location_id is None or l.location_id == location_id]
-    out = {"on_hand": 0.0, "eligible": 0.0, "quarantined": 0.0, "blocked": 0.0, "recalled": 0.0, "expired": 0.0, "storage_exception": 0.0,
-           "lot_count": 0, "eligible_lot_count": 0, "earliest_expiry": None, "expiring_quantity": 0.0, "expiring_lots": []}
+    out = {"on_hand": 0.0, "eligible": 0.0, "eligible_before_reservations": 0.0, "reserved": 0.0, "quarantined": 0.0, "blocked": 0.0, "recalled": 0.0, "expired": 0.0,
+           "storage_exception": 0.0, "lot_count": 0, "eligible_lot_count": 0, "earliest_expiry": None, "expiring_quantity": 0.0, "expiring_lots": []}
     horizon = at + timedelta(days=warning_days)
-    for lot in lots:
-        qty = lot.quantity_on_hand
+    for lot in product.lots:
+        # Farm-wide: the lot's on-hand. Per location: the lot's balance
+        # there, derived from its movements (transfers included).
+        qty = lot.quantity_on_hand if location_id is None else lot_quantity_at(db, lot, location_id)
         if qty <= 0.0005:
             continue
         out["on_hand"] += qty
@@ -439,7 +660,11 @@ def stock_breakdown(db: Session, product: pm.MedicineProduct, *, location_id: st
             out["storage_exception"] += qty
         elif why in ("quarantined", "blocked", "recalled"):
             out[why] += qty
-    for k in ("on_hand", "eligible", "quarantined", "blocked", "recalled", "expired", "storage_exception", "expiring_quantity"):
+    # §7: stock reserved for another protected purpose is not eligible.
+    out["eligible_before_reservations"] = out["eligible"]
+    out["reserved"] = min(reserved_quantity(db, product, location_id=location_id), out["eligible"])
+    out["eligible"] = out["eligible"] - out["reserved"]
+    for k in ("on_hand", "eligible", "eligible_before_reservations", "reserved", "quarantined", "blocked", "recalled", "expired", "storage_exception", "expiring_quantity"):
         out[k] = round(out[k], 6)
     return out
 
@@ -481,6 +706,12 @@ def recommended_reorder(product: pm.MedicineProduct, policy: pm.PharmacyStockPol
     if need > 0 and product.default_pack_size and product.default_pack_size > 0:
         need = math.ceil(need / product.default_pack_size - 1e-9) * product.default_pack_size
     return round(need, 6)
+
+
+def confirmed_incoming(db: Session, product: pm.MedicineProduct) -> float:
+    """Submitted / approved requisition lines for the medicine, in its
+    stock unit (PROCUREMENT §5; the §9 formula's `confirmed_incoming`)."""
+    return procurement.incoming_quantity(db, product.farm_id, product.inventory_item_id, item_of(db, product).unit)
 
 
 def average_daily_consumption(db: Session, product: pm.MedicineProduct, *, days: int = 30) -> float:
@@ -598,6 +829,12 @@ def _resolve_alerts(db: Session, product: pm.MedicineProduct, *, alert_types: tu
         for t in db.scalars(select(models.Task).where(models.Task.source_type == "pharmacy_requisition", models.Task.source_id == a.id, models.Task.status == "open")):
             # The shortage is gone; the draft requisition is closed, not deleted.
             t.status = "done"
+        # A draft nobody has acted on is withdrawn with the shortage; a
+        # submitted or approved requisition is a person's decision and stays.
+        if a.requisition_id and not reason.startswith("superseded"):
+            req = db.get(procurement.prm.PurchaseRequisition, a.requisition_id)
+            if req is not None and req.status == "draft":
+                procurement.cancel(db, req, reason=f"pharmacy shortage resolved: {reason}", user_id=user_id)
     return rows
 
 
@@ -637,14 +874,18 @@ def evaluate_item(db: Session, product: pm.MedicineProduct, *, user_id: str = "s
             _resolve_alerts(db, product, alert_types=pm.STOCK_ALERT_TYPES + ("LOW_DAYS_COVER",), location_id=loc, reason="alerts disabled by policy", user_id=user_id)
             continue
         status = stock_status(bd["eligible"], policy)
-        reorder = recommended_reorder(product, policy, bd["eligible"])
+        incoming = confirmed_incoming(db, product)
+        reorder = recommended_reorder(product, policy, bd["eligible"], incoming)
         raise_type = {"OUT": "OUT_OF_STOCK", "CRITICAL": "CRITICAL_STOCK", "LOW": "BELOW_MINIMUM_STOCK"}.get(status)
         figures = (f"eligible {bd['eligible']:g} {item.unit} (on hand {bd['on_hand']:g}; excluded: expired {bd['expired']:g}, quarantined {bd['quarantined']:g}, "
-                   f"blocked {bd['blocked']:g}, recalled {bd['recalled']:g}, storage exception {bd['storage_exception']:g})")
+                   f"blocked {bd['blocked']:g}, recalled {bd['recalled']:g}, storage exception {bd['storage_exception']:g}"
+                   + (f", reserved {bd['reserved']:g}" if bd["reserved"] else "") + ")")
         if raise_type and (policy.essential or policy.minimum_stock_base is not None or policy.critical_stock_base is not None):
             head = {"OUT": "is out of eligible stock", "CRITICAL": f"is at a critical level (≤ {policy.critical_stock_base:g} {item.unit})",
                     "LOW": f"is below the farm's minimum of {policy.minimum_stock_base:g} {item.unit}"}[status]
-            text = f"{name} {head}: {figures}." + (f" Recommended reorder {reorder:g} {item.unit} to reach the target of {policy.target_stock_base:g}." if reorder > 0 else "") + f" {SAFETY}"
+            text = (f"{name} {head}: {figures}." + (f" Recommended reorder {reorder:g} {item.unit} to reach the target of {policy.target_stock_base:g}" if reorder > 0 else "")
+                    + (f" ({incoming:g} {item.unit} already on requisition)." if reorder > 0 and incoming > 0 else ("." if reorder > 0 else ""))
+                    + (f" {incoming:g} {item.unit} is already on an approved or submitted requisition." if reorder <= 0 and incoming > 0 else "") + f" {SAFETY}")
             row, created = _raise_alert(db, product, alert_type=raise_type, location_id=loc, policy=policy, breakdown=bd, explanation=text, reorder=reorder, user_id=user_id)
             out.append(row)
             _resolve_alerts(db, product, alert_types=tuple(t for t in pm.STOCK_ALERT_TYPES if t != raise_type), location_id=loc, reason=f"superseded by {raise_type}", user_id=user_id)
@@ -697,38 +938,59 @@ def resolve_alert_manually(db: Session, alert: pm.PharmacyStockAlert, *, note: s
     return alert
 
 
-def create_requisition(db: Session, alert: pm.PharmacyStockAlert, *, user_id: str) -> tuple[models.Task, bool]:
-    """One DRAFT requisition per unresolved shortage (§9): a task for the
-    buyer to act on, never a purchase order and never approved here."""
+def create_requisition(db: Session, alert: pm.PharmacyStockAlert, *, user_id: str) -> tuple[procurement.prm.PurchaseRequisition, bool]:
+    """One DRAFT purchase requisition per unresolved shortage (§9,
+    PROCUREMENT §5): a document the buyer submits and a manager approves,
+    never a purchase order and never approved here."""
     if alert.alert_type not in pm.STOCK_ALERT_TYPES and alert.alert_type != "LOW_DAYS_COVER":
         raise PharmacyError("Only a stock shortage can open a requisition.")
     if alert.status == "resolved":
         raise PharmacyError("This alert is resolved; the shortage is gone.")
-    if alert.requisition_task_id:
-        task = db.get(models.Task, alert.requisition_task_id)
-        if task is not None and task.status == "open":
-            return task, False
+    existing = procurement.open_for_source(db, alert.farm_id, "pharmacy_stock_alert", alert.id)
+    if existing is None and alert.requisition_id:
+        existing = db.get(procurement.prm.PurchaseRequisition, alert.requisition_id)
+        if existing is not None and existing.status in ("cancelled", "rejected", "received"):
+            existing = None
+    if existing is not None:
+        alert.requisition_id = existing.id
+        alert.requisition_task_id = existing.task_id
+        return existing, False
     product = get_product(db, alert.inventory_item_id, alert.farm_id)
     item = item_of(db, product)
     policy = policy_for(db, product, alert.location_id)
-    qty = alert.recommended_reorder_base or recommended_reorder(product, policy, alert.eligible_available_base or 0)
+    qty = alert.recommended_reorder_base or recommended_reorder(product, policy, alert.eligible_available_base or 0, confirmed_incoming(db, product))
     if qty <= 0:
         raise PharmacyError("No reorder quantity: set a target stock level on the policy first.")
-    supplier = db.get(models.Supplier, policy.preferred_supplier_id) if policy and policy.preferred_supplier_id else None
-    task = models.Task(
-        id=new_id(), farm_id=alert.farm_id, title=f"Draft requisition: {item.name} × {qty:g} {item.unit}",
-        description=(f"DRAFT purchase requisition from pharmacy alert {alert.alert_type}: eligible {alert.eligible_available_base or 0:g} {item.unit}, "
-                     f"minimum {alert.minimum_stock_base or 0:g}, target {alert.target_stock_base or 0:g}."
-                     + (f" Preferred supplier: {supplier.name}." if supplier else "") + " Needs approval before any order is placed."),
-        due_at=now() + timedelta(days=max(1, int(policy.lead_time_days or 2)) if policy else 2), priority="high" if alert.severity in ("critical", "high") else "medium",
-        status="open", source_type="pharmacy_requisition", source_id=alert.id,
+    buyer = routing.primary_recipient(db, alert.farm_id, "procurement_requisition")
+    req = procurement.create_requisition(
+        db, alert.farm_id, requested_by=buyer.id if buyer else (user_id if db.get(models.User, user_id) else alert.acknowledged_by or _any_manager(db, alert.farm_id)),
+        purpose_code="pharmacy_replenishment", needed_by=now() + timedelta(days=max(1, int(policy.lead_time_days or 2)) if policy else 2),
+        justification=(f"Pharmacy alert {alert.alert_type}: eligible {alert.eligible_available_base or 0:g} {item.unit}, minimum {alert.minimum_stock_base or 0:g}, "
+                       f"target {alert.target_stock_base or 0:g}. {SAFETY}"),
+        source_type="pharmacy_stock_alert", source_reference_id=alert.id,
+        lines=[{"inventory_item_id": item.id, "requested_quantity": qty, "uom_code": item.unit, "estimated_unit_price": item.unit_cost,
+                "preferred_supplier_id": policy.preferred_supplier_id if policy else None, "specification": f"{product.brand_name or ''} {product.generic_name or ''}".strip() or None}],
+        user_id=user_id,
     )
-    db.add(task)
-    db.flush()
-    alert.requisition_task_id = task.id
+    alert.requisition_id = req.id
+    alert.requisition_task_id = req.task_id
+    if req.task_id:
+        t = db.get(models.Task, req.task_id)
+        if t is not None:
+            t.priority = "high" if alert.severity in ("critical", "high") else "medium"
+            t.source_type = "pharmacy_requisition"
+            t.source_id = alert.id
     write_event(db, farm_id=alert.farm_id, entity_type="medicine_product", entity_id=alert.inventory_item_id, event_type="medicine_reorder_required",
-                payload={"alert_id": alert.id, "task_id": task.id, "recommended_reorder": qty, "unit": item.unit, "draft": True}, created_by=user_id)
-    return task, True
+                payload={"alert_id": alert.id, "requisition_id": req.id, "requisition_no": req.requisition_no, "task_id": req.task_id, "recommended_reorder": qty,
+                         "unit": item.unit, "draft": True}, created_by=user_id)
+    return req, True
+
+
+def _any_manager(db: Session, farm_id: str) -> str:
+    u = db.scalar(select(models.User).where(models.User.farm_id == farm_id, models.User.role.in_(("manager", "owner")), models.User.active.is_(True)))
+    if u is None:
+        raise PharmacyError("No manager or owner account on this farm to request a purchase.")
+    return u.id
 
 
 def alert_dict(db: Session, a: pm.PharmacyStockAlert) -> dict:
@@ -740,6 +1002,7 @@ def alert_dict(db: Session, a: pm.PharmacyStockAlert) -> dict:
         "earliest_expiry_date": a.earliest_expiry_date, "expiring_quantity": a.expiring_quantity, "recommended_reorder_base": a.recommended_reorder_base,
         "explanation": a.explanation, "status": a.status, "acknowledged_by": a.acknowledged_by, "acknowledged_at": a.acknowledged_at,
         "resolved_at": a.resolved_at, "resolution_note": a.resolution_note, "deduplication_key": a.deduplication_key, "requisition_task_id": a.requisition_task_id,
+        "requisition_id": a.requisition_id, "route_code": ROUTE_FOR_ALERT.get(a.alert_type, "pharmacy_stock"),
     }
 
 
@@ -753,10 +1016,28 @@ def _subject(db: Session, subject_type: str, subject_id: str, farm_id: str):
     return subject
 
 
-def eligible_lots(db: Session, product: pm.MedicineProduct, *, location_id: str | None = None, at: datetime | None = None) -> list[pm.InventoryLot]:
-    """First-expiry-first-out order among lots that count (§7)."""
+def lot_free_quantity(db: Session, product: pm.MedicineProduct, lot: pm.InventoryLot, *, reservation: pm.InventoryReservation | None = None) -> float:
+    """What the lot can give to a purpose other than the reservations on
+    it — the dose for a reserved purpose may draw on its own reservation."""
+    return round(lot.quantity_on_hand - reserved_quantity(db, product, lot=lot, exclude=reservation), 6)
+
+
+def eligible_lots(db: Session, product: pm.MedicineProduct, *, location_id: str | None = None, at: datetime | None = None,
+                  reservation: pm.InventoryReservation | None = None) -> list[pm.InventoryLot]:
+    """First-expiry-first-out order among lots that count (§7). A lot
+    held for a purpose is only offered to that purpose."""
     at = at or now()
-    rows = [l for l in product.lots if ineligibility(l, at) is None and (location_id is None or l.location_id == location_id)]
+    rows = []
+    for l in product.lots:
+        if ineligibility(l, at) is not None:
+            continue
+        if location_id is not None and lot_quantity_at(db, l, location_id) <= 0.0005:
+            continue
+        if reservation is not None and reservation.inventory_lot_id not in (None, l.id):
+            continue
+        if lot_free_quantity(db, product, l, reservation=reservation) <= 0.0005:
+            continue
+        rows.append(l)
     far = datetime.max.replace(tzinfo=at.tzinfo)
     rows.sort(key=lambda l: (ensure_utc(l.expiry_date) if l.expiry_date else far, ensure_utc(l.received_at)))
     return rows
@@ -765,7 +1046,8 @@ def eligible_lots(db: Session, product: pm.MedicineProduct, *, location_id: str 
 def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str, inventory_item_id: str, lot_id: str | None = None,
                dose_quantity: float, dose_unit: str, route_code: str, head_count: int | None = None, quantity_consumed: float | None = None,
                treatment_id: str | None = None, protocol_run_step_id: str | None = None, administered_at: datetime | None = None,
-               reason: str | None = None, notes: str | None = None, user_id: str) -> pm.MedicationAdministration:
+               reason: str | None = None, notes: str | None = None, reservation_id: str | None = None, location_id: str | None = None,
+               user_id: str) -> pm.MedicationAdministration:
     """A dose actually given (§11), atomically: authorisation and
     treatment context, lot eligibility, the record, the exact-lot
     consumption, the product's authorised withdrawal, the event, and the
@@ -778,6 +1060,7 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
     at = ensure_utc(administered_at) if administered_at else now()
     if dose_quantity <= 0:
         raise PharmacyError("Dose must be greater than zero.")
+    dose_unit = uom_service.require(db, dose_unit, what="dose unit")
     if route_code not in pm.ROUTES:
         raise PharmacyError(f"route_code must be one of {list(pm.ROUTES)}")
     if product.administration_routes and route_code not in product.administration_routes:
@@ -790,6 +1073,12 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
         expected_type = "animal" if subject_type == "animal" else "flock"
         if treatment is None or treatment.entity_type != expected_type or treatment.entity_id != subject_id:
             raise PharmacyError("The treatment does not belong to this subject.", 404 if treatment is None else 422)
+        # The prescription names the product (§11): the dose must be of it.
+        if treatment.medicine_product_id and treatment.medicine_product_id != product.inventory_item_id:
+            prescribed = db.get(models.InventoryItem, treatment.medicine_product_id)
+            raise PharmacyError(f"The treatment prescribes {prescribed.name if prescribed else treatment.medication}, not {item.name}. Record a treatment for this medicine first.")
+        if treatment.status not in ("active",):
+            raise PharmacyError(f"The treatment is {treatment.status}; an administration needs an active prescription.")
     if product.prescription_required and treatment is None and not protocol_run_step_id:
         raise PharmacyError(f"{item.name} needs a prescription: record the treatment (veterinarian or manager) or run an approved protocol step first. "
                             "Stock on the shelf never authorises its use.")
@@ -797,11 +1086,18 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
     if heads <= 0:
         raise PharmacyError("head_count must be at least one.")
     if quantity_consumed is None:
-        if not uom.compatible(dose_unit, item.unit):
+        if not uom_service.compatible(db, dose_unit, item.unit):
             raise PharmacyError(f"The dose is in {dose_unit} and {item.name} is stocked in {item.unit}; give quantity_consumed in {item.unit}.")
-        quantity_consumed = round(uom.convert(dose_quantity * heads, dose_unit, item.unit), 6)
+        quantity_consumed = round(uom_service.convert(db, dose_quantity * heads, dose_unit, item.unit), 6)
     if quantity_consumed <= 0:
         raise PharmacyError("Quantity consumed must be greater than zero.")
+    reservation = None
+    if reservation_id:
+        reservation = get_reservation(db, reservation_id, farm_id)
+        if reservation.inventory_item_id != product.inventory_item_id or reservation.status != "active":
+            raise PharmacyError("The reservation is not an active hold on this medicine.")
+    if location_id and db.get(models.Location, location_id) is None:
+        raise PharmacyError("Location not found", 404)
 
     # The exact lot: the one named, if it counts; else first-expiry-first-out.
     if lot_id:
@@ -811,21 +1107,28 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
         why = ineligibility(lot, at)
         if why is not None:
             raise PharmacyError(f"Lot {lot.lot_code} is not eligible ({why.replace('_', ' ')}). Choose an eligible lot.")
-        if lot.quantity_on_hand + 0.0005 < quantity_consumed:
-            raise PharmacyError(f"Lot {lot.lot_code} has only {lot.quantity_on_hand:g} {item.unit} on hand; {quantity_consumed:g} is needed.")
+        if reservation is not None and reservation.inventory_lot_id not in (None, lot.id):
+            raise PharmacyError(f"The reservation holds lot {db.get(pm.InventoryLot, reservation.inventory_lot_id).lot_code}, not {lot.lot_code}.")
+        free = lot_free_quantity(db, product, lot, reservation=reservation)
+        if free + 0.0005 < quantity_consumed:
+            held = lot.quantity_on_hand - free
+            raise PharmacyError(f"Lot {lot.lot_code} has only {max(free, 0):g} {item.unit} free of {lot.quantity_on_hand:g} on hand"
+                                + (f" ({held:g} is reserved for another purpose)" if held > 0.0005 else "") + f"; {quantity_consumed:g} is needed.")
     else:
-        candidates = eligible_lots(db, product, at=at)
-        lot = next((l for l in candidates if l.quantity_on_hand + 0.0005 >= quantity_consumed), None)
+        candidates = eligible_lots(db, product, at=at, location_id=location_id, reservation=reservation)
+        lot = next((l for l in candidates if lot_free_quantity(db, product, l, reservation=reservation) + 0.0005 >= quantity_consumed), None)
         if lot is None:
-            total = round(sum(l.quantity_on_hand for l in candidates), 6)
+            total = round(sum(lot_free_quantity(db, product, l, reservation=reservation) for l in candidates), 6)
             bd = stock_breakdown(db, product, at=at)
             raise PharmacyError(f"No eligible lot of {item.name} holds {quantity_consumed:g} {item.unit} (eligible {total:g}; on hand {bd['on_hand']:g}, "
-                                f"of which expired {bd['expired']:g}, quarantined {bd['quarantined']:g}, storage exception {bd['storage_exception']:g}). "
-                                "Only eligible stock can be administered.")
+                                f"of which expired {bd['expired']:g}, quarantined {bd['quarantined']:g}, storage exception {bd['storage_exception']:g}"
+                                + (f", reserved for other purposes {bd['reserved']:g}" if bd["reserved"] else "") + "). Only eligible stock can be administered.")
+    issue_location = location_id or _default_issue_location(db, lot)
 
     adm = pm.MedicationAdministration(
         id=new_id(), farm_id=farm_id, subject_type=subject_type, subject_id=subject_id, treatment_id=treatment_id, protocol_run_step_id=protocol_run_step_id,
-        inventory_item_id=product.inventory_item_id, inventory_lot_id=lot.id, dose_quantity=dose_quantity, dose_unit=dose_unit, route_code=route_code,
+        inventory_item_id=product.inventory_item_id, inventory_lot_id=lot.id, reservation_id=reservation.id if reservation else None, location_id=issue_location,
+        dose_quantity=dose_quantity, dose_unit=dose_unit, route_code=route_code,
         head_count=heads, quantity_consumed=quantity_consumed, unit=item.unit, administered_at=at, administered_by=user_id, reason=reason, notes=notes,
         status="recorded", created_at=now(),
     )
@@ -833,13 +1136,19 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
     db.flush()
     tx = models.InventoryTransaction(
         id=new_id(), item_id=item.id, direction="out", quantity=quantity_consumed, unit_cost=lot.unit_cost, reason="administration",
-        linked_entity_type="medication_administration", linked_entity_id=adm.id, inventory_lot_id=lot.id, created_at=at,
+        linked_entity_type="medication_administration", linked_entity_id=adm.id, inventory_lot_id=lot.id, location_id=issue_location, created_at=at,
     )
     db.add(tx)
     adm.inventory_transaction_id = tx.id
     lot.quantity_on_hand = round(lot.quantity_on_hand - quantity_consumed, 6)
     refresh_lot_status(lot)
     item.current_qty = (item.current_qty or 0) - quantity_consumed
+    if reservation is not None:
+        # Issue for the purpose consumes the reservation (INVENTORY §5).
+        reservation.consumed_quantity = round((reservation.consumed_quantity or 0) + min(quantity_consumed, reservation_remaining(reservation)), 6)
+        if reservation_remaining(reservation) <= 0.0005:
+            reservation.status = "consumed"
+            reservation.released_at = at
     d = _detail(lot)
     if d.opened_at is None and product.opened_shelf_life_days:
         d.opened_at = at
@@ -863,9 +1172,13 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
     write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject_id, event_type="medication_administered",
                 payload={"administration_id": adm.id, "medicine": item.name, "inventory_item_id": item.id, "lot_id": lot.id, "lot_code": lot.lot_code,
                          "dose": dose_quantity, "dose_unit": dose_unit, "route": route_code, "head_count": heads, "quantity_consumed": quantity_consumed,
-                         "unit": item.unit, "treatment_id": treatment_id, "protocol_run_step_id": protocol_run_step_id,
+                         "unit": item.unit, "treatment_id": treatment_id, "protocol_run_step_id": protocol_run_step_id, "reservation_id": adm.reservation_id,
+                         "location_id": issue_location, "health_case_id": treatment.health_case_id if treatment else None,
                          "withdrawal_milk_until": milk.isoformat() if milk else None, "withdrawal_meat_until": meat.isoformat() if meat else None},
                 created_by=user_id)
+    if until is not None:
+        write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject_id, event_type="withdrawal_started",
+                    payload={"administration_id": adm.id, "milk_until": milk.isoformat() if milk else None, "meat_until": meat.isoformat() if meat else None}, created_by=user_id)
     evaluate_item(db, product, user_id=user_id)
     return adm
 
@@ -887,7 +1200,7 @@ def reverse_administration(db: Session, adm: pm.MedicationAdministration, *, rea
     item.current_qty = (item.current_qty or 0) + adm.quantity_consumed
     db.add(models.InventoryTransaction(
         id=new_id(), item_id=item.id, direction="in", quantity=adm.quantity_consumed, unit_cost=lot.unit_cost, reason="administration_reversal",
-        linked_entity_type="medication_administration", linked_entity_id=adm.id, inventory_lot_id=lot.id, created_at=now(),
+        linked_entity_type="medication_administration", linked_entity_id=adm.id, inventory_lot_id=lot.id, location_id=adm.location_id, created_at=now(),
     ))
     adm.status = "reversed"
     adm.reversed_at = now()
@@ -903,9 +1216,11 @@ def administration_dict(db: Session, adm: pm.MedicationAdministration) -> dict:
     lot = db.get(pm.InventoryLot, adm.inventory_lot_id)
     subject = db.get(models.Animal, adm.subject_id) if adm.subject_type == "animal" else db.get(models.Flock, adm.subject_id)
     user = db.get(models.User, adm.administered_by)
+    treatment = db.get(models.Treatment, adm.treatment_id) if adm.treatment_id else None
     return {
         "id": adm.id, "subject_type": adm.subject_type, "subject_id": adm.subject_id, "subject_name": getattr(subject, "name", None),
         "species": getattr(subject, "species", None), "treatment_id": adm.treatment_id, "protocol_run_step_id": adm.protocol_run_step_id,
+        "health_case_id": treatment.health_case_id if treatment else None, "reservation_id": adm.reservation_id, "location_id": adm.location_id,
         "inventory_item_id": adm.inventory_item_id, "medicine_name": item.name if item else None, "inventory_lot_id": adm.inventory_lot_id,
         "lot_code": lot.lot_code if lot else None, "dose_quantity": adm.dose_quantity, "dose_unit": adm.dose_unit, "route_code": adm.route_code,
         "head_count": adm.head_count, "quantity_consumed": adm.quantity_consumed, "unit": adm.unit, "administered_at": adm.administered_at,
@@ -921,6 +1236,7 @@ def product_dict(db: Session, product: pm.MedicineProduct, *, with_lots: bool = 
     policy = policy_for(db, product, None)
     bd = stock_breakdown(db, product, warning_days=policy.expiry_warning_days if policy else 60)
     status = stock_status(bd["eligible"], policy)
+    incoming = confirmed_incoming(db, product)
     open_alerts = db.scalars(select(pm.PharmacyStockAlert).where(
         pm.PharmacyStockAlert.inventory_item_id == product.inventory_item_id, pm.PharmacyStockAlert.status != "resolved")).all()
     out = {
@@ -936,16 +1252,19 @@ def product_dict(db: Session, product: pm.MedicineProduct, *, with_lots: bool = 
         "ingredients": [{"code": i.ingredient.code, "name": i.ingredient.name, "concentration_value": i.concentration_value, "concentration_uom": i.concentration_uom,
                          "concentration_basis": i.concentration_basis} for i in product.ingredients],
         "stock": {k: v for k, v in bd.items() if k != "expiring_lots"}, "eligible_available": bd["eligible"], "on_hand": bd["on_hand"], "lot_count": bd["lot_count"],
+        "reserved": bd["reserved"], "confirmed_incoming": incoming,
         "earliest_expiry": bd["earliest_expiry"], "expiring_quantity": bd["expiring_quantity"], "storage_exception": bd["storage_exception"] > 0,
-        "status": status, "policy": policy_dict(policy), "recommended_reorder": recommended_reorder(product, policy, bd["eligible"]),
-        "open_alerts": [{"id": a.id, "alert_type": a.alert_type, "severity": a.severity, "status": a.status, "requisition_task_id": a.requisition_task_id} for a in open_alerts],
-        "open_requisition": any(a.requisition_task_id for a in open_alerts), "average_daily_use": average_daily_consumption(db, product),
+        "status": status, "policy": policy_dict(policy), "recommended_reorder": recommended_reorder(product, policy, bd["eligible"], incoming),
+        "open_alerts": [{"id": a.id, "alert_type": a.alert_type, "severity": a.severity, "status": a.status, "requisition_task_id": a.requisition_task_id,
+                         "requisition_id": a.requisition_id} for a in open_alerts],
+        "open_requisition": any(a.requisition_id or a.requisition_task_id for a in open_alerts), "average_daily_use": average_daily_consumption(db, product),
         "created_at": product.created_at, "updated_at": product.updated_at,
     }
     if with_lots:
         out["lots"] = [lot_dict(db, l) for l in sorted(product.lots, key=lambda l: (ensure_utc(l.expiry_date) if l.expiry_date else datetime.max.replace(tzinfo=now().tzinfo)))]
         out["policies"] = [policy_dict(p) for p in policies_for(db, product)]
         out["alerts"] = [alert_dict(db, a) for a in open_alerts]
+        out["reservations"] = [reservation_dict(db, r) for r in active_reservations(db, product)]
         recent = db.scalars(select(pm.MedicationAdministration).where(pm.MedicationAdministration.inventory_item_id == product.inventory_item_id)
                             .order_by(pm.MedicationAdministration.administered_at.desc()).limit(20)).all()
         out["administrations"] = [administration_dict(db, a) for a in recent]
@@ -979,16 +1298,21 @@ def summary(db: Session, farm_id: str) -> dict:
 
 def pharmacy_signals(db: Session, farm_id: str) -> list:
     """Open pharmacy alerts for the notification bell (logistics, under
-    the inventory module). Acknowledged ones leave the bell, not the list."""
-    from app.services.signals_service import Signal  # local import: signals imports this module
+    the inventory module), addressed to the people the farm's routes
+    name (MEDICINE-NOTIFICATION-RULES §Notification behavior): one copy
+    per recipient, so each sees and clears their own. Acknowledged
+    alerts leave the bell, not the list."""
+    from app.services.signals_service import Signal, routed  # local import: signals imports this module
 
     out = []
     for a in db.scalars(select(pm.PharmacyStockAlert).where(pm.PharmacyStockAlert.farm_id == farm_id, pm.PharmacyStockAlert.status == "open")):
         item = db.get(models.InventoryItem, a.inventory_item_id)
-        out.append(Signal(
+        base = Signal(
             source_type="pharmacy_stock_alert", source_id=a.id, module_code=perms.INVENTORY, notification_type=f"pharmacy_{a.alert_type.lower()}",
             title=f"{item.name if item else 'Medicine'}: {a.alert_type.replace('_', ' ').lower()}", description=a.explanation[:300], priority=a.severity,
             entity_type="medicine_product", entity_id=a.inventory_item_id,
-            metadata={"alert_id": a.id, "alert_type": a.alert_type, "eligible": a.eligible_available_base, "recommended_reorder": a.recommended_reorder_base},
-        ))
+            metadata={"alert_id": a.id, "alert_type": a.alert_type, "eligible": a.eligible_available_base, "recommended_reorder": a.recommended_reorder_base,
+                      "requisition_id": a.requisition_id},
+        )
+        out.extend(routed(db, farm_id, ROUTE_FOR_ALERT.get(a.alert_type, "pharmacy_stock"), base))
     return out

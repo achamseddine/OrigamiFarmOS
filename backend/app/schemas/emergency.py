@@ -137,3 +137,48 @@ class EscalateIn(BaseModel):
 
 class ResolveRunIn(BaseModel):
     outcome: str
+
+
+class OfflineShownIn(BaseModel):
+    """What the tablet showed from the signed package (§14)."""
+
+    protocol_version_id: str | None = None
+    match_score: float | None = None
+    triage_level: str | None = None
+    escalated: bool = False
+    escalation_reasons: list[str] = Field(default_factory=list)
+
+
+class OfflineMedicationIn(BaseModel):
+    dose_quantity: float | None = None
+    dose_unit: str | None = None
+    lot_id: str | None = None
+    weight_used_kg: float | None = None
+    head_count: int | None = None
+
+
+class OfflineStepIn(BaseModel):
+    protocol_step_id: str
+    status: str = "completed"  # completed | skipped
+    occurred_at: datetime | None = None
+    result: dict = Field(default_factory=dict)
+    medication: OfflineMedicationIn | None = None
+    skip_reason: str | None = None
+    notes: str | None = None
+
+
+class OfflineRunIn(BaseModel):
+    """`POST /emergency/offline-runs` — an emergency executed on the tablet
+    from the offline package, submitted for revalidation. `operation_id`
+    makes the sync idempotent."""
+
+    operation_id: str
+    device_id: str | None = None
+    package_signature: str | None = None
+    subject_type: str
+    subject_id: str
+    signs: list[SignIn] = Field(default_factory=list)
+    occurred_at: datetime | None = None
+    shown: OfflineShownIn = Field(default_factory=OfflineShownIn)
+    steps: list[OfflineStepIn] = Field(default_factory=list)
+    notes: str | None = None

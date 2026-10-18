@@ -225,12 +225,14 @@ def upgrade() -> None:
         b.create_foreign_key("fk_inventory_tx_inventory_lot", "inventory_lots", ["inventory_lot_id"], ["id"])
 
     conn = op.get_bind()
+    # Booleans go in as bound Python values: an integer literal is a type
+    # error on PostgreSQL even though SQLite accepts it.
     for code, name, name_ar in CATEGORIES:
-        conn.execute(sa.text("INSERT INTO medicine_categories (id, code, name, name_ar, active) VALUES (:id, :code, :name, :name_ar, 1)"),
-                     {"id": str(uuid.uuid4()), "code": code, "name": name, "name_ar": name_ar})
+        conn.execute(sa.text("INSERT INTO medicine_categories (id, code, name, name_ar, active) VALUES (:id, :code, :name, :name_ar, :active)"),
+                     {"id": str(uuid.uuid4()), "code": code, "name": name, "name_ar": name_ar, "active": True})
     for code, name in INGREDIENTS:
-        conn.execute(sa.text("INSERT INTO medicine_active_ingredients (id, code, name, active) VALUES (:id, :code, :name, 1)"),
-                     {"id": str(uuid.uuid4()), "code": code, "name": name})
+        conn.execute(sa.text("INSERT INTO medicine_active_ingredients (id, code, name, active) VALUES (:id, :code, :name, :active)"),
+                     {"id": str(uuid.uuid4()), "code": code, "name": name, "active": True})
 
 
 def downgrade() -> None:

@@ -222,3 +222,15 @@ class AnimalDigitalTwinOut(AnimalOut):
     # The resolved capability set (generic animal model §8): the profile
     # draws its tabs from this, so one fetch is enough to render it.
     capabilities: dict = {}
+    # The care record (MEDICINE-PHARMACY-SCHEMA §11, HEALTH-VETERINARY-SCHEMA,
+    # CLINICAL-DECISION-SUPPORT §14): the doses given with their lots, the
+    # withdrawal windows that follow from them, the standing conditions the
+    # veterinarian recorded, the latest dated weight, the open health case
+    # and the live emergency — what the tablet shows at the animal and what
+    # its offline triage reads as the animal's facts.
+    recent_administrations: list[dict] = []
+    withdrawals: dict = {}
+    active_conditions: list[dict] = []
+    latest_weight: dict | None = None
+    open_health_case: dict | None = None
+    emergency: dict | None = None

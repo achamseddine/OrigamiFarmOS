@@ -280,11 +280,15 @@ final List<_Rule> _rules = [
   _Rule('POST', '/pharmacy/administrations', (m) {
     final dose = (m.body['dose_quantity'] as num?)?.toDouble() ?? 0;
     final heads = (m.body['head_count'] as num?)?.toInt() ?? 1;
+    final record = _newRecord(m, extra: {
+      'status': 'recorded', 'administered_at': m.body['administered_at'] ?? _now(), 'head_count': heads,
+      'quantity_consumed': m.body['quantity_consumed'] ?? dose * heads, 'unit': m.body['dose_unit'], 'inventory_lot_id': m.body['lot_id'] ?? '',
+    });
+    final animalId = m.body['subject_type'] == 'animal' ? m.body['subject_id'] as String? : null;
     return [
-      AppendRecord('/pharmacy/administrations', _newRecord(m, extra: {
-        'status': 'recorded', 'administered_at': m.body['administered_at'] ?? _now(), 'head_count': heads,
-        'quantity_consumed': m.body['quantity_consumed'] ?? dose * heads, 'unit': m.body['dose_unit'], 'inventory_lot_id': m.body['lot_id'] ?? '',
-      })),
+      AppendRecord('/pharmacy/administrations', record),
+      // The animal's own care record (its Digital Twin) shows the dose too.
+      if (animalId != null) AppendRecord('/animals/$animalId', record, listKey: 'recent_administrations'),
     ];
   }),
   _Rule('POST', '/pharmacy/administrations/$_id/reverse', (m) => [MergeRecord('/pharmacy/administrations', m.ids[0], {'status': 'reversed', 'reversed_at': _now(), 'reversal_reason': m.body['reason']})]),
@@ -299,6 +303,27 @@ final List<_Rule> _rules = [
           'matches': const [], 'escalation_reasons': const [], 'explanation': '', 'selected_match_id': null,
         })),
       ]),
+  // A protocol executed at the animal from the signed offline package
+  // (§14): the case appears at once with what the tablet showed — the
+  // version it used or the escalation — marked as an offline execution
+  // awaiting the server's revalidation. The steps done travel in the
+  // request; the run itself is the server's to create.
+  _Rule('POST', '/emergency/offline-runs', (m) {
+    final shown = (m.body['shown'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final escalated = shown['escalated'] == true;
+    return [
+      AppendRecord('/emergency/assessments', _newRecord(m, extra: {
+        'status': escalated ? 'escalated' : 'offline', 'source': 'offline', 'triage_level': shown['triage_level'] ?? 'PENDING',
+        'started_at': m.body['occurred_at'] ?? _now(), 'observed_signs': m.body['signs'] ?? const [],
+        'ai_confidence': shown['match_score'], 'escalation_reasons': shown['escalation_reasons'] ?? const [],
+        'explanation': escalated
+            ? 'ESCALATE — recorded offline; the server revalidates when the tablet syncs.'
+            : 'Executed offline from the signed package (${m.body['package_signature'] ?? '—'}); the server revalidates when the tablet syncs.',
+        'matches': const [], 'selected_match_id': null, 'offline_operation_id': m.body['operation_id'], 'package_signature': m.body['package_signature'],
+        'offline_steps': m.body['steps'] ?? const [],
+      })),
+    ];
+  }),
   _Rule('POST', '/emergency/assessments/$_id/close', (m) => [MergeRecord('/emergency/assessments', m.ids[0], {'status': 'resolved', 'closed_at': _now()})]),
   _Rule('POST', '/emergency/runs/$_id/escalate', (m) => [MergeRecord('/emergency/runs', m.ids[0], {'status': 'escalated', 'escalated_at': _now(), 'escalation_reason': m.body['reason']})]),
   _Rule('POST', '/emergency/runs/$_id/resolve', (m) => [MergeRecord('/emergency/runs', m.ids[0], {'status': 'completed', 'completed_at': _now(), 'outcome': m.body['outcome']})]),

@@ -214,6 +214,32 @@ def _intended_target(formula: fm.FeedFormula | None, species_code: str | None, p
     return policy.Target(species_code=species_code or (formula.species_code if formula else None), management_profile=profile, label=label, partial=True)
 
 
+def validate_intended_use(db: Session, farm_id: str, *, species_code: str | None, management_profile: str | None, mixer_asset_id: str | None, operator_id: str | None) -> None:
+    """FEED-SCHEMA §20: intended species and profile are references to
+    the configured masters, the mixer is a farm asset, the operator a
+    user — classification and provenance, never free text."""
+    if species_code and db.get(livestock_models.Species, species_code) is None:
+        raise FeedError(f"Unknown species '{species_code}'.")
+    if management_profile:
+        profile = db.get(livestock_models.ManagementProfile, management_profile)
+        if profile is None:
+            raise FeedError(f"Unknown management profile '{management_profile}'. See GET /species/{{code}}/configuration for the configured profiles.")
+        if species_code and profile.species_code and profile.species_code != species_code:
+            raise FeedError(f"Profile '{management_profile}' is configured for {profile.species_code}, not {species_code}.")
+    if mixer_asset_id:
+        from app.domain import platform_models as plm
+
+        asset = db.get(plm.FarmAsset, mixer_asset_id)
+        if asset is None or asset.farm_id != farm_id:
+            raise FeedError("Mixer asset not found; register the mixer under Assets first.", 404)
+        if asset.status != "active":
+            raise FeedError(f"{asset.name} is {asset.status.replace('_', ' ')} and cannot be used for a mix.")
+    if operator_id:
+        operator = db.get(models.User, operator_id)
+        if operator is None or operator.farm_id != farm_id or not operator.active:
+            raise FeedError("Operator not found on this farm.", 404)
+
+
 def start_batch(
     db: Session,
     farm_id: str,
@@ -227,6 +253,7 @@ def start_batch(
     intended_species_code: str | None = None,
     intended_management_profile: str | None = None,
     mixer_asset_id: str | None = None,
+    operator_id: str | None = None,
     production_date: datetime | None = None,
     user_id: str,
 ) -> fm.FeedBatch:
@@ -234,8 +261,7 @@ def start_batch(
     targets, and gives it the farm's next mix number. Re-runs the
     usage-policy check on every component against the intended use (§33:
     the restriction is revalidated when the physical batch is created)."""
-    if intended_species_code and db.get(livestock_models.Species, intended_species_code) is None:
-        raise FeedError(f"Unknown species '{intended_species_code}'.")
+    validate_intended_use(db, farm_id, species_code=intended_species_code, management_profile=intended_management_profile, mixer_asset_id=mixer_asset_id, operator_id=operator_id)
     version: fm.FeedFormulaVersion | None = None
     if formula_version_id:
         version = db.get(fm.FeedFormulaVersion, formula_version_id)
@@ -269,7 +295,7 @@ def start_batch(
         id=new_id(), farm_id=farm_id, feed_product_id=product.id, formula_version_id=version.id,
         batch_code=_unique_batch_code(db, farm_id, batch_code or code), mix_number=number, mix_code=code,
         intended_species_code=species, intended_management_profile=intended_management_profile,
-        production_date=production_date or when, mixer_asset_id=mixer_asset_id,
+        production_date=production_date or when, mixer_asset_id=mixer_asset_id, operator_id=operator_id or user_id,
         status="in_progress", target_quantity=target_quantity, unit=unit, planned_cost=planned_cost(db, version, target_quantity, unit),
         started_at=when, mixed_by=user_id, notes=notes, created_at=when,
     )
@@ -284,7 +310,8 @@ def start_batch(
     write_event(
         db, farm_id=farm_id, entity_type="feed_batch", entity_id=batch.id, event_type="feed_batch_started",
         payload={"batch_code": batch.batch_code, "mix_number": number, "mix_code": code, "formula": formula.code, "version": version.version,
-                 "target_quantity": target_quantity, "unit": unit, "intended_species_code": species, "intended_management_profile": intended_management_profile},
+                 "target_quantity": target_quantity, "unit": unit, "intended_species_code": species, "intended_management_profile": intended_management_profile,
+                 "mixer_asset_id": mixer_asset_id, "operator_id": batch.operator_id},
         created_by=user_id,
     )
     return batch
@@ -301,6 +328,8 @@ def complete_batch(
     expiry_date: datetime | None = None,
     notes: str | None = None,
     allow_negative: bool = False,
+    operator_id: str | None = None,
+    mixer_asset_id: str | None = None,
     user_id: str,
 ) -> fm.FeedBatch:
     """§7: the actual weighed quantities consume inventory (from the lots
@@ -310,6 +339,11 @@ def complete_batch(
         raise FeedError(f"Batch {batch.batch_code} is {batch.status}.")
     if actual_quantity <= 0:
         raise FeedError("Actual quantity produced must be greater than zero.")
+    validate_intended_use(db, batch.farm_id, species_code=None, management_profile=None, mixer_asset_id=mixer_asset_id, operator_id=operator_id)
+    if operator_id:
+        batch.operator_id = operator_id
+    if mixer_asset_id:
+        batch.mixer_asset_id = mixer_asset_id
     version = db.get(fm.FeedFormulaVersion, batch.formula_version_id) if batch.formula_version_id else None
     formula = version.formula if version else None
     provided = {a["feed_product_id"]: a for a in actuals}
@@ -410,6 +444,50 @@ def _user_name(db: Session, user_id: str | None) -> str | None:
     return user.name if user else None
 
 
+def _asset_name(db: Session, asset_id: str | None) -> str | None:
+    from app.domain import platform_models as plm
+
+    asset = db.get(plm.FarmAsset, asset_id) if asset_id else None
+    return asset.name if asset else None
+
+
+# ------------------------------------------------------------ numbering
+def mix_settings(db: Session, farm_id: str) -> fm.FeedMixSequence:
+    seq = db.get(fm.FeedMixSequence, farm_id)
+    if seq is None:
+        highest = db.scalar(select(func.max(fm.FeedBatch.mix_number)).where(fm.FeedBatch.farm_id == farm_id)) or 0
+        seq = fm.FeedMixSequence(farm_id=farm_id, last_number=highest)
+        db.add(seq)
+        db.flush()
+    return seq
+
+
+def set_mix_code_format(db: Session, farm_id: str, *, code_format: str, user_id: str) -> fm.FeedMixSequence:
+    """FEED-SCHEMA §20: the display format is the farm's to choose; the
+    number is the identity and never changes. Existing mixes keep the code
+    they were given — a historical mix is never renumbered or relabelled."""
+    fmt = (code_format or "").strip()
+    if "{n" not in fmt:
+        raise FeedError("The mix code format must contain {n} (the number), e.g. MIX-{n:06d} or DM-{n}.")
+    try:
+        sample = fmt.format(n=1)
+    except (KeyError, ValueError, IndexError) as e:
+        raise FeedError(f"That format is not valid: {e}") from e
+    if len(sample) > 120:
+        raise FeedError("The mix code is limited to 120 characters.")
+    seq = mix_settings(db, farm_id)
+    previous = seq.code_format
+    seq.code_format = fmt
+    write_event(db, farm_id=farm_id, entity_type="farm", entity_id=farm_id, event_type="feed_mix_code_format_changed",
+                payload={"from": previous, "to": fmt, "next_number": seq.last_number + 1}, created_by=user_id)
+    return seq
+
+
+def mix_settings_dict(seq: fm.FeedMixSequence) -> dict:
+    return {"farm_id": seq.farm_id, "code_format": seq.code_format, "last_number": seq.last_number, "next_number": seq.last_number + 1,
+            "next_code": mix_code_for(seq.code_format, seq.last_number + 1)}
+
+
 def mix_usage(db: Session, batch: fm.FeedBatch) -> dict:
     """The numbered mix's whole life (FEED-SCHEMA §20): what went into it,
     what came out, every dated issue to an animal or group through the
@@ -455,12 +533,16 @@ def mix_usage(db: Session, batch: fm.FeedBatch) -> dict:
                 models.InventoryTransaction.lot_id == lot.id,
             ))
             pv = db.get(fm.FeedingProgramVersion, e.program_version_id) if e.program_version_id else None
+            assignment = db.get(fm.FeedingAssignment, e.assignment_id) if e.assignment_id else None
             issues.append({
                 "feeding_event_id": e.id, "occurred_at": e.occurred_at, "event_type": e.event_type, "status": e.status,
                 "reversal_of_id": e.reversal_of_id, "subject_type": e.subject_type, "subject_id": e.subject_id, "subject_name": name,
                 "species": species, "head_count": e.head_count, "quantity_offered": c.quantity_offered, "quantity_consumed": c.quantity_consumed,
                 "unit": c.unit, "cost": c.cost, "recorded_by": e.recorded_by, "recorded_by_name": _user_name(db, e.recorded_by),
-                "program_version_id": e.program_version_id, "program_code": pv.program.code if pv else None,
+                "program_id": pv.program_id if pv else None, "program_version_id": e.program_version_id, "program_code": pv.program.code if pv else None,
+                "program_version": pv.version if pv else None, "assignment_id": e.assignment_id,
+                "assignment_type": assignment.assignment_type if assignment else None,
+                "assignment_subject_type": assignment.subject_type if assignment else None,
                 "inventory_transaction_id": tx.id if tx else None,
             })
             if e.status != "recorded":
@@ -506,7 +588,8 @@ def mix_usage(db: Session, batch: fm.FeedBatch) -> dict:
         "formula_version": version.version if version else None, "formula_version_id": batch.formula_version_id,
         "intended_species_code": batch.intended_species_code, "intended_management_profile": batch.intended_management_profile,
         "production_date": batch.production_date, "started_at": batch.started_at, "produced_at": batch.produced_at, "use_by_date": batch.use_by_date,
-        "operator_id": batch.mixed_by, "operator_name": _user_name(db, batch.mixed_by), "mixer_asset_id": batch.mixer_asset_id, "notes": batch.notes,
+        "operator_id": batch.operator_id or batch.mixed_by, "operator_name": _user_name(db, batch.operator_id or batch.mixed_by), "mixed_by": batch.mixed_by,
+        "mixer_asset_id": batch.mixer_asset_id, "mixer_asset_name": _asset_name(db, batch.mixer_asset_id), "notes": batch.notes,
         "target_quantity": batch.target_quantity, "actual_quantity": batch.actual_quantity, "unit": batch.unit,
         "planned_cost": batch.planned_cost, "actual_cost": batch.actual_cost, "cost_per_unit": batch.unit_cost,
         "output_lot": None if lot is None else {"id": lot.id, "lot_code": lot.lot_code, "status": lot.status, "quantity_on_hand": round(lot.quantity_on_hand, 3),

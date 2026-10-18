@@ -82,15 +82,26 @@ curl -s http://127.0.0.1:8000/api/v1/reports/visit-profitability -H "Authorizati
 
 ```bash
 createdb origami_farmos
-psql origami_farmos -f ../database/schema.sql
 export DATABASE_URL=postgresql://USER:PASS@localhost:5432/origami_farmos
-python -m app.seed        # or: psql origami_farmos -f ../database/seed_demo_data.sql
+alembic -c alembic.ini upgrade head   # the schema, with its reference rows
+python -m app.seed                     # the demo farm (or app.seed_production for the real accounts)
 uvicorn app.main:app --reload
 ```
 
-`database/schema.sql` and `database/seed_demo_data.sql` are both verified
-to apply cleanly to a real PostgreSQL 16 instance (including every CHECK
-constraint) as part of this build.
+A bare `postgresql://` URL is fine: `app.core.config.normalize_database_url`
+pins the psycopg2 driver the requirements install, so SQLAlchemy 2.1's
+change of default PostgreSQL driver does not break a deployment's
+connection string.
+
+`database/schema.sql` is the same schema rendered as PostgreSQL DDL from
+the ORM (`python -m app.export_schema`), for reading, review and
+provisioning by hand (`psql -f ../database/schema.sql`, then
+`alembic -c alembic.ini stamp head`). `tests/test_migrations.py` proves
+the Alembic chain and the models agree — tables, columns, types, keys,
+indexes, unique constraints — seeds the demo farm onto the migrated schema
+and round-trips a downgrade, on SQLite in every run and on PostgreSQL 16
+when `FARMOS_TEST_POSTGRES_URL` names a disposable database (CI does, with
+a service container).
 
 ## Migrations (Alembic)
 
@@ -119,7 +130,12 @@ DATABASE_URL=sqlite:///./ci.db pytest -q   # DATABASE_URL only affects the FastA
                                             # (see tests/conftest.py) regardless.
 ```
 
-232 tests, all passing as of this build: 16 pure unit tests for the
+375 tests, all passing as of this build (on SQLite; the migration parity
+test also ran against a real PostgreSQL 16, as CI does). Among them the
+foundation, health-case, procurement, migration-parity and generated-artifact
+suites (`tests/test_platform.py`, `test_health_cases.py`,
+`test_procurement.py`, `test_migrations.py`, `test_generated_artifacts.py`)
+added with the specification gap closure — plus: 16 pure unit tests for the
 recommendation engine (`tests/test_recommendations.py`, no DB/HTTP
 involved) and the API tests in `tests/test_api.py` covering auth, RBAC,
 every validation rule, the recommendation lifecycle (generate → decide →
@@ -177,13 +193,16 @@ app/
   seed.py                    Idempotent demo-data seeder (also the tests' fixture data source)
 ```
 
-Engine-agnostic by design: `domain/models.py` uses plain `String` ids and
+Engine-agnostic by design: `domain/*.py` uses plain `String(36)` ids and
 `sqlalchemy.JSON` (not Postgres-specific `UUID`/`JSONB` types) so the exact
 same code runs against SQLite for local dev/demo/tests and PostgreSQL for
-pilot/staging/production. `database/schema.sql` is the hand-authored
-PostgreSQL-specific source of truth (proper `UUID`, `TIMESTAMPTZ`, `JSONB`,
-`CHECK` constraints) for environments that provision the database directly
-rather than through the ORM.
+pilot/staging/production. The models are the one definition of the schema:
+`database/migrations/` evolves a database to them, `database/schema.sql`
+is rendered from them, and `app/domain/registry.py` is the one list of
+model modules every consumer imports (a module missing from it fails a
+test). Every index and named constraint the migrations create is declared
+on the models too, so a SQLite database made by `create_all` has the same
+shape as a migrated PostgreSQL one.
 
 ### A note on datetimes and SQLite
 
@@ -212,6 +231,8 @@ caught and fixed by the test suite during development — see git history.
 - **Feed Performance Intelligence, deterministic first increment (`database/FEED-PERFORMANCE-INTELLIGENCE.md`):** six rebuildable projection tables — monitors with explicit baselines, exposure windows with lineage, assessments with likelihood / confidence / confounders / missing context, per-mix score cards, supplier × ingredient rows, deduplicated self-resolving alerts — written only by `services/feed_performance_service.py`; batch completion and milk/egg records re-evaluate; HIGH-likelihood declines open a review task; open alerts reach the bell (`api/v1/feed_performance.py`, migration `d2f4a6c8e0b1`, `tests/test_feed_performance.py`, 10 tests).
 - **Medicine & farm pharmacy (`database/MEDICINE-PHARMACY-SCHEMA.md`, `MEDICINE-NOTIFICATION-RULES.md`):** medicine products over inventory items; `inventory_lots` (the canonical non-feed lot) extended by `medicine_lot_details` (opened / use-by after opening / storage and cold-chain status / recall); every movement is an `inventory_transactions` row with `inventory_lot_id`; eligible stock computed on read (expired, quarantined, blocked, recalled, storage-exception lots never count); the manager's `pharmacy_stock_policies` (essential, minimum / critical / target, days of cover, expiry warning) drive deduplicated `pharmacy_stock_alerts` that resolve on recovery, with a draft requisition task never an order; `medication_administrations` bind a dose to the exact lot, require a treatment or approved protocol step for prescription-only products, apply the product's authorised withdrawal and re-evaluate at once (`api/v1/pharmacy.py`, migration `e3a5b7c9d1f2`, `tests/test_pharmacy.py`, 14 tests).
 - **Clinical decision support & emergency protocols (`database/CLINICAL-DECISION-SUPPORT-EMERGENCY-PROTOCOLS.md`):** protocols with veterinarian-approved versions (only a veterinarian approves; approval written once), trigger rules scored on the worker's signs plus recent observations, eligibility rules over the animal's authoritative facts (BLOCK / REQUIRE_VET / WARN), steps with medication parameters as the only source of drug, route and dose; `services/emergency_service.py` triages, selects or escalates with reasons (danger sign, required observation missing, no current approved protocol, confidence below threshold, blocked, withdrawn version), starts runs with manager / vet notification tasks, prepares a medication step from the approved rule and the animal's weight within the approved limits against exact eligible pharmacy stock, binds the confirmed step to a `medication_administrations` row and a prescription-provenance treatment, schedules reassessment and escalates on no improvement; a severe observation starts triage by itself; an offline package carries only offline-eligible versions, signed (`api/v1/emergency.py`, migration `f4b6c8d0e2a3`, `tests/test_emergency.py`, 11 tests).
+- **Specification gap closure (migration `a7c9e1f3b5d7`, `architecture/ADR-002`):** a `units_of_measure` registry every unit column references (`app/platform/units.py`, `services/uom_service.py`, `/units-of-measure`); `farm_assets` for the mixer a numbered mix names (`/assets`); `notification_routes` that turn a signal into one bell entry per routed person (`services/routing_service.py`, `/notification-routes`); the in-process scheduler running the daily feed-performance cycle, the daily pharmacy scan and the 15-minute reassessment check with a run log (`app/core/scheduler.py`, `/scheduler`); health cases, diagnoses, treatment plans, standing conditions and dated weights (`services/health_case_service.py`, `/health/cases`, `/animals/{id}/conditions`, `/animals/{id}/weights`) that the emergency engine opens, reads (allergies, open diagnoses, weight age) and closes; purchase requisitions with submit / approve / reject / cancel and the approving authority snapshotted, visible to the pharmacy as incoming supply (`services/procurement_service.py`, `/procurement/requisitions`); inventory reservations and paired-transaction transfers (`/pharmacy/reservations`, `/pharmacy/transfers`); feed performance 2.0 (lactation-curve / peer-group / production-curve baselines, the full alert catalogue with structured suggested actions, effective feed value, ingredient-lot and supplier signals, hooks on every feeding, lot and context change); validated mix intended use, operator and mixer references, configurable mix code format (`/feed-mix-settings`), assignment on every issue; offline protocol execution revalidated at sync (`POST /emergency/offline-runs`, `GET /animals/{id}` care record). Tests: `tests/test_platform.py`, `test_health_cases.py`, `test_procurement.py`, plus the extended feeding, pharmacy, emergency and feed-performance suites.
+- **Generated artifacts and parity:** `python -m app.export_schema` renders `database/schema.sql`, `python -m app.export_openapi` exports `api/openapi.yaml`; `tests/test_generated_artifacts.py` fails when either is stale and `tests/test_migrations.py` proves migration ↔ ORM parity, the seed and a downgrade round trip on SQLite and PostgreSQL 16 (`.github/workflows/backend-tests.yml` runs the suite with a PostgreSQL service on every push).
 - **Farm Visits & Agri-Tourism module (tech spec v0.6):** license-gated the same way, reusing the same `module_licenses` table; opening days are a configurable per-weekday calendar, never hard-coded (RULE-VIS-003); packages and activities (Horse Ride, Cheese Making Workshop are seed examples only — RULE-VIS-010) are created dynamically; a booking's status machine (draft → confirmed → checked_in → completed/cancelled/no_show → refunded) is enforced by `app/visits/analytics.py::validate_status_transition`; session guest capacity is checked at confirm time and activity-slot capacity + animal-welfare daily limits are checked at booking time (RULE-VIS-002/004); a ride/animal-interaction activity requires a handler with the matching role already rostered on the session before it can be confirmed (RULE-VIS-005); a Farm Shop / Visitor POS sale deducts either plain inventory or Mouneh finished-goods stock and posts a core `Sale` row so it shows up in Sales & Finance (RULE-VIS-006); every analytics formula in tech spec §9 (visitor revenue, direct visit cost, gross margin, revenue/visitor, activity utilization, retail conversion, average basket value, package profitability) is recomputed from granular components rather than trusted off a booking's stored total, specifically to avoid double-counting activity revenue.
 
 ## The tablet's bundled demo farm

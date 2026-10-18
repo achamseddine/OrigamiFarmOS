@@ -180,7 +180,33 @@ protocol with its evidence, warnings and approval reference, or a red
 escalation banner with the reasons; a run lists its steps, prepares a
 medication dose from the approved rule and the exact lot, and the person
 confirms, skips (optional steps only), reassesses, escalates or resolves.
-The tablet never computes a dose or matches a protocol by itself.
+Online, the tablet never computes a dose or matches a protocol by itself.
+
+Both are reached from the animal too: the Digital Twin's quick actions
+include **Give medicine** and **Assess animal** for anyone who holds the
+health module, and its **Medicines & withdrawals** card
+(`features/animals/animal_care_section.dart`) shows what `GET /animals/{id}`
+now carries — the doses given with their lots, the withdrawal in force, the
+standing conditions the veterinarian recorded, the latest dated weight, the
+open health case and the live emergency. A notification that names a
+medicine, a stock alert, a case, a triage or a run opens the Health screen
+on the right tab (`features/navigation/entity_router.dart`).
+
+**Out of coverage, approved protocols still run** (specification §14). While
+online the app caches the signed offline package — only the approved
+versions marked offline-eligible, their rules and steps, and the medicines
+they name with the eligible lots as of the download. When the server cannot
+be reached, `lib/emergency/offline_engine.dart` triages the signs against
+that package with the server's own arithmetic, line for line: the same
+weighted score, the same eligibility rules over the facts the tablet holds
+(a fact it does not hold is reported as *not checked*, never passed), the
+same per-weight dose inside the same approved limits, the first lot in the
+snapshot that can serve it. `offline_run_dialog.dart` walks the protocol
+step by step at the animal; a blocked step shows its reasons and the
+escalation banner and nothing after it can be confirmed. What was shown and
+done is queued as `POST /emergency/offline-runs` with the package signature
+and an operation id; the server re-runs the triage, records the run against
+the version used and lists every difference rather than trusting the device.
 
 ## Data entry
 
@@ -371,6 +397,8 @@ The backend's full test suite does run here and passes, including the
 permission, employee, notification, priority, audit, agriculture, feed,
 feed-performance, pharmacy and emergency suites that back these screens.
 The Flutter SDK was later made available in the development session, so
-`flutter analyze` and `flutter test` (142 tests: entity parsing against
-the bundled snapshot, offline cache effects, visit rules) also run before
-each push.
+`flutter analyze` and `flutter test` (176 tests: entity parsing against
+the bundled snapshot, offline cache effects, visit rules, the offline
+protocol engine against a hand-built package and the bundled farm's real
+one, the entity routes, and the animal care card rendered from the
+snapshot's Digital Twins) also run before each push.

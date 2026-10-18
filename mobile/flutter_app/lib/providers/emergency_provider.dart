@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
+import '../app/install_id.dart';
+import '../data/local/local_store.dart' show newUuid;
 import '../domain/entities/emergency.dart';
+import '../emergency/offline_engine.dart';
 
 /// The emergency protocol engine (database/CLINICAL-DECISION-SUPPORT-
 /// EMERGENCY-PROTOCOLS.md): approved protocols, live cases, runs and the
@@ -9,6 +12,11 @@ import '../domain/entities/emergency.dart';
 /// escalates; this provider carries the person's answers — the signs
 /// they saw, the confirmation they gave — and reloads what the engine
 /// decided.
+///
+/// Out of coverage it holds the **signed offline package** (§14) the
+/// tablet last downloaded, and triage runs against that on the device
+/// with the server's own arithmetic; what was shown and done is queued
+/// as an offline run and the server revalidates it at sync.
 class EmergencyProvider extends ChangeNotifier {
   EmergencyProvider({required ApiClient apiClient}) : _api = apiClient;
 
@@ -19,6 +27,8 @@ class EmergencyProvider extends ChangeNotifier {
   List<EmergencyRun> runs = [];
   List<EmergencyProtocol> protocols = [];
   List<SignCode> signCodes = [];
+  OfflinePackage? offlinePackage;
+  String? deviceId;
   bool loading = false;
 
   List<EmergencyAssessment> get activeCases => [for (final a in assessments) if (a.isActive && a.parentRunId == null) a];
@@ -31,11 +41,21 @@ class EmergencyProvider extends ChangeNotifier {
     return null;
   }
 
+  /// The server answers right now. In standalone mode there is no server,
+  /// so the tablet's own database is the farm and the package is the
+  /// engine.
+  bool get online => _api.online && !_api.standalone;
+
+  /// Triage can run on the device: no server, and a package with at least
+  /// one offline-eligible version on the tablet. Without a package the
+  /// signs are queued as before and the server triages them at sync.
+  bool get canTriageLocally => !online && offlinePackage != null && !offlinePackage!.isEmpty;
+
   Future<void> load() async {
     loading = true;
     notifyListeners();
     try {
-      await Future.wait(_fetches());
+      await Future.wait([..._fetches(), _ensureDeviceId()]);
     } finally {
       loading = false;
       notifyListeners();
@@ -53,6 +73,9 @@ class EmergencyProvider extends ChangeNotifier {
         _fetch('/emergency/runs', (j) => runs = [for (final r in j as List<dynamic>) EmergencyRun.fromJson(r as Map<String, dynamic>)]),
         _fetch('/emergency/protocols', (j) => protocols = [for (final p in j as List<dynamic>) EmergencyProtocol.fromJson(p as Map<String, dynamic>)]),
         _fetch('/emergency/sign-codes', (j) => signCodes = [for (final s in j as List<dynamic>) SignCode.fromJson(s as Map<String, dynamic>)]),
+        // Cached by the API client like every read, so the last package
+        // downloaded is the one used when the server is out of reach.
+        _fetch('/emergency/offline-package', (j) => offlinePackage = OfflinePackage.fromJson(j as Map<String, dynamic>)),
       ];
 
   Future<void> _fetch(String path, void Function(dynamic json) apply) async {
@@ -60,6 +83,14 @@ class EmergencyProvider extends ChangeNotifier {
       apply(await _api.get(path));
     } catch (_) {
       // Keep what we had; the tab shows its empty state if that is nothing.
+    }
+  }
+
+  Future<void> _ensureDeviceId() async {
+    try {
+      deviceId ??= await installId();
+    } catch (_) {
+      // No preferences channel (tests): the run carries no device id.
     }
   }
 
@@ -71,7 +102,8 @@ class EmergencyProvider extends ChangeNotifier {
   }
 
   /// Triage from the signs the person saw. Offline it is queued; the
-  /// server triages when it arrives — the tablet never guesses a match.
+  /// server triages when it arrives — the tablet never guesses a match
+  /// outside the signed package (see [triageLocally]).
   Future<WriteResult> assess(Map<String, dynamic> body) => _write(() => _api.post('/emergency/assessments', body: body));
   Future<WriteResult> startRun(String assessmentId, {String? matchId}) =>
       _write(() => _api.post('/emergency/assessments/$assessmentId/start', body: {'match_id': matchId, 'confirmed': true}));
@@ -86,4 +118,38 @@ class EmergencyProvider extends ChangeNotifier {
       _write(() => _api.post('/emergency/runs/$runId/reassess', body: {'signs': signs, 'notes': notes}));
   Future<WriteResult> escalate(String runId, String reason) => _write(() => _api.post('/emergency/runs/$runId/escalate', body: {'reason': reason}));
   Future<WriteResult> resolveRun(String runId, String outcome) => _write(() => _api.post('/emergency/runs/$runId/resolve', body: {'outcome': outcome}));
+
+  // ------------------------------------------------------------ offline (§14)
+
+  /// The device's triage from the signed package — the server's
+  /// arithmetic over the facts the tablet holds. Only meaningful when
+  /// [canTriageLocally]; the result is shown to the person, who decides.
+  OfflineTriageResult triageLocally({required Map<String, dynamic> facts, required List<Map<String, dynamic>> signs, String? subjectName}) =>
+      triageOffline(package: offlinePackage!, facts: facts, signs: signs, subjectName: subjectName);
+
+  /// What the tablet showed and did, queued for the server to revalidate.
+  /// The operation id makes the sync idempotent; the package signature
+  /// lets the server tell a stale package from the current one.
+  Future<WriteResult> recordOfflineRun({
+    required String subjectType,
+    required String subjectId,
+    required List<Map<String, dynamic>> signs,
+    required OfflineTriageResult triage,
+    required List<Map<String, dynamic>> steps,
+    String? notes,
+  }) async {
+    await _ensureDeviceId();
+    final body = offlineRunPayload(
+      operationId: newUuid(),
+      deviceId: deviceId,
+      package: offlinePackage!,
+      subjectType: subjectType,
+      subjectId: subjectId,
+      signs: signs,
+      triage: triage,
+      steps: steps,
+      notes: notes,
+    );
+    return _write(() => _api.post('/emergency/offline-runs', body: body));
+  }
 }

@@ -68,6 +68,21 @@ def _rank(priority: str) -> int:
     return _PRIORITY_RANK.get(priority, 5)
 
 
+def routed(db: Session, farm_id: str, route_code: str, signal: Signal) -> list[Signal]:
+    """One copy of the signal per person the farm's notification route
+    names (`services/routing_service.py`), each addressed to them; with
+    nobody routed, the farm-wide signal as before. The source id carries
+    the recipient so the bell keeps one row per person."""
+    from dataclasses import replace
+
+    from app.services import routing_service
+
+    people = routing_service.recipients(db, farm_id, route_code)
+    if not people:
+        return [signal]
+    return [replace(signal, source_id=f"{signal.source_id}|{u.id}", assigned_to=u.id, metadata={**signal.metadata, "route_code": route_code}) for u in people]
+
+
 # ---------------------------------------------------------------------------
 # Individual sources
 # ---------------------------------------------------------------------------

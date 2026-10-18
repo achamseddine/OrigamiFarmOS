@@ -451,3 +451,193 @@ class EmergencyProtocol {
     );
   }
 }
+
+// ------------------------------------------------------- offline package
+
+/// One trigger rule of an approved version, as the offline engine reads it.
+class TriggerRule {
+  const TriggerRule({required this.code, required this.operator, this.thresholdNumeric, this.thresholdUnit, this.expectedValueCode, required this.required, required this.weight, required this.dangerSign, this.label});
+  final String code;
+
+  /// >= > <= < == != present absent
+  final String operator;
+  final double? thresholdNumeric;
+  final String? thresholdUnit;
+  final String? expectedValueCode;
+  final bool required;
+  final double weight;
+  final bool dangerSign;
+  final String? label;
+
+  factory TriggerRule.fromJson(Map<String, dynamic> json) => TriggerRule(
+        code: json['observation_code'] as String? ?? '',
+        operator: json['operator'] as String? ?? 'present',
+        thresholdNumeric: _dn(json['threshold_numeric']),
+        thresholdUnit: json['threshold_unit'] as String?,
+        expectedValueCode: json['expected_value_code'] as String?,
+        required: json['required'] as bool? ?? false,
+        weight: _d(json['weight'], 1),
+        dangerSign: json['danger_sign'] as bool? ?? false,
+        label: json['label'] as String?,
+      );
+}
+
+/// One eligibility rule: a fact of the animal the version checks.
+class EligibilityRule {
+  const EligibilityRule({required this.ruleType, this.operator, required this.payload, required this.failureAction, this.message});
+  final String ruleType;
+  final String? operator;
+  final Map<String, dynamic> payload;
+
+  /// WARN | REQUIRE_VET | BLOCK
+  final String failureAction;
+  final String? message;
+
+  factory EligibilityRule.fromJson(Map<String, dynamic> json) => EligibilityRule(
+        ruleType: json['rule_type'] as String? ?? '',
+        operator: json['operator'] as String?,
+        payload: _map(json['rule_payload']),
+        failureAction: json['failure_action'] as String? ?? 'WARN',
+        message: json['message'] as String?,
+      );
+}
+
+/// An offline-eligible approved version with everything the tablet needs
+/// to triage and run it without the server.
+class OfflineProtocolVersion {
+  const OfflineProtocolVersion({
+    required this.id,
+    required this.protocolId,
+    required this.protocolCode,
+    required this.protocolTitle,
+    required this.versionNo,
+    this.speciesCode,
+    required this.subjectScope,
+    required this.minimumMatchConfidence,
+    required this.offlineEligible,
+    this.reassessmentMinutes,
+    required this.requiresManagerNotification,
+    required this.requiresVetNotification,
+    this.approvalReference,
+    this.approvedByName,
+    required this.triggerRules,
+    required this.eligibilityRules,
+    required this.steps,
+  });
+
+  final String id;
+  final String protocolId;
+  final String protocolCode;
+  final String protocolTitle;
+  final int versionNo;
+  final String? speciesCode;
+
+  /// animal | group | any
+  final String subjectScope;
+  final double minimumMatchConfidence;
+  final bool offlineEligible;
+  final int? reassessmentMinutes;
+  final bool requiresManagerNotification;
+  final bool requiresVetNotification;
+  final String? approvalReference;
+  final String? approvedByName;
+  final List<TriggerRule> triggerRules;
+  final List<EligibilityRule> eligibilityRules;
+  final List<ProtocolStepDef> steps;
+
+  factory OfflineProtocolVersion.fromJson(Map<String, dynamic> json) => OfflineProtocolVersion(
+        id: json['id'] as String,
+        protocolId: json['protocol_id'] as String? ?? '',
+        protocolCode: json['protocol_code'] as String? ?? '',
+        protocolTitle: json['protocol_title'] as String? ?? json['protocol_code'] as String? ?? '',
+        versionNo: _i(json['version_no'], 1),
+        speciesCode: json['species_code'] as String?,
+        subjectScope: json['subject_scope'] as String? ?? 'animal',
+        minimumMatchConfidence: _d(json['minimum_match_confidence'], 0.6),
+        offlineEligible: json['offline_eligible'] as bool? ?? false,
+        reassessmentMinutes: (json['reassessment_minutes'] as num?)?.toInt(),
+        requiresManagerNotification: json['requires_manager_notification'] as bool? ?? false,
+        requiresVetNotification: json['requires_vet_notification'] as bool? ?? false,
+        approvalReference: json['approval_reference'] as String?,
+        approvedByName: json['approved_by_name'] as String?,
+        triggerRules: [for (final r in _maps(json['trigger_rules'])) TriggerRule.fromJson(r)],
+        eligibilityRules: [for (final r in _maps(json['eligibility_rules'])) EligibilityRule.fromJson(r)],
+        steps: [for (final s in _maps(json['steps'])) ProtocolStepDef.fromJson(s)],
+      );
+}
+
+/// An eligible lot of a packaged medicine, as of the download.
+class OfflineLot {
+  const OfflineLot({required this.lotId, required this.lotCode, required this.quantityOnHand, required this.freeQuantity, this.expiryDate});
+  final String lotId;
+  final String lotCode;
+  final double quantityOnHand;
+  final double freeQuantity;
+  final DateTime? expiryDate;
+
+  factory OfflineLot.fromJson(Map<String, dynamic> json) => OfflineLot(
+        lotId: json['lot_id'] as String? ?? '',
+        lotCode: json['lot_code'] as String? ?? '',
+        quantityOnHand: _d(json['quantity_on_hand']),
+        freeQuantity: _d(json['free_quantity'], _d(json['quantity_on_hand'])),
+        expiryDate: _dt(json['expiry_date']),
+      );
+}
+
+/// A medicine a packaged medication step names, with its stock snapshot.
+class OfflineMedicine {
+  const OfflineMedicine({required this.medicineProductId, required this.name, required this.unit, required this.routes, required this.speciesCodes, required this.prescriptionRequired, required this.ingredientCodes, required this.withdrawalRules, required this.eligibleLots});
+  final String medicineProductId;
+  final String name;
+  final String unit;
+  final List<String> routes;
+  final List<String> speciesCodes;
+  final bool prescriptionRequired;
+  final List<String> ingredientCodes;
+  final Map<String, dynamic> withdrawalRules;
+  final List<OfflineLot> eligibleLots;
+
+  double get eligibleQuantity => eligibleLots.fold(0, (s, l) => s + l.freeQuantity);
+
+  factory OfflineMedicine.fromJson(Map<String, dynamic> json) => OfflineMedicine(
+        medicineProductId: json['medicine_product_id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        unit: json['unit'] as String? ?? '',
+        routes: _strings(json['administration_routes']),
+        speciesCodes: _strings(json['species_codes']),
+        prescriptionRequired: json['prescription_required'] as bool? ?? false,
+        ingredientCodes: _strings(json['ingredient_codes']),
+        withdrawalRules: _map(json['withdrawal_rules']),
+        eligibleLots: [for (final l in _maps(json['eligible_lots'])) OfflineLot.fromJson(l)],
+      );
+}
+
+/// `GET /emergency/offline-package` (§14): the signed set of
+/// offline-eligible approved versions, the medicines they name and the
+/// sign vocabulary. Downloaded while online, used when not; its
+/// signature travels with every offline run so the server can tell a
+/// stale package from the current one.
+class OfflinePackage {
+  const OfflinePackage({required this.signature, this.generatedAt, this.stockAsOf, required this.modelReference, required this.modelVersion, required this.versions, required this.medicines, required this.signCodes});
+  final String signature;
+  final DateTime? generatedAt;
+  final DateTime? stockAsOf;
+  final String modelReference;
+  final String modelVersion;
+  final List<OfflineProtocolVersion> versions;
+  final Map<String, OfflineMedicine> medicines;
+  final List<SignCode> signCodes;
+
+  bool get isEmpty => versions.isEmpty;
+
+  factory OfflinePackage.fromJson(Map<String, dynamic> json) => OfflinePackage(
+        signature: json['signature'] as String? ?? '',
+        generatedAt: _dt(json['generated_at']),
+        stockAsOf: _dt(json['stock_as_of']),
+        modelReference: json['model_reference'] as String? ?? '',
+        modelVersion: json['model_version']?.toString() ?? '',
+        versions: [for (final v in _maps(json['versions'])) OfflineProtocolVersion.fromJson(v)],
+        medicines: {for (final m in _maps(json['medicines'])) (m['medicine_product_id'] as String? ?? ''): OfflineMedicine.fromJson(m)},
+        signCodes: [for (final s in _maps(json['sign_codes'])) SignCode.fromJson(s)],
+      );
+}

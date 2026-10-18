@@ -10,6 +10,7 @@ from app.domain import models
 from app.repositories.base import new_id, now, write_event
 from app.schemas.observations import ObservationCreate, ObservationOut
 from app.services import emergency_service
+from app.services import health_case_service as cases
 
 router = APIRouter(prefix="/observations", tags=["observations"])
 
@@ -50,6 +51,14 @@ def create_observation(
         observer_id=payload.observer_id,
         notes=payload.notes,
     )
+    # An observation on a subject with an open health case belongs to it
+    # (HEALTH-VETERINARY-SCHEMA health_observation.health_case_id) — still
+    # an observation, never a diagnosis.
+    subject_type = "animal" if payload.entity_type == "animal" else ("group" if payload.entity_type in ("flock", "group") else None)
+    if subject_type is not None:
+        case = cases.current_case(db, subject_type, payload.entity_id)
+        if case is not None:
+            observation.health_case_id = case.id
     db.add(observation)
     write_event(
         db,

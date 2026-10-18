@@ -43,6 +43,10 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/pharmacy': (labelKey: 'outboxPharmacy', moduleCode: FarmModule.inventory),
   '/pharmacy/administrations': (labelKey: 'outboxMedication', moduleCode: FarmModule.animalHealth),
   '/emergency': (labelKey: 'outboxEmergency', moduleCode: FarmModule.animalHealth),
+  // A protocol executed at the animal from the offline package (§14).
+  '/emergency/offline-runs': (labelKey: 'outboxEmergencyOffline', moduleCode: FarmModule.animalHealth),
+  '/health/cases': (labelKey: 'outboxHealthCase', moduleCode: FarmModule.animalHealth),
+  '/procurement': (labelKey: 'outboxRequisition', moduleCode: FarmModule.inventory),
   '/feed-nutrient-profiles': (labelKey: 'outboxNutrientProfile', moduleCode: FarmModule.feedNutrition),
   '/recommendations': (labelKey: 'outboxDecision', moduleCode: FarmModule.aiIntelligence),
   '/notifications': (labelKey: 'outboxNotificationRead', moduleCode: FarmModule.morningOperations),

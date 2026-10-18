@@ -10,11 +10,13 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/emergency.dart';
+import '../../emergency/offline_engine.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/emergency_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../feed/feed_workspace_screen.dart' show FeedEmpty, feedDate, feedNumber;
+import 'offline_run_dialog.dart';
 import 'pharmacy_tab.dart' show askReason;
 
 /// Emergency triage and veterinarian-approved protocols at the point of
@@ -507,6 +509,18 @@ class _SignsDialogState extends State<_SignsDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(context.t('emAssessHelp'), style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted)),
+            if (!reassess && !emergency.online) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(FarmSpacing.sm),
+                decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+                child: Row(children: [
+                  const Icon(Icons.cloud_off, size: 16, color: FarmColors.warningInk),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(context.t(emergency.canTriageLocally ? 'emOfflineBanner' : 'emOfflineNoPackage'), style: FarmTypography.textTheme.bodySmall)),
+                ]),
+              ),
+            ],
             const SizedBox(height: 12),
             if (!reassess)
               DropdownButtonFormField<String>(
@@ -587,6 +601,37 @@ class _SignsDialogState extends State<_SignsDialog> {
     final messenger = ScaffoldMessenger.of(context);
     final provider = context.read<EmergencyProvider>();
     final notes = _notes.text.trim().isEmpty ? null : _notes.text.trim();
+    // Out of coverage with a signed package on the tablet (§14): triage
+    // runs here, with the server's arithmetic, and the person walks the
+    // protocol at the animal. The server revalidates it at sync.
+    if (widget.reassessRun == null && provider.canTriageLocally) {
+      final type = subject!.split(':').first;
+      final id = subject.split(':').last;
+      final Map<String, dynamic> facts;
+      final String name;
+      if (type == 'animal') {
+        final animals = context.read<AnimalsProvider>();
+        final animal = animals.byId(id);
+        Map<String, dynamic>? twin;
+        try {
+          twin = await animals.fetchDigitalTwin(id); // the cached care record, when it was downloaded
+        } catch (_) {
+          twin = null;
+        }
+        facts = factsForAnimal(animal, twin: twin);
+        name = animal.name;
+      } else {
+        final group = context.read<LivestockProvider>().groups.firstWhere((g) => g.id == id);
+        facts = factsForGroup(group);
+        name = group.name;
+      }
+      if (!mounted) return;
+      final triage = provider.triageLocally(facts: facts, signs: signs, subjectName: name);
+      final host = Navigator.of(context, rootNavigator: true).context;
+      Navigator.pop(context);
+      await showOfflineRunDialog(host, triage: triage, facts: facts, signs: signs, subjectType: type, subjectId: id, subjectName: name, notes: notes);
+      return;
+    }
     final result = widget.reassessRun != null
         ? await provider.reassess(widget.reassessRun!.id, signs, notes: notes)
         : await provider.assess({'subject_type': subject!.split(':').first, 'subject_id': subject.split(':').last, 'signs': signs, 'source': 'worker', if (notes != null) 'notes': notes});

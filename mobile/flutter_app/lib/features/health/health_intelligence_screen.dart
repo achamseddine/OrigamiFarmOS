@@ -14,6 +14,8 @@ import '../../providers/pharmacy_provider.dart';
 import '../../providers/recommendations_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../../core/widgets/directional_icon.dart';
+import '../../app/app_navigator.dart';
+import '../navigation/entity_router.dart';
 import 'emergency_tab.dart';
 import 'pharmacy_tab.dart';
 
@@ -28,6 +30,25 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
   int _tab = 0;
   String? _selectedId;
 
+  /// A notification or priority card that names a pharmacy or emergency
+  /// record lands on the right tab — and a medicine opens its detail —
+  /// rather than on the alerts list the user then has to leave.
+  void _consumeFocus(BuildContext context) {
+    final navigator = context.watch<AppNavigator>();
+    final type = navigator.focusEntityType;
+    if (type == null) return;
+    final pharmacy = EntityRouter.pharmacyEntities.contains(type);
+    final emergency = EntityRouter.emergencyEntities.contains(type);
+    if (!pharmacy && !emergency) return;
+    final id = navigator.focusEntityId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _tab = pharmacy ? 4 : 5);
+      navigator.clearFocus();
+      if (type == 'medicine_product' && id != null) showMedicineDetailDialog(this.context, id);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final alerts = context.watch<RecommendationsProvider>().forCategory(RecommendationCategory.health);
@@ -36,6 +57,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
     final taskCreated = selected != null && tasksProvider.tasks.any((t) => t.sourceId == selected.id);
     final pharmacyUnseen = context.watch<PharmacyProvider>().unseenAlerts.length;
     final emergencyLive = context.watch<EmergencyProvider>().escalated.length;
+    _consumeFocus(context);
 
     return SingleChildScrollView(
       child: Column(

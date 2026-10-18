@@ -162,3 +162,23 @@ def list_supplier_performance(db: Session = Depends(get_db), user: models.User =
     rows = db.scalars(select(fm.SupplierFeedPerformance).where(fm.SupplierFeedPerformance.farm_id == user.farm_id)
                       .order_by(fm.SupplierFeedPerformance.supplier_label, fm.SupplierFeedPerformance.feed_product_id)).all()
     return [perf.supplier_row_dict(db, r) for r in rows]
+
+
+@router.get("/feed-performance/ingredient-lots")
+def list_ingredient_lot_performance(db: Session = Depends(get_db), user: models.User = Depends(_view)) -> list[dict]:
+    """Purchased ingredient lots against the production response of the
+    mixes that used them (§8): the lot, its supplier, the mixes, the mean
+    response beside the farm's other mixes of the same feed, and whether a
+    manufacturing deviation on those mixes clouds the comparison. Read
+    from the last cycle's scores; the cycle itself raises the alerts."""
+    return perf.ingredient_lot_performance(db, user.farm_id, user_id=user.id, write_alerts=False)
+
+
+@router.get("/feed-performance/effective-feed-value")
+def get_effective_feed_value(days: int = Query(7, ge=1, le=90), db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    """§10 — purchase price alone is insufficient: feed cost over the
+    window, cost per litre and per head-day, milk revenue at the farm's own
+    recent selling price less feed cost, and the dry-matter-adjusted cost
+    of the mixes in use. Every figure that cannot be computed is named in
+    `missing` rather than guessed."""
+    return perf.effective_feed_value(db, user.farm_id, days=days)

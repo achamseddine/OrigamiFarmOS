@@ -24,6 +24,11 @@ from app.domain import livestock_models  # noqa: E402,F401  (registers the gener
 from app.domain import feed_models  # noqa: E402,F401  (registers the generic feed architecture's tables)
 from app.domain import mouneh_models  # noqa: E402,F401  (registers Mouneh module tables on Base.metadata)
 from app.domain import visits_models  # noqa: E402,F401  (registers Visits module tables on Base.metadata)
+from app.domain import pharmacy_models  # noqa: E402,F401  (medicine products, inventory lots, reservations, pharmacy policies)
+from app.domain import emergency_models  # noqa: E402,F401  (emergency protocols, assessments, runs)
+from app.domain import platform_models  # noqa: E402,F401  (units of measure, assets, notification routes, job runs)
+from app.domain import health_models  # noqa: E402,F401  (health cases, diagnoses, plans, conditions, weights)
+from app.domain import procurement_models  # noqa: E402,F401  (purchase requisitions and approvals)
 
 config = context.config
 

@@ -10,6 +10,9 @@ from app.schemas.common import ORMModel
 
 class NotificationOut(ORMModel):
     id: str
+    # Null = farm-wide (everyone holding the module); set = addressed to
+    # one person by the farm's notification routes.
+    user_id: str | None = None
     module_code: str
     notification_type: str
     title: str

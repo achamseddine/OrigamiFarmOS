@@ -18,7 +18,8 @@ from app.db.base import get_db
 from app.domain import emergency_models as em
 from app.domain import models
 from app.schemas.emergency import (
-    ApproveVersionIn, AssessmentIn, ConfirmStepIn, EscalateIn, PrepareStepIn, ProtocolIn, ProtocolVersionIn, ReassessIn, ResolveRunIn, SkipStepIn, StartRunIn, WithdrawVersionIn,
+    ApproveVersionIn, AssessmentIn, ConfirmStepIn, EscalateIn, OfflineRunIn, PrepareStepIn, ProtocolIn, ProtocolVersionIn, ReassessIn, ResolveRunIn, SkipStepIn, StartRunIn,
+    WithdrawVersionIn,
 )
 from app.services import emergency_service as es
 
@@ -65,8 +66,30 @@ def list_sign_codes(db: Session = Depends(get_db), user: models.User = Depends(_
 
 @router.get("/offline-package")
 def offline_package(db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
-    """Only offline-eligible approved versions, signed by content (§14)."""
+    """Only offline-eligible approved versions, signed by content, with the
+    medicine mapping and an eligible-stock snapshot (§14)."""
     return es.offline_package(db, user.farm_id)
+
+
+@router.post("/offline-runs", status_code=status.HTTP_201_CREATED)
+def record_offline_run(payload: OfflineRunIn, db: Session = Depends(get_db), user: models.User = Depends(_act)) -> dict:
+    """Sync of an emergency executed on the tablet from the offline
+    package (§14): revalidated against the current rules, recorded as it
+    happened, every difference listed and escalated — never silently
+    changed. Idempotent on `operation_id`."""
+    body = payload.model_dump(mode="json")
+    out = _keep_escalation(db, lambda: es.record_offline_run(db, user.farm_id, body, user_id=user.id))
+    db.commit()
+    return out
+
+
+@router.post("/reassessments/check")
+def check_reassessments(db: Session = Depends(get_db), user: models.User = Depends(_act)) -> dict:
+    """The reassessment check the scheduler runs: one task per overdue
+    run, to the person who started it."""
+    out = es.check_overdue_reassessments(db, user.farm_id, user_id=user.id)
+    db.commit()
+    return out
 
 
 # -------------------------------------------------------------- protocols

@@ -20,9 +20,10 @@ from app.domain import models
 from app.domain import pharmacy_models as pm
 from app.schemas.pharmacy import (
     AdministrationReverse, MedicationAdministrationIn, MedicineLotOpen, MedicineLotReceive, MedicineLotStatus, MedicineLotStorage,
-    MedicineProductIn, MedicineProductPatch, PharmacyAdjustment, PharmacyAlertClose, PharmacyPolicyIn,
+    MedicineProductIn, MedicineProductPatch, PharmacyAdjustment, PharmacyAlertClose, PharmacyPolicyIn, ReservationIn, ReservationRelease, TransferIn,
 )
 from app.services import pharmacy_service as ph
+from app.services import procurement_service as procurement
 
 router = APIRouter(prefix="/pharmacy", tags=["pharmacy"])
 
@@ -166,6 +167,51 @@ def adjust_stock(payload: PharmacyAdjustment, db: Session = Depends(get_db), use
     return {"transaction_id": tx.id, "lot": ph.lot_dict(db, lot), "medicine": ph.product_dict(db, product)}
 
 
+@router.post("/transfers", status_code=status.HTTP_201_CREATED)
+def transfer_stock(payload: TransferIn, db: Session = Depends(get_db), user: models.User = Depends(_stock_edit)) -> dict:
+    """Moves part of a lot to another location as a paired OUT / IN
+    (INVENTORY-SCHEMA §4). On-hand is unchanged; per-location policies
+    are re-evaluated."""
+    product = ph.get_product(db, payload.inventory_item_id, user.farm_id)
+    lot = ph.get_lot(db, payload.lot_id, user.farm_id)
+    out = ph.transfer(db, product, lot=lot, quantity=payload.quantity, to_location_id=payload.to_location_id, from_location_id=payload.from_location_id,
+                      reason=payload.reason, user_id=user.id)
+    db.commit()
+    return {**out, "lot": ph.lot_dict(db, lot)}
+
+
+# ------------------------------------------------------------ reservations
+@router.get("/reservations")
+def list_reservations(inventory_item_id: str | None = None, reservation_status: str | None = Query("active", alias="status"),
+                      db: Session = Depends(get_db), user: models.User = Depends(_view)) -> list[dict]:
+    stmt = select(pm.InventoryReservation).where(pm.InventoryReservation.farm_id == user.farm_id)
+    if inventory_item_id:
+        stmt = stmt.where(pm.InventoryReservation.inventory_item_id == inventory_item_id)
+    if reservation_status and reservation_status != "all":
+        stmt = stmt.where(pm.InventoryReservation.status == reservation_status)
+    return [ph.reservation_dict(db, r) for r in db.scalars(stmt.order_by(pm.InventoryReservation.created_at.desc()))]
+
+
+@router.post("/reservations", status_code=status.HTTP_201_CREATED)
+def reserve_stock(payload: ReservationIn, db: Session = Depends(get_db), user: models.User = Depends(_either((perms.INVENTORY, perms.EDIT), (perms.ANIMAL_HEALTH, perms.CREATE)))) -> dict:
+    """Holds eligible stock for a purpose (INVENTORY-SCHEMA §5): it stops
+    counting as available to everyone else until released or consumed."""
+    product = ph.get_product(db, payload.inventory_item_id, user.farm_id)
+    lot = ph.get_lot(db, payload.lot_id, user.farm_id) if payload.lot_id else None
+    r = ph.reserve(db, product, quantity=payload.quantity, unit=payload.unit, lot=lot, location_id=payload.location_id, purpose_type=payload.purpose_type,
+                   purpose_id=payload.purpose_id, purpose_label=payload.purpose_label, valid_to=payload.valid_to, user_id=user.id)
+    db.commit()
+    return ph.reservation_dict(db, r)
+
+
+@router.post("/reservations/{reservation_id}/release")
+def release_reservation(reservation_id: str, payload: ReservationRelease | None = None, db: Session = Depends(get_db),
+                        user: models.User = Depends(_either((perms.INVENTORY, perms.EDIT), (perms.ANIMAL_HEALTH, perms.CREATE)))) -> dict:
+    r = ph.release_reservation(db, ph.get_reservation(db, reservation_id, user.farm_id), reason=payload.reason if payload else None, user_id=user.id)
+    db.commit()
+    return ph.reservation_dict(db, r)
+
+
 # --------------------------------------------------------------- policies
 @router.get("/policies")
 def list_policies(db: Session = Depends(get_db), user: models.User = Depends(_view)) -> list[dict]:
@@ -221,11 +267,15 @@ def resolve_alert(alert_id: str, payload: PharmacyAlertClose, db: Session = Depe
 
 @router.post("/alerts/{alert_id}/requisition")
 def create_requisition(alert_id: str, db: Session = Depends(get_db), user: models.User = Depends(_stock)) -> dict:
-    """Opens one DRAFT requisition task for the shortage (§9). Calling it
-    again returns the same open draft; nothing here approves a purchase."""
-    task, created = ph.create_requisition(db, _alert(db, alert_id, user.farm_id), user_id=user.id)
+    """Opens one DRAFT purchase requisition for the shortage (§9,
+    PROCUREMENT §5), with a task for the buyer. Calling it again returns
+    the same open draft; nothing here approves a purchase."""
+    req, created = ph.create_requisition(db, _alert(db, alert_id, user.farm_id), user_id=user.id)
     db.commit()
-    return {"task_id": task.id, "title": task.title, "status": task.status, "created": created, "alert": ph.alert_dict(db, _alert(db, alert_id, user.farm_id))}
+    task = db.get(models.Task, req.task_id) if req.task_id else None
+    return {"requisition": procurement.requisition_dict(db, req), "requisition_id": req.id, "requisition_no": req.requisition_no,
+            "task_id": req.task_id, "title": task.title if task else None, "status": req.status, "created": created,
+            "alert": ph.alert_dict(db, _alert(db, alert_id, user.farm_id))}
 
 
 # -------------------------------------------------------- administrations

@@ -51,7 +51,7 @@ class Species(Base):
     terminology_json: Mapped[dict] = mapped_column(JSON, default=dict)
     # Management profile codes the Add Animal flow offers for this species;
     # empty means all. A horse is never offered "broiler".
-    profiles_json: Mapped[list] = mapped_column(JSON, default=list)
+    profiles_json: Mapped[list | None] = mapped_column(JSON, default=list, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
 

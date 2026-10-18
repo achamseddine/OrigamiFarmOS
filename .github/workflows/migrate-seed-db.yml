@@ -70,8 +70,9 @@ jobs:
           if url.startswith("sqlite"):
               sys.exit("PROD_DATABASE_URL points at SQLite. This workflow is for the real database.")
           import sqlalchemy
+          from app.core.config import normalize_database_url  # pins the psycopg2 driver the requirements install
           try:
-              with sqlalchemy.create_engine(url, connect_args={"connect_timeout": 15}).connect() as c:
+              with sqlalchemy.create_engine(normalize_database_url(url), connect_args={"connect_timeout": 15}).connect() as c:
                   version = c.exec_driver_sql("select version()").scalar()
               print("Connected:", str(version).split(" on ")[0])
           except Exception as exc:

@@ -7,11 +7,13 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
+from app.domain import emergency_models as em
 from app.domain import models
+from app.domain import pharmacy_models as pm
 from app.livestock.catalog import Cap
-from app.repositories.base import diff_changes, new_id, snapshot, write_audit_log, write_event
+from app.repositories.base import diff_changes, ensure_utc, new_id, now, snapshot, write_audit_log, write_event
 from app.schemas.animals import AnimalCreate, AnimalDigitalTwinOut, AnimalMove, AnimalOut, AnimalUpdate
-from app.services import capability_service, feeding_program_service, identifier_service
+from app.services import capability_service, feed_performance_service, feeding_program_service, health_case_service, identifier_service
 from app.services.capability_service import CapabilitySet
 
 router = APIRouter(prefix="/animals", tags=["animals"])
@@ -109,9 +111,13 @@ def create_animal(
             data.pop(field, None)
 
     animal = models.Animal(id=new_id(), farm_id=current_user.farm_id, **data)
+    if animal.lactating:
+        animal.lactation_started_at = now()
     db.add(animal)
     db.flush()
     identifier_service.attach(db, animal, identifiers)
+    if animal.weight_kg:
+        health_case_service.record_weight(db, animal.farm_id, animal, weight_kg=animal.weight_kg, method="scale", source_type="animal_update", user_id=current_user.id)
     write_event(
         db, farm_id=current_user.farm_id, entity_type="animal", entity_id=animal.id,
         event_type="animal_created",
@@ -180,12 +186,29 @@ def update_animal(
     new_tag = changes.pop("tag", None)
 
     before = snapshot(animal, _AUDITED_ANIMAL_FIELDS)
+    # A weight is a dated record (HEALTH-VETERINARY-SCHEMA / per-weight
+    # dosing); the animal's `weight_kg` is the latest of them.
+    new_weight = changes.pop("weight_kg", None)
     for field, value in changes.items():
         setattr(animal, field, value)
+    if new_weight is not None and new_weight != animal.weight_kg:
+        health_case_service.record_weight(db, animal.farm_id, animal, weight_kg=new_weight, method="scale", source_type="animal_update", user_id=current_user.id)
+        changes["weight_kg"] = new_weight
+    # Lactation context for the feed-performance baselines (days in milk,
+    # recent calving / dry-off), kept from the lactating flag.
+    if "lactating" in changes:
+        if animal.lactating and animal.lactation_started_at is None:
+            animal.lactation_started_at = now()
+        elif not animal.lactating:
+            animal.dried_off_at = now()
     # A change to what the feeding resolver reads (pregnant, lactating,
     # stage, profile, group…) asks for a feeding review (feed architecture
     # §10) — an event and a task, never a silent reassignment.
     feeding_program_service.review_animal_if_relevant(db, animal, set(changes), user_id=current_user.id)
+    # FEED-PERFORMANCE-INTELLIGENCE §12: a lifecycle / group change moves
+    # the confounders, so the reading is taken again.
+    if {"group_name", "life_stage", "management_profile", "lactating", "pregnant", "status"} & changes.keys():
+        feed_performance_service.on_context_changed(db, "animal", animal, trigger="lifecycle_changed", user_id=current_user.id)
     if new_tag is not None and new_tag.strip() and new_tag.strip() != (animal.tag or ""):
         identifier_service.replace_primary_value(
             db, animal, new_tag.strip(), cap_set or capability_service.resolve_for_animal(db, animal)
@@ -266,9 +289,51 @@ def get_animal(animal_id: str, db: Session = Depends(get_db), _user: models.User
         .order_by(models.Recommendation.generated_at.desc())
     ).all()
 
+    # The care record: doses with their lots, the withdrawal windows they
+    # imply, standing conditions, the latest dated weight, the open case and
+    # the live emergency.
+    from app.services import pharmacy_service as ph  # local: the pharmacy module is optional reading for this router
+
+    administrations = db.scalars(
+        select(pm.MedicationAdministration)
+        .where(pm.MedicationAdministration.subject_type == "animal", pm.MedicationAdministration.subject_id == animal_id)
+        .order_by(pm.MedicationAdministration.administered_at.desc())
+        .limit(10)
+    ).all()
+    at = now()
+    milk_until = [ensure_utc(a.withdrawal_milk_until) for a in administrations if a.status == "recorded" and a.withdrawal_milk_until and ensure_utc(a.withdrawal_milk_until) > at]
+    meat_until = [ensure_utc(a.withdrawal_meat_until) for a in administrations if a.status == "recorded" and a.withdrawal_meat_until and ensure_utc(a.withdrawal_meat_until) > at]
+    record_until = ensure_utc(animal.withdrawal_until) if animal.withdrawal_until and ensure_utc(animal.withdrawal_until) > at else None
+    withdrawals = {
+        "active": bool(milk_until or meat_until or record_until),
+        "milk_until": max(milk_until).isoformat() if milk_until else None,
+        "meat_until": max(meat_until).isoformat() if meat_until else None,
+        "record_until": record_until.isoformat() if record_until else None,
+        "reason": animal.withdrawal_reason,
+    }
+    conditions = health_case_service.active_conditions(db, animal_id)
+    weight = health_case_service.latest_weight(db, animal_id)
+    case = health_case_service.current_case(db, "animal", animal_id)
+    live = db.scalar(
+        select(em.EmergencyAssessment)
+        .where(em.EmergencyAssessment.animal_id == animal_id, em.EmergencyAssessment.status.in_(("open", "protocol_started", "escalated")))
+        .order_by(em.EmergencyAssessment.started_at.desc())
+    )
+    live_run = db.scalar(select(em.EmergencyProtocolRun).where(em.EmergencyProtocolRun.emergency_assessment_id == live.id).order_by(em.EmergencyProtocolRun.started_at.desc())) if live else None
+
     return AnimalDigitalTwinOut(
         **AnimalOut.model_validate(animal).model_dump(),
         capabilities=capability_service.resolve_for_animal(db, animal).to_dict(),
+        recent_administrations=[ph.administration_dict(db, a) for a in administrations],
+        withdrawals=withdrawals,
+        active_conditions=[health_case_service.condition_dict(db, c) for c in conditions],
+        latest_weight=health_case_service.weight_dict(db, weight) if weight else None,
+        open_health_case=health_case_service.case_dict(db, case, with_details=False) if case else None,
+        emergency=(
+            {"id": live.id, "status": live.status, "triage_level": live.triage_level, "started_at": live.started_at.isoformat(), "explanation": live.explanation,
+             "escalation_reasons": live.escalation_reasons or [], "run_id": live_run.id if live_run else None, "run_status": live_run.status if live_run else None}
+            if live else None
+        ),
         recent_observations=[
             {
                 "id": o.id,

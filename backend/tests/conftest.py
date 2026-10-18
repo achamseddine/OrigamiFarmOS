@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-import pytest
+import os
+
+# The background scheduler must never run against a test's database (or
+# the developer's file database) from a test client; the jobs are driven
+# explicitly by the scheduler tests instead.
+os.environ.setdefault("FARMOS_SCHEDULER", "false")
+
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

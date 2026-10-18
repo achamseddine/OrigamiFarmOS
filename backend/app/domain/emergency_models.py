@@ -20,7 +20,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -38,7 +38,10 @@ STEP_TYPES = ("ASSESS", "NON_DRUG_ACTION", "MEDICATION", "MEASUREMENT", "NOTIFY"
 TRIGGER_OPERATORS = (">=", ">", "<=", "<", "==", "!=", "present", "absent")
 FAILURE_ACTIONS = ("BLOCK", "REQUIRE_VET", "WARN")
 ELIGIBILITY_RULE_TYPES = ("species", "sex", "life_stage", "management_profile", "weight_kg", "weight_known", "pregnant", "lactating",
-                          "withdrawal_active", "status", "age_days", "recent_medication", "subject_type")
+                          "withdrawal_active", "status", "age_days", "recent_medication", "subject_type",
+                          # authoritative clinical facts (HEALTH-VETERINARY-SCHEMA): open diagnoses, recorded
+                          # allergies / adverse reactions / conditions, and how fresh the weight is
+                          "active_diagnosis", "allergy", "condition", "weight_age_days")
 ELIGIBILITY_RESULTS = ("ELIGIBLE", "WARN", "REQUIRE_VET", "BLOCK")
 TRIAGE_LEVELS = ("LOW", "MODERATE", "HIGH", "CRITICAL")
 DOSE_RULE_TYPES = ("FIXED", "PER_WEIGHT")
@@ -169,8 +172,8 @@ class ProtocolMedicationStep(Base):
     dose_rule_type: Mapped[str] = mapped_column(String(40))
     fixed_dose_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     dose_per_weight_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
-    dose_unit: Mapped[str] = mapped_column(String(20))
-    weight_unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dose_unit: Mapped[str] = mapped_column(String(30), ForeignKey("units_of_measure.code"))
+    weight_unit: Mapped[str | None] = mapped_column(String(30), ForeignKey("units_of_measure.code"), nullable=True)
     minimum_dose_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     maximum_dose_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     repeat_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -189,16 +192,27 @@ class EmergencyAssessment(Base):
     confidence, and why it escalated if it did. Kept whole for audit."""
 
     __tablename__ = "emergency_assessments"
+    __table_args__ = (
+        UniqueConstraint("offline_operation_id", name="uq_emergency_assessment_offline_op"),
+        Index("ix_emergency_assessments_status", "farm_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     animal_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("animals.id"), nullable=True)
     animal_group_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("flocks.id"), nullable=True)
-    health_case_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    health_case_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("health_cases.id"), nullable=True)
     parent_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    # worker | observation_hook | reassessment | api
+    # worker | observation_hook | reassessment | api | offline
     source: Mapped[str] = mapped_column(String(30), default="worker")
+    # Offline execution (§14): the tablet's operation id makes the sync
+    # idempotent; the device and the package signature it ran against are
+    # kept so a stale package is visible on audit.
+    offline_operation_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    device_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    package_signature: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    offline_discrepancies: Mapped[list] = mapped_column(JSON, default=list)
     observed_signs: Mapped[list] = mapped_column(JSON, default=list)
     animal_facts: Mapped[dict] = mapped_column(JSON, default=dict)
     triage_level: Mapped[str] = mapped_column(String(30), default="LOW")
@@ -233,6 +247,10 @@ class ProtocolMatch(Base):
 
 class EmergencyProtocolRun(Base):
     __tablename__ = "emergency_protocol_runs"
+    __table_args__ = (
+        UniqueConstraint("offline_operation_id", name="uq_emergency_run_offline_op"),
+        Index("ix_emergency_runs_status", "farm_id", "status"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -240,11 +258,18 @@ class EmergencyProtocolRun(Base):
     protocol_version_id: Mapped[str] = mapped_column(String(36), ForeignKey("emergency_protocol_versions.id"))
     animal_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("animals.id"), nullable=True)
     animal_group_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("flocks.id"), nullable=True)
-    health_case_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    health_case_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("health_cases.id"), nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     started_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     # in_progress | awaiting_reassessment | escalated | completed | cancelled
     status: Mapped[str] = mapped_column(String(30), default="in_progress")
+    # Offline execution (§14): recorded on the tablet from the signed
+    # package, revalidated at sync. What was shown and administered is
+    # kept as recorded; any difference the server finds is listed.
+    offline: Mapped[bool] = mapped_column(Boolean, default=False)
+    offline_operation_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    package_signature: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    offline_discrepancies: Mapped[list] = mapped_column(JSON, default=list)
     manager_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     veterinarian_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     next_reassessment_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

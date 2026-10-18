@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -77,6 +77,10 @@ class UserModulePermission(Base):
     """
 
     __tablename__ = "user_module_permissions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "module_code", name="uq_user_module"),
+        Index("ix_user_module_permissions_user", "user_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -105,6 +109,10 @@ class Notification(Base):
     """
 
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_farm", "farm_id"),
+        Index("ix_notifications_source", "farm_id", "source_type", "source_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -117,7 +125,8 @@ class Notification(Base):
     entity_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # A routed copy carries "<source id>|<user id>", so this is wider than an id.
+    source_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -129,6 +138,7 @@ class Crop(Base):
     """
 
     __tablename__ = "crops"
+    __table_args__ = (UniqueConstraint("farm_id", "name", name="uq_crop_farm_name"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -145,6 +155,7 @@ class CropPlanting(Base):
     """
 
     __tablename__ = "crop_plantings"
+    __table_args__ = (Index("ix_crop_plantings_field", "field_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -208,7 +219,14 @@ class Animal(Base):
     lactation_cycle: Mapped[int | None] = mapped_column(Integer, nullable=True)
     withdrawal_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     withdrawal_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # The latest weight, denormalised from `animal_weight_records` (the
+    # dated history a per-weight dose and a growth metric read).
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Lactation context the feed-performance baselines and confounders use
+    # (days in milk, recent calving, recent dry-off). `lactation_cycle` is
+    # the parity.
+    lactation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dried_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     group_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Full Add-Animal record (tech spec §13) — provenance, physical
@@ -314,6 +332,12 @@ class InventoryTransaction(Base):
     # The canonical (non-feed) lot this movement belongs to — a medicine
     # lot today (pharmacy schema §6). A pharmacy movement always names it.
     inventory_lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("inventory_lots.id"), nullable=True)
+    # Where the movement happened (INVENTORY-SCHEMA §4). Null means the
+    # lot's own location. A transfer is a paired OUT / IN sharing one
+    # `correlation_id`; a lot's balance per location is the sum of its
+    # movements by location — never a location flipped on the lot.
+    location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -335,6 +359,9 @@ class Observation(Base):
     confidence: Mapped[float] = mapped_column(Float, default=0.65)
     verification_status: Mapped[str] = mapped_column(String(20), default="unverified")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The clinical episode this observation belongs to, once a case is
+    # open for the subject (HEALTH-VETERINARY-SCHEMA health_observation).
+    health_case_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("health_cases.id"), nullable=True)
 
 
 class Event(Base):
@@ -455,6 +482,12 @@ class Treatment(Base):
     entity_id: Mapped[str] = mapped_column(String(36))
     diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
     medication: Mapped[str] = mapped_column(String(200))
+    # The prescription names the stocked medicine product when the farm
+    # pharmacy holds it (MEDICINE-PHARMACY-SCHEMA §11): an administration
+    # under this treatment must then be of that product.
+    medicine_product_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("medicine_products.inventory_item_id"), nullable=True)
+    health_case_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("health_cases.id"), nullable=True)
+    treatment_plan_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("treatment_plans.id"), nullable=True)
     dose: Mapped[str] = mapped_column(String(100))
     route: Mapped[str] = mapped_column(String(50))
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -569,10 +602,13 @@ class IdempotencyRecord(Base):
     """
 
     __tablename__ = "idempotency_records"
-    __table_args__ = (UniqueConstraint("idempotency_key", "user_id", name="uq_idempotency_key_user"),)
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", "user_id", name="uq_idempotency_key_user"),
+        Index("ix_idempotency_records_key", "idempotency_key"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    idempotency_key: Mapped[str] = mapped_column(String(100), index=True)
+    idempotency_key: Mapped[str] = mapped_column(String(100))
     user_id: Mapped[str] = mapped_column(String(36))
     method: Mapped[str] = mapped_column(String(10))
     path: Mapped[str] = mapped_column(String(300))

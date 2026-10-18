@@ -624,19 +624,48 @@ class TestNumberedMixes:
         assert sorted(b["mix_number"] for b in seeded) == [1, 2]
         assert {b["mix_code"] for b in seeded} == {"MIX-000001", "MIX-000002"}
         assert all(b["intended_species_code"] == "cow" and b["production_date"] for b in seeded)
+        # The seeded mixes name the operator and the mixer asset, not free text.
+        assert all(b["operator_id"] == "user-worker-1" and b["operator_name"] == "Karim Youssef" and b["mixer_asset_id"] == "asset-mixer-2" and b["mixer_asset_name"] == "Mixer wagon 2" for b in seeded)
         # A goat mix does not start its own sequence; it is simply the next number.
-        goat = self._start(client, self._goat_formula(client)["id"], intended_species_code="goat", mixer_asset_id="Small mixer")
-        assert (goat["mix_number"], goat["mix_code"], goat["intended_species_code"], goat["mixer_asset_id"]) == (3, "MIX-000003", "goat", "Small mixer")
+        goat_formula = self._goat_formula(client)
+        r = client.post(f"{API}/feed-batches", json={"formula_id": goat_formula["id"], "target_quantity": 500, "intended_species_code": "goat", "mixer_asset_id": "Small mixer"}, headers=_h(client))
+        assert r.status_code == 404 and "Assets" in r.json()["detail"], "the mixer is a registered farm asset, never free text"
+        r = client.post(f"{API}/feed-batches", json={"formula_id": goat_formula["id"], "target_quantity": 500, "intended_species_code": "goat", "intended_management_profile": "spaceship"}, headers=_h(client))
+        assert r.status_code == 422 and "management profile" in r.json()["detail"], "the intended profile is a configured profile"
+        r = client.post(f"{API}/feed-batches", json={"formula_id": goat_formula["id"], "target_quantity": 500, "operator_id": "nobody"}, headers=_h(client))
+        assert r.status_code == 404
+        asset = client.post(f"{API}/assets", json={"name": "Small mixer", "asset_type": "mixer"}, headers=_h(client))
+        assert asset.status_code == 201, asset.text
+        goat = self._start(client, goat_formula["id"], intended_species_code="goat", intended_management_profile="dairy", mixer_asset_id=asset.json()["id"], operator_id="user-worker-1")
+        assert (goat["mix_number"], goat["mix_code"], goat["intended_species_code"], goat["mixer_asset_name"]) == (3, "MIX-000003", "goat", "Small mixer")
+        assert goat["intended_management_profile"] == "dairy" and goat["operator_name"] == "Karim Youssef" and goat["mixed_by"] == "user-rami"
+        assert goat["mix_number"] == 3, "the three refused starts consumed no number"
         # Repeating the dairy formula tomorrow is a new mix, not a reopened one.
         again = self._start(client, _formula(client)["id"])
         assert (again["mix_number"], again["mix_code"]) == (4, "MIX-000004")
         assert again["intended_species_code"] == "cow", "the formula's species is the default intended use"
+        assert again["operator_id"] == "user-rami", "the operator defaults to the account that opened the batch"
         # Lookup by the number the farm uses.
         r = client.get(f"{API}/feed-batches", params={"mix_number": 4}, headers=_h(client))
         assert [b["id"] for b in r.json()] == [again["id"]]
         r = client.get(f"{API}/feed-batches", params={"search": "000003"}, headers=_h(client))
         assert [b["id"] for b in r.json()] == [goat["id"]]
         assert client.get(f"{API}/feed-mixes/999", headers=_h(client)).status_code == 404
+
+    def test_the_code_format_is_configurable_and_history_keeps_its_codes(self, client: TestClient):
+        r = client.get(f"{API}/feed-mix-settings", headers=_h(client))
+        assert r.status_code == 200, r.text
+        assert r.json() == {"farm_id": "farm-origami", "code_format": "MIX-{n:06d}", "last_number": 2, "next_number": 3, "next_code": "MIX-000003"}
+        r = client.put(f"{API}/feed-mix-settings", json={"code_format": "DAIRY-ONLY"}, headers=_h(client))
+        assert r.status_code == 422 and "{n}" in r.json()["detail"]
+        r = client.put(f"{API}/feed-mix-settings", json={"code_format": "OF-{n:04d}"}, headers=_h(client))
+        assert r.status_code == 200 and r.json()["next_code"] == "OF-0003", r.text
+        worker = auth_headers(client, "karim.worker@origami.farm", "farmos123")
+        assert client.put(f"{API}/feed-mix-settings", json={"code_format": "X-{n}"}, headers=worker).status_code == 403, "numbering is configuration"
+        nxt = self._start(client, _formula(client)["id"])
+        assert (nxt["mix_number"], nxt["mix_code"]) == (3, "OF-0003")
+        seeded = client.get(f"{API}/feed-batches", params={"mix_number": 1}, headers=_h(client)).json()[0]
+        assert seeded["mix_code"] == "MIX-000001", "a historical mix is never relabelled"
 
     def test_intended_use_is_checked_against_the_usage_policy(self, client: TestClient):
         # The dairy formula carries the cattle-only premix: saying this run is
@@ -681,6 +710,9 @@ class TestNumberedMixes:
         assert [s["subject_id"] for s in usage["exposed_subjects"]] == [HERD]
         issue = next(i for i in usage["issues"] if i["event_type"] == "delivered")
         assert issue["subject_name"] == "Dairy Herd" and issue["inventory_transaction_id"] and issue["recorded_by_name"]
+        # §20: every issue names the feeding program and assignment it was made under.
+        assert issue["program_code"] == "DAIRY-HIGH" and issue["program_id"] == "prog-dairy-high" and issue["program_version"] == 1
+        assert issue["assignment_id"] and issue["assignment_type"] == "explicit" and issue["assignment_subject_type"] == "group"
         assert usage["ledger_adjustments"][0]["reason"] == "waste"
         assert usage["cost_per_unit"] is not None and len(usage["components"]) == 5 and all(c["lot_code"] for c in usage["components"])
         assert usage["formula_version"] == 2 and usage["intended_species_code"] == "cow"

@@ -24,7 +24,13 @@ from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are r
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
 from app.domain import feed_models  # noqa: F401 - feed products / formulas / programs tables
+from app.domain import pharmacy_models  # noqa: F401 - medicine products, inventory lots, pharmacy policies
+from app.domain import emergency_models  # noqa: F401 - emergency protocols and runs
+from app.domain import platform_models  # noqa: F401 - units of measure, assets, routes, job runs
+from app.domain import health_models  # noqa: F401 - health cases, conditions, weight records
+from app.domain import procurement_models  # noqa: F401 - purchase requisitions
 from app.feeding.catalog import ensure_feed_reference_data
+from app.platform.units import ensure_units
 from app.feeding.seed import seed_feed_demo_data
 from app.pharmacy.seed import seed_pharmacy_demo_data
 from app.emergency.seed import seed_emergency_demo_data
@@ -58,6 +64,7 @@ def seed_demo_data(db: Session) -> None:
     # farm depends on — they go in before any animal that refers to them.
     ensure_reference_data(db)
     ensure_feed_reference_data(db)
+    ensure_units(db)
 
     farm = models.Farm(id=FARM_ID, name="Origami Farms", country="Lebanon", region="Bekaa Valley", timezone="Asia/Beirut", default_currency="USD")
     db.add(farm)
@@ -111,6 +118,24 @@ def seed_demo_data(db: Session) -> None:
     for name, cid in customers.items():
         db.add(models.Customer(id=cid, farm_id=FARM_ID, name=name))
 
+    # --------------------------------------------------------- Inventory
+    # The items come first: the animals' feeding history below posts
+    # transactions against them.
+    items = [
+        ("feed-dairy-mix", "Dairy Mix", "Dairy", "kg", 3250, 2000, "Al Mashreq", 0.42),
+        ("feed-alfalfa", "Alfalfa Hay", "Dairy", "kg", 4800, 3000, "Bekaa Hay Co.", 0.31),
+        ("feed-corn-silage", "Corn Silage", "Dairy", "kg", 2200, 2500, "Farm Harvest", 0.18),
+        ("feed-layer", "Layer Feed", "Poultry", "kg", 1150, 1500, "Al Mashreq", 0.39),
+        ("feed-goat-mix", "Goat Mix", "Goats", "kg", 900, 800, "Green Feed Co.", 0.44),
+        ("feed-minerals", "Minerals", "Minerals", "kg", 320, 300, "NutriPlus", 1.10),
+        ("feed-medicine", "Medicine", "Medicine", "items", 14, 10, "VetCare", 12.5),
+    ]
+    for iid, name, category, unit, qty, reorder, supplier, cost in items:
+        db.add(models.InventoryItem(id=iid, farm_id=FARM_ID, name=name, category=category, unit=unit,
+                                     current_qty=qty, reorder_level=reorder, supplier_label=supplier, unit_cost=cost,
+                                     last_purchase=_days_ago(20)))
+    db.flush()
+
     # ---------------------------------------------------------------- Animals
     animals = [
         dict(id="cow-744", tag="744", name="Bella", species="cow", breed="Holstein Friesian", sex="F",
@@ -147,22 +172,43 @@ def seed_demo_data(db: Session) -> None:
     # tag becomes a typed identifier row (ear tag on mammals, leg band on
     # poultry), the same mapping the migration applies to a live database.
     poultry = {"layer_hen", "duck", "turkey"}
+    # Days in milk and parity for the lactating animals (feed-performance
+    # baselines and confounders read them), and a dated weight for every
+    # animal with a weight — the per-weight protocol dose reads the record.
+    lactation = {"cow-744": (200, 2), "cow-214": (90, 3), "cow-clover": (150, 1), "goat-willow": (60, 2), "goat-gigi": (45, 1)}
     for a in animals:
         profile = "dairy" if a.get("lactating") else ("layer" if a["species"] in poultry else None)
+        dim, parity = lactation.get(a["id"], (None, None))
         db.add(models.Animal(
             id=a["id"], farm_id=FARM_ID, tag=a["tag"], name=a["name"], species=a["species"], breed=a["breed"], sex=a["sex"],
             birth_date=_now() - timedelta(days=365 * a["birth_years"] + 40), status=a["status"],
             life_stage="adult" if a["birth_years"] >= 1 else "young", management_profile=profile,
             location_label=a["location_label"], health_score=a["health_score"], pregnant=a.get("pregnant", False),
-            pregnancy_days=a.get("pregnancy_days"), lactating=a.get("lactating", False), lactation_cycle=a.get("lactation_cycle"),
+            pregnancy_days=a.get("pregnancy_days"), lactating=a.get("lactating", False), lactation_cycle=a.get("lactation_cycle") or parity,
+            lactation_started_at=_days_ago(dim) if dim else None,
             withdrawal_until=_in_hours(a["withdrawal_days"] * 24) if a.get("withdrawal_days") else None,
             withdrawal_reason=a.get("withdrawal_reason"), weight_kg=a.get("weight_kg"), group_name=a.get("group_name"),
         ))
+    # The animals exist before anything that references them is inserted:
+    # the unit of work orders INSERTs by relationship(), not by a bare
+    # ForeignKey column, and PostgreSQL enforces the keys SQLite only
+    # declares.
+    db.flush()
+    for a in animals:
+        if a.get("weight_kg"):
+            db.add(health_models.AnimalWeightRecord(id=new_id(), farm_id=FARM_ID, animal_id=a["id"], weight_kg=a["weight_kg"], measured_at=_days_ago(12),
+                                                    method="scale", recorded_by="user-worker-1", source_type="manual"))
         db.add(livestock_models.AnimalIdentifier(
             id=new_id(), animal_id=a["id"],
             identifier_type="LEG_BAND" if a["species"] in poultry else "EAR_TAG",
             identifier_value=a["tag"], is_primary=True, status="active",
         ))
+    db.flush()
+
+    # A standing clinical fact the emergency engine reads: Luna reacted to
+    # penicillin once, on the veterinarian's record (HEALTH-VETERINARY-SCHEMA).
+    db.add(health_models.AnimalHealthCondition(id="cond-luna-penicillin", farm_id=FARM_ID, animal_id="cow-214", condition_type="adverse_reaction", code="penicillin_g",
+                                               label="Adverse reaction to penicillin G (2025)", severity="moderate", recorded_at=_days_ago(300), recorded_by="user-vet-1", active=True))
 
     # Bella's milk trend: declining over the last 8 sessions (triggers RULE-HEALTH-RISK).
     bella_milk = [23, 22.5, 22, 21.5, 21, 20.5, 20, 18.6]
@@ -203,6 +249,7 @@ def seed_demo_data(db: Session) -> None:
         db.add(models.Flock(id=fid, farm_id=FARM_ID, name=name, species=species, count=count, status="healthy",
                             location_label=loc, group_type="flock", sex_composition="female",
                             life_stage="adult", management_profile="layer"))
+    db.flush()
 
     # Duck flock egg drop (-22%, triggers RULE-EGG-DROP); layer/turkey stay stable.
     db.add(models.EggRecord(id=new_id(), flock_id="flock-duck", total_eggs=1446, sellable_eggs=1300, broken_eggs=60,
@@ -232,6 +279,7 @@ def seed_demo_data(db: Session) -> None:
                              field_code=fid.replace("field-", "F-").upper(),
                              location_label="Bekaa Valley — home block",
                              soil_type="clay_loam", irrigation_method="drip", status="active"))
+    db.flush()
 
     # ------------------------------------------------- Crops and plantings
     # Crop *types* are farm data, never a hard-coded list (tech spec §16) —
@@ -247,6 +295,7 @@ def seed_demo_data(db: Session) -> None:
     for crop_id, name, category, cycle_days in crops:
         db.add(models.Crop(id=crop_id, farm_id=FARM_ID, name=name, category=category,
                             default_cycle_days=cycle_days))
+    db.flush()
 
     # (field, crop, variety, area, planted days ago, harvest in days, expected kg, stage)
     plantings = [
@@ -279,20 +328,7 @@ def seed_demo_data(db: Session) -> None:
                                      quantity=quantity, unit="kg", waste_qty=waste,
                                      destination="inventory", recorded_at=_days_ago(days_ago, hour=7)))
 
-    # --------------------------------------------------------- Inventory
-    items = [
-        ("feed-dairy-mix", "Dairy Mix", "Dairy", "kg", 3250, 2000, "Al Mashreq", 0.42),
-        ("feed-alfalfa", "Alfalfa Hay", "Dairy", "kg", 4800, 3000, "Bekaa Hay Co.", 0.31),
-        ("feed-corn-silage", "Corn Silage", "Dairy", "kg", 2200, 2500, "Farm Harvest", 0.18),
-        ("feed-layer", "Layer Feed", "Poultry", "kg", 1150, 1500, "Al Mashreq", 0.39),
-        ("feed-goat-mix", "Goat Mix", "Goats", "kg", 900, 800, "Green Feed Co.", 0.44),
-        ("feed-minerals", "Minerals", "Minerals", "kg", 320, 300, "NutriPlus", 1.10),
-        ("feed-medicine", "Medicine", "Medicine", "items", 14, 10, "VetCare", 12.5),
-    ]
-    for iid, name, category, unit, qty, reorder, supplier, cost in items:
-        db.add(models.InventoryItem(id=iid, farm_id=FARM_ID, name=name, category=category, unit=unit,
-                                     current_qty=qty, reorder_level=reorder, supplier_label=supplier, unit_cost=cost,
-                                     last_purchase=_days_ago(20)))
+    # ------------------------------------------------- Inventory history
     # 7 days of usage history for the two low-stock items so days_remaining is computable.
     for item_id, daily in [("feed-corn-silage", 90), ("feed-layer", 55)]:
         for i in range(7):
@@ -353,7 +389,6 @@ def seed_demo_data(db: Session) -> None:
     db.flush()
     # Feed products, formulas, a mixed batch, programs and a week of
     # feedings — built on the inventory items and animals seeded above.
-    db.flush()
     seed_feed_demo_data(db, FARM_ID)
     seed_pharmacy_demo_data(db, FARM_ID)
     seed_emergency_demo_data(db, FARM_ID)

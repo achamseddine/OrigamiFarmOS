@@ -1,0 +1,72 @@
+name: Backend tests
+
+# Runs the backend suite on every push and pull request that touches the
+# backend, the database (migrations, rendered schema) or the API contract.
+# Besides the API and domain tests this proves three cross-cutting facts
+# on each change:
+#   - the Alembic chain and the ORM describe one schema, on SQLite and on
+#     a real PostgreSQL 16 (tests/test_migrations.py);
+#   - database/schema.sql is rendered from the current models and
+#     api/openapi.yaml from the current application
+#     (tests/test_generated_artifacts.py);
+#   - the demo farm seeds onto the migrated schema.
+on:
+  push:
+    branches:
+      - claude/origami-farmos-tablet-mvp-u88i3e
+      - main
+    paths:
+      - ".github/workflows/backend-tests.yml"
+      - "backend/**"
+      - "database/**"
+      - "api/**"
+  pull_request:
+    paths:
+      - ".github/workflows/backend-tests.yml"
+      - "backend/**"
+      - "database/**"
+      - "api/**"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: farmos
+          POSTGRES_PASSWORD: farmos
+          POSTGRES_DB: farmos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U farmos"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      FARMOS_SCHEDULER: "false"
+      # A disposable database the migration test may drop and recreate.
+      FARMOS_TEST_POSTGRES_URL: postgresql://farmos:farmos@localhost:5432/farmos_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Generated files are current
+        run: |
+          python -m app.export_schema --check
+          python -m app.export_openapi --check
+
+      - name: Migrations, schema parity and the suite
+        run: python -m pytest -q tests -p no:cacheprovider
