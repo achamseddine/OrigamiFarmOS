@@ -347,3 +347,6 @@ The analytical unit is the numbered mix/output lot, not merely the formula name.
 
 For each mix the intelligence layer must be able to monitor: production date; first/last feeding date; quantity produced/issued/remaining; target species/profile; exposed animals/groups and head-days; formula-vs-actual deviations; ingredient supplier/lot lineage; cost; refusals/waste; milk/egg/growth or other applicable production response; health/context changes; and assessment/alert history. Supplier and ingredient effects may be aggregated across multiple numbered mixes only with preserved drill-down to the originating mixes.
 
+## Integration with Dynamic Nutritional Requirements & Ration Optimization
+`DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md` defines per-animal nutrient requirements and safe cost-constrained ration proposals. This intelligence module compares approved/actual feeding exposure to subsequent milk, health and economic outcomes. Persistent anomalies can request a new optimization run, but cannot auto-apply a ration change. Both modules share canonical numbered mix/lot lineage and preserve association-versus-causation uncertainty.
+
