@@ -21,3 +21,6 @@
 19. analytics/projections, including feed performance intelligence projections/assessments/alerts after feed + procurement + production + health dependencies are available.
 
 Each slice gets reviewed migration SQL and automated migration tests. Never create duplicate masters to break dependency order. Conceptual LivestockSubject remains explicit animal_id/animal_group_id FKs with exactly-one checks where applicable.
+
+**Nutrition/optimization dependency:** after animal/health/reproduction/production, feed nutrient/lot, procurement/pricing and inventory schemas, introduce `nutrition_model`, `animal_nutrient_requirement`, `ration_optimization_run`, and `ration_proposal` as defined in `DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`. Approved program and actual feeding events remain the authoritative operational records.
+
