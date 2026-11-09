@@ -68,3 +68,5 @@ The product baseline must preserve supplier/ingredient-lot → actual local mixi
 ## Individual ration calculation target
 The future Feed Module must calculate individual cow nutrient requirements using weight, milk yield, lactation, pregnancy, BCS and relevant health restrictions, and propose safe cost-constrained rations from actual ingredient lots and numbered mixes. Missing analysis or animal inputs must be visible. This is a target capability, not a completed MVP feature. Implementation may phase requirements → optimization → approval/worker delivery → continuous recalculation.
 
+## Individual ration calculation target
+The future Feed Module must calculate individual cow nutrient requirements using weight, milk yield, lactation, pregnancy, BCS and relevant health restrictions, and propose safe cost-constrained rations from actual ingredient lots and numbered mixes. Missing analysis or animal inputs must be visible. This is a target capability, not a completed MVP feature. Implementation may phase requirements → optimization → approval/worker delivery → continuous recalculation. Canonical design: `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`.
