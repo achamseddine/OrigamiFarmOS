@@ -71,3 +71,11 @@ Revisit only if implementation evidence demonstrates a strong need for a shared 
 
 These depend on Feed + Inventory + Procurement/Supplier + Livestock + Production + Health + Costing and therefore belong after those authoritative domains in migration/implementation order.
 
+### Dynamic Nutrition & Ration Optimization
+- `nutrition_model` (approved versioned species/stage requirement model)
+- `animal_nutrient_requirement` (dated per-animal requirement snapshot)
+- `ration_optimization_run` (auditable solver run, individual or group)
+- `ration_proposal` (costed review/approval artifact)
+
+Canonical specification: `DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`. Dependencies: Animal, Health, Reproduction, Production, Feed, Inventory, Procurement and Costing. These are not substitutes for feeding events.
+
