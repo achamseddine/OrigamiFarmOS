@@ -438,3 +438,6 @@ A numbered mix is not reusable: repeating the same dairy/horse/sheep/chicken for
 
 Required query/dashboard behavior for each mix: produced quantity; quantity issued/fed; estimated consumed; waste; current eligible remaining stock; first/last use date; animals/groups exposed; days used; formula variance; cost/kg; production response link; and alert/performance status. Reverse trace must answer both “what went into MIX-N?” and “who ate MIX-N, when and how much?”.
 
+## 21. Dynamic per-animal nutrition and ration optimization
+The canonical extension is `DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`. Animal-specific nutrient requirements, constrained least-cost optimization runs and reviewable ration proposals are separate from feed formulas, approved feeding programs and actual feeding events. Calculation consumes current milk yield, lactation, weight, pregnancy, health restrictions and feed nutrient/lot/price/stock facts. Species-specific models must be validated; missing data/infeasibility must be explicit. A proposed ration never changes stock or an approved program until authorized.
+
