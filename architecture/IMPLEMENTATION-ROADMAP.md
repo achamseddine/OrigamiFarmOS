@@ -42,3 +42,6 @@ Do not proceed to the next phase while foundational invariants are failing.
 ## Feed Performance Intelligence implementation gate
 Feed Performance Intelligence is intentionally implemented only after the authoritative lineage it depends on exists. Required sequence: supplier/receipt lot identity → inventory lot genealogy → actual feed-batch components → feeding events/exposure → milk/production records → relevant health/lifecycle context → costing → analytical monitors/assessments/alerts. Feed vertical slices must preserve these keys from day one. Initial intelligence should begin with deterministic baselines/formula deviation/traceability, then add versioned statistical/AI models without changing authoritative domain semantics.
 
+## Dynamic nutrition implementation dependency
+Implement `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md` after animal lifecycle/health/milk, feed nutrient profiles, numbered mix/lot lineage and inventory/pricing are available. First implement validated requirement calculations with unit tests and missing-data reporting; next constrained feasibility/least-cost solver; then proposal approval and per-meal worker UI; finally event-driven recalculation and Feed Performance Intelligence feedback. This is a required target, not already implemented functionality.
+
