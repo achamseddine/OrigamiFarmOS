@@ -94,3 +94,10 @@ See `architecture/IMPLEMENTATION-ROADMAP.md`.
 - Preserve mix → formula/version → actual ingredient quantities/lots/suppliers → production date/operator → output lot → dated feeding usage/animal or group/quantity → remaining ledger stock → cost/performance lineage.
 - Never store an editable “remaining mix” balance; derive it from inventory transactions. Never renumber or overwrite a historical mix.
 
+## Dynamic nutrition rule
+- Implement individual animal nutrient requirements from a validated versioned species/stage model using milk yield, weight, lactation, pregnancy, BCS and health restrictions where available.
+- Constrained ration optimization must use actual feed nutrient profiles, supplier lots, numbered mixes, eligible inventory and prices; never invent missing analysis or nutritional coefficients.
+- Infeasible solutions must be reported rather than labeled balanced. Group plans must expose individual adequacy/outliers.
+- AI recommendations and optimization proposals are not approved feeding programs or actual stock movements. Require authorization before changing feed plans; never silently alter numbered mix history.
+- Read `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md` before implementing this feature.
+
