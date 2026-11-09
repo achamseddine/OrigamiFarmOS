@@ -35,3 +35,6 @@ Outputs: Multi-farm support, Onboarding flow, Farm templates, Subscription model
 5. Add feed cost/output and effective supplier-value analytics.
 6. Add versioned AI/statistical models with explicit confounders, explanations and review workflows.
 
+## Dynamic Nutrition & Ration Optimization
+Implement validated per-animal nutrient requirement snapshots; constrained least-cost ration solver using actual inventory/lot quality/prices; group-feeding reconciliation and individual overrides; authorized approval and worker meal instructions; daily/event-driven recalculation on milk, health, weight, pregnancy and feed changes; and continuous evaluation through Feed Performance Intelligence. Source: `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`.
+
