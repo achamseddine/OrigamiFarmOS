@@ -1147,3 +1147,6 @@ Every physical crushing/mixing run is a uniquely numbered Feed Batch/Mix regardl
 
 The numbered mix is monitored from manufacture through depletion: production date, formula/version, actual ingredient lots/suppliers, quantity produced, output lot, every dated feeding usage, target animals/groups, quantity offered/estimated consumed/wasted, remaining ledger stock, cost and downstream production/performance. This gives the farm manager a simple operational question with a complete answer: “Mix 0042—what was in it, who received it, when, how much remains, and how did they perform?”
 
+## Individual dynamic nutrition engine
+Each animal digital twin supplies milk production, weight/BCS, days in milk, parity, pregnancy, health/intake restrictions and available environmental context to a validated species-specific nutritional requirement model. The model produces a dated requirement snapshot; a constrained optimizer uses ingredient/numbered-mix nutrient profiles, lot quality, available stock, prices and safe inclusion limits to propose kg per animal per day and per meal. Individual requirements remain visible even when delivery is grouped. Proposed rations require approval and never overwrite the formula, approved program or actual feeding event. See `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`.
+
