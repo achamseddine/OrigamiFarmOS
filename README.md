@@ -211,3 +211,9 @@ Origami's feed architecture extends beyond stock, ration and traceability. It pr
 
 ### Dynamic individual ration optimization (planned)
 The canonical Feed Module design includes `database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md`: per-animal nutritional requirements based on production, lifecycle, weight/BCS and health; safe constrained least-cost proposals using actual feed inventory, lot nutrient quality, numbered mixes and prices; approval-controlled feeding programs; and continuous reevaluation linked to Feed Performance Intelligence. This is a documented target, not yet implemented functionality.
+
+## Interactive farm-wide UI/UX prototype (V3)
+
+The standalone, responsive [Origami FarmOS V3 browser prototype](prototypes/origami-farmos-v3.html) demonstrates connected Animal Registry & Digital Twin, feed lot/numbered mixing workflows, inventory, milk/egg production, clinical follow-up, crops/greenhouses, finance, equipment/work orders and explainable rule-based insights. Read the [prototype guide](prototypes/README.md) for a step-by-step walkthrough, limits and safety boundaries. Automated browser smoke coverage is in [`prototypes/tests/test_v3_smoke.py`](prototypes/tests/test_v3_smoke.py).
+
+**Prototype, not production:** data is stored locally in one browser; role selection is not authentication; nutritional optimization, true AI, shared database and authoritative inventory synchronization still require implementation.
