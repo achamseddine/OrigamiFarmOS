@@ -796,7 +796,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(onPressed: _saving || subject == null || route == null ? null : () => _save(medicine, subjectType!, subjectId!, route!), child: Text(context.t('save'))),
+        FilledButton(onPressed: _saving || subject == null || route == null ? null : () => _save(medicine, subjectType!, subjectId!, route), child: Text(context.t('save'))),
       ],
     );
   }
