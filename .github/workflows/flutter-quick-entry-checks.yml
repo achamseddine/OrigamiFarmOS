@@ -1,0 +1,29 @@
+name: Flutter quick-entry checks
+
+on:
+  pull_request:
+    paths:
+      - "mobile/flutter_app/**"
+      - ".github/workflows/flutter-quick-entry-checks.yml"
+  push:
+    branches:
+      - feat/qr-animal-quick-entry
+    paths:
+      - "mobile/flutter_app/**"
+      - ".github/workflows/flutter-quick-entry-checks.yml"
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/flutter_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze --no-fatal-infos
+      - run: flutter test
