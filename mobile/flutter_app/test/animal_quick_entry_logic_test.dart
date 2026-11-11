@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:farmos/core/util/number_input.dart';
 import 'package:farmos/features/animals/animal_scan.dart';
+import 'package:farmos/domain/entities/animal.dart';
+import 'package:farmos/domain/entities/livestock.dart';
 
 void main() {
   test('localized decimal and integer inputs', () {
@@ -19,6 +21,30 @@ void main() {
     expect(milkSessionForHour(12), 'morning');
     expect(milkSessionForHour(13), 'evening');
     expect(milkSessionForHour(18), 'evening');
+  });
+
+  test('scan resolves only one active animal, not a retired or ambiguous tag', () {
+    Animal animal(String id, String tag, {String status = 'active'}) => Animal(
+      id: id,
+      name: 'Test animal',
+      species: 'cow',
+      breed: 'Holstein',
+      sex: 'F',
+      birthDate: DateTime(2021),
+      status: AnimalHealthStatus.healthy,
+      location: 'Barn',
+      healthScore: 100,
+      identifiers: [
+        AnimalIdentifier(id: 'identifier-$id', type: 'EAR_TAG', value: tag, isPrimary: true, status: status),
+      ],
+    );
+    final first = animal('a1', '214');
+    final second = animal('a2', '214');
+    final retired = animal('a3', 'old', status: 'retired');
+    expect(resolveAnimalScan('origami://animal/a1', [first, second]), first);
+    expect(resolveAnimalScan('214', [first, second]), isNull);
+    expect(resolveAnimalScan('old', [retired]), isNull);
+    expect(resolveAnimalScan('unknown', [first]), isNull);
   });
 
   test('scan accepts canonical animal QR only, no arbitrary URL', () {
