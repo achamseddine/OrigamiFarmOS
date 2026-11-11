@@ -6,7 +6,7 @@ from pydantic import BaseModel, field_validator
 
 from app.schemas.common import ORMModel
 
-ALLOWED_MILK_DESTINATIONS = {"stored", "sold", "processed", "consumed"}
+ALLOWED_MILK_DESTINATIONS = {"stored", "sold", "processed", "consumed", "withheld"}
 
 
 class MilkRecordCreate(BaseModel):
