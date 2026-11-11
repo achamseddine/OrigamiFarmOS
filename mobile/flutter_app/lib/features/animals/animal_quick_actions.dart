@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
+import '../../core/util/number_input.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -202,7 +203,12 @@ class _MilkDialogState extends State<_MilkDialog> {
               decoration: InputDecoration(labelText: '${context.t('quantity')} (${context.t('liters')})'),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
+            if (isUnderWithdrawal)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: FarmSpacing.sm),
+                child: Text(context.t('qrWithheldMilk'), style: const TextStyle(color: FarmColors.dangerInk)),
+              )
+            else DropdownButtonFormField<String>(
               value: _destination,
               decoration: InputDecoration(labelText: context.t('destination')),
               items: [
@@ -235,7 +241,7 @@ class _MilkDialogState extends State<_MilkDialog> {
   }
 
   Future<void> _submit() async {
-    final liters = double.tryParse(_liters.text.trim());
+    final liters = parseLocalizedDouble(_liters.text);
     if (liters == null || liters < 0) {
       setState(() => _error = context.t('valueMustBePositive'));
       return;
@@ -248,129 +254,7 @@ class _MilkDialogState extends State<_MilkDialog> {
           animalId: widget.animal.id,
           session: _session,
           liters: liters,
-          destination: _destination,
-        );
-    if (!mounted) return;
-    if (result.success) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
-    } else {
-      setState(() {
-        _saving = false;
-        _error = result.error;
-      });
-    }
-  }
-}
-
-/// Manager/veterinarian-gated treatment dialog (Constitution: "Veterinarians
-/// diagnose and prescribe"). Tech spec §14: "Medication, dose, route, start
-/// date, responsible user, and withdrawal period are required where
-/// applicable."
-Future<void> showTreatDialog(BuildContext context, Animal animal) {
-  return showDialog(context: context, builder: (context) => _TreatDialog(animal: animal));
-}
-
-class _TreatDialog extends StatefulWidget {
-  const _TreatDialog({required this.animal});
-  final Animal animal;
-
-  @override
-  State<_TreatDialog> createState() => _TreatDialogState();
-}
-
-class _TreatDialogState extends State<_TreatDialog> {
-  final _diagnosis = TextEditingController();
-  final _medication = TextEditingController();
-  final _dose = TextEditingController();
-  final _route = TextEditingController(text: 'Intramuscular');
-  int _withdrawalDays = 3;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _diagnosis.dispose();
-    _medication.dispose();
-    _dose.dispose();
-    _route.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('${context.t('treat')} — ${widget.animal.name} #${widget.animal.primaryId}'),
-      content: SizedBox(
-        width: 400,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.warning, 0.18), borderRadius: BorderRadius.circular(FarmRadii.sm)),
-              child: Text(context.t('diagnosisLocked'), style: FarmTypography.textTheme.bodySmall),
-            ),
-            TextField(controller: _diagnosis, decoration: const InputDecoration(labelText: 'Diagnosis')),
-            const SizedBox(height: 10),
-            TextField(controller: _medication, decoration: const InputDecoration(labelText: 'Medication *')),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(child: TextField(controller: _dose, decoration: const InputDecoration(labelText: 'Dose *'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _route, decoration: const InputDecoration(labelText: 'Route *'))),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                const Text('Withdrawal (days):'),
-                Expanded(
-                  child: Slider(
-                    value: _withdrawalDays.toDouble(),
-                    min: 0,
-                    max: 21,
-                    divisions: 21,
-                    label: '$_withdrawalDays',
-                    onChanged: (v) => setState(() => _withdrawalDays = v.round()),
-                  ),
-                ),
-                Text('$_withdrawalDays'),
-              ],
-            ),
-            if (_error != null) Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(
-          onPressed: _saving ? null : _submit,
-          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _submit() async {
-    if (_medication.text.trim().isEmpty || _dose.text.trim().isEmpty || _route.text.trim().isEmpty) {
-      setState(() => _error = 'Medication, dose and route are required.');
-      return;
-    }
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    final result = await context.read<AnimalsProvider>().recordTreatment(
-          animalId: widget.animal.id,
-          medication: _medication.text.trim(),
-          dose: _dose.text.trim(),
-          route: _route.text.trim(),
-          diagnosis: _diagnosis.text.trim().isEmpty ? null : _diagnosis.text.trim(),
-          withdrawalUntil: _withdrawalDays > 0 ? DateTime.now().add(Duration(days: _withdrawalDays)) : null,
+          destination: widget.animal.isUnderWithdrawal ? 'withheld' : _destination,
         );
     if (!mounted) return;
     if (result.success) {
