@@ -27,7 +27,7 @@ Animal? resolveAnimalScan(String raw, Iterable<Animal> animals) {
   if (code == null) return null;
   final matches = animals.where((animal) =>
       animal.id == code ||
-      (animal.tag != null && animal.tag!.toLowerCase() == code.toLowerCase()) ||
+      (animal.identifiers.isEmpty && animal.tag != null && animal.tag!.toLowerCase() == code.toLowerCase()) ||
       animal.activeIdentifiers.any((i) => i.value.toLowerCase() == code.toLowerCase())).toList();
   return matches.length == 1 ? matches.single : null;
 }
