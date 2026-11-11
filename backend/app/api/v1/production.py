@@ -80,11 +80,12 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         )
 
     under_withdrawal = animal.withdrawal_until is not None and ensure_utc(animal.withdrawal_until) > datetime.now(timezone.utc)
-    if under_withdrawal and payload.destination == "sold":
+    # Server-side safety gate, including when an offline tablet is stale.
+    if under_withdrawal and payload.destination != "withheld":
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"{animal.name} is under withdrawal until {animal.withdrawal_until.isoformat()}. "
-            "Milk from this animal cannot be sold.",
+            "Record this milk as withheld; it must not enter stored, sold, processed or consumed stock.",
         )
 
     record = models.MilkRecord(
