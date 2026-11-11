@@ -25,6 +25,7 @@ import 'animal_care_section.dart';
 import 'animal_feeding_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
+import 'animal_quick_entry_screen.dart';
 import 'capability_chips.dart';
 import '../../core/widgets/directional_icon.dart';
 
@@ -407,15 +408,21 @@ class _HistoryColumn extends StatelessWidget {
     final access = context.watch<AccessProvider>();
     final health = access.isModuleAvailable(FarmModule.animalHealth);
     final canCare = health && access.canCreate(FarmModule.animalHealth);
+    final canObserve = access.canCreate(FarmModule.animalHealth) || access.canCreate(FarmModule.animals);
+    final canFeed = access.canCreate(FarmModule.feedNutrition);
+    final canMilk = access.canCreate(FarmModule.milkProduction) && caps.has(Cap.milkProduction);
+    final canMove = access.canEdit(FarmModule.animals);
     final actions = <_QuickAction>[
-      _QuickAction(FarmIcon.eye, 'observe', () => showObserveDialog(context, animal.id)),
-      _QuickAction(FarmIcon.stethoscope, 'treat', () => showTreatDialog(context, animal)),
+      if (canObserve) _QuickAction(FarmIcon.eye, 'observe', () => showObserveDialog(context, animal.id)),
       if (canCare) _QuickAction(FarmIcon.syringe, 'phAdminister', () => showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id)),
       if (canCare) _QuickAction(FarmIcon.bell, 'emAssess', () => showAssessDialog(context, subjectType: 'animal', subjectId: animal.id)),
-      _QuickAction(FarmIcon.feedBag, 'feed', () => showFeedDialog(context, animal)),
-      if (caps.has(Cap.milkProduction)) _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
-      _QuickAction(FarmIcon.location, 'move', () => showMoveDialog(context, animal)),
-      _QuickAction(FarmIcon.calendar, 'viewHistory', () {}),
+      if (canFeed) _QuickAction(FarmIcon.feedBag, 'feed', () => showFeedDialog(context, animal)),
+      if (canMilk) _QuickAction(FarmIcon.milkBottle, 'milk', () => showMilkDialog(context, animal)),
+      if (canMove) _QuickAction(FarmIcon.location, 'move', () => showMoveDialog(context, animal)),
+      if (canMilk || canFeed || canObserve || canCare)
+        _QuickAction(FarmIcon.qr, 'qrQuickEntry', () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => AnimalQuickEntryScreen(initialAnimalId: animal.id)),
+        )),
     ];
 
     final events = (twin?['recent_events'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
