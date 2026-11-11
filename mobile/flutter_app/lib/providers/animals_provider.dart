@@ -139,6 +139,17 @@ class AnimalsProvider extends ChangeNotifier {
     return result;
   }
 
+  /// A dated, measured weight event. The server checks Animals edit or
+  /// Animal Health create and keeps the historical measurement.
+  Future<WriteResult> recordWeight({
+    required String animalId,
+    required double weightKg,
+    required String method,
+  }) => _api.write(() => _api.post('/animals/$animalId/weights', body: {
+        'weight_kg': weightKg,
+        'method': method,
+      }));
+
   Future<WriteResult> moveAnimal({required String animalId, required String newLocation}) async {
     final result = await _api.write(() => _api.patch('/animals/$animalId', body: {'location_label': newLocation}));
     if (result.success) {
