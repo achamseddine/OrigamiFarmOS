@@ -16,6 +16,8 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/inventory.dart';
 import '../../domain/entities/task.dart';
 import '../../providers/feed_provider.dart';
+import '../../providers/access_provider.dart';
+import '../animals/animal_quick_entry_screen.dart';
 import '../../providers/notifications_provider.dart';
 import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
@@ -120,6 +122,18 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
             subtitle: context.t('morningSubline'),
             icon: FarmIcon.sun,
             trailing: const _Motto(),
+            actions: [
+              if ([FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals]
+                  .any(context.watch<AccessProvider>().canCreate))
+                HeroAction(
+                  icon: FarmIcon.qr,
+                  label: context.t('qrQuickEntry'),
+                  primary: true,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),
