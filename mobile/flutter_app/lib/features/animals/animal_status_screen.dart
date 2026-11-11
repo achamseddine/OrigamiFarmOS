@@ -19,6 +19,7 @@ import '../../sync/sync_controller.dart';
 import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
+import 'animal_quick_entry_screen.dart';
 import '../../core/widgets/hero_band.dart';
 
 class AnimalStatusScreen extends StatefulWidget {
@@ -74,6 +75,17 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
             subtitle: context.t('animalStatusSubtitle'),
             icon: FarmIcon.cow,
             actions: [
+              if ([
+                FarmModule.milkProduction, FarmModule.feedNutrition,
+                FarmModule.animalHealth, FarmModule.animals,
+              ].any(context.watch<AccessProvider>().canCreate))
+                HeroAction(
+                  icon: FarmIcon.qr,
+                  label: context.t('qrQuickEntry'),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+                  ),
+                ),
               // Tech spec §12: the Animals screen must not be read-only for
               // whoever looks after the animals.
               if (context.watch<AccessProvider>().canCreate(FarmModule.animals))
