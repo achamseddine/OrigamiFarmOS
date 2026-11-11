@@ -228,6 +228,76 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     }
   }
 
+  Future<void> _recordWeight(Animal animal) async {
+    final weight = TextEditingController();
+    String method = 'scale';
+    String? error;
+    bool saving = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: Text(dialogContext.t('qrWeight')),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: weight,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: dialogContext.t('qrWeightKg')),
+                ),
+                const SizedBox(height: FarmSpacing.sm),
+                DropdownButtonFormField<String>(
+                  initialValue: method,
+                  decoration: InputDecoration(labelText: dialogContext.t('qrWeightMethod')),
+                  items: [
+                    DropdownMenuItem(value: 'scale', child: Text(dialogContext.t('qrWeightScale'))),
+                    DropdownMenuItem(value: 'tape', child: Text(dialogContext.t('qrWeightTape'))),
+                  ],
+                  onChanged: saving ? null : (value) => setDialogState(() => method = value ?? method),
+                ),
+                if (error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: FarmSpacing.sm),
+                    child: Text(error!, style: const TextStyle(color: FarmColors.dangerInk)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext), child: Text(dialogContext.t('cancel'))),
+            FilledButton(
+              onPressed: saving ? null : () async {
+                final value = parseLocalizedDouble(weight.text);
+                if (value == null || value <= 0) {
+                  setDialogState(() => error = dialogContext.t('qrInvalidQuantity'));
+                  return;
+                }
+                setDialogState(() { saving = true; error = null; });
+                final result = await dialogContext.read<AnimalsProvider>().recordWeight(
+                  animalId: animal.id, weightKg: value, method: method,
+                );
+                if (!dialogContext.mounted) return;
+                if (result.success) {
+                  Navigator.pop(dialogContext);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(context.t('qrWeightSaved'))),
+                  );
+                } else {
+                  setDialogState(() { saving = false; error = result.error ?? dialogContext.t('couldNotSave'); });
+                }
+              },
+              child: Text(dialogContext.t('save')),
+            ),
+          ],
+        ),
+      ),
+    );
+    weight.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final animals = context.watch<AnimalsProvider>().animals;
@@ -243,6 +313,8 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     final canFeed = access.canCreate(FarmModule.feedNutrition);
     final canObserve = access.canCreate(FarmModule.animalHealth) || access.canCreate(FarmModule.animals);
     final canCare = access.canCreate(FarmModule.animalHealth);
+    final canWeight = animal != null && caps!.has(Cap.weightTracking) &&
+        (access.canEdit(FarmModule.animals) || canCare);
     final lang = Localizations.localeOf(context).languageCode;
 
     return Scaffold(
@@ -354,6 +426,12 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                           onPressed: _saving ? null : () => showObserveDialog(context, animal.id),
                           icon: const Icon(Icons.healing),
                           label: Text(context.t('qrReportIssue')),
+                        ),
+                      if (canWeight)
+                        OutlinedButton.icon(
+                          onPressed: _saving ? null : () => _recordWeight(animal),
+                          icon: const Icon(Icons.monitor_weight_outlined),
+                          label: Text(context.t('qrWeight')),
                         ),
                       if (canCare)
                         OutlinedButton.icon(
