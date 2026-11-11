@@ -12,6 +12,12 @@ class FarmStrings {
   FarmStrings._();
 
   static const Map<String, String> _en = {
+    'qrWeight': 'Record measured weight',
+    'qrWeightKg': 'Weight (kg)',
+    'qrWeightMethod': 'Measurement method',
+    'qrWeightScale': 'Scale',
+    'qrWeightTape': 'Measuring tape',
+    'qrWeightSaved': 'Weight measurement recorded.',
     'qrWithheldMilk': 'Milk under withdrawal — WITHHELD, not for sale or processing.',
     'qrSelectRoute': 'Choose approved route',
     'qrNoRoutes': 'No approved routes configured for this product. Administration is blocked.',
@@ -1350,6 +1356,12 @@ class FarmStrings {
   };
 
   static const Map<String, String> _ar = {
+    'qrWeight': 'سجّل الوزن المقاس',
+    'qrWeightKg': 'الوزن (كغ)',
+    'qrWeightMethod': 'طريقة القياس',
+    'qrWeightScale': 'ميزان',
+    'qrWeightTape': 'شريط قياس',
+    'qrWeightSaved': 'انسجّل قياس الوزن.',
     'qrWithheldMilk': 'الحليب بفترة السحب — محجوز، ممنوع ينباع أو ينعمل منّو منتجات.',
     'qrSelectRoute': 'اختار طريقة الإعطاء المعتمدة',
     'qrNoRoutes': 'ما في طريقة إعطاء معتمدة لهالدواء. ما فيك تسجّل إعطاءه.',
