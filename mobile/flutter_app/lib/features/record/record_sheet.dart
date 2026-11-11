@@ -15,6 +15,7 @@ import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
+import '../animals/animal_quick_entry_screen.dart';
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../feed/feed_movement_dialog.dart';
 import '../produce/agriculture_forms.dart';
@@ -59,6 +60,15 @@ class RecordAction {
 }
 
 final List<RecordAction> _actions = [
+  RecordAction(
+    icon: FarmIcon.qr,
+    labelKey: 'qrQuickEntry',
+    accent: FarmColors.cedar,
+    modules: [FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals],
+    open: (context) async => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+    ),
+  ),
   RecordAction(
     icon: FarmIcon.milkBottle,
     labelKey: 'milk',
