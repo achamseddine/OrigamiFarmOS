@@ -282,9 +282,11 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                 if (!dialogContext.mounted) return;
                 if (result.success) {
                   Navigator.pop(dialogContext);
-                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.t('qrWeightSaved'))),
-                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(context.t('qrWeightSaved'))),
+                    );
+                  }
                 } else {
                   setDialogState(() { saving = false; error = result.error ?? dialogContext.t('couldNotSave'); });
                 }
