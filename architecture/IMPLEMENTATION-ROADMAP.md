@@ -28,6 +28,8 @@ Feed masters, usage policy, formula/version, mixing batch, ingredient-lot consum
 ## Phase 5 — Reproduction / Health / Production
 Implement as separate vertical domains consuming livestock capabilities/events.
 
+**Status:** reproduction (breeding, pregnancy, birth, incubation/hatch) and lactation are implemented with migration `b5e7a9c1d3f8`, together with the Phase 2 items still open — state history, first-class group membership and the head-count ledger (`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md` §16).
+
 ## Phase 6 — Procurement and costing
 Requisition/approval/PO/receipt/invoice links, feed cost and animal/group/product cost attribution.
 

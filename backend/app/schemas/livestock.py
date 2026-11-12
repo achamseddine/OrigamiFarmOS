@@ -167,6 +167,10 @@ class AnimalGroupCreate(BaseModel):
     species: str
     group_type: str = "flock"
     count: int = Field(0, ge=0)
+    # MEMBERSHIP_DERIVED | QUANTITY_MANAGED | HYBRID (LIVESTOCK-SCHEMA §6).
+    # Unset: a species kept individually (cattle, horses) counts its
+    # members; a flock species counts heads.
+    tracking_mode: str | None = None
     sex_composition: str | None = None
     life_stage: str | None = None
     management_profile: str | None = None
@@ -203,3 +207,5 @@ class AnimalGroupOut(ORMModel):
     management_profile: str | None = None
     status: str
     location_label: str | None = None
+    tracking_mode: str = "QUANTITY_MANAGED"
+    created_at: datetime | None = None

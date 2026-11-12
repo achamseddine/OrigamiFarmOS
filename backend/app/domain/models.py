@@ -240,6 +240,19 @@ class Animal(Base):
     current_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Lifecycle (LIVESTOCK-SCHEMA §2 status, §14): active | sold | dead |
+    # culled | slaughtered | transferred | archived. A projection of the
+    # STATUS rows in `animal_state_history`, written only by the exit and
+    # archive workflows; `active` is false for every value but active.
+    lifecycle_status: Mapped[str] = mapped_column(String(20), default="active")
+    exited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Reproduction projection (REPRODUCTION-SCHEMA: "current reproductive
+    # status is a projection from authoritative episodes"). With
+    # `pregnant`, `lactating`, `lactation_cycle`, `lactation_started_at`
+    # and `dried_off_at` above, written only by reproduction_service from
+    # `pregnancy_episodes` and `lactation_episodes` — never by an edit.
+    pregnancy_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expected_due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
@@ -275,6 +288,12 @@ class Flock(Base):
     status: Mapped[str] = mapped_column(String(30), default="healthy")
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     location_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # LIVESTOCK-SCHEMA §6 quantity semantics. MEMBERSHIP_DERIVED: `count` is
+    # the number of current members. QUANTITY_MANAGED / HYBRID: `count` is
+    # the latest row of `animal_group_quantity_events`, and individuals
+    # registered in a hybrid flock never redefine its total.
+    tracking_mode: Mapped[str] = mapped_column(String(30), default="QUANTITY_MANAGED")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=_now)
 
 
 class Field(Base):

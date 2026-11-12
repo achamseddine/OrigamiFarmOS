@@ -140,7 +140,8 @@ MANAGEMENT_PROFILES: tuple[tuple[str, str | None, str, str], ...] = (
 # Species. Terminology is what the UI says for a generic event — the
 # event type stays `birth`, the screen says "Calving" (tech spec §5, §8).
 # --------------------------------------------------------------------------
-def _species(code, name_en, name_ar, mode, icon, default_mgmt, *, birth, offspring, group, female, male, sort, profiles=()):
+def _species(code, name_en, name_ar, mode, icon, default_mgmt, *, birth, offspring, group, female, male, sort, profiles=(),
+             gestation=None, incubation=None):
     return {
         "code": code, "name_en": name_en, "name_ar": name_ar,
         "reproduction_mode": mode, "icon": icon, "default_management": default_mgmt,
@@ -155,6 +156,10 @@ def _species(code, name_en, name_ar, mode, icon, default_mgmt, *, birth, offspri
             "male_en": male[0], "male_ar": male[1],
         },
         "active": True, "sort_order": sort,
+        # Typical length of a pregnancy / an incubation, in days — what an
+        # expected due or hatch date is computed from when the check or the
+        # setter does not give one.
+        "gestation_days": gestation, "incubation_days": incubation,
     }
 
 
@@ -162,35 +167,49 @@ SPECIES: tuple[dict, ...] = (
     _species("cow", "Cattle", "أبقار", VIVIPAROUS, "cow", "individual",
              birth=("Calving", "ولادة"), offspring=("Calf", "عجل"), group=("Herd", "قطيع"),
              female=("Cow", "بقرة"), male=("Bull", "ثور"), sort=1,
-             profiles=("dairy", "meat", "breeding", "dual_purpose")),
+             profiles=("dairy", "meat", "breeding", "dual_purpose"), gestation=283),
     _species("sheep", "Sheep", "أغنام", VIVIPAROUS, "sheep", "either",
              birth=("Lambing", "ولادة"), offspring=("Lamb", "حمل"), group=("Flock", "قطيع"),
              female=("Ewe", "نعجة"), male=("Ram", "كبش"), sort=2,
-             profiles=("dairy", "meat", "wool", "breeding", "dual_purpose")),
+             profiles=("dairy", "meat", "wool", "breeding", "dual_purpose"), gestation=147),
     _species("goat", "Goats", "ماعز", VIVIPAROUS, "goat", "either",
              birth=("Kidding", "ولادة"), offspring=("Kid", "جدي"), group=("Herd", "قطيع"),
              female=("Doe", "عنزة"), male=("Buck", "تيس"), sort=3,
-             profiles=("dairy", "meat", "breeding", "dual_purpose")),
+             profiles=("dairy", "meat", "breeding", "dual_purpose"), gestation=150),
     _species("horse", "Horses", "خيول", VIVIPAROUS, "horse", "individual",
              birth=("Foaling", "ولادة"), offspring=("Foal", "مهر"), group=("Herd", "قطيع"),
              female=("Mare", "فرس"), male=("Stallion", "حصان"), sort=4,
-             profiles=("breeding", "work", "companion")),
+             profiles=("breeding", "work", "companion"), gestation=340),
     _species("layer_hen", "Chickens", "دجاج", OVIPAROUS, "poultry", "group",
              birth=("Hatching", "فقس"), offspring=("Chick", "صوص"), group=("Flock", "سرب"),
              female=("Hen", "دجاجة"), male=("Rooster", "ديك"), sort=5,
-             profiles=("layer", "broiler", "breeding")),
+             profiles=("layer", "broiler", "breeding"), incubation=21),
     _species("duck", "Ducks", "بط", OVIPAROUS, "duck", "group",
              birth=("Hatching", "فقس"), offspring=("Duckling", "فرخ بط"), group=("Flock", "سرب"),
              female=("Duck", "بطة"), male=("Drake", "ذكر البط"), sort=6,
-             profiles=("layer", "broiler", "breeding")),
+             profiles=("layer", "broiler", "breeding"), incubation=28),
     _species("turkey", "Turkeys", "ديك رومي", OVIPAROUS, "poultry", "group",
              birth=("Hatching", "فقس"), offspring=("Poult", "فرخ"), group=("Flock", "سرب"),
              female=("Hen", "أنثى"), male=("Tom", "ذكر"), sort=7,
-             profiles=("layer", "broiler", "breeding")),
+             profiles=("layer", "broiler", "breeding"), incubation=28),
     _species("other", "Other", "أخرى", UNSPECIFIED, "barn", "either",
              birth=("Birth", "ولادة"), offspring=("Offspring", "صغير"), group=("Group", "مجموعة"),
              female=("Female", "أنثى"), male=("Male", "ذكر"), sort=99),
 )
+
+# Group types (LIVESTOCK-SCHEMA §8): (code, label_en, label_ar, exclusive,
+# allows individual members). A herd, flock, pen or batch is physical —
+# an animal is in one at a time, and joining another moves it. A cohort
+# is analytical ("spring 2026 calves") and overlaps freely.
+GROUP_TYPES: tuple[tuple[str, str, str, bool, bool], ...] = (
+    ("herd", "Herd", "قطيع", True, True),
+    ("flock", "Flock", "سرب", True, True),
+    ("pen", "Pen", "حظيرة", True, True),
+    ("batch", "Batch", "دفعة", True, True),
+    ("cohort", "Cohort", "مجموعة متابعة", False, True),
+)
+
+TRACKING_MODES = ("MEMBERSHIP_DERIVED", "QUANTITY_MANAGED", "HYBRID")
 
 # Breeds this farm's region actually keeps — a starting catalog, not a
 # closed list; the form accepts free text too.

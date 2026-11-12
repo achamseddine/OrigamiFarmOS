@@ -58,6 +58,15 @@ def ensure_reference_data(db: Session) -> None:
             cap.category, cap.label_en, cap.label_ar = category, label_en, label_ar
     db.flush()
 
+    for code, label_en, label_ar, exclusive, individuals in catalog.GROUP_TYPES:
+        policy = db.get(lm.AnimalGroupTypePolicy, code)
+        if policy is None:
+            db.add(lm.AnimalGroupTypePolicy(group_type=code, label_en=label_en, label_ar=label_ar,
+                                            exclusive_membership=exclusive, allows_individual_members=individuals, active=True))
+        else:
+            policy.label_en, policy.label_ar = label_en, label_ar
+    db.flush()
+
     existing_breeds = {(b.species_code, b.name) for b in db.query(lm.Breed).all()}
     for species_code, name, name_ar in catalog.BREEDS:
         if (species_code, name) not in existing_breeds:
@@ -82,11 +91,17 @@ def ensure_reference_data(db: Session) -> None:
     db.flush()
 
 
+_LATER_SPECIES_COLUMNS = frozenset({"gestation_days", "incubation_days"})
+
+
 def migration_rows() -> dict[str, list[dict]]:
     """The catalog as plain dicts keyed by table, ids generated here so the
     migration is one bulk insert per table."""
     return {
-        "species": [dict(r) for r in catalog.SPECIES],
+        # The species columns that migration created. Fields added to the
+        # catalog later (gestation / incubation days) are set by the
+        # migration that added their columns, so this insert keeps working.
+        "species": [{k: v for k, v in r.items() if k not in _LATER_SPECIES_COLUMNS} for r in catalog.SPECIES],
         "life_stages": [
             {"code": c, "species_code": s, "label_en": en, "label_ar": ar, "sort_order": o}
             for c, s, en, ar, o in catalog.LIFE_STAGES

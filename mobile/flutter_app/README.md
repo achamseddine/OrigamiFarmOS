@@ -208,6 +208,12 @@ done is queued as `POST /emergency/offline-runs` with the package signature
 and an operation id; the server re-runs the triage, records the run against
 the version used and lists every difference rather than trusting the device.
 
+### The livestock record
+
+An animal's Digital Twin carries **Reproduction & milking** — pregnant and due, served and waiting for a check, in milk and for how long, with only the actions its resolved capabilities allow, named in the species' own words (Calving, Lambing, Kidding, Foaling) — and **Herd & family**: its groups, recorded dam, sire and offspring, and its status / stage / profile / location history. **Record exit** records a death, a sale or a cull. The full reproductive record opens from "View history", and a newborn not registered at birth is registered from it. The Animals screen shows the herd's reproduction day; every group (from the Animals screen's "View all groups", or a flock card on the Egg screen) opens its members, head-count ledger and, for poultry, the incubator. Pregnancy and milking are records, so the edit form no longer has switches for them; the herd field is a picker of the species' groups. Code: `features/animals/animal_reproduction_section.dart`, `animal_herd_section.dart`, `reproduction_forms.dart`, `providers/herd_records_provider.dart`, `domain/entities/reproduction.dart`.
+
+The Milk and Egg screens read the same provider as Produce & Harvest, which used to load only for Produce staff; it now loads for anyone holding Milk, Eggs or Produce, one list at a time, so a module the user lacks costs them only that list.
+
 ## Data entry
 
 Every module's responsible employee can actually run their area, not just
@@ -397,7 +403,7 @@ The backend's full test suite does run here and passes, including the
 permission, employee, notification, priority, audit, agriculture, feed,
 feed-performance, pharmacy and emergency suites that back these screens.
 The Flutter SDK was later made available in the development session, so
-`flutter analyze` and `flutter test` (176 tests: entity parsing against
+`flutter analyze` and `flutter test` (196 tests: the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
 the bundled snapshot, offline cache effects, visit rules, the offline
 protocol engine against a hand-built package and the bundled farm's real
 one, the entity routes, and the animal care card rendered from the

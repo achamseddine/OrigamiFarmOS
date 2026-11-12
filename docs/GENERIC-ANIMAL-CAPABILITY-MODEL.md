@@ -127,8 +127,12 @@ either an `Animal` or an `AnimalGroup`. Here `AnimalGroup` is the existing
 `management_profile`) and exposed as `/animal-groups`; the polymorphic
 subject is expressed as explicit foreign keys on the record tables rather
 than a `livestock_subject` table. A group resolves capabilities like an
-animal (`sex_composition` → sex), and a species without `GROUP_TRACKING`
-cannot have a group (422).
+animal (`sex_composition` → sex). A group either counts heads or counts
+its registered members (`tracking_mode`, LIVESTOCK-SCHEMA §6): a counted
+flock needs the species' `GROUP_TRACKING`, a herd of registered cows only
+needs its members to be individuals, so a horse cannot be a counted
+group (422) but a pen of mares can be a membership group. See §16 for
+memberships, the head-count ledger and the rest of the livestock record.
 
 ## 8. Dynamic UI
 
@@ -236,11 +240,11 @@ rest. Verified upgrade → downgrade → upgrade against legacy rows.
 | 4 dynamic Add Animal form | done |
 | 5 dynamic animal-profile navigation | done (sections and quick actions gate on capabilities) |
 | 6 identifier validation | done |
-| 7 reproduction events model | **not done** — pregnancy / lactation remain flags on the animal; a `reproduction_events` table (with species terminology) is the next step |
+| 7 reproduction events model | done — breeding events, pregnancy episodes and checks, births with their newborns, lactation episodes; `pregnant` / `lactating` are a projection, never edited (§16) |
 | 8 production gating | done for milk and eggs |
 | 9 unified `production_records` | **not done** — the typed `milk_records` / `egg_records` tables are kept and gated; unifying them is a schema change with no user-visible gain yet |
-| 10 animal groups | done (as extended flocks) |
-| 11 incubation / hatching | **not done** — the capabilities exist and resolve; there is no incubation record type yet |
+| 10 animal groups | done — first-class: effective-dated memberships, group-type policies (exclusive herds/pens, overlapping cohorts), a head-count ledger (§16) |
+| 11 incubation / hatching | done — incubation batches and hatch events, chicks counted into the destination flock's ledger (§16) |
 | 12 admin UI for the catalog | **not done** — species are added by inserting rows (the resolver, the API and the tablet pick them up with no code change, which is what the acceptance test proves) |
 
 ## 14. Acceptance
@@ -257,3 +261,82 @@ resolves identically on the device and the server.
 Behaviour is driven by resolved capabilities, never by hard-coded species
 checks.** The one permitted "check" is the biological invariant table in the
 resolver — and it is keyed on `reproduction_mode` and sex, not on a species.
+
+## 16. The livestock record: history, groups, reproduction
+
+Implemented with migration `b5e7a9c1d3f8` from `database/LIVESTOCK-SCHEMA.md`
+§5–§10, §14, `REPRODUCTION-SCHEMA.md` and `PRODUCTION-SCHEMA.md` §8.
+
+**State history** (`animal_state_history`, `services/livestock_state_service.py`).
+Status (lifecycle), life stage, management profile and location are current
+values on `animals`, but a change to any of them closes the open history
+range and opens a new one first — the edit form, a move and an exit all go
+through `record()`. `GET /animals/{id}/history`.
+
+**Exit** (`POST /animals/{id}/exit`: dead, sold, culled, slaughtered,
+transferred). Behavioural model §14: the animal's group memberships, active
+lactation and pregnancy and its feeding assignments close; a hybrid or
+counted flock it belonged to records the loss in its ledger; milk, feeding
+and reproduction records are refused afterwards; everything recorded before
+stays. A death is recorded by anyone with Animals · edit, the others need
+Animals · approve. An archive is the same workflow; only an archived animal
+can be restored.
+
+**Groups** (`services/group_service.py`). Memberships are effective-dated
+and closed, never deleted; joining another exclusive group is a move.
+`flocks.count` is the number of current members (MEMBERSHIP_DERIVED) or the
+running total of `animal_group_quantity_events` (QUANTITY_MANAGED / HYBRID);
+it is never typed over — an older client's "count = N" becomes a
+COUNT_ADJUSTMENT. `animals.group_name` is the name of the animal's current
+exclusive group, and the feeding resolver inherits a program from that
+membership. A herd name in the edit form must name an existing group of the
+species. `/animal-groups/{id}/members`, `/animal-groups/{id}/quantity-events`,
+`/animal-group-types`.
+
+**Reproduction and lactation** (`services/reproduction_service.py`,
+`api/v1/reproduction.py`). Every action is checked against the resolved
+capabilities (BREEDING, PREGNANCY, LIVE_BIRTH, LACTATION, INCUBATION,
+HATCHING). Pregnancy is never inferred from a mating: a positive check opens
+the episode, dated from the examiner's gestation or the likely service, and
+the species' configured `gestation_days` gives the due date; a negative check
+or a loss ends it. A birth closes the pregnancy, registers each newborn
+marked for it through the normal registration path (so a calf needs its ear
+tag) or counts it into a group, links DAM_OF / SIRE_OF, and starts the dam's
+next lactation where she has the capability — one transaction, refused whole
+if any newborn is refused. A newborn not registered at birth is registered
+later from its birth row. `animals.pregnant`, `pregnancy_days` (computed from
+the conception date at read time), `expected_due_date`, `lactating`,
+`lactation_cycle`, `lactation_started_at` and `dried_off_at` are a projection
+of the episodes; `PUT /animals` refuses to change pregnancy or lactation.
+Every change that moves what the feeding resolver reads raises a feeding
+review and re-reads feed performance. `GET /reproduction/overview` answers
+who is due, who waits for a check, who is in milk and what is in the
+incubator.
+
+**Identifiers.** `GET /animals?search=` matches every identifier an animal
+carries or carried; `GET /animals/lookup?value=` returns every exact match,
+a retired tag flagged — an ambiguity is the person's to resolve.
+
+**Migration.** Existing data becomes the records it stood for: opening state
+history for every animal; a free-text herd name that named no group becomes
+a membership-derived group of that name, with memberships; an existing flock
+with registered members becomes HYBRID, its count an INITIAL_COUNT row;
+`pregnant` and `lactating` become active episodes (`tests/test_livestock_backfill.py`,
+on SQLite and PostgreSQL 16).
+
+**Tablet.** The Digital Twin has a Reproduction & milking card (status, due
+date, last service and check, the lactation, and only the actions that
+apply, in the species' own words — "Calving", "Kidding"), the full
+reproductive record with "Register" on an untagged newborn, a Herd & family
+card (groups, dam, sire, offspring, history, an exited banner), and "Record
+exit". The Animals screen shows the reproduction day; every group opens its
+members, head-count ledger and, for poultry, the incubator. All of it works
+offline and in the standalone build through `cache_effects.dart`.
+
+**Deviations recorded here.** `flocks` remains the AnimalGroup table (no
+separate `code`; the id is identity, the name display). Due and hatch dates
+are `timestamptz` like every date in this schema, not `date`. Quantities stay
+`Float` like the rest of the schema; the move to `numeric` is one
+cross-cutting change, not this one. `lactation_episodes` lives in
+`reproduction_models.py` beside the births that start it, and remains a
+production state read by production and feed.

@@ -14,7 +14,9 @@ from types import ModuleType
 
 MODEL_MODULES: tuple[str, ...] = (
     "app.domain.models",             # farm, users, permissions, animals/flocks, milk, eggs, health, inventory, tasks, events, idempotency
-    "app.domain.livestock_models",   # species, breeds, life stages, management profiles, capability rules, identifiers, animal groups
+    "app.domain.livestock_models",   # species, breeds, life stages, management profiles, capability rules, identifiers,
+                                     # state history, group type policies, memberships, quantity events, relationships
+    "app.domain.reproduction_models", # breeding, pregnancy episodes and checks, births and offspring, lactations, incubation and hatch
     "app.domain.feed_models",        # feed products, lots, formulas, numbered mixes, programs, feeding events, forecasts, performance intelligence
     "app.domain.mouneh_models",      # Mouneh module
     "app.domain.visits_models",      # Farm visits & agri-tourism module

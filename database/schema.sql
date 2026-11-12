@@ -25,7 +25,17 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 122 tables, 28 secondary indexes.
+-- 135 tables, 39 secondary indexes.
+
+CREATE TABLE animal_group_type_policies (
+    group_type VARCHAR(30) NOT NULL,
+    label_en VARCHAR(80) NOT NULL,
+    label_ar VARCHAR(80) NOT NULL,
+    exclusive_membership BOOLEAN NOT NULL,
+    allows_individual_members BOOLEAN NOT NULL,
+    active BOOLEAN NOT NULL,
+    PRIMARY KEY (group_type)
+);
 
 CREATE TABLE capabilities (
     code VARCHAR(40) NOT NULL,
@@ -101,6 +111,8 @@ CREATE TABLE species (
     profiles_json JSON,
     active BOOLEAN NOT NULL,
     sort_order INTEGER NOT NULL,
+    gestation_days INTEGER,
+    incubation_days INTEGER,
     PRIMARY KEY (code)
 );
 
@@ -613,6 +625,10 @@ CREATE TABLE animals (
     current_value FLOAT,
     notes TEXT,
     active BOOLEAN NOT NULL,
+    lifecycle_status VARCHAR(20) NOT NULL,
+    exited_at TIMESTAMP WITH TIME ZONE,
+    pregnancy_started_at TIMESTAMP WITH TIME ZONE,
+    expected_due_date TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (id),
@@ -778,6 +794,8 @@ CREATE TABLE flocks (
     status VARCHAR(30) NOT NULL,
     location_id VARCHAR(36),
     location_label VARCHAR(200),
+    tracking_mode VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(species) REFERENCES species (code),
@@ -1030,6 +1048,48 @@ CREATE TABLE visit_staff_roster (
     FOREIGN KEY(worker_id) REFERENCES users (id)
 );
 
+CREATE TABLE animal_group_memberships (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    animal_group_id VARCHAR(36) NOT NULL,
+    animal_id VARCHAR(36) NOT NULL,
+    valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
+    valid_to TIMESTAMP WITH TIME ZONE,
+    reason_code VARCHAR(80),
+    end_reason_code VARCHAR(80),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_by VARCHAR(36),
+    ended_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_animal_group_membership_range CHECK (valid_to IS NULL OR valid_to >= valid_from),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(animal_group_id) REFERENCES flocks (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_animal_group_memberships_animal ON animal_group_memberships (animal_id, valid_from);
+CREATE INDEX ix_animal_group_memberships_group ON animal_group_memberships (animal_group_id, valid_from);
+
+CREATE TABLE animal_group_quantity_events (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    animal_group_id VARCHAR(36) NOT NULL,
+    event_type VARCHAR(30) NOT NULL,
+    quantity_delta INTEGER NOT NULL,
+    resulting_quantity INTEGER NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    reason VARCHAR(200),
+    source_type VARCHAR(40),
+    source_id VARCHAR(36),
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    correlation_id VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_animal_group_quantity_non_negative CHECK (resulting_quantity >= 0),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(animal_group_id) REFERENCES flocks (id)
+);
+CREATE INDEX ix_animal_group_quantity_events_group ON animal_group_quantity_events (animal_group_id, occurred_at);
+
 CREATE TABLE animal_health_conditions (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -1067,6 +1127,48 @@ CREATE TABLE animal_identifiers (
 CREATE INDEX ix_animal_identifiers_animal ON animal_identifiers (animal_id);
 CREATE INDEX ix_animal_identifiers_lookup ON animal_identifiers (identifier_type, identifier_value);
 
+CREATE TABLE animal_relationships (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    source_animal_id VARCHAR(36) NOT NULL,
+    target_animal_id VARCHAR(36) NOT NULL,
+    relationship_type VARCHAR(30) NOT NULL,
+    confidence_code VARCHAR(30) NOT NULL,
+    evidence_type VARCHAR(40),
+    evidence_id VARCHAR(36),
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_animal_relationship_not_self CHECK (source_animal_id <> target_animal_id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(source_animal_id) REFERENCES animals (id),
+    FOREIGN KEY(target_animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_animal_relationships_source ON animal_relationships (source_animal_id, relationship_type);
+CREATE INDEX ix_animal_relationships_target ON animal_relationships (target_animal_id, relationship_type);
+
+CREATE TABLE animal_state_history (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    animal_id VARCHAR(36) NOT NULL,
+    state_type VARCHAR(40) NOT NULL,
+    value_code VARCHAR(200),
+    value_reference_id VARCHAR(36),
+    effective_from TIMESTAMP WITH TIME ZONE NOT NULL,
+    effective_to TIMESTAMP WITH TIME ZONE,
+    reason_code VARCHAR(80),
+    source_type VARCHAR(40),
+    source_id VARCHAR(36),
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_animal_state_history_range CHECK (effective_to IS NULL OR effective_to >= effective_from),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_animal_state_history_animal ON animal_state_history (animal_id, state_type, effective_from);
+
 CREATE TABLE animal_weight_records (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -1084,6 +1186,29 @@ CREATE TABLE animal_weight_records (
     FOREIGN KEY(animal_id) REFERENCES animals (id)
 );
 CREATE INDEX ix_animal_weight_records_animal ON animal_weight_records (animal_id, measured_at);
+
+CREATE TABLE breeding_events (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    female_animal_id VARCHAR(36) NOT NULL,
+    male_animal_id VARCHAR(36),
+    sire_reference VARCHAR(120),
+    event_type VARCHAR(40) NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    semen_batch_reference VARCHAR(120),
+    technician_user_id VARCHAR(36),
+    status VARCHAR(20) NOT NULL,
+    void_reason VARCHAR(200),
+    notes TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    correlation_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(female_animal_id) REFERENCES animals (id),
+    FOREIGN KEY(male_animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_breeding_events_female ON breeding_events (female_animal_id, occurred_at);
 
 CREATE TABLE egg_records (
     id VARCHAR(36) NOT NULL,
@@ -1169,6 +1294,27 @@ CREATE TABLE health_cases (
     FOREIGN KEY(animal_group_id) REFERENCES flocks (id)
 );
 CREATE INDEX ix_health_cases_subject ON health_cases (farm_id, animal_id, animal_group_id);
+
+CREATE TABLE incubation_batches (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    species_code VARCHAR(30) NOT NULL,
+    source_group_id VARCHAR(36),
+    code VARCHAR(60) NOT NULL,
+    eggs_set INTEGER NOT NULL,
+    set_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    expected_hatch_date TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_incubation_batch_code UNIQUE (farm_id, code),
+    CONSTRAINT ck_incubation_eggs_set_positive CHECK (eggs_set > 0),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(species_code) REFERENCES species (code),
+    FOREIGN KEY(source_group_id) REFERENCES flocks (id)
+);
 
 CREATE TABLE inventory_lots (
     id VARCHAR(36) NOT NULL,
@@ -1634,6 +1780,23 @@ CREATE TABLE finished_goods_stock (
     FOREIGN KEY(batch_id) REFERENCES production_batches (id)
 );
 
+CREATE TABLE hatch_events (
+    id VARCHAR(36) NOT NULL,
+    incubation_batch_id VARCHAR(36) NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    hatched_live INTEGER NOT NULL,
+    unhatched INTEGER,
+    culled INTEGER,
+    destination_group_id VARCHAR(36),
+    notes TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_hatch_live_non_negative CHECK (hatched_live >= 0),
+    FOREIGN KEY(incubation_batch_id) REFERENCES incubation_batches (id),
+    FOREIGN KEY(destination_group_id) REFERENCES flocks (id)
+);
+
 CREATE TABLE inventory_reservations (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -1792,6 +1955,28 @@ CREATE TABLE pharmacy_stock_policies (
     FOREIGN KEY(preferred_supplier_id) REFERENCES suppliers (id)
 );
 
+CREATE TABLE pregnancy_episodes (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    animal_id VARCHAR(36) NOT NULL,
+    originating_breeding_event_id VARCHAR(36),
+    status VARCHAR(20) NOT NULL,
+    estimated_conception_at TIMESTAMP WITH TIME ZONE,
+    expected_due_date TIMESTAMP WITH TIME ZONE,
+    ended_at TIMESTAMP WITH TIME ZONE,
+    outcome_code VARCHAR(30),
+    source VARCHAR(20) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_by VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id),
+    FOREIGN KEY(originating_breeding_event_id) REFERENCES breeding_events (id)
+);
+CREATE INDEX ix_pregnancy_episodes_animal ON pregnancy_episodes (animal_id, status);
+
 CREATE TABLE protocol_medication_steps (
     protocol_step_id VARCHAR(36) NOT NULL,
     medicine_product_id VARCHAR(36) NOT NULL,
@@ -1871,6 +2056,32 @@ CREATE TABLE visit_booking_activities (
     FOREIGN KEY(booking_id) REFERENCES visit_bookings (id),
     FOREIGN KEY(activity_id) REFERENCES visit_activities (id)
 );
+
+CREATE TABLE birth_events (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    dam_animal_id VARCHAR(36) NOT NULL,
+    pregnancy_episode_id VARCHAR(36),
+    sire_animal_id VARCHAR(36),
+    sire_reference VARCHAR(120),
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    assistance_code VARCHAR(20) NOT NULL,
+    offspring_count INTEGER NOT NULL,
+    live_count INTEGER NOT NULL,
+    stillborn_count INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    notes TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_birth_counts_non_negative CHECK (offspring_count >= 0 AND live_count >= 0 AND stillborn_count >= 0),
+    CONSTRAINT ck_birth_counts_add_up CHECK (live_count + stillborn_count <= offspring_count),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(dam_animal_id) REFERENCES animals (id),
+    FOREIGN KEY(pregnancy_episode_id) REFERENCES pregnancy_episodes (id),
+    FOREIGN KEY(sire_animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_birth_events_dam ON birth_events (dam_animal_id, occurred_at);
 
 CREATE TABLE emergency_protocol_runs (
     id VARCHAR(36) NOT NULL,
@@ -1973,6 +2184,27 @@ CREATE TABLE mouneh_sale_lines (
     FOREIGN KEY(customer_id) REFERENCES customers (id)
 );
 
+CREATE TABLE pregnancy_assessments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    pregnancy_episode_id VARCHAR(36),
+    animal_id VARCHAR(36) NOT NULL,
+    assessed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    assessment_type VARCHAR(30) NOT NULL,
+    result_code VARCHAR(20) NOT NULL,
+    estimated_gestation_days INTEGER,
+    expected_due_date TIMESTAMP WITH TIME ZONE,
+    examiner_user_id VARCHAR(36),
+    notes TEXT,
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(pregnancy_episode_id) REFERENCES pregnancy_episodes (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id)
+);
+CREATE INDEX ix_pregnancy_assessments_animal ON pregnancy_assessments (animal_id, assessed_at);
+
 CREATE TABLE protocol_matches (
     id VARCHAR(36) NOT NULL,
     emergency_assessment_id VARCHAR(36) NOT NULL,
@@ -2011,6 +2243,23 @@ CREATE TABLE treatments (
     FOREIGN KEY(medicine_product_id) REFERENCES medicine_products (inventory_item_id),
     FOREIGN KEY(health_case_id) REFERENCES health_cases (id),
     FOREIGN KEY(treatment_plan_id) REFERENCES treatment_plans (id)
+);
+
+CREATE TABLE birth_offspring (
+    id VARCHAR(36) NOT NULL,
+    birth_event_id VARCHAR(36) NOT NULL,
+    offspring_animal_id VARCHAR(36),
+    sequence_no INTEGER NOT NULL,
+    sex VARCHAR(5),
+    birth_weight_kg FLOAT,
+    outcome_code VARCHAR(20) NOT NULL,
+    destination_group_id VARCHAR(36),
+    notes TEXT,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_birth_offspring_sequence UNIQUE (birth_event_id, sequence_no),
+    FOREIGN KEY(birth_event_id) REFERENCES birth_events (id),
+    FOREIGN KEY(offspring_animal_id) REFERENCES animals (id),
+    FOREIGN KEY(destination_group_id) REFERENCES flocks (id)
 );
 
 CREATE TABLE feed_batches (
@@ -2065,6 +2314,28 @@ CREATE TABLE feed_formula_components (
     FOREIGN KEY(version_id) REFERENCES feed_formula_versions (id),
     FOREIGN KEY(feed_product_id) REFERENCES feed_products (id)
 );
+
+CREATE TABLE lactation_episodes (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    animal_id VARCHAR(36) NOT NULL,
+    birth_event_id VARCHAR(36),
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    ended_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) NOT NULL,
+    lactation_number INTEGER,
+    end_reason_code VARCHAR(30),
+    source VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_by VARCHAR(36),
+    ended_by VARCHAR(36),
+    PRIMARY KEY (id),
+    CONSTRAINT ck_lactation_range CHECK (ended_at IS NULL OR ended_at >= started_at),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id),
+    FOREIGN KEY(birth_event_id) REFERENCES birth_events (id)
+);
+CREATE INDEX ix_lactation_episodes_animal ON lactation_episodes (animal_id, status);
 
 CREATE TABLE medication_administrations (
     id VARCHAR(36) NOT NULL,

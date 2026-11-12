@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -54,6 +54,11 @@ class Species(Base):
     profiles_json: Mapped[list | None] = mapped_column(JSON, default=list, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=100)
+    # Reproduction configuration (REPRODUCTION-SCHEMA): how long a
+    # pregnancy or an incubation normally lasts, so an expected due or
+    # hatch date is configuration for a new species, not code.
+    gestation_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    incubation_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Breed(Base):
@@ -151,3 +156,129 @@ class AnimalIdentifier(Base):
     status: Mapped[str] = mapped_column(String(20), default="active")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+# --------------------------------------------------------------------------
+# Livestock history (database/LIVESTOCK-SCHEMA.md §5–§10)
+# --------------------------------------------------------------------------
+class AnimalStateHistory(Base):
+    """Effective-dated master state (LIVESTOCK-SCHEMA §5, §14). The current
+    value stays on `animals` for operational reads; this is the history a
+    change must write first — a status, stage, profile or location is never
+    changed on the animal alone. Ranges for one animal and state type never
+    overlap: the service closes the open one before opening the next."""
+
+    __tablename__ = "animal_state_history"
+    __table_args__ = (
+        Index("ix_animal_state_history_animal", "animal_id", "state_type", "effective_from"),
+        CheckConstraint("effective_to IS NULL OR effective_to >= effective_from", name="ck_animal_state_history_range"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    animal_id: Mapped[str] = mapped_column(String(36), ForeignKey("animals.id"))
+    # STATUS (lifecycle) | LIFE_STAGE | MANAGEMENT_PROFILE | LOCATION
+    state_type: Mapped[str] = mapped_column(String(40))
+    value_code: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    value_reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class AnimalGroupTypePolicy(Base):
+    """What a kind of group allows (LIVESTOCK-SCHEMA §8): a physical herd or
+    pen is exclusive — joining another closes the first — while an
+    analytical cohort may overlap with anything."""
+
+    __tablename__ = "animal_group_type_policies"
+
+    group_type: Mapped[str] = mapped_column(String(30), primary_key=True)
+    label_en: Mapped[str] = mapped_column(String(80))
+    label_ar: Mapped[str] = mapped_column(String(80))
+    exclusive_membership: Mapped[bool] = mapped_column(Boolean, default=True)
+    allows_individual_members: Mapped[bool] = mapped_column(Boolean, default=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AnimalGroupMembership(Base):
+    """An animal's time in a group (LIVESTOCK-SCHEMA §7). Closed, never
+    deleted: leaving a herd sets `valid_to`, so a question about who was in
+    it last spring still has an answer."""
+
+    __tablename__ = "animal_group_memberships"
+    __table_args__ = (
+        Index("ix_animal_group_memberships_group", "animal_group_id", "valid_from"),
+        Index("ix_animal_group_memberships_animal", "animal_id", "valid_from"),
+        CheckConstraint("valid_to IS NULL OR valid_to >= valid_from", name="ck_animal_group_membership_range"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    animal_group_id: Mapped[str] = mapped_column(String(36), ForeignKey("flocks.id"))
+    animal_id: Mapped[str] = mapped_column(String(36), ForeignKey("animals.id"))
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    end_reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    ended_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class AnimalGroupQuantityEvent(Base):
+    """The head-count ledger of a quantity-managed or hybrid group
+    (LIVESTOCK-SCHEMA §9). `flocks.count` is the latest `resulting_quantity`
+    — a projection of these rows, never typed over."""
+
+    __tablename__ = "animal_group_quantity_events"
+    __table_args__ = (
+        Index("ix_animal_group_quantity_events_group", "animal_group_id", "occurred_at"),
+        CheckConstraint("resulting_quantity >= 0", name="ck_animal_group_quantity_non_negative"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    animal_group_id: Mapped[str] = mapped_column(String(36), ForeignKey("flocks.id"))
+    # INITIAL_COUNT | ADDITION | REMOVAL | BIRTH | HATCH | DEATH | SALE |
+    # PURCHASE | TRANSFER_IN | TRANSFER_OUT | CULL | COUNT_ADJUSTMENT
+    event_type: Mapped[str] = mapped_column(String(30))
+    quantity_delta: Mapped[int] = mapped_column(Integer)
+    resulting_quantity: Mapped[int] = mapped_column(Integer)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    correlation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+
+
+class AnimalRelationship(Base):
+    """Parentage and other animal-to-animal links (LIVESTOCK-SCHEMA §10).
+    Written by a recorded birth, or entered for an animal bought in with
+    known parents; either way it names its evidence."""
+
+    __tablename__ = "animal_relationships"
+    __table_args__ = (
+        Index("ix_animal_relationships_source", "source_animal_id", "relationship_type"),
+        Index("ix_animal_relationships_target", "target_animal_id", "relationship_type"),
+        CheckConstraint("source_animal_id <> target_animal_id", name="ck_animal_relationship_not_self"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    # DAM_OF | SIRE_OF | FOSTER_DAM_OF — source is the parent, target the offspring.
+    source_animal_id: Mapped[str] = mapped_column(String(36), ForeignKey("animals.id"))
+    target_animal_id: Mapped[str] = mapped_column(String(36), ForeignKey("animals.id"))
+    relationship_type: Mapped[str] = mapped_column(String(30))
+    confidence_code: Mapped[str] = mapped_column(String(30), default="recorded")
+    evidence_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    evidence_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

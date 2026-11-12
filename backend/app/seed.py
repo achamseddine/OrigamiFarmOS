@@ -34,6 +34,7 @@ from app.platform.units import ensure_units
 from app.feeding.seed import seed_feed_demo_data
 from app.pharmacy.seed import seed_pharmacy_demo_data
 from app.emergency.seed import seed_emergency_demo_data
+from app.livestock.seed import seed_livestock_demo_data
 from app.livestock.reference import ensure_reference_data
 from app.mouneh.seed import seed_mouneh_demo_data
 from app.repositories.base import new_id
@@ -145,7 +146,7 @@ def seed_demo_data(db: Session) -> None:
              birth_years=5, status="healthy", location_label="North Pasture", health_score=92,
              lactating=True, group_name="Dairy Herd"),
         dict(id="goat-189", tag="189", name="Rasha", species="goat", breed="Baladi", sex="F",
-             birth_years=3, status="under_treatment", location_label="North Pasture", health_score=58, group_name="Dairy Herd"),
+             birth_years=3, status="under_treatment", location_label="North Pasture", health_score=58, group_name="Goat Group B"),
         dict(id="goat-g032", tag="G-032", name="Mira", species="goat", breed="Damascus", sex="F",
              birth_years=2, status="under_observation", location_label="Hillside Paddock", health_score=76, group_name="Goat Group B"),
         dict(id="sheep-s045", tag="S-045", name="Daisy", species="sheep", breed="Awassi", sex="F",
@@ -390,6 +391,9 @@ def seed_demo_data(db: Session) -> None:
     # Feed products, formulas, a mixed batch, programs and a week of
     # feedings — built on the inventory items and animals seeded above.
     seed_feed_demo_data(db, FARM_ID)
+    # The herds as groups with memberships, the flocks' head-count ledgers,
+    # and the reproduction and lactation records behind the animals' state.
+    seed_livestock_demo_data(db, FARM_ID)
     seed_pharmacy_demo_data(db, FARM_ID)
     seed_emergency_demo_data(db, FARM_ID)
     seed_mouneh_demo_data(db, FARM_ID)
