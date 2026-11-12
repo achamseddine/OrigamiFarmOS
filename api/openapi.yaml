@@ -886,7 +886,10 @@ paths:
 
         §12). The tablet writes this straight into SQLite on first login /
 
-        when activating demo mode, per the offline-first flow in §10.'
+        when activating demo mode, per the offline-first flow in §10.
+
+
+        Only the caller''s own farm, and never a password hash.'
       operationId: bootstrap_api_v1_farms__farm_id__bootstrap_get
       security:
       - HTTPBearer: []
@@ -979,12 +982,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: cursor
         in: query
         required: false
@@ -1003,6 +1000,12 @@ paths:
           maximum: 500
           default: 100
           title: Limit
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -1156,12 +1159,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: species
         in: query
         required: false
@@ -1186,6 +1183,12 @@ paths:
           - type: string
           - type: 'null'
           title: Search
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7057,12 +7060,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: entity_type
         in: query
         required: false
@@ -7079,6 +7076,12 @@ paths:
           - type: string
           - type: 'null'
           title: Entity Id
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7105,7 +7108,16 @@ paths:
 
         this endpoint cannot be used to smuggle one in regardless of caller
 
-        role.'
+        role.
+
+
+        The farm, the subject and the observer must all be the caller''s own:
+
+        an observation is evidence the emergency engine and the health case
+
+        act on, so it cannot be planted on another farm''s animal or in
+
+        another farm''s staff member''s name.'
       operationId: create_observation_api_v1_observations_post
       security:
       - HTTPBearer: []
@@ -7137,12 +7149,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: status_filter
         in: query
         required: false
@@ -7159,6 +7165,12 @@ paths:
           - type: string
           - type: 'null'
           title: Assigned To
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7308,12 +7320,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7323,6 +7329,12 @@ paths:
           minimum: 1
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7417,12 +7429,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7430,6 +7436,12 @@ paths:
           type: integer
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7490,12 +7502,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7503,6 +7509,12 @@ paths:
           type: integer
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7559,12 +7571,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7572,6 +7578,12 @@ paths:
           type: integer
           default: 90
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7705,12 +7717,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: category
         in: query
         required: false
@@ -7734,6 +7740,12 @@ paths:
           type: boolean
           default: true
           title: Refresh
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response

@@ -142,6 +142,106 @@ def require_permission(module_code: str, action: str = perms.VIEW):
     return _check
 
 
+def _module_labels(module_codes: tuple[str, ...]) -> str:
+    return " or ".join(perms.MODULES_BY_CODE[c].label_en for c in module_codes)
+
+
+def ensure_any_permission(db: Session, user: models.User, module_codes: tuple[str, ...], action: str = perms.VIEW) -> None:
+    """In-body form of [require_any_permission], for a check that depends
+    on the request (an observation on a field needs Agriculture, one on an
+    animal needs Animals or Animal Health)."""
+    if not any(user_can(db, user, code, action) for code in module_codes):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"You do not have permission to {action} in {_module_labels(module_codes)}. Ask a farm manager to grant it.",
+        )
+
+
+def require_any_permission(*module_codes: str, action: str = perms.VIEW):
+    """Endpoint gate satisfied by holding `action` on any one of
+    `module_codes`.
+
+    Used where the same records legitimately appear on more than one
+    module's screens — expenses belong to Expenses and to Finance — and
+    where the tablet loads several endpoints in one batch behind one
+    module (its `ProductionProvider` fetches milk, eggs, fields and harvest
+    together for whoever holds Produce & Harvest). Each such list is
+    stated at the endpoint, next to the data it guards.
+    """
+    for code in module_codes:
+        if code not in perms.MODULES_BY_CODE:
+            raise ValueError(f"Unknown module '{code}'")
+    if action not in perms.ACTIONS:
+        raise ValueError(f"Unknown action '{action}'")
+
+    def _check(
+        current_user: models.User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> models.User:
+        ensure_any_permission(db, current_user, module_codes, action)
+        return current_user
+
+    return _check
+
+
+# ---------------------------------------------------------------------------
+# Farm scope (SECURITY-ARCHITECTURE: "explicit farm/site scope ... for every
+# mutation"; BEHAVIORAL-MODEL §19: "Every command validates principal,
+# farm/site scope, permission/role ...")
+# ---------------------------------------------------------------------------
+NOT_YOUR_FARM = "You can only work with your own farm's records."
+
+
+def ensure_own_farm(user: models.User, farm_id: str | None) -> str:
+    """A farm id the client sent — in a query string, a path or a request
+    body — must be the caller's own farm. A token for one farm never reads
+    or writes another, whatever id the request names. Returns the farm the
+    request is scoped to."""
+    if farm_id is not None and farm_id != user.farm_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, NOT_YOUR_FARM)
+    return user.farm_id
+
+
+def require_farm_access(*module_codes: str, action: str = perms.VIEW):
+    """Endpoint gate for the routes that take `farm_id` from the client:
+    the farm must be the caller's own, and — when `module_codes` is given —
+    the caller must hold `action` on at least one of them. The route then
+    reads the farm from the returned user, never from the request.
+
+    Declares `farm_id` itself, so the contract is unchanged: it is still a
+    required query parameter (or the path segment, for
+    `/farms/{farm_id}/...`).
+    """
+    module_check = require_any_permission(*module_codes, action=action) if module_codes else get_current_user
+
+    def _check(farm_id: str, current_user: models.User = Depends(module_check)) -> models.User:
+        ensure_own_farm(current_user, farm_id)
+        return current_user
+
+    return _check
+
+
+def owned_or_404(db: Session, model, entity_id: str | None, user: models.User, label: str):
+    """Loads a farm-owned row named by id in the request. Another farm's
+    row answers exactly like a missing one, so an id from elsewhere reveals
+    nothing about that farm."""
+    obj = db.get(model, entity_id) if entity_id else None
+    if obj is None or getattr(obj, "farm_id", None) != user.farm_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{label} not found")
+    return obj
+
+
+def ensure_farm_user(db: Session, user: models.User, user_id: str | None, role: str) -> None:
+    """A person named in a request body (the observer, the recorder) must
+    be someone on the caller's own farm — a record can be entered on a
+    colleague's behalf, never attributed to another farm's staff."""
+    if user_id is None or user_id == user.id:
+        return
+    named = db.get(models.User, user_id)
+    if named is None or named.farm_id != user.farm_id:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"The {role} must be someone on this farm.")
+
+
 LICENSE_ACTIVE_STATUSES = {"active", "trial"}
 
 

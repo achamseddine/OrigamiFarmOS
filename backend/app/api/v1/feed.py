@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import owned_or_404, require_any_permission, require_farm_access
+from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import feed_models as fm
 from app.domain import models
@@ -16,6 +17,11 @@ from app.schemas.feeding import InventoryMovementOut
 from app.services import feed_inventory_service as inv
 
 router = APIRouter(prefix="/feed", tags=["feed"])
+
+# The Feed & Inventory screen, and the record sheet's feed action, are
+# offered to whoever holds either module.
+_STOCK_VIEW = require_farm_access(perms.FEED_NUTRITION, perms.INVENTORY)
+_STOCK_CREATE = require_any_permission(perms.FEED_NUTRITION, perms.INVENTORY, action=perms.CREATE)
 
 # Inventory categories that are stock but not feed: they keep the plain
 # item ledger and never become feed products or lots.
@@ -27,13 +33,13 @@ def _is_feed(item: models.InventoryItem) -> bool:
 
 
 @router.get("/items", response_model=list[InventoryItemOut])
-def list_inventory_items(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.InventoryItem]:
-    return list(db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == farm_id).order_by(models.InventoryItem.name)))
+def list_inventory_items(db: Session = Depends(get_db), user: models.User = Depends(_STOCK_VIEW)) -> list[models.InventoryItem]:
+    return list(db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == user.farm_id).order_by(models.InventoryItem.name)))
 
 
 @router.get("/transactions", response_model=list[InventoryMovementOut])
 def list_feed_transactions(
-    farm_id: str, days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)
+    days: int = Query(30, ge=1, le=365), db: Session = Depends(get_db), user: models.User = Depends(_STOCK_VIEW)
 ) -> list[dict]:
     """The movement history behind the feed screen's "recent movements":
     newest first, each with the lot it belongs to."""
@@ -42,7 +48,7 @@ def list_feed_transactions(
         select(models.InventoryTransaction, fm.FeedProduct.id)
         .join(models.InventoryItem, models.InventoryItem.id == models.InventoryTransaction.item_id)
         .outerjoin(fm.FeedProduct, fm.FeedProduct.inventory_item_id == models.InventoryItem.id)
-        .where(models.InventoryItem.farm_id == farm_id, models.InventoryTransaction.created_at >= since)
+        .where(models.InventoryItem.farm_id == user.farm_id, models.InventoryTransaction.created_at >= since)
         .order_by(models.InventoryTransaction.created_at.desc())
     ).all()
     return [
@@ -57,7 +63,7 @@ def list_feed_transactions(
 
 @router.post("/transactions", response_model=InventoryItemOut, status_code=status.HTTP_201_CREATED)
 def create_feed_transaction(
-    payload: FeedTransactionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
+    payload: FeedTransactionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_STOCK_CREATE)
 ) -> models.InventoryItem:
     """Validation rule (tech spec §14): "Inventory should not go negative
     without explicit override."
@@ -67,9 +73,7 @@ def create_feed_transaction(
     and either way the movement names its lot. Non-feed stock (medicine)
     keeps the plain item ledger.
     """
-    item = db.get(models.InventoryItem, payload.item_id)
-    if item is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Inventory item not found")
+    item = owned_or_404(db, models.InventoryItem, payload.item_id, current_user, "Inventory item")
 
     if _is_feed(item):
         product = inv.ensure_product_for_item(db, item, created_by=current_user.id)
@@ -80,7 +84,7 @@ def create_feed_transaction(
             inv.consume(
                 db, product, payload.quantity, payload.unit, reason=payload.reason or "feeding",
                 linked_entity_type=payload.linked_entity_type or "inventory_item", linked_entity_id=payload.linked_entity_id or item.id,
-                purpose=_purpose_for(db, payload), allow_negative=payload.allow_negative, user_id=current_user.id,
+                purpose=_purpose_for(db, payload, item.farm_id), allow_negative=payload.allow_negative, user_id=current_user.id,
             )
         db.commit()
         db.refresh(item)
@@ -109,15 +113,15 @@ def create_feed_transaction(
     return item
 
 
-def _purpose_for(db: Session, payload: FeedTransactionCreate) -> inv.Purpose | None:
+def _purpose_for(db: Session, payload: FeedTransactionCreate, farm_id: str) -> inv.Purpose | None:
     """A distribution linked to an animal is issued *for* that animal, so
     stock reserved for its species or group can be drawn on."""
     if payload.linked_entity_type == "animal" and payload.linked_entity_id:
         animal = db.get(models.Animal, payload.linked_entity_id)
-        if animal is not None:
+        if animal is not None and animal.farm_id == farm_id:
             return inv.Purpose(species_code=animal.species, subject_type="animal", subject_id=animal.id, label=animal.name)
     if payload.linked_entity_type in ("group", "flock") and payload.linked_entity_id:
         group = db.get(models.Flock, payload.linked_entity_id)
-        if group is not None:
+        if group is not None and group.farm_id == farm_id:
             return inv.Purpose(species_code=group.species, subject_type="group", subject_id=group.id, label=group.name)
     return None

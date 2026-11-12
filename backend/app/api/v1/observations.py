@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import ensure_any_permission, ensure_farm_user, ensure_own_farm, get_current_user, owned_or_404, require_farm_access
+from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import new_id, now, write_event
@@ -14,12 +15,22 @@ from app.services import health_case_service as cases
 
 router = APIRouter(prefix="/observations", tags=["observations"])
 
+# What an observation is about decides who may record it: the record
+# sheet offers "observe" to Animals and Animal Health; a field belongs to
+# Agriculture.
+_SUBJECTS = {
+    "animal": (models.Animal, "Animal", (perms.ANIMALS, perms.ANIMAL_HEALTH)),
+    "flock": (models.Flock, "Flock", (perms.ANIMALS, perms.ANIMAL_HEALTH)),
+    "field": (models.Field, "Field", (perms.AGRICULTURE, perms.PRODUCE_HARVEST)),
+}
+_OBSERVATIONS_VIEW = require_farm_access(perms.ANIMALS, perms.ANIMAL_HEALTH, perms.AGRICULTURE)
+
 
 @router.get("", response_model=list[ObservationOut])
 def list_observations(
-    farm_id: str, entity_type: str | None = None, entity_id: str | None = None, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)
+    entity_type: str | None = None, entity_id: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_OBSERVATIONS_VIEW)
 ) -> list[models.Observation]:
-    stmt = select(models.Observation).where(models.Observation.farm_id == farm_id)
+    stmt = select(models.Observation).where(models.Observation.farm_id == user.farm_id)
     if entity_type:
         stmt = stmt.where(models.Observation.entity_type == entity_type)
     if entity_id:
@@ -35,7 +46,17 @@ def create_observation(
     diagnose." [ObservationCreate] structurally has no diagnosis field, so
     this endpoint cannot be used to smuggle one in regardless of caller
     role.
+
+    The farm, the subject and the observer must all be the caller's own:
+    an observation is evidence the emergency engine and the health case
+    act on, so it cannot be planted on another farm's animal or in
+    another farm's staff member's name.
     """
+    ensure_own_farm(current_user, payload.farm_id)
+    model, label, modules = _SUBJECTS[payload.entity_type]
+    ensure_any_permission(db, current_user, modules, perms.CREATE)
+    owned_or_404(db, model, payload.entity_id, current_user, label)
+    ensure_farm_user(db, current_user, payload.observer_id, "observer")
     observation = models.Observation(
         id=new_id(),
         farm_id=payload.farm_id,

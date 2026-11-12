@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import ensure_own_farm, get_current_user, require_farm_access
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import new_id, write_event
@@ -36,6 +36,7 @@ def push(payload: SyncPushRequest, db: Session = Depends(get_db), current_user: 
     queued/event-logged, ready for a same-shaped repository call to be
     added — see README "What remains".
     """
+    ensure_own_farm(current_user, payload.farm_id)
     results: list[SyncItemResult] = []
 
     for item in payload.items:
@@ -85,7 +86,7 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
     payload = item.payload
 
     if item.entity_type == "task" and "status" in payload:
-        task = db.get(models.Task, item.entity_id)
+        task = _own(db, models.Task, item.entity_id, farm_id)
         if task is not None:
             task.status = payload["status"]
         return
@@ -95,6 +96,8 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
         # not a milk-record id — each push item is a new, immutable milk
         # entry, so it always gets a fresh row. Duplicate delivery of the
         # same batch is already handled by the idempotency_key check above.
+        if _own(db, models.Animal, item.entity_id, farm_id) is None:
+            raise ValueError("Animal not found on this farm")
         db.add(
             models.MilkRecord(
                 id=new_id(),
@@ -109,7 +112,7 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
         return
 
     if item.entity_type == "inventory_item" and {"direction", "quantity"} <= payload.keys():
-        target = db.get(models.InventoryItem, item.entity_id)
+        target = _own(db, models.InventoryItem, item.entity_id, farm_id)
         if target is not None:
             delta = -payload["quantity"] if payload["direction"] == "out" else payload["quantity"]
             target.current_qty = max(target.current_qty + delta, 0)
@@ -119,16 +122,24 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
     # this build — see the docstring on `push`.
 
 
+def _own(db: Session, model, entity_id: str, farm_id: str):
+    """The row, if it exists on this farm. Another farm's row is refused
+    rather than skipped, so the item is reported back as rejected."""
+    row = db.get(model, entity_id)
+    if row is not None and row.farm_id != farm_id:
+        raise ValueError(f"{model.__name__} not found on this farm")
+    return row
+
+
 @router.get("/pull", response_model=SyncPullResponse)
 def pull(
-    farm_id: str,
     cursor: str | None = Query(None, description="ISO-8601 timestamp; events after this are returned"),
     limit: int = Query(100, le=500),
     db: Session = Depends(get_db),
-    _user: models.User = Depends(get_current_user),
+    user: models.User = Depends(require_farm_access()),
 ) -> SyncPullResponse:
     """GET /sync/pull — changes since `cursor` (tech spec §12)."""
-    stmt = select(models.Event).where(models.Event.farm_id == farm_id)
+    stmt = select(models.Event).where(models.Event.farm_id == user.farm_id)
     if cursor:
         try:
             cursor_dt = datetime.fromisoformat(cursor)
