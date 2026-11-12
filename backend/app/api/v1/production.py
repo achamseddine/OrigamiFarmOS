@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
 from app.services import capability_service, feed_performance_service, feeding_program_service
-from app.api.deps import get_current_user
+from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access
+from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_event
@@ -16,58 +17,69 @@ from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, Harv
 
 router = APIRouter(prefix="/production", tags=["production"])
 
+# Reads: the record's own module, plus Produce & Harvest — the tablet's
+# ProductionProvider loads fields, milk, eggs and harvest in one batch for
+# whoever holds it, and the milk/egg screens read from that provider.
+_FIELDS_VIEW = require_farm_access(perms.AGRICULTURE, perms.PRODUCE_HARVEST)
+_MILK_VIEW = require_farm_access(perms.MILK_PRODUCTION, perms.PRODUCE_HARVEST)
+_EGGS_VIEW = require_farm_access(perms.EGG_PRODUCTION, perms.PRODUCE_HARVEST)
+_HARVEST_VIEW = require_farm_access(perms.PRODUCE_HARVEST, perms.AGRICULTURE)
+# Writes: the same modules the tablet's record sheet offers each action to.
+_MILK_CREATE = require_any_permission(perms.MILK_PRODUCTION, action=perms.CREATE)
+_EGGS_CREATE = require_any_permission(perms.EGG_PRODUCTION, action=perms.CREATE)
+_HARVEST_CREATE = require_any_permission(perms.PRODUCE_HARVEST, perms.AGRICULTURE, action=perms.CREATE)
+
 
 @router.get("/fields", response_model=list[FieldOut])
-def list_fields(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.Field]:
-    return list(db.scalars(select(models.Field).where(models.Field.farm_id == farm_id).order_by(models.Field.name)))
+def list_fields(db: Session = Depends(get_db), user: models.User = Depends(_FIELDS_VIEW)) -> list[models.Field]:
+    return list(db.scalars(select(models.Field).where(models.Field.farm_id == user.farm_id).order_by(models.Field.name)))
 
 
 @router.get("/milk", response_model=list[MilkRecordOut])
-def list_milk_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.MilkRecord]:
+def list_milk_records(days: int = 30, db: Session = Depends(get_db), user: models.User = Depends(_MILK_VIEW)) -> list[models.MilkRecord]:
     cutoff = now() - timedelta(days=days)
     stmt = (
         select(models.MilkRecord)
         .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
-        .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= cutoff)
+        .where(models.Animal.farm_id == user.farm_id, models.MilkRecord.recorded_at >= cutoff)
         .order_by(models.MilkRecord.recorded_at.desc())
     )
     return list(db.scalars(stmt))
 
 
 @router.get("/eggs", response_model=list[EggRecordOut])
-def list_egg_records(farm_id: str, days: int = 30, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.EggRecord]:
+def list_egg_records(days: int = 30, db: Session = Depends(get_db), user: models.User = Depends(_EGGS_VIEW)) -> list[models.EggRecord]:
     cutoff = now() - timedelta(days=days)
     stmt = (
         select(models.EggRecord)
         .join(models.Flock, models.Flock.id == models.EggRecord.flock_id)
-        .where(models.Flock.farm_id == farm_id, models.EggRecord.recorded_at >= cutoff)
+        .where(models.Flock.farm_id == user.farm_id, models.EggRecord.recorded_at >= cutoff)
         .order_by(models.EggRecord.recorded_at.desc())
     )
     return list(db.scalars(stmt))
 
 
 @router.get("/harvest", response_model=list[HarvestRecordOut])
-def list_harvest_records(farm_id: str, days: int = 90, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> list[models.HarvestRecord]:
+def list_harvest_records(days: int = 90, db: Session = Depends(get_db), user: models.User = Depends(_HARVEST_VIEW)) -> list[models.HarvestRecord]:
     cutoff = now() - timedelta(days=days)
     stmt = (
         select(models.HarvestRecord)
         .join(models.Field, models.Field.id == models.HarvestRecord.field_id)
-        .where(models.Field.farm_id == farm_id, models.HarvestRecord.recorded_at >= cutoff)
+        .where(models.Field.farm_id == user.farm_id, models.HarvestRecord.recorded_at >= cutoff)
         .order_by(models.HarvestRecord.recorded_at.desc())
     )
     return list(db.scalars(stmt))
 
 
 @router.post("/milk", status_code=status.HTTP_201_CREATED)
-def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> dict:
+def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_MILK_CREATE)) -> dict:
     """Validation rule (tech spec §14): "Milk from an animal under
     withdrawal must show a hard warning or be blocked from sale
     destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
     in the recommendation engine.
     """
-    animal = db.get(models.Animal, payload.animal_id)
-    if animal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+    animal = owned_or_404(db, models.Animal, payload.animal_id, current_user, "Animal")
+    ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
 
     # Milk is a capability (generic animal model §12): a bull, a hen, a
     # meat ewe or a mare cannot have a milk record, however the form was
@@ -117,13 +129,11 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
 
 
 @router.post("/eggs", status_code=status.HTTP_201_CREATED)
-def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> dict:
+def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_EGGS_CREATE)) -> dict:
     """Validation rule (tech spec §14): "Sellable + broken + consumed +
     hatched + wasted cannot exceed total eggs."
     """
-    flock = db.get(models.Flock, payload.flock_id)
-    if flock is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Flock not found")
+    flock = owned_or_404(db, models.Flock, payload.flock_id, current_user, "Flock")
     cap_set = capability_service.resolve_for_group(db, flock)
     if not cap_set.has(Cap.EGG_PRODUCTION):
         raise HTTPException(
@@ -164,10 +174,8 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
 
 
 @router.post("/harvest", status_code=status.HTTP_201_CREATED)
-def record_harvest(payload: HarvestRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> dict:
-    field = db.get(models.Field, payload.field_id)
-    if field is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Field not found")
+def record_harvest(payload: HarvestRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_HARVEST_CREATE)) -> dict:
+    field = owned_or_404(db, models.Field, payload.field_id, current_user, "Field")
 
     record = models.HarvestRecord(
         id=new_id(),

@@ -130,8 +130,10 @@ DATABASE_URL=sqlite:///./ci.db pytest -q   # DATABASE_URL only affects the FastA
                                             # (see tests/conftest.py) regardless.
 ```
 
-375 tests, all passing as of this build (on SQLite; the migration parity
-test also ran against a real PostgreSQL 16, as CI does). Among them the
+434 tests, all passing as of this build on SQLite (CI also runs the
+migration parity test against a real PostgreSQL 16). Among them
+`tests/test_farm_scope.py` (farm isolation and module permissions — see
+"Farm scope and module permissions" below), and the
 foundation, health-case, procurement, migration-parity and generated-artifact
 suites (`tests/test_platform.py`, `test_health_cases.py`,
 `test_procurement.py`, `test_migrations.py`, `test_generated_artifacts.py`)
@@ -181,7 +183,8 @@ app/
     visits_service.py          Reads DB state (bookings, sessions, costs), calls visits/analytics.py
     reports_service.py         Morning-briefing + daily-summary aggregation
   api/
-    deps.py                  get_current_user, require_roles(...), require_module_license(...) RBAC/license dependencies
+    deps.py                  get_current_user, require_roles / require_permission / require_any_permission, require_module_license,
+                             and the farm-scope gates require_farm_access / ensure_own_farm / owned_or_404
     v1/*.py                  One router per resource, matching tech spec §12's endpoint table
     v1/modules.py             Super-user module license activate/deactivate (tech spec v0.5 REQ-MOU-001)
     v1/mouneh.py               Products, recipes, raw materials, batches, finished goods, sales, dashboard
@@ -250,6 +253,42 @@ the schema's output. If an endpoint changes shape, re-running the export
 is the whole update. The script exits non-zero and names any endpoint
 that did not return 200, so a gap shows up at build time rather than as
 an empty screen on a tablet.
+
+## Farm scope and module permissions
+
+A token for one farm never reads or writes another farm's records, and a
+screen the tablet offers only to the holders of a module is refused,
+server-side, to anyone who does not hold it. Three gates in
+`app/api/deps.py` carry this:
+
+- **`require_farm_access(*modules)`** for routes that take `farm_id` from
+  the client (a query parameter, or the `/farms/{farm_id}/...` path). The
+  farm must be the caller's own, and the caller must hold view on at
+  least one of the listed modules; the route then reads the farm from the
+  user, never from the request. It declares `farm_id` itself, so the API
+  contract is unchanged.
+- **`ensure_own_farm(user, payload.farm_id)`** for request bodies that
+  carry a farm id (`POST /observations`, `/tasks`, `/sync/push`).
+- **`owned_or_404(db, Model, id, user, label)`** for an id of a farm-owned
+  record in the request. Another farm's record answers exactly like a
+  missing one. People named in a body (an observer, a milk recorder, a
+  task assignee) must be on the same farm.
+
+Where one record type appears on several modules' screens, the gate
+lists each of them (`require_any_permission`): expenses belong to
+Expenses and Finance; milk and egg records also to Produce & Harvest,
+because the tablet's `ProductionProvider` loads fields, milk, eggs and
+harvest in one batch for that module and one refusal would blank the
+Produce screen. Writes require the same modules the tablet's record
+sheet offers each action to. A recommendation decision needs Approve on
+AI / Health Intelligence (a manager's by default) and is recorded in the
+caller's name. `/farms/{farm_id}/bootstrap` never returns password
+hashes.
+
+`tests/test_farm_scope.py` walks the OpenAPI contract: every GET that
+takes `farm_id` must refuse another farm's manager and serve the farm's
+own, so a new endpoint that forgets the check fails without anyone
+remembering to add a test.
 
 ## Offline writes
 

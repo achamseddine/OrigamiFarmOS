@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission, user_can
+from app.api.deps import get_current_user, owned_or_404, require_farm_access, require_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import emergency_models as em
@@ -67,16 +67,20 @@ def _has_operational_history(db: Session, animal_id: str) -> bool:
     return bool(treat)
 
 
+# The herd list is what the tablet's AnimalsProvider loads (for Animals);
+# health, milk and feeding work all start from picking an animal.
+_ANIMALS_VIEW = require_farm_access(perms.ANIMALS, perms.ANIMAL_HEALTH, perms.MILK_PRODUCTION, perms.FEED_NUTRITION)
+
+
 @router.get("", response_model=list[AnimalOut])
 def list_animals(
-    farm_id: str,
     species: str | None = None,
     status_filter: str | None = Query(None, alias="status"),
     search: str | None = None,
     db: Session = Depends(get_db),
-    _user: models.User = Depends(get_current_user),
+    user: models.User = Depends(_ANIMALS_VIEW),
 ) -> list[models.Animal]:
-    stmt = select(models.Animal).where(models.Animal.farm_id == farm_id, models.Animal.active.is_(True))
+    stmt = select(models.Animal).where(models.Animal.farm_id == user.farm_id, models.Animal.active.is_(True))
     if species:
         stmt = stmt.where(models.Animal.species == species)
     if status_filter:
@@ -236,9 +240,7 @@ def move_animal(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_permission(perms.ANIMALS, perms.EDIT)),
 ) -> models.Animal:
-    animal = db.get(models.Animal, animal_id)
-    if animal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+    animal = owned_or_404(db, models.Animal, animal_id, current_user, "Animal")
     previous = animal.location_label
     animal.location_label = payload.location_label
     write_audit_log(
@@ -262,10 +264,8 @@ def move_animal(
 
 
 @router.get("/{animal_id}", response_model=AnimalDigitalTwinOut)
-def get_animal(animal_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    animal = db.get(models.Animal, animal_id)
-    if animal is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+def get_animal(animal_id: str, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    animal = owned_or_404(db, models.Animal, animal_id, user, "Animal")
 
     observations = db.scalars(
         select(models.Observation)

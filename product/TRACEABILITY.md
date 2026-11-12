@@ -83,7 +83,11 @@ by `tests/test_api.py::TestRecommendations`.
 Every endpoint in the spec's table is implemented — see
 `backend/app/api/v1/*.py` and `api/openapi.yaml` for the generated
 OpenAPI 3.1 spec. RBAC roles (tech spec §17) are enforced in
-`backend/app/api/deps.py`.
+`backend/app/api/deps.py`, together with farm isolation
+(`require_farm_access`, `ensure_own_farm`, `owned_or_404`) and per-module
+permissions on the core read and write endpoints
+(`require_any_permission`); `backend/tests/test_farm_scope.py` covers both,
+including a sweep over every OpenAPI operation that takes `farm_id`.
 
 ## Mouneh & Farm Product Processing module (tech spec v0.5)
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_farm_access
 from app.db.base import get_db
 from app.domain import models
 from app.schemas.auth import BootstrapResponse
@@ -14,9 +14,15 @@ from app.schemas.auth import BootstrapResponse
 router = APIRouter(prefix="/farms", tags=["farms"])
 
 
+# Columns that never leave the server, whatever endpoint serialises the row.
+_NEVER_SERIALISED = frozenset({"password_hash"})
+
+
 def _serialize(obj) -> dict:
     out = {}
     for column in obj.__table__.columns:
+        if column.name in _NEVER_SERIALISED:
+            continue
         value = getattr(obj, column.name)
         if isinstance(value, datetime):
             value = value.isoformat()
@@ -38,11 +44,14 @@ def my_farm(db: Session = Depends(get_db), current_user: models.User = Depends(g
 
 
 @router.get("/{farm_id}/bootstrap", response_model=BootstrapResponse)
-def bootstrap(farm_id: str, db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)) -> BootstrapResponse:
+def bootstrap(db: Session = Depends(get_db), user: models.User = Depends(require_farm_access())) -> BootstrapResponse:
     """GET /farms/{farm_id}/bootstrap — initial local cache data (tech spec
     §12). The tablet writes this straight into SQLite on first login /
     when activating demo mode, per the offline-first flow in §10.
+
+    Only the caller's own farm, and never a password hash.
     """
+    farm_id = user.farm_id
     farm = db.get(models.Farm, farm_id)
     if farm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")

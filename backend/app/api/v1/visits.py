@@ -259,13 +259,13 @@ def _booking_or_404(db: Session, booking_id: str, farm_id: str) -> vm.VisitBooki
 
 
 def _validate_and_price_activities(
-    db: Session, activities: list[BookingActivitySelection], *, exclude_booking_activity_ids: set[str] | None = None
+    db: Session, activities: list[BookingActivitySelection], *, farm_id: str, exclude_booking_activity_ids: set[str] | None = None
 ) -> list[tuple[vm.VisitActivity, int]]:
     exclude_booking_activity_ids = exclude_booking_activity_ids or set()
     resolved: list[tuple[vm.VisitActivity, int]] = []
     for sel in activities:
         activity = db.get(vm.VisitActivity, sel.activity_id)
-        if activity is None:
+        if activity is None or activity.farm_id != farm_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"Activity {sel.activity_id} not found")
         already = visits_service.activity_booked_quantity(db, activity.id, sel.scheduled_at)
         try:
@@ -305,7 +305,7 @@ def create_booking(payload: VisitBookingCreate, db: Session = Depends(get_db), c
         if dup is not None:
             return dup
 
-    resolved_activities = _validate_and_price_activities(db, payload.activities)
+    resolved_activities = _validate_and_price_activities(db, payload.activities, farm_id=current_user.farm_id)
     guest_count = payload.adults + payload.children
     total_amount, _activity_revenue = visits_service.compute_booking_amount(package, resolved_activities, guest_count=guest_count)
 
