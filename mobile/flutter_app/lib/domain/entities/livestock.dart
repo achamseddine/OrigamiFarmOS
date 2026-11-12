@@ -414,6 +414,7 @@ class AnimalGroup {
     this.managementProfile,
     required this.status,
     this.location,
+    this.trackingMode = 'QUANTITY_MANAGED',
   });
 
   final String id;
@@ -427,6 +428,12 @@ class AnimalGroup {
   final String status;
   final String? location;
 
+  /// MEMBERSHIP_DERIVED (count = its registered members), QUANTITY_MANAGED
+  /// or HYBRID (count = its head-count ledger) — LIVESTOCK-SCHEMA §6.
+  final String trackingMode;
+
+  bool get countsMembers => trackingMode == 'MEMBERSHIP_DERIVED';
+
   factory AnimalGroup.fromJson(Map<String, dynamic> json) => AnimalGroup(
         id: json['id'] as String,
         name: json['name'] as String,
@@ -438,5 +445,6 @@ class AnimalGroup {
         managementProfile: json['management_profile'] as String?,
         status: json['status'] as String? ?? 'healthy',
         location: json['location_label'] as String?,
+        trackingMode: json['tracking_mode'] as String? ?? 'QUANTITY_MANAGED',
       );
 }

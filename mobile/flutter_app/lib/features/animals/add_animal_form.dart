@@ -220,10 +220,12 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       'weight_kg': double.tryParse(_weight.text),
       'color_markings': _blank(_colorMarkings.text),
       'status': _status,
-      // A switch the resolver hid is sent off, whatever it was before: a
-      // cow moved to the meat profile stops being flagged as lactating.
-      'pregnant': caps.has(Cap.pregnancy) && _pregnant,
-      'lactating': caps.has(Cap.lactation) && _lactating,
+      // Opening state at registration only: an animal bought in pregnant
+      // or in milk arrives with that episode. After that, pregnancy and
+      // milking are records (pregnancy check, birth, dry-off) — an edit
+      // never sends them (REPRODUCTION-SCHEMA: status is a projection).
+      if (!_isEdit) 'pregnant': caps.has(Cap.pregnancy) && _pregnant,
+      if (!_isEdit) 'lactating': caps.has(Cap.lactation) && _lactating,
       'purchase_cost': double.tryParse(_purchaseCost.text),
       'current_value': double.tryParse(_currentValue.text),
       'notes': _blank(_notes.text),
@@ -461,7 +463,9 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         Row(children: [
           Expanded(child: TextField(controller: _location, decoration: InputDecoration(labelText: context.t('barnPenPasture')))),
           const SizedBox(width: 12),
-          Expanded(child: TextField(controller: _group, decoration: InputDecoration(labelText: context.t('herdOrGroup')))),
+          // A group of this species that exists (LIVESTOCK-SCHEMA §7): the
+          // server moves the membership, and refuses a name that is no group.
+          Expanded(child: _GroupPicker(speciesCode: _speciesCode, controller: _group, onChanged: () => setState(() {}))),
         ]),
         const SizedBox(height: FarmSpacing.md),
         _label(context, 'physicalAndHealth'),
@@ -494,7 +498,11 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         // Reproduction and lactation switches exist only for an animal
         // that can be pregnant or lactating: a bull, a hen and a horse
         // kept for meat never see them.
-        if (caps.has(Cap.pregnancy) || caps.has(Cap.lactation)) ...[
+        if (_isEdit && (caps.has(Cap.pregnancy) || caps.has(Cap.lactation))) ...[
+          const SizedBox(height: 6),
+          Text(context.t('reproFromRecords'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
+        ],
+        if (!_isEdit && (caps.has(Cap.pregnancy) || caps.has(Cap.lactation))) ...[
           const SizedBox(height: 6),
           Row(children: [
             if (caps.has(Cap.pregnancy))
@@ -613,6 +621,42 @@ class _CatalogMissing extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// The herd / group field: the groups of this species, or none. A legacy
+/// free-text name that names no group stays selectable, so an edit that
+/// does not touch it is not refused.
+class _GroupPicker extends StatelessWidget {
+  const _GroupPicker({required this.speciesCode, required this.controller, required this.onChanged});
+
+  final String speciesCode;
+  final TextEditingController controller;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final names = [
+      for (final g in context.watch<LivestockProvider>().groups)
+        if (g.species == speciesCode) g.name,
+    ];
+    final current = controller.text.trim();
+    if (current.isNotEmpty && !names.contains(current)) names.add(current);
+    return DropdownButtonFormField<String?>(
+      key: ValueKey('group-$speciesCode'),
+      initialValue: current.isEmpty ? null : current,
+      isExpanded: true,
+      decoration: InputDecoration(labelText: context.t('herdOrGroup')),
+      items: [
+        DropdownMenuItem<String?>(value: null, child: Text(context.t('herdNoGroup'))),
+        for (final n in names) DropdownMenuItem<String?>(value: n, child: Text(n, overflow: TextOverflow.ellipsis)),
+      ],
+      onChanged: (v) {
+        controller.text = v ?? '';
+        onChanged();
+      },
     );
   }
 }

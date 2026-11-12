@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
-from app.services import capability_service, feed_performance_service, feeding_program_service
+from app.services import capability_service, feed_performance_service, feeding_program_service, livestock_state_service
 from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access
 from app.core import permissions as perms
 from app.db.base import get_db
@@ -80,6 +80,7 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     """
     animal = owned_or_404(db, models.Animal, payload.animal_id, current_user, "Animal")
     ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
+    livestock_state_service.ensure_on_farm(animal, "milk")
 
     # Milk is a capability (generic animal model §12): a bull, a hen, a
     # meat ewe or a mare cannot have a milk record, however the form was

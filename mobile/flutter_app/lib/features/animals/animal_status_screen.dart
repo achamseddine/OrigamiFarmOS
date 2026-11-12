@@ -19,6 +19,8 @@ import '../../sync/sync_controller.dart';
 import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
+import 'animal_herd_section.dart' show showAllGroupsSheet;
+import 'animal_reproduction_section.dart' show ReproOverviewCard;
 import '../../core/widgets/hero_band.dart';
 
 class AnimalStatusScreen extends StatefulWidget {
@@ -123,6 +125,13 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
               children: [for (final card in cards) SizedBox(width: w, child: card)],
             );
           }),
+          // Due dates, pregnancy checks waiting, the incubator.
+          Padding(
+            padding: const EdgeInsets.only(top: FarmSpacing.md),
+            child: ReproOverviewCard(
+              onOpenAnimal: (id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AnimalDigitalTwinScreen(animalId: id))),
+            ),
+          ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
@@ -139,7 +148,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                         ],
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: TextButton(onPressed: () {}, child: Text(context.t('viewAllGroups'))),
+                          child: TextButton(onPressed: () => showAllGroupsSheet(context), child: Text(context.t('viewAllGroups'))),
                         ),
                       ],
                     ),

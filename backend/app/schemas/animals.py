@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from app.livestock import catalog
 from app.schemas.common import ORMModel
@@ -54,9 +54,28 @@ class AnimalOut(ORMModel):
     current_value: float | None = None
     notes: str | None = None
     active: bool = True
+    # Lifecycle and the reproduction / lactation projection (read-only:
+    # written by the exit, pregnancy-check, birth and dry-off workflows).
+    lifecycle_status: str = "active"
+    exited_at: datetime | None = None
+    pregnancy_started_at: datetime | None = None
+    expected_due_date: datetime | None = None
+    lactation_started_at: datetime | None = None
+    dried_off_at: datetime | None = None
     # Every identifier the animal carries (generic animal model §4). `tag`
     # above is the primary one's value, kept for display and search.
     identifiers: list[IdentifierOut] = []
+
+    @model_validator(mode="after")
+    def _days_pregnant_today(self):
+        """Days pregnant as of now, from the estimated conception — a stored
+        count would be a day stale by tomorrow."""
+        if self.pregnant and self.pregnancy_started_at is not None:
+            started = self.pregnancy_started_at if self.pregnancy_started_at.tzinfo else self.pregnancy_started_at.replace(tzinfo=timezone.utc)
+            self.pregnancy_days = max(0, (datetime.now(timezone.utc).date() - started.astimezone(timezone.utc).date()).days)
+        elif not self.pregnant:
+            self.pregnancy_days = None
+        return self
 
     @property
     def is_under_withdrawal(self) -> bool:
@@ -234,3 +253,12 @@ class AnimalDigitalTwinOut(AnimalOut):
     latest_weight: dict | None = None
     open_health_case: dict | None = None
     emergency: dict | None = None
+    # The livestock record (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): the
+    # reproduction card (state, due date, last service and check, the
+    # lactation in progress, which actions apply), the groups the animal is
+    # in now, its recorded parents and offspring, and its recent state
+    # history (status, stage, profile, location).
+    reproduction: dict | None = None
+    groups: list[dict] = []
+    relationships: dict = {}
+    recent_history: list[dict] = []

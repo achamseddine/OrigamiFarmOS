@@ -16,6 +16,7 @@ import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
+import '../animals/animal_herd_section.dart' show showAllGroupsSheet;
 import '../../providers/production_provider.dart';
 
 bool _isToday(DateTime d) {
@@ -30,7 +31,8 @@ bool _isToday(DateTime d) {
 /// here: an egg record belongs to a flock, not a species, and is summed
 /// farm-wide above.
 class _PoultryGroup {
-  const _PoultryGroup({required this.label, required this.icon, required this.count, required this.status});
+  const _PoultryGroup({required this.species, required this.label, required this.icon, required this.count, required this.status});
+  final String species;
   final String label;
   final FarmIcon icon;
   final int count;
@@ -52,7 +54,7 @@ _PoultryGroup _groupFor(List<Animal> animals, List<AnimalGroup> groups, String s
           : individuals.any((a) => a.status == AnimalHealthStatus.underObservation)
               ? AnimalHealthStatus.underObservation
               : AnimalHealthStatus.healthy;
-  return _PoultryGroup(label: label, icon: icon, count: individuals.length + grouped, status: status);
+  return _PoultryGroup(species: species, label: label, icon: icon, count: individuals.length + grouped, status: status);
 }
 
 /// "Layer hen flock" / "سرب دجاجة بياضة": the species' own word for a
@@ -215,29 +217,35 @@ class _FlockCard extends StatelessWidget {
       AnimalHealthStatus.underObservation => context.t('watchShort'),
       AnimalHealthStatus.underTreatment => context.t('alertShort'),
     };
-    return Container(
-      padding: const EdgeInsets.all(FarmSpacing.md),
-      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            SizedBox(width: 44, height: 44, child: PhotoSlot(icon: group.icon)),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(group.label, style: FarmTypography.textTheme.titleSmall),
-                  StatusPill(label: group.count == 0 ? context.t('noBirds') : statusLabel, level: group.count == 0 ? FarmStatusLevel.neutral : level, dense: true),
-                ],
+    // Opens this species' flocks: members, the head-count ledger and the
+    // incubator (LIVESTOCK-SCHEMA §6–§9, REPRODUCTION-SCHEMA incubation).
+    return InkWell(
+      borderRadius: BorderRadius.circular(FarmRadii.md),
+      onTap: () => showAllGroupsSheet(context, species: group.species),
+      child: Container(
+        padding: const EdgeInsets.all(FarmSpacing.md),
+        decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              SizedBox(width: 44, height: 44, child: PhotoSlot(icon: group.icon)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(group.label, style: FarmTypography.textTheme.titleSmall),
+                    StatusPill(label: group.count == 0 ? context.t('noBirds') : statusLabel, level: group.count == 0 ? FarmStatusLevel.neutral : level, dense: true),
+                  ],
+                ),
               ),
-            ),
-          ]),
-          const SizedBox(height: 10),
-          Text('${group.count}', style: FarmTypography.textTheme.titleLarge),
-          Text(context.t('birds'), style: FarmTypography.textTheme.bodySmall),
-        ],
+            ]),
+            const SizedBox(height: 10),
+            Text('${group.count}', style: FarmTypography.textTheme.titleLarge),
+            Text(context.t('birds'), style: FarmTypography.textTheme.bodySmall),
+          ],
+        ),
       ),
     );
   }

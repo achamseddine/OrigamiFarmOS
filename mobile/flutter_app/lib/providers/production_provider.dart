@@ -58,11 +58,16 @@ class ProductionProvider extends ChangeNotifier {
     loading = true;
     notifyListeners();
     try {
+      // Each list on its own: the milk staff hold Milk but not Produce, and
+      // the server answers the list they may not see with a 403 — that must
+      // cost them the fields list, not the milk screen.
+      Future<dynamic> orEmpty(String path, Map<String, dynamic> query) =>
+          _api.get(path, query: query).catchError((Object _) => <dynamic>[], test: (e) => e is ApiException && !e.isOffline);
       final results = await Future.wait([
-        _api.get('/production/fields', query: {'farm_id': _farmId}),
-        _api.get('/production/milk', query: {'farm_id': _farmId, 'days': 30}),
-        _api.get('/production/eggs', query: {'farm_id': _farmId, 'days': 30}),
-        _api.get('/production/harvest', query: {'farm_id': _farmId, 'days': 90}),
+        orEmpty('/production/fields', {'farm_id': _farmId}),
+        orEmpty('/production/milk', {'farm_id': _farmId, 'days': 30}),
+        orEmpty('/production/eggs', {'farm_id': _farmId, 'days': 30}),
+        orEmpty('/production/harvest', {'farm_id': _farmId, 'days': 90}),
       ]);
       _fields = (results[0] as List<dynamic>).map((e) => Field.fromJson(e as Map<String, dynamic>)).toList();
       _milk = (results[1] as List<dynamic>).map((e) => MilkRecord.fromJson(e as Map<String, dynamic>)).toList();

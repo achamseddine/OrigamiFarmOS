@@ -182,9 +182,17 @@ def subject_state(db: Session, subject_type: str, subject) -> SubjectState:
 
 
 def group_for_animal(db: Session, animal: models.Animal) -> models.Flock | None:
-    """The group an animal belongs to. Animals carry a free-text
-    `group_name`; the group is the AnimalGroup of the same farm with that
-    name — the only link the animal model has today."""
+    """The group an animal inherits a program from: its current
+    exclusive membership (herd / flock / pen — LIVESTOCK-SCHEMA §7). An
+    animal with no membership rows yet (one registered before memberships
+    existed) falls back to the group its `group_name` names."""
+    from app.services import group_service
+
+    group = group_service.exclusive_group_of(db, animal)
+    if group is not None:
+        return group
+    if group_service.memberships_of_animal(db, animal.id):
+        return None
     if not animal.group_name:
         return None
     # Same farm, same name — and the same species: a goat penned with the
@@ -196,10 +204,19 @@ def group_for_animal(db: Session, animal: models.Animal) -> models.Flock | None:
 
 
 def animals_in_group(db: Session, group: models.Flock) -> list[models.Animal]:
-    return list(db.scalars(select(models.Animal).where(
+    """The group's current members, plus any same-named animal that has
+    no membership history at all (registered before memberships existed)."""
+    from app.domain import livestock_models as lm
+    from app.services import group_service
+
+    members = [a for _m, a in group_service.current_members(db, group) if a.active]
+    seen = {a.id for a in members}
+    legacy = db.scalars(select(models.Animal).where(
         models.Animal.farm_id == group.farm_id, models.Animal.active.is_(True), models.Animal.species == group.species,
         func.lower(models.Animal.group_name) == group.name.strip().lower(),
-    )))
+        ~select(lm.AnimalGroupMembership.id).where(lm.AnimalGroupMembership.animal_id == models.Animal.id).exists(),
+    )).all()
+    return members + [a for a in legacy if a.id not in seen]
 
 
 # --------------------------------------------------------------- resolver
@@ -598,6 +615,11 @@ def record_feeding(
     before a gram leaves the store."""
     if event_type not in catalog.FEEDING_EVENT_TYPES:
         raise FeedError(f"event_type must be one of {list(catalog.FEEDING_EVENT_TYPES)}")
+    if subject_type == "animal" and not subject.active:
+        # Behavioural model §14: an animal that left blocks future feeding.
+        from app.services.livestock_state_service import ensure_on_farm
+
+        ensure_on_farm(subject, "feeding")
     if not components:
         raise FeedError("A feeding event needs at least one feed.")
     state = subject_state(db, subject_type, subject)

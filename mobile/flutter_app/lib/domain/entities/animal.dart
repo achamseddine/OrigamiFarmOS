@@ -59,6 +59,9 @@ class Animal {
     this.purchaseCost,
     this.currentValue,
     this.notes,
+    this.lifecycleStatus = 'active',
+    this.exitedAt,
+    this.expectedDueDate,
   });
 
   final String id;
@@ -111,6 +114,17 @@ class Animal {
   final double? purchaseCost;
   final double? currentValue;
   final String? notes;
+
+  /// active | sold | dead | culled | slaughtered | transferred | archived
+  /// (LIVESTOCK-SCHEMA §14) — written by the exit workflow, read here.
+  final String lifecycleStatus;
+  final DateTime? exitedAt;
+
+  /// From the open pregnancy (REPRODUCTION-SCHEMA); null when not pregnant
+  /// or when the conception date is not known.
+  final DateTime? expectedDueDate;
+
+  bool get onFarm => lifecycleStatus == 'active';
 
   bool get isUnderWithdrawal =>
       underWithdrawalUntil != null && underWithdrawalUntil!.isAfter(DateTime.now());
@@ -186,6 +200,9 @@ class Animal {
         purchaseCost: (json['purchase_cost'] as num?)?.toDouble(),
         currentValue: (json['current_value'] as num?)?.toDouble(),
         notes: json['notes'] as String?,
+        lifecycleStatus: json['lifecycle_status'] as String? ?? ((json['active'] as bool? ?? true) ? 'active' : 'archived'),
+        exitedAt: json['exited_at'] != null ? DateTime.tryParse(json['exited_at'] as String) : null,
+        expectedDueDate: json['expected_due_date'] != null ? DateTime.tryParse(json['expected_due_date'] as String) : null,
       );
 
   /// Copies with selected overrides. Every field is carried through by
@@ -233,6 +250,9 @@ class Animal {
         purchaseCost: purchaseCost,
         currentValue: currentValue,
         notes: notes,
+        lifecycleStatus: lifecycleStatus,
+        exitedAt: exitedAt,
+        expectedDueDate: expectedDueDate,
       );
 
   String get ageLabel {
