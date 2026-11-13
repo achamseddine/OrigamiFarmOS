@@ -19,6 +19,8 @@ import '../../sync/sync_controller.dart';
 import '../sync/sync_pill.dart';
 import 'add_animal_form.dart';
 import 'animal_digital_twin_screen.dart';
+import 'animal_herd_section.dart' show showAllGroupsSheet;
+import 'animal_reproduction_section.dart' show ReproOverviewCard;
 import 'animal_quick_entry_screen.dart';
 import '../../core/widgets/hero_band.dart';
 
