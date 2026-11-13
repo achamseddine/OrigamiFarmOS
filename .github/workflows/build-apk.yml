@@ -22,6 +22,7 @@ on:
   push:
     branches:
       - claude/origami-farmos-tablet-mvp-u88i3e
+      - feat/qr-animal-quick-entry
     paths:
       - ".github/workflows/build-apk.yml"
       - "mobile/flutter_app/**"
@@ -51,8 +52,7 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter analyze --no-fatal-infos
-        continue-on-error: true
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       # The offline cache/outbox logic is pure Dart and unit-tested; this
       # also catches a compile error anywhere in lib/ before the slower
@@ -89,13 +89,15 @@ jobs:
       # developed under) block. A GitHub Release asset is served from
       # api.github.com / objects.githubusercontent.com instead, which is
       # reachable in more environments, so publish the APK there too.
-      - name: Publish APK to a rolling GitHub Release
+      - name: Publish versioned QR APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-apk-latest
-          name: "Tablet APK (latest automated build)"
+          tag_name: tablet-qr-${{ github.run_number }}
+          name: "Origami FarmOS QR APK v0.1.${{ github.run_number }}"
           body: |
             **Build 0.1.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+
+            **Pre-release / on-farm test APK.** Animal QR quick entry uses a keyboard-wedge reader or typed tag. Built-in camera QR scanning, printable QR labels and secure photo attachments are not included. Do not use as a production veterinary decision system.
 
             The sign-in screen of this build shows `App 0.1.${{ github.run_number }} · <commit>` under
             the button. If a tablet shows a different number after installing, the
@@ -108,6 +110,6 @@ jobs:
             installed". Every build after that updates without uninstalling.
 
             Fine for sideloading onto a test tablet, not for Play Store distribution.
-            This release is overwritten by every run of the "Build tablet APK" workflow.
+            This prerelease has its own versioned tag and will not overwrite the existing tablet-apk-latest release.
           prerelease: true
           files: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk
