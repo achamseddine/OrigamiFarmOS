@@ -215,6 +215,8 @@ From **Morning Briefing**, **Animals**, the centre **Record** sheet or an animal
 Milk during withdrawal is recorded as **withheld**; the backend rejects any other destination during an active withdrawal. The medicine shortcut uses the lot-bound pharmacy administration flow rather than the old free-text Treat dialog.
 
 **Current limitation:** no built-in camera QR decoder, printable QR artwork, photo attachments or BCS/photo-derived weight; no multi-animal milking-round sheet or cross-device duplicate-session reconciliation. QR codes must currently be printed using a trusted offline label tool and scanned with a reader that types into the input. Workers must check sync status and physically segregate withdrawn milk. See [QR worker workflow specification](../../docs/QR-ANIMAL-QUICK-ENTRY.md).
+**Flow review (2026-11-13):** The operator sequence and known safety gaps are documented in [Operational Workflows](../../handbook/06-Operational-Workflows/README.md) and [Animal + Feed workflow audit](../../docs/ANIMAL-FEED-FLOW-AUDIT.md). Documentation updates do not correct the backend's group/individual demand overlap, negative-stock bypass, program-activation permission path or milk-session duplication.
+
 ### The livestock record
 
 An animal's Digital Twin carries **Reproduction & milking** — pregnant and due, served and waiting for a check, in milk and for how long, with only the actions its resolved capabilities allow, named in the species' own words (Calving, Lambing, Kidding, Foaling) — and **Herd & family**: its groups, recorded dam, sire and offspring, and its status / stage / profile / location history. **Record exit** records a death, a sale or a cull. The full reproductive record opens from "View history", and a newborn not registered at birth is registered from it. The Animals screen shows the herd's reproduction day; every group (from the Animals screen's "View all groups", or a flock card on the Egg screen) opens its members, head-count ledger and, for poultry, the incubator. Pregnancy and milking are records, so the edit form no longer has switches for them; the herd field is a picker of the species' groups. Code: `features/animals/animal_reproduction_section.dart`, `animal_herd_section.dart`, `reproduction_forms.dart`, `providers/herd_records_provider.dart`, `domain/entities/reproduction.dart`.
@@ -243,7 +245,7 @@ read it:
   hen, no pregnancy line on a bull. Full edit, plus Observe / Treat / Feed
   / Milk / Move quick actions.
 - **Feed** — one workspace (`features/feed/feed_workspace_screen.dart`,
-  `docs/GENERIC-FEED-ARCHITECTURE.md`) with nine tabs over one
+  `docs/GENERIC-FEED-ARCHITECTURE.md`) with **ten** tabs over one
   `FeedingProvider`: the stock screen; feeds and their lots (receive a
   delivery keeping ordered / received / rejected apart, reserve stock for
   a purpose, quarantine / block / recall / release a lot); formulas with
@@ -254,7 +256,7 @@ read it:
   recording; declared and lab nutrient profiles; costs by animal, feed
   and batch; and trace & control (a lot's origin and everyone who ate
   from it, days of cover, reorder recommendations that open tasks,
-  reconciliations). The Digital Twin's Feeding section shows the
+  reconciliations); and **Performance** (deterministic assessments, alerts and evidence — not a per-animal ration solver). The Digital Twin's Feeding section shows the
   animal's effective program — its own or inherited from its group — the
   review banner with the recommended program and reasons when a
   lifecycle change calls for one (Assign for approvers), today's targets,
