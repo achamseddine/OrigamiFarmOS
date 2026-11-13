@@ -97,6 +97,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: tablet-qr-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
           name: "Origami FarmOS QR APK v0.1.${{ github.run_number }}"
           body: |
             **Build 0.1.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
