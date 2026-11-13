@@ -24,7 +24,6 @@ import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import 'animal_care_section.dart';
 import 'animal_herd_section.dart';
 import 'animal_reproduction_section.dart';
-import 'reproduction_forms.dart' show showExitForm;
 import 'animal_feeding_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
