@@ -232,8 +232,10 @@ Documented deviations: reference tables keep natural keys; the scheduler runs in
 
 | Requirement | Implemented here | Not yet implemented |
 |---|---|---|
-| Animal-first worker record rather than checklist-only completion | `features/animals/animal_quick_entry_screen.dart`, opened from Morning, Animals, Record sheet and Digital Twin | Built-in camera QR scanning and printable labels |
-| Unique animal resolution, no location substitution | `features/animals/animal_scan.dart` and `test/animal_quick_entry_logic_test.dart` | Server-side QR token/label service, effective-dated pen QR resolution |
+| Animal-first worker record rather than checklist-only completion | `features/animals/animal_quick_entry_screen.dart`, opened from Morning (camera), Animals, Record sheet, Digital Twin and My Day's routine rows (rounds) | Photo attachments |
+| Unique animal resolution, no location substitution | `features/animals/animal_scan.dart`, `test/animal_quick_entry_logic_test.dart`, `test/qr/qr_workflow_test.dart` | Effective-dated location→occupant resolution (pen labels open the group instead) |
+| Camera scanning and printable labels (ADR-003) | `features/scan/qr_scanner_page.dart`, `features/scan/qr_labels.dart` | Device testing in barn light and on weathered labels |
+| Duplicate-session safeguard, program feed rows, rounds, pen labels | `features/animals/quick_round.dart`, `animal_quick_entry_screen.dart`, `features/morning/today_routine_card.dart` | Cross-device duplicate reconciliation |
 | Milk, local-time session, decimal litres | Existing `AnimalsProvider.recordMilk`; new quick-entry form; `core/util/number_input.dart` | Cross-device duplicate-session conflict resolution and milking-round sheet |
 | Concentrate / silage / straw offered kg, optional measured refusals | Existing `FeedingProvider.recordFeeding`; product IDs and eligible lot consumption remain server-owned | Per-category feed-product classification validation; no invented per-animal group intake |
 | Controlled medicines | Old free-text `_TreatDialog` removed; Record sheet and Digital Twin route to `showAdministerDialog`; route must be explicitly selected from configured `Medicine.routes` | Dose-entry authorization UX hardening; attachment support |

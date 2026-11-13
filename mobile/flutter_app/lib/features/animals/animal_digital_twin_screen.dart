@@ -35,6 +35,7 @@ import 'animal_herd_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
 import 'animal_quick_entry_screen.dart';
+import '../scan/qr_labels.dart';
 import 'animal_twin_tabs.dart';
 import 'capability_chips.dart';
 import 'reproduction_forms.dart';
@@ -377,6 +378,10 @@ List<RecordAction> animalRecordActions(
       RecordAction('birth', FarmIcon.pregnancy, repro.birthTerm(arabic), group: RecordGroup.breeding, () => then(showBirthForm(context, animal, repro))),
     if (canHerd) RecordAction('move', FarmIcon.location, context.t('twMoveLocation'), group: RecordGroup.herd, () => then(showMoveDialog(context, animal))),
     if (canHerd) RecordAction('group', FarmIcon.people, context.t('herdMove'), group: RecordGroup.herd, () => then(showMoveToGroupForm(context, animal))),
+    // The label to tie to this animal's tag, for the scan-first round.
+    RecordAction('label', FarmIcon.qr, context.t('qrLabel'), group: RecordGroup.herd, () => showQrLabels(context, labels: [
+          QrLabel.forAnimal(animal, speciesName: context.read<LivestockProvider>().speciesName(animal.species, Localizations.localeOf(context).languageCode)),
+        ])),
     if (canHerd) RecordAction('exit', FarmIcon.logout, context.t('exitAction'), accent: FarmColors.danger, group: RecordGroup.herd, () => then(showExitForm(context, animal))),
   ];
 }

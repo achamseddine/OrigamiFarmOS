@@ -23,6 +23,7 @@ import '../../core/widgets/ux_blocks.dart';
 import 'animal_herd_section.dart' show showAllGroupsSheet;
 import 'animal_reproduction_section.dart' show ReproOverviewCard;
 import 'animal_quick_entry_screen.dart';
+import '../scan/qr_labels.dart';
 import '../../core/widgets/hero_band.dart';
 
 class AnimalStatusScreen extends StatefulWidget {
@@ -127,10 +128,20 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
               ].any(context.watch<AccessProvider>().canCreate))
                 HeroAction(
                   icon: FarmIcon.qr,
-                  label: context.t('qrQuickEntry'),
+                  label: context.t('qrScanAnimal'),
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
                   ),
+                ),
+              // Labels for the animals the registry shows, to print once and
+              // tie to each animal's tag.
+              if (context.watch<AccessProvider>().canEdit(FarmModule.animals) && filtered.isNotEmpty)
+                HeroAction(
+                  icon: FarmIcon.qr,
+                  label: context.t('qrPrintLabels'),
+                  onPressed: () => showQrLabels(context, labels: [
+                    for (final a in filtered) QrLabel.forAnimal(a, speciesName: livestock.speciesName(a.species, lang)),
+                  ]),
                 ),
               // Tech spec §12: the Animals screen must not be read-only for
               // whoever looks after the animals.

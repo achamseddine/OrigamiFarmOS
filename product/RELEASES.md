@@ -1,5 +1,22 @@
 # Releases
 
+## v0.7.0 — Scan-first worker rounds (QR)
+
+Merges PR #11's QR quick entry (withheld milk enforced server-side, medicine only through the pharmacy, no guessed routes, Arabic/Persian digits) and builds its follow-ups, from a workflow analysis of the 06:00 round (`docs/QR-ANIMAL-QUICK-ENTRY.md`).
+
+**Delivered:**
+- Camera QR scanning on the tablet, offline (ADR-003: `mobile_scanner`, `pdf`, `printing`, `barcode`); the camera permission is optional in the manifest.
+- QR labels for animals and pens printed or shared as an A4 PDF from the tablet; Arabic names print correctly.
+- Pen/group labels (`origami://group/{id}`) open the group's feeding round and members, never one animal.
+- The worker screen shows what is already recorded today; a second milking in the same session needs a tick.
+- Feed rows from the animal's own program with planned amounts as hints and *Fill planned amounts*; the worker confirms every figure.
+- Rounds from My Day (morning/evening milking, individual feeding) with who is done and who is left; *Scan next automatically*.
+- Entry points: *Scan an animal* on My Day and in the Record sheet opens the camera; *Print QR labels* on the Animals screen; *Quick entry* and *QR label* in the Digital Twin's Record sheet.
+- Tests: Flutter 240 (+18 including PR #11's); backend unchanged and passing.
+
+**Next:**
+- Photo attachments with private storage; body-condition scoring; cross-device duplicate reconciliation; barn-light device testing of labels.
+
 ## v0.6.1 — Health and Mouneh in the V3 layout
 
 **Delivered:**

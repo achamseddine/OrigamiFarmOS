@@ -62,11 +62,11 @@ class RecordAction {
 final List<RecordAction> _actions = [
   RecordAction(
     icon: FarmIcon.qr,
-    labelKey: 'qrQuickEntry',
+    labelKey: 'qrScanAnimal',
     accent: FarmColors.cedar,
     modules: [FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals],
     open: (context) async => Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+      MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
     ),
   ),
   RecordAction(

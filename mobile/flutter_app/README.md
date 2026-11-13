@@ -237,7 +237,9 @@ From **Morning Briefing**, **Animals**, the centre **Record** sheet or an animal
 
 Milk during withdrawal is recorded as **withheld**; the backend rejects any other destination during an active withdrawal. The medicine shortcut uses the lot-bound pharmacy administration flow rather than the old free-text Treat dialog.
 
-**Current limitation:** no built-in camera QR decoder, printable QR artwork, photo attachments or BCS/photo-derived weight; no multi-animal milking-round sheet or cross-device duplicate-session reconciliation. QR codes must currently be printed using a trusted offline label tool and scanned with a reader that types into the input. Workers must check sync status and physically segregate withdrawn milk. See [QR worker workflow specification](../../docs/QR-ANIMAL-QUICK-ENTRY.md).
+**Second increment — scan-first rounds** (`features/scan/`, `quick_round.dart`, ADR-003): the tablet's **camera** reads labels offline (`mobile_scanner`, ML Kit bundled model; torch; a keyboard-wedge reader and typed tags still work). **Labels** are printed from the tablet as an A4 PDF (`pdf`/`printing`) — from an animal's Record sheet, the quick-entry screen, a pen's view, or *Print QR labels* on the Animals screen for the animals shown. A **pen label** (`origami://group/{id}`) opens the group: today's feeding rounds against its program, *Record this feeding*, and its animals to pick from — never an animal by itself. For each animal the screen shows what is **already recorded today**; a second milking in the same session needs an explicit tick. **Feed rows are the animal's own program** with the planned amount per feeding as a hint, and *Fill planned amounts* writes them in for the worker to check. My Day's routine rows open **rounds** (morning/evening milking, individual feeding) that list who is done and who is left. *Scan next automatically* reopens the camera after each save.
+
+**Still open:** photo attachments, body-condition scoring, cross-device duplicate reconciliation, and device testing of labels in barn light. Workers must check sync status and physically segregate withdrawn milk. See [QR worker workflow specification](../../docs/QR-ANIMAL-QUICK-ENTRY.md).
 
 ## Data entry
 
@@ -428,7 +430,7 @@ The backend's full test suite does run here and passes, including the
 permission, employee, notification, priority, audit, agriculture, feed,
 feed-performance, pharmacy and emergency suites that back these screens.
 The Flutter SDK was later made available in the development session, so
-`flutter analyze` and `flutter test` (222 tests: the Health command centre, health cases and Mouneh in English and Arabic, the Digital Twin's tabs and the registry drawn over the bundled farm, the day's routine, registry filters, finished mix on hand and the weight cache rule, the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
+`flutter analyze` and `flutter test` (240 tests: the QR grammar, rounds, the duplicate check, program feed rows, label PDFs and the worker screen driven by a fake scanner over the bundled farm, the Health command centre, health cases and Mouneh in English and Arabic, the Digital Twin's tabs and the registry drawn over the bundled farm, the day's routine, registry filters, finished mix on hand and the weight cache rule, the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
 the bundled snapshot, offline cache effects, visit rules, the offline
 protocol engine against a hand-built package and the bundled farm's real
 one, the entity routes, and the animal care card rendered from the

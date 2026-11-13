@@ -127,12 +127,14 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
             actions: [
               if ([FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals]
                   .any(context.watch<AccessProvider>().canCreate))
+                // The worker's first move at the barn door: point the
+                // tablet at a label.
                 HeroAction(
                   icon: FarmIcon.qr,
-                  label: context.t('qrQuickEntry'),
+                  label: context.t('qrScanAnimal'),
                   primary: true,
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen()),
+                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
                   ),
                 ),
             ],

@@ -18,6 +18,8 @@ import '../../providers/animals_provider.dart';
 import '../../providers/feeding_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
+import '../animals/animal_quick_entry_screen.dart';
+import '../animals/quick_round.dart';
 import '../feed/feeding_event_dialog.dart';
 
 /// The husbandry routine of the day (V3 prototype, "My Day"): the
@@ -174,14 +176,21 @@ class TodayRoutineCard extends StatelessWidget {
     switch (c.kind) {
       case RoutineKind.milking:
         if (!access.canCreate(FarmModule.milkProduction)) return null;
-        return () => context.read<AppNavigator>().goToModule(FarmModule.milkProduction);
+        // The round, scan by scan, with who is left on screen.
+        return () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => AnimalQuickEntryScreen(round: QuickRound.milking(c.key), startWithCamera: true),
+            ));
       case RoutineKind.eggs:
         if (!access.canCreate(FarmModule.eggProduction)) return null;
         return () => context.read<AppNavigator>().goToModule(FarmModule.eggProduction);
       case RoutineKind.feeding:
         if (!access.canCreate(FarmModule.feedNutrition)) return null;
         final line = c.line;
-        if (line == null) return () => context.read<AppNavigator>().goToModule(FarmModule.feedNutrition);
+        if (line == null) {
+          return () => Navigator.of(context).push(MaterialPageRoute<void>(
+                builder: (_) => const AnimalQuickEntryScreen(round: QuickRound.feeding(), startWithCamera: true),
+              ));
+        }
         final rounds = line.program?.feedingsPerDay ?? 1;
         return () => showFeedingEventDialog(
               context,
