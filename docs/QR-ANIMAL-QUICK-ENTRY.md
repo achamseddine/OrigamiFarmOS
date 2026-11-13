@@ -52,6 +52,10 @@ Treat all QR input as untrusted. A scan **never** bypasses sign-in, farm scope, 
 - **Health:** observation ≠ diagnosis; measured weight ≠ image-based estimation. History is appended, corrected or reversed through owning domain APIs rather than edited in place.
 - **Offline:** existing `ApiClient.write` outbox uses idempotency keys and cached writes; UI success may mean *accepted locally*, not yet accepted by the server. Sync failures must remain visible. The milk and feed endpoints are separate transactions; there is no promise of atomic cross-domain save.
 
+## Critical integration gaps discovered in the 2026-11-13 review
+
+See [Animal + Feed workflow audit](ANIMAL-FEED-FLOW-AUDIT.md) for code-backed evidence, priority and acceptance tests. In particular: **AF-03** stale offline withdrawal state must never be used to clear milk for sale; **AF-07** the server has no cross-device animal/date/session duplicate guard; **AF-08** the suggested AM/PM session uses device time rather than a configured farm timezone; **AF-01** group + individual daily feeding demand can be double-counted; **AF-02** feed create-rights can request an un-lotted negative-stock issue; and **AF-14** program creation/versioning can auto-activate with create rights. These are **open implementation gaps**. A QR scan never proves that an event has been accepted by the server.
+
 ## Follow-up work (not shipped)
 
 1. **Native camera QR scanning** and offline QR label generation/printing with an ADR, device-camera permission review, robust scan throttling and physical tag tests.
