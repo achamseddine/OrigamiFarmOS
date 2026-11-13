@@ -38,6 +38,7 @@ class TasksScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebOperations'),
             title: context.t('navTasks'),
             subtitle: user.isManager ? context.t('tasksSubtitleManager') : context.t('tasksSubtitleWorker'),
             icon: FarmIcon.task,

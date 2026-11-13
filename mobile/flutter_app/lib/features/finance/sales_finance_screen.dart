@@ -49,6 +49,7 @@ class SalesFinanceScreen extends StatelessWidget {
           // nothing when tapped; the seven-day profit chart below is the
           // comparison, so the dead control is gone rather than moved.
           HeroBand(
+            eyebrow: context.t('ebFinance'),
             title: context.t('dailySummaryTitle'),
             subtitle: context.t('salesSubtitle'),
             icon: FarmIcon.coins,

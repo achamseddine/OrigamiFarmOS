@@ -1,5 +1,22 @@
 # Releases
 
+## v0.6.0 — The V3 prototype's layout on the tablet
+
+Brings the farm-wide V3 prototype's UX (`prototypes/origami-farmos-v3.html`) into the Flutter tablet on the real backend, as the prototype's own README asks, starting with animals, My Day and feed.
+
+**Delivered:**
+- Shared page anatomy: eyebrow headers on every top-level screen, section headings, dashed empty states, caution notices, record tiles, fact lists and underlined tabs (`core/widgets/ux_blocks.dart`).
+- Animal Digital Twin rebuilt as header card + four figures + capability-gated tabs (Overview, Milk, Feed, Weight, Reproduction, Health & medicines, Timeline) with a grouped *Record* sheet; dated weights recorded from the tablet (offline too); a ration-readiness card that calculates nothing; a merged timeline; a missing or not-yet-loaded animal no longer crashes the screen.
+- Animal registry with search by any identifier and status filters including animals that left the farm.
+- My Day: today's milking, feeding and egg-collection routine, ticked off only from today's records.
+- Feed & nutrition: *Make feed mix* / *Record feeding*, ledger-derived figures, the prototype's tab order, rounds recorded today per plan line. Fixed: five feed tabs hid their tap ripple behind a coloured box (a debug-mode assertion).
+- Health: the AI caveat and an honest empty state.
+- Demo snapshot now carries each animal's weights. 197 strings added in English and Arabic (observation types and event names among them, which were English-only).
+- Tests: Flutter 213 (+17, including screens drawn over the bundled snapshot through a new test harness); analyzer unchanged at 0 errors.
+
+**Next:**
+- The prototype's Overview and Intelligence pages, Inventory / Crops / Operations / Finance restyles, and body-condition scoring (a capability with no record yet).
+
 ## v0.5.0 — The livestock record: history, groups and reproduction
 
 Completes the generic animal model's remaining steps (docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md §13: reproduction, groups, incubation) from LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA and PRODUCTION-SCHEMA §8.

@@ -166,6 +166,23 @@ final List<_Rule> _rules = [
         MergeRecord('/animals/${m.ids[0]}', m.ids[1], const {'status': 'retired'}, listKey: 'identifiers'),
         MergeNested('/animals', m.ids[0], 'identifiers', m.ids[1], const {'status': 'retired'}),
       ]),
+  // A dated weight (health_cases router): it heads the animal's weight
+  // list, and becomes the figure on its herd row and its Digital Twin —
+  // the server makes the newest weight the animal's `weight_kg` too.
+  _Rule('POST', '/animals/$_id/weights', (m) {
+    final record = _newRecord(m, extra: {
+      'animal_id': m.ids[0],
+      'method': m.body['method'] ?? 'scale',
+      'measured_at': m.body['measured_at'] ?? _now(),
+      'source_type': 'manual',
+    });
+    final kg = (m.body['weight_kg'] as num?)?.toDouble();
+    return [
+      AppendRecord('/animals/${m.ids[0]}/weights', record),
+      if (kg != null) MergeRecord('/animals', m.ids[0], {'weight_kg': kg}),
+      PatchDocument('/animals/${m.ids[0]}', {'weight_kg': ?kg, 'latest_weight': record}),
+    ];
+  }),
   // Herds, flocks and batches managed as one unit (§7).
   ..._crud('/animal-groups'),
   // The livestock record (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): what a

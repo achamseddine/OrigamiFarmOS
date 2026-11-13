@@ -54,8 +54,12 @@ class _ProgramCard extends StatelessWidget {
     final p = program;
     final v = p.active;
     final livestock = context.watch<LivestockProvider>();
-    return Container(
-      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
+    // A Material, not a coloured box: the tile paints its ripple on the
+    // nearest Material, and a DecoratedBox in between hid it.
+    return Material(
+      color: FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.md),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),

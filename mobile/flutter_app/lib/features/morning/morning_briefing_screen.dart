@@ -23,6 +23,7 @@ import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
 import '../priorities/priority_card.dart';
 import '../../core/widgets/hero_band.dart';
+import 'today_routine_card.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
 /// (tech spec §2 "Morning first: default route after login is Morning
@@ -114,6 +115,7 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('myDayEyebrow'),
             title: managerName.isEmpty
                 ? context.t('goodMorning')
                 : '${context.t('goodMorning')}، $managerName',
@@ -124,6 +126,9 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
+          // The day's husbandry routine, ticked off from today's records.
+          const TodayRoutineCard(),
+          const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, constraints) {
             final wide = constraints.maxWidth > kTabletBreakpoint;
             final columns = <Widget>[

@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
+import '../../core/widgets/ux_blocks.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/recommendation.dart';
@@ -64,6 +65,7 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('hlEyebrow'),
             title: context.t('healthIntelligenceTitle'),
             subtitle: context.t('healthIntelligenceSubtitle'),
             icon: FarmIcon.stethoscope,
@@ -92,10 +94,9 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
           if (_tab == 5) const EmergencyTab() else if (_tab == 4) const PharmacyTab() else if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
             if (alerts.isEmpty)
               SectionCard(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text(context.t('noHealthAlerts'), style: FarmTypography.textTheme.bodyMedium)),
-                ),
+                // The prototype's wording: an empty list is a statement
+                // about the records, never about the herd.
+                child: EmptyState(message: context.t('noHealthAlerts'), detail: context.t('hlNoAlertsCaveat'), icon: FarmIcon.heart),
               )
             else
               LayoutBuilder(builder: (context, c) {
@@ -122,6 +123,8 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
                   ]),
                 );
               }),
+            const SizedBox(height: FarmSpacing.md),
+            NoticeBanner(text: context.t('twAiCaveat')),
             const SizedBox(height: FarmSpacing.md),
             SectionCard(
               title: context.t('fromObservationToRecommendation'),

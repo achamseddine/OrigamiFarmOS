@@ -156,6 +156,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [("/reproduction/overview", None), ("/incubations", None), ("/animal-group-types", None)]
     paths += [(f"/animals/{animal_id}/reproduction", None) for animal_id in animal_ids]
     paths += [(f"/animals/{animal_id}/history", None) for animal_id in animal_ids]
+    # Every animal's dated weights — the Digital Twin's Weight tab.
+    paths += [(f"/animals/{animal_id}/weights", None) for animal_id in animal_ids]
     paths += [(f"/animal-groups/{group_id}/members", None) for group_id in group_ids]
     paths += [(f"/animal-groups/{group_id}/quantity-events", None) for group_id in group_ids]
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]

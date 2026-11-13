@@ -55,6 +55,7 @@ class _VisitsModuleScreenState extends State<VisitsModuleScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         HeroBand(
+          eyebrow: context.t('ebVisits'),
           title: context.t('navVisits'),
           subtitle: context.t('navVisitsSub'),
           icon: FarmIcon.calendar,

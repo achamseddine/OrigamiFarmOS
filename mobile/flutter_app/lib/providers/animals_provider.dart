@@ -26,6 +26,15 @@ class AnimalsProvider extends ChangeNotifier {
 
   Animal byId(String id) => _animals.firstWhere((a) => a.id == id, orElse: () => _animals.first);
 
+  /// The animal with this id, or null while the herd is still loading —
+  /// or when it is not on this farm's list at all.
+  Animal? find(String id) {
+    for (final a in [..._animals, ..._exited]) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
   List<TreatmentRecord> treatmentsFor(String entityId) => _treatments.where((t) => t.entityId == entityId).toList();
 
   Future<void> load() async {
@@ -136,6 +145,42 @@ class AnimalsProvider extends ChangeNotifier {
         ),
       );
     }
+    return result;
+  }
+
+  List<Animal> _exited = [];
+
+  /// Animals that were sold, died or otherwise left the farm — kept on
+  /// record, fetched only when someone asks for them (registry filter).
+  List<Animal> get exited => List.unmodifiable(_exited);
+
+  Future<void> loadExited() async {
+    final rows = await _api.get('/animals', query: {'farm_id': _farmId, 'include_exited': true}) as List<dynamic>;
+    _exited = [
+      for (final r in rows)
+        if ((r as Map<String, dynamic>)['lifecycle_status'] != null && r['lifecycle_status'] != 'active') Animal.fromJson(r),
+    ];
+    notifyListeners();
+  }
+
+  /// The animal's dated weights, newest first (`GET /animals/{id}/weights`).
+  Future<List<WeightRecord>> fetchWeights(String animalId) async {
+    final rows = await _api.get('/animals/$animalId/weights') as List<dynamic>;
+    final weights = [for (final r in rows) WeightRecord.fromJson(r as Map<String, dynamic>)];
+    weights.sort((a, b) => b.measuredAt.compareTo(a.measuredAt));
+    return weights;
+  }
+
+  /// A weighing. The server makes the newest weight the animal's
+  /// `weight_kg`; the herd row shows it at once.
+  Future<WriteResult> recordWeight({required String animalId, required double weightKg, required String method, DateTime? measuredAt, String? notes}) async {
+    final result = await _api.write(() => _api.post('/animals/$animalId/weights', body: {
+          'weight_kg': weightKg,
+          'method': method,
+          'measured_at': ?measuredAt?.toUtc().toIso8601String(),
+          'notes': ?notes,
+        }));
+    if (result.success) _replace(animalId, (a) => a.copyWith(weightKg: weightKg));
     return result;
   }
 

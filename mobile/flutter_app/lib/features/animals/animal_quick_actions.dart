@@ -22,7 +22,13 @@ const _observationTypes = [
   'abnormal_behavior',
 ];
 
-String _observationLabel(String key) => key.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+/// What an observation type is called, in the reader's language; a type
+/// the table does not know yet is spelt out from its code.
+String observationLabel(BuildContext context, String key) {
+  final translated = context.t('obs_$key');
+  if (translated != 'obs_$key') return translated;
+  return key.split('_').where((w) => w.isNotEmpty).map((w) => w[0].toUpperCase() + w.substring(1)).join(' ');
+}
 
 /// Worker-facing capture dialog. Deliberately has no diagnosis field
 /// (Constitution: "Workers record observations. Workers do not diagnose.")
@@ -73,7 +79,7 @@ class _ObserveDialogState extends State<_ObserveDialog> {
             DropdownButtonFormField<String>(
               value: _type,
               decoration: InputDecoration(labelText: context.t('observationType')),
-              items: [for (final t in _observationTypes) DropdownMenuItem(value: t, child: Text(_observationLabel(t)))],
+              items: [for (final t in _observationTypes) DropdownMenuItem(value: t, child: Text(observationLabel(context, t)))],
               onChanged: (v) => setState(() => _type = v ?? _type),
             ),
             const SizedBox(height: 12),

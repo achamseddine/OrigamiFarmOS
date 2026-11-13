@@ -57,6 +57,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebSettings'),
             title: context.t('navSettings'),
             subtitle: context.t('settingsSubtitle'),
             icon: FarmIcon.settings,

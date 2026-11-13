@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/ux_blocks.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -39,7 +40,7 @@ class MixingTab extends StatelessWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           if (canCreate)
             FilledButton.icon(
-              onPressed: feeding.formulas.any((f) => f.active != null) ? () => _showStartDialog(context) : null,
+              onPressed: feeding.formulas.any((f) => f.active != null) ? () => showStartMixDialog(context) : null,
               icon: const Icon(Icons.add, size: 16),
               label: Text(context.t('startBatch')),
             ),
@@ -47,6 +48,7 @@ class MixingTab extends StatelessWidget {
           for (final b in open) ...[const SizedBox(height: 10), _BatchCard(batch: b, canComplete: canCreate, canApprove: canApprove)],
         ]),
       ),
+      NoticeBanner(tone: NoticeTone.info, text: context.t('fwMixLedgerNote')),
       SectionCard(
         title: context.t('completedBatches'),
         child: Column(children: [
@@ -69,8 +71,12 @@ class _BatchCard extends StatelessWidget {
     final b = batch;
     final lang = Localizations.localeOf(context).languageCode;
     final livestock = context.watch<LivestockProvider>();
-    return Container(
-      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
+    // A Material, not a coloured box: the tile paints its ripple on the
+    // nearest Material, and a DecoratedBox in between hid it.
+    return Material(
+      color: FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.md),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
@@ -144,7 +150,9 @@ class _BatchCard extends StatelessWidget {
 }
 
 // -------------------------------------------------------------- start
-Future<void> _showStartDialog(BuildContext context) => showDialog<void>(context: context, builder: (_) => const _StartBatchDialog());
+/// Opens a new numbered mix from an active formula — the feed page's
+/// primary action.
+Future<void> showStartMixDialog(BuildContext context) => showDialog<void>(context: context, builder: (_) => const _StartBatchDialog());
 
 class _StartBatchDialog extends StatefulWidget {
   const _StartBatchDialog();

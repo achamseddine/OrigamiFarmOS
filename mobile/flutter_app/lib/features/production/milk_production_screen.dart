@@ -118,6 +118,7 @@ class MilkProductionScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebProduction'),
             title: context.t('milkProductionTitle'),
             subtitle: context.t('milkProductionSubtitle'),
             icon: FarmIcon.milkBottle,

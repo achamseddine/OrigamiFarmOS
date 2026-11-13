@@ -446,6 +446,48 @@ Future<bool> showExitForm(BuildContext context, Animal animal) async {
   return ok;
 }
 
+// ---------------------------------------------------------------- weight
+/// The methods a person can choose; `point_of_care` and `legacy` are set
+/// by the system (a weight taken during an emergency protocol, a figure
+/// carried over from the old profile field), never picked here.
+const weightMethods = ['scale', 'tape', 'visual_estimate'];
+
+Future<bool> showWeightForm(BuildContext context, Animal animal) async {
+  var method = 'scale';
+  final kg = TextEditingController();
+  final notes = TextEditingController();
+  final ok = await _recordDialog(
+    context,
+    title: '${context.t('twRecordWeight')} — ${animal.name}',
+    fields: (context, setState) => [
+      TextField(
+        controller: kg,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(labelText: context.t('weightKg'), suffixText: 'kg'),
+      ),
+      _gap(),
+      _dropdown(context, label: context.t('weightMethod'), value: method, options: weightMethods, display: (m) => context.t('wm_$m'),
+          onChanged: (v) => setState(() => method = v)),
+      _gap(),
+      TextField(controller: notes, decoration: InputDecoration(labelText: context.t('notes'))),
+    ],
+    submit: (context) {
+      final value = double.tryParse(kg.text.trim().replaceAll(',', '.'));
+      if (value == null || value <= 0) return Future.value(WriteResult.fail(context.t('weightInvalid')));
+      return context.read<AnimalsProvider>().recordWeight(
+            animalId: animal.id,
+            weightKg: value,
+            method: method,
+            notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+          );
+    },
+  );
+  kg.dispose();
+  notes.dispose();
+  return ok;
+}
+
 // ---------------------------------------------------------------- groups
 Future<bool> showMoveToGroupForm(BuildContext context, Animal animal) async {
   final groups = context.read<LivestockProvider>().groups.where((g) => g.species == animal.species && g.name != animal.groupName).toList();

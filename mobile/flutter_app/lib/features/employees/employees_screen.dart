@@ -56,6 +56,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebTeam'),
             title: context.t('employeesAndResponsibilities'),
             subtitle: context.t('employeesSubtitle'),
             icon: FarmIcon.people,

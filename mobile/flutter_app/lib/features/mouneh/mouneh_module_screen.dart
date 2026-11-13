@@ -49,6 +49,7 @@ class _MounehModuleScreenState extends State<MounehModuleScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         HeroBand(
+          eyebrow: context.t('ebMouneh'),
           title: context.t('navMouneh'),
           subtitle: context.t('navMounehSub'),
           icon: FarmIcon.package,

@@ -214,6 +214,19 @@ An animal's Digital Twin carries **Reproduction & milking** — pregnant and due
 
 The Milk and Egg screens read the same provider as Produce & Harvest, which used to load only for Produce staff; it now loads for anyone holding Milk, Eggs or Produce, one list at a time, so a module the user lacks costs them only that list.
 
+### The V3 prototype's layout
+
+The farm-wide browser prototype (`prototypes/origami-farmos-v3.html`, on the `origami-farmos-baseline-…` branch) settled how the screens are laid out; its own README says to adopt that into this app on the real backend rather than keep its browser storage. What was carried over, on server data and in both languages:
+
+- **Page anatomy.** Every top-level screen's header now has the prototype's uppercase eyebrow over the title (`HeroBand.eyebrow`); sections open with eyebrow, heading, one line and their action (`SectionHeading`). Empty lists are a dashed box with an icon (`EmptyState`, also behind every feed tab's `FeedEmpty`); figures that could be over-read carry an amber caveat (`NoticeBanner`). All in `core/widgets/ux_blocks.dart`.
+- **Animal Digital Twin** (`animal_digital_twin_screen.dart`, `animal_twin_tabs.dart`): a header card (photo, "SPECIES · TAG · PURPOSE", name, tags for status / health / sex / group / pregnancy / milk / withdrawal / pending sync, *Edit profile* and *Record*), four figures (milk last 7 days, latest weight, pregnancy, recorded activity) and tabs **Overview · Milk · Feed · Weight · Reproduction · Health & medicines · Timeline**. Which tabs exist comes from the resolved capabilities and the person's modules, never the species. *Record* opens every action the animal and person have, grouped (every day, health, breeding, herd & location). New on the way: dated **weights** with their method (`GET/POST /animals/{id}/weights`, offline through a cache rule), a **ration readiness** card that lists which inputs are on record and says plainly that no individual ration is calculated, and a merged **timeline** of events, observations and state changes. Opening an animal before the herd has loaded, or one that is not on the farm's list, now says so instead of throwing.
+- **Animal registry** (`animal_status_screen.dart`): search by name, tag, any identifier, breed or group; species and status filters (needs attention, healthy, observation, treatment, pregnant, lactating, withdrawal, left the farm — the last fetched with `include_exited`); the prototype's registry cards.
+- **My Day** (`features/morning/today_routine_card.dart`): today's routine — morning and evening milking against the animals in milk, each group's feeding rounds against its program's feedings per day (individually fed animals share one line), egg collection per flock — ticked off only from what was recorded today.
+- **Feed & nutrition** (`feed_workspace_screen.dart`): *Make feed mix* and *Record feeding* in the header, four figures (numbered mixes, finished mix on hand from the stock ledger's output lots, feedings in 7 days, feeding cost in 30 days), underlined tabs in the prototype's order starting with mix production, a note that every run is its own numbered mix and that what is left is never typed in, and "rounds today" on each feed-intake line.
+- **Health**: the AI caveat beside recommendations, and an empty alert list that says it is a statement about the records, not the herd.
+
+Widget tests draw these screens over the bundled snapshot through `test/support/snapshot_farm.dart`, which serves the server's own responses as the API.
+
 ## Data entry
 
 Every module's responsible employee can actually run their area, not just
@@ -403,7 +416,7 @@ The backend's full test suite does run here and passes, including the
 permission, employee, notification, priority, audit, agriculture, feed,
 feed-performance, pharmacy and emergency suites that back these screens.
 The Flutter SDK was later made available in the development session, so
-`flutter analyze` and `flutter test` (196 tests: the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
+`flutter analyze` and `flutter test` (213 tests: the Digital Twin's tabs and the registry drawn over the bundled farm, the day's routine, registry filters, finished mix on hand and the weight cache rule, the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
 the bundled snapshot, offline cache effects, visit rules, the offline
 protocol engine against a hand-built package and the bundled farm's real
 one, the entity routes, and the animal care card rendered from the

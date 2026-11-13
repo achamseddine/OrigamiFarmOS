@@ -31,6 +31,10 @@ class FeedingProvider extends ChangeNotifier {
   FeedCostSummary costs = FeedCostSummary.empty;
   List<NutrientDef> nutrients = [];
 
+  /// Every feeding recorded on the farm in the last week, newest first —
+  /// what the day's routine and the feed intake tab tick off against.
+  List<FeedingEvent> recentEvents = [];
+
   // Feed performance intelligence: the server's explanations, read-only
   // here except for acknowledging and closing alerts and asking for a run.
   FeedPerformanceSummary performance = FeedPerformanceSummary.empty;
@@ -75,12 +79,31 @@ class FeedingProvider extends ChangeNotifier {
         _fetch('/feed-reconciliations', (j) => reconciliations = [for (final r in j as List<dynamic>) FeedReconciliation.fromJson(r as Map<String, dynamic>)]),
         _fetch('/feed-costs', (j) => costs = FeedCostSummary.fromJson(j as Map<String, dynamic>), query: {'days': 30}),
         _fetch('/feed-nutrients', (j) => nutrients = [for (final n in j as List<dynamic>) NutrientDef.fromJson(n as Map<String, dynamic>)]),
+        _fetchRecentEvents(),
         ..._performanceFetches(),
       ]);
     } finally {
       loading = false;
       notifyListeners();
     }
+  }
+
+  Future<void> _fetchRecentEvents() => _fetch('/feeding-events', (j) => recentEvents = [for (final e in j as List<dynamic>) FeedingEvent.fromJson(e as Map<String, dynamic>)],
+      query: {'days': 7});
+
+  /// Feedings recorded today (device-local day) for one subject, not
+  /// counting reversed ones or the reversals themselves.
+  List<FeedingEvent> fedToday(String subjectId) {
+    final now = DateTime.now();
+    return [
+      for (final e in recentEvents)
+        if (e.subjectId == subjectId &&
+            e.status == 'recorded' &&
+            e.occurredAt.toLocal().year == now.year &&
+            e.occurredAt.toLocal().month == now.month &&
+            e.occurredAt.toLocal().day == now.day)
+          e,
+    ];
   }
 
   List<Future<void>> _performanceFetches() => [
@@ -264,11 +287,13 @@ class FeedingProvider extends ChangeNotifier {
       _write(() => _api.post('/feeding-events', body: body), then: () async {
         final subjectId = body['subject_id'] as String?;
         if (subjectId != null) await planFor(subjectId, force: true);
+        await _fetchRecentEvents();
         await refreshStock();
       });
   Future<WriteResult> reverseFeeding(String eventId, String reason, {String? subjectId}) =>
       _write(() => _api.post('/feeding-events/$eventId/reverse', body: {'reason': reason}), then: () async {
         if (subjectId != null) await planFor(subjectId, force: true);
+        await _fetchRecentEvents();
         await refreshStock();
       });
 

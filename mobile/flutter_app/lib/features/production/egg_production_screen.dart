@@ -114,6 +114,7 @@ class EggProductionScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebProduction'),
             title: context.t('eggProductionTitle'),
             subtitle: context.t('eggProductionSubtitle'),
             icon: FarmIcon.egg,
