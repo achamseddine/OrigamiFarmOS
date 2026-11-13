@@ -18,6 +18,10 @@ Unlike traditional farm management software that primarily stores records, FarmO
 * **Evidence Before Opinion:** Every recommendation is supported by evidence.
 * **One Digital Twin per Object:** Every physical object on the farm (animals, flocks, fields, etc.) has one digital representation.
 
+## Animal and Feed workflows — documentation and correction status
+
+Start at the [Animal and Feed documentation index](docs/README.md), the [operator workflow handbook](handbook/06-Operational-Workflows/README.md) and the [2026-11-13 code-backed flow audit](docs/ANIMAL-FEED-FLOW-AUDIT.md). The audit identifies **open** issues in group/individual feed-demand totals, negative-stock provenance, program activation/assignment approval and offline milk withdrawal. These documentation changes do **not** implement the fixes. The [per-animal nutrition optimizer specification](database/DYNAMIC-NUTRITION-AND-RATION-OPTIMIZATION.md) is **design only**; Feed Performance is observational analytics, not a ration solver.
+
 ## QR animal-side recording (feature branch)
 
 The new [QR Animal Quick Entry workflow](docs/QR-ANIMAL-QUICK-ENTRY.md) puts the Animal Digital Twin at the centre of the worker's routine. The first Flutter increment accepts an animal QR payload from a keyboard-wedge reader (or a typed tag), records measured morning/evening milk and offered concentrate/silage/straw with optional measured refusals, and links observations, dated weights and pharmacy administration. It uses the existing offline outbox and domain APIs. **Camera scanning, QR printing and secure photo attachments are not yet implemented.** Withdrawal milk uses the distinct non-saleable `withheld` destination and is rejected by the API if submitted to an ordinary destination.
