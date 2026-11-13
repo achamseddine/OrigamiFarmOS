@@ -3,12 +3,15 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_farm_access
+from app.api.deps import get_current_user, require_farm_access, require_permission
+from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
+from app.repositories.base import write_audit_log, write_event
 from app.schemas.auth import BootstrapResponse
 
 router = APIRouter(prefix="/farms", tags=["farms"])
@@ -40,6 +43,42 @@ def my_farm(db: Session = Depends(get_db), current_user: models.User = Depends(g
     farm = db.get(models.Farm, current_user.farm_id)
     if farm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")
+    return _serialize(farm)
+
+
+class FarmSettingsUpdate(BaseModel):
+    """The farm-level settings a manager changes from the tablet. Only the
+    fields sent are changed."""
+
+    # Days before an expected birth that a lactating animal is dried off.
+    dry_off_days_before_birth: int | None = Field(None, ge=0, le=200)
+
+
+@router.patch("/me")
+def update_my_farm(
+    payload: FarmSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_permission(perms.SETTINGS, perms.EDIT)),
+) -> dict:
+    """Changes the signed-in user's farm settings. Settings are not history-
+    bearing facts, so the row is updated in place — and every change is an
+    audit entry and a `farm_settings_changed` event with the old value."""
+    farm = db.get(models.Farm, current_user.farm_id)
+    if farm is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")
+    changes = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None and getattr(farm, k) != v}
+    if changes:
+        before = {k: getattr(farm, k) for k in changes}
+        for k, v in changes.items():
+            setattr(farm, k, v)
+        write_event(db, farm_id=farm.id, entity_type="farm", entity_id=farm.id, event_type="farm_settings_changed",
+                    payload={"before": before, "after": changes}, created_by=current_user.id)
+        write_audit_log(
+            db, farm_id=farm.id, user_id=current_user.id, action="farm_settings_changed", entity_type="farm", entity_id=farm.id,
+            module_code=perms.SETTINGS, changes={k: {"from": before[k], "to": v} for k, v in changes.items()},
+            summary=f"{current_user.name} changed " + ", ".join(f"{k.replace('_', ' ')} {before[k]} → {v}" for k, v in changes.items()),
+        )
+        db.commit()
     return _serialize(farm)
 
 

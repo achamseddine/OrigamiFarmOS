@@ -1,6 +1,6 @@
 # QR Animal Quick Entry — worker workflow and implementation map
 
-**Status (2026-11-13): second increment on `claude/gifted-davinci-mu9fjj` — built-in camera scanning, printable QR labels for animals and pens, pen/group labels, duplicate-session safeguards, program-prefilled feed rows and scan-driven rounds from My Day. Photo attachments, body-condition scoring and cross-device duplicate reconciliation are still not implemented.** First slice: `feat/qr-animal-quick-entry` (PR #11, merged into this branch). This is the canonical worker workflow direction, replacing generic checklist completion as the way to record animal work.
+**Status (2026-11-13): second increment on `claude/gifted-davinci-mu9fjj`, plus the on-farm corrections below — built-in camera scanning, printable QR labels for animals and pens, pen/group labels, duplicate-session safeguards, program-prefilled feed rows and scan-driven rounds from My Day. Photo attachments, body-condition scoring and cross-device duplicate reconciliation are still not implemented.** First slice: `feat/qr-animal-quick-entry` (PR #11, merged into this branch). This is the canonical worker workflow direction, replacing generic checklist completion as the way to record animal work.
 
 ## Goal
 
@@ -26,6 +26,19 @@ The 06:00 round for one cow — morning milk plus concentrate and straw offered 
 | A pen or a flock | Not scannable; group feeding through menus | **Pen label** opens the group: today's feeding rounds, record the round from its program, pick an animal from its members |
 
 Per cow that is roughly: scan → (check) → litres → *Fill planned amounts* → save — four actions instead of about a dozen, with no product picking and no dropdown scrolling. The tablet now refuses three mistakes the old path allowed silently: a duplicate milking in the same session, a pen label recording against "whichever animal" stood there, and a code from another farm or an animal that has left.
+
+## Corrections after on-farm testing (2026-11-13)
+
+| Finding | Correction | Where |
+|---|---|---|
+| Adding an animal seemed to need a scanned code (the ear tag field was mandatory for cattle, the microchip for horses) | Nothing is scanned or typed to register: the server gives every new animal the farm's next **farm number**, and the form shows the new animal's **QR label** to print as soon as it is saved. An ear tag can be typed now or added later; the twin says it is missing until then | `add_animal_form.dart`, `identifier_service.with_farm_number`, `docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md` §4a |
+| Pregnancy and milking could only be set when registering, and not at all for some animals (no dairy profile, "senior" stage) | The form asks *Is she pregnant?* (not pregnant / inseminated — not confirmed / pregnant, with the insemination date and method, expected birth and dry-off date) and *Is she being milked?* on new and existing animals; answers become breeding / pregnancy-check / lactation / dry-off records. An answer the stage or profile does not allow adjusts them and says so. Senior females keep the adult capabilities | `animal_status_section.dart`, `catalog.SENIOR_RULES` |
+| Saying an animal is in milk did not lead to a milk record | The milk record opens straight after the save | `add_animal_form.dart` |
+| Dry-off before birth had no farm rule | **Settings → Dry-off before birth** (days, default 60). The twin and the reproduction overview show *dry off from* for every pregnant animal in milk and flag it when due | `farms.dry_off_days_before_birth`, `PATCH /farms/me`, `database/PRODUCTION-SCHEMA.md` §8 |
+| The animal feed record did not work: the farm had no feed products (production DB), and a feed with no stock entered was refused | Three default rows — **Concentrate, Corn silage, Wheat straw** — each already pointing at the farm's feed, every row optional, *Add another feed*; the farm gets the three standard feeds (empty ledger) by migration/seed or the form's *Set up* button; feeding more than the entered stock asks *"Stock not entered yet — record anyway"* explicitly | `feeding_event_dialog.dart`, `GET /feed-products/standard-slots`, `docs/GENERIC-FEED-ARCHITECTURE.md` §3a |
+
+Deploying: the backend needs migration `a8d0c2e4f6b1` (run *Migrate & seed DB* with
+`migrate_only`) before the new tablet build is used against it.
 
 ## Implemented in the second increment
 

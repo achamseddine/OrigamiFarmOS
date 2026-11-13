@@ -274,8 +274,10 @@ class TestSummary:
         r = client.get(f"{API}/feed-performance/summary", headers=_h(client))
         assert r.status_code == 200, r.text
         s = r.json()
-        assert s["monitors"] == 4 and s["batches_scored"] == 1 and s["suppliers_scored"] == 4
+        # Supplier scores are per supplier × product: the demo's wheat straw
+        # lot (Bekaa Hay Co.) is the fifth pair.
+        assert s["monitors"] == 4 and s["batches_scored"] == 1 and s["suppliers_scored"] == 5
         assert s["model_reference"] == "origami.feed_performance.deterministic" and s["last_evaluated_at"]
         out = _evaluate(client)
-        assert out["monitors"] == 4 and out["batches_scored"] == 1 and out["suppliers"] == 4 and out["insufficient"] == 3
+        assert out["monitors"] == 4 and out["batches_scored"] == 1 and out["suppliers"] == 5 and out["insufficient"] == 3
         assert out["cost_efficiency"]["cost_per_litre_this_week"] is not None

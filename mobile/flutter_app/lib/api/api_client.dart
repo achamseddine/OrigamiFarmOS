@@ -31,11 +31,18 @@ class ApiException implements Exception {
 /// expects (`result.success`, `result.error`), plus [queued] for a write
 /// that is safely on the tablet but has not reached the server yet.
 class WriteResult {
-  const WriteResult.ok() : error = null, queued = false;
-  const WriteResult.queued() : error = null, queued = true;
-  const WriteResult.fail(this.error) : queued = false;
+  const WriteResult.ok([this.data]) : error = null, queued = false;
+  const WriteResult.queued([this.data]) : error = null, queued = true;
+  const WriteResult.fail(this.error) : queued = false, data = null;
 
   final String? error;
+
+  /// What the server answered (the created record), or the outbox's local
+  /// placeholder when [queued] — whose `id` the server does not know yet.
+  final Object? data;
+
+  /// The id the server gave a created record; null while it is queued.
+  String? get serverId => !queued && data is Map ? (data as Map)['id'] as String? : null;
 
   /// True when the write went to the outbox instead of the server. It is
   /// saved — on this tablet — and will be sent on the next sync.
@@ -368,7 +375,7 @@ class ApiClient {
     try {
       final result = await action();
       final queued = result is Map && result[kPendingFlag] == true;
-      return queued ? const WriteResult.queued() : const WriteResult.ok();
+      return queued ? WriteResult.queued(result) : WriteResult.ok(result);
     } on ApiException catch (e) {
       return WriteResult.fail(e.message);
     }

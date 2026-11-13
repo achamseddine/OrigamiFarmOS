@@ -169,7 +169,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     lot_ids = [l.id for l in db.query(feed_models.FeedLot).filter_by(farm_id=FARM_ID).all()]
     paths += [
         ("/feed/transactions", {**farm, "days": 30}),
-        ("/feed-products", None), ("/feed-lots", None), ("/feed-formulas", None), ("/feed-batches", None), ("/feed-nutrients", None),
+        ("/feed-products", None), ("/feed-products/standard-slots", None), ("/feed-lots", None), ("/feed-formulas", None),
+        ("/feed-batches", None), ("/feed-nutrients", None),
         ("/feeding-programs", None), ("/feeding-plan/today", None), ("/feeding-events", {"days": 7}),
         ("/feed-inventory/availability", None), ("/feed-inventory/days-of-cover", None), ("/feed-inventory/reorder-recommendations", None),
         ("/feed-allocations", None), ("/feed-reorder-policies", None), ("/feed-reconciliations", None), ("/feed-costs", {"days": 30}),

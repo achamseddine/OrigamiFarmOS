@@ -52,6 +52,21 @@ POLICY_EFFECTS = ("allow", "block", "limit")
 PRODUCT_SOURCES = ("purchased", "farm_produced")
 
 
+# The three feeds a worker records at the animal by default
+# (docs/QR-ANIMAL-QUICK-ENTRY.md): the feeding form opens one row for each,
+# every row optional. Each is an ordinary farm feed product backed by an
+# inventory item — no special stock. A farm that already has a matching feed
+# (by code, by a keyword in its name, or a concentrate by category) keeps it
+# and no second one is created.
+#   (slot, code, name_en, name_ar, category, unit, name keywords)
+STANDARD_FEEDS: tuple[tuple[str, str, str, str, str, str, tuple[str, ...]], ...] = (
+    ("concentrate", "CONCENTRATE", "Concentrate", "علف مركّز", "concentrate", "kg", ("concentrate", "مركز", "مركّز")),
+    ("corn_silage", "CORN-SILAGE", "Corn silage", "سيلاج الذرة", "forage", "kg", ("silage", "سيلاج")),
+    ("wheat_straw", "WHEAT-STRAW", "Wheat straw", "تبن القمح", "forage", "kg", ("straw", "تبن")),
+)
+STANDARD_FEED_SLOTS = tuple(row[0] for row in STANDARD_FEEDS)
+
+
 def ensure_feed_reference_data(db: Session) -> None:
     """Idempotent upsert of the nutrient catalog."""
     for code, name_en, name_ar, unit, category, sort_order in NUTRIENTS:

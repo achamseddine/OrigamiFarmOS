@@ -95,6 +95,19 @@ class FeedProductOut(BaseModel):
     has_active_formula: bool = False
 
 
+class StandardFeedSlotOut(BaseModel):
+    """One default row of the animal feeding form, and the farm feed that
+    fills it (None when the farm has none yet)."""
+
+    slot: str
+    code: str
+    label_en: str
+    label_ar: str
+    unit: str
+    feed_product_id: str | None = None
+    feed_product_name: str | None = None
+
+
 class LotReceive(BaseModel):
     feed_product_id: str
     quantity: float = Field(gt=0)

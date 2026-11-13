@@ -28,6 +28,7 @@ from app.schemas.feeding import (
     LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
+    StandardFeedSlotOut,
 )
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
@@ -218,6 +219,33 @@ def list_feed_products(include_inactive: bool = False, db: Session = Depends(get
     out = [_product_out(db, p) for p in rows]
     db.commit()  # opening-balance lots created on read are kept
     return out
+
+
+def _slots_out(slots: dict) -> list[dict]:
+    from app.feeding import catalog as feed_catalog
+
+    out = []
+    for slot, code, name_en, name_ar, _category, unit, _kw in feed_catalog.STANDARD_FEEDS:
+        product = slots.get(slot)
+        out.append({"slot": slot, "code": code, "label_en": name_en, "label_ar": name_ar, "unit": product.unit if product else unit,
+                    "feed_product_id": product.id if product else None, "feed_product_name": product.name if product else None})
+    return out
+
+
+@router.get("/feed-products/standard-slots", response_model=list[StandardFeedSlotOut])
+def standard_feed_slots(db: Session = Depends(get_db), user: models.User = Depends(_view)):
+    """The default rows of the animal feeding form — concentrate, corn
+    silage, wheat straw — and which of the farm's feeds fills each."""
+    return _slots_out(inv.standard_feed_slots(db, user.farm_id))
+
+
+@router.post("/feed-products/standard", response_model=list[StandardFeedSlotOut])
+def ensure_standard_feeds(db: Session = Depends(get_db), user: models.User = Depends(_create)):
+    """Creates whichever standard feed the farm lacks (idempotent): an
+    ordinary feed product with an empty ledger, never invented stock."""
+    slots = inv.ensure_standard_feeds(db, user.farm_id, created_by=user.id)
+    db.commit()
+    return _slots_out(slots)
 
 
 @router.post("/feed-products", response_model=FeedProductOut, status_code=status.HTTP_201_CREATED)

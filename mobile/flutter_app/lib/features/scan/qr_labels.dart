@@ -116,13 +116,17 @@ Future<Uint8List> buildQrLabelPdf(List<Uint8List> labelPngs) async {
 }
 
 /// Preview the labels and print or share them as a PDF.
-Future<void> showQrLabels(BuildContext context, {required List<QrLabel> labels}) {
-  return showDialog<void>(context: context, builder: (_) => _QrLabelsDialog(labels: labels));
+/// [title] and [note] replace the sheet's heading and explanation — the
+/// Add Animal form uses them to say the new animal's code is ready.
+Future<void> showQrLabels(BuildContext context, {required List<QrLabel> labels, String? title, String? note}) {
+  return showDialog<void>(context: context, builder: (_) => _QrLabelsDialog(labels: labels, title: title, note: note));
 }
 
 class _QrLabelsDialog extends StatefulWidget {
-  const _QrLabelsDialog({required this.labels});
+  const _QrLabelsDialog({required this.labels, this.title, this.note});
   final List<QrLabel> labels;
+  final String? title;
+  final String? note;
 
   @override
   State<_QrLabelsDialog> createState() => _QrLabelsDialogState();
@@ -167,12 +171,12 @@ class _QrLabelsDialogState extends State<_QrLabelsDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('${context.t('qrLabelsTitle')} · ${widget.labels.length}'),
+      title: Text(widget.title ?? '${context.t('qrLabelsTitle')} · ${widget.labels.length}'),
       content: SizedBox(
         width: 700,
         child: SingleChildScrollView(
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Text(context.t('qrLabelsNote'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
+            Text(widget.note ?? context.t('qrLabelsNote'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
             const SizedBox(height: FarmSpacing.md),
             Wrap(spacing: 10, runSpacing: 10, children: [
               for (var i = 0; i < widget.labels.length; i++) RepaintBoundary(key: _keys[i], child: QrLabelCard(label: widget.labels[i])),

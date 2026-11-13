@@ -50,6 +50,10 @@ class BreedingRecord {
 
   bool get voided => status == 'voided';
 
+  /// A mating, insemination or embryo transfer — a service that can start
+  /// a pregnancy (a heat is only a sign).
+  bool get isService => !voided && eventType != 'HEAT_OBSERVED';
+
   /// Who sired it: the farm's own male, else the outside sire written down.
   String? get sire => maleName ?? sireReference;
 
@@ -230,6 +234,9 @@ class ReproSummary {
     this.birthsCount = 0,
     this.awaitingCheck = false,
     this.lactationNumber,
+    this.dryOffDays = kDefaultDryOffDays,
+    this.dryOffFrom,
+    this.dryOffDue = false,
   });
 
   final ReproApplies applies;
@@ -244,6 +251,23 @@ class ReproSummary {
   final int birthsCount;
   final bool awaitingCheck;
   final int? lactationNumber;
+
+  /// The farm's dry-off setting and, for a pregnant animal, the date
+  /// milking should stop; [dryOffDue] once that date has come while she is
+  /// still in milk.
+  final int dryOffDays;
+  final DateTime? dryOffFrom;
+  final bool dryOffDue;
+
+  /// Served (inseminated or mated) and not yet confirmed either way: the
+  /// latest service is newer than the latest pregnancy check.
+  bool get inseminatedUnconfirmed {
+    final b = lastBreeding;
+    final served = b?.occurredAt;
+    if (pregnant || b == null || !b.isService || served == null) return false;
+    final check = lastCheck?.assessedAt;
+    return check == null || check.isBefore(served);
+  }
 
   /// The species' own word: "Calving", "Lambing", "Kidding", "Foaling".
   String birthTerm(bool arabic) => (terminology[arabic ? 'birth_ar' : 'birth_en'] as String?) ?? (arabic ? 'ولادة' : 'Birth');
@@ -264,6 +288,9 @@ class ReproSummary {
       birthsCount: _int(j['births_count']) ?? 0,
       awaitingCheck: j['awaiting_pregnancy_check'] == true,
       lactationNumber: _int(j['lactation_number']),
+      dryOffDays: _int(j['dry_off_days_before_birth']) ?? kDefaultDryOffDays,
+      dryOffFrom: _dt(j['dry_off_from']),
+      dryOffDue: j['dry_off_due'] == true,
     );
   }
 }
@@ -439,7 +466,16 @@ class IncubationBatch {
 
 /// The farm's reproduction day (`GET /reproduction/overview`).
 class ReproOverview {
-  const ReproOverview({this.pregnant = const [], this.awaitingCheck = const [], this.recentBirths = 0, this.inMilk = 0, this.dueSoon = 0, this.incubations = const []});
+  const ReproOverview({
+    this.pregnant = const [],
+    this.awaitingCheck = const [],
+    this.recentBirths = 0,
+    this.inMilk = 0,
+    this.dueSoon = 0,
+    this.incubations = const [],
+    this.dryOffDays = kDefaultDryOffDays,
+    this.dryOffDue = 0,
+  });
 
   final List<Map<String, dynamic>> pregnant;
   final List<Map<String, dynamic>> awaitingCheck;
@@ -447,6 +483,12 @@ class ReproOverview {
   final int inMilk;
   final int dueSoon;
   final List<IncubationBatch> incubations;
+
+  /// The farm setting: days before an expected birth that milking stops.
+  final int dryOffDays;
+
+  /// Pregnant animals still in milk whose dry-off date has come.
+  final int dryOffDue;
 
   bool get isEmpty => pregnant.isEmpty && awaitingCheck.isEmpty && recentBirths == 0 && inMilk == 0 && incubations.isEmpty;
 
@@ -457,5 +499,14 @@ class ReproOverview {
         inMilk: _int(j['in_milk_count']) ?? 0,
         dueSoon: _int(j['due_soon_count']) ?? 0,
         incubations: [for (final b in _maps(j['incubations'])) IncubationBatch.fromJson(b)],
+        dryOffDays: _int(j['dry_off_days_before_birth']) ?? kDefaultDryOffDays,
+        dryOffDue: _int(j['dry_off_due_count']) ?? 0,
       );
 }
+
+/// The server's default for `farms.dry_off_days_before_birth`.
+const kDefaultDryOffDays = 60;
+
+/// When milking should stop ahead of [expectedBirth] — a plan, never a
+/// record.
+DateTime? dryOffFrom(DateTime? expectedBirth, int days) => expectedBirth?.subtract(Duration(days: days));

@@ -4,12 +4,18 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../api/api_client.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
+import '../../domain/entities/reproduction.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
+import '../../providers/herd_records_provider.dart';
 import '../../providers/livestock_provider.dart';
+import '../scan/qr_labels.dart';
+import 'animal_quick_actions.dart';
+import 'animal_status_section.dart';
 import 'capability_chips.dart';
 
 /// The Add / Edit Animal record — the start of an animal's digital twin.
@@ -25,10 +31,21 @@ import 'capability_chips.dart';
 /// rules are cached with the rest of the farm, so this works in a field
 /// with no signal.
 ///
-/// Only a name and the species' required identifiers are mandatory: a
-/// farmer standing in a barn registers an animal in three fields and
-/// fills in the rest later. Financial fields appear only for someone who
-/// also holds Finance; the backend drops them for anyone else regardless.
+/// Only a name is mandatory: a farmer standing in a barn registers an
+/// animal in a few fields and fills in the rest later. Nothing has to be
+/// scanned — the server gives every new animal the farm's next number, and
+/// the tablet shows its QR code to print as soon as it is saved. An ear tag
+/// (or a horse's microchip) the species expects can be typed now or added
+/// on the Digital Twin when the animal is tagged; until then the twin says
+/// it is missing. Financial fields appear only for someone who also holds
+/// Finance; the backend drops them for anyone else regardless.
+///
+/// Pregnancy and milking are asked as two plain questions, on a new animal
+/// and on an existing one alike. They are never saved as flags: a new
+/// animal arrives with the episodes that say so (one request), and on an
+/// edit each changed answer becomes the record the herd keeps — an
+/// insemination, a pregnancy check, the start of a lactation, a dry-off.
+/// Saying an animal is in milk opens the milk record straight after.
 ///
 /// Editing changes the animal, not its identifiers: those are managed on
 /// the Digital Twin (add one, retire one) so a replaced ear tag keeps its
@@ -79,8 +96,22 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
   late DateTime? _birthDate = widget.animal?.birthDate;
   late bool _birthDateEstimated = widget.animal?.birthDateEstimated ?? false;
   late DateTime? _acquisitionDate = widget.animal?.acquisitionDate;
-  late bool _pregnant = widget.animal?.pregnant ?? false;
-  late bool _lactating = widget.animal?.lactating ?? false;
+
+  // Pregnancy & milk, as asked (see [AnimalStatusSection]); the initial
+  // values are what the herd records said when the form opened.
+  late PregnancyChoice _preg = widget.animal?.pregnant == true ? PregnancyChoice.pregnant : PregnancyChoice.open;
+  late PregnancyChoice _initialPreg = _preg;
+  DateTime? _serviceDate;
+  DateTime? _initialServiceDate;
+  String _serviceType = kServiceTypes.first;
+  late MilkChoice _milk = widget.animal?.lactating == true ? MilkChoice.milking : MilkChoice.dry;
+  late MilkChoice _initialMilk = _milk;
+  String? _adjustedNote;
+  bool _loadingHistory = false;
+  bool _statusTouched = false;
+  // Records already written by an edit that then failed part-way, so a
+  // second Save does not write them twice.
+  final Set<String> _statusDone = {};
 
   bool _saving = false;
   String? _error;
@@ -98,6 +129,84 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
     _profile = animal?.managementProfile;
     _breedId = animal?.breedId;
     _fitToSpecies(livestock, fresh: animal == null);
+    if (animal != null && animal.sex.trim().toUpperCase().startsWith('F')) _loadHistory(animal.id);
+  }
+
+  /// Reads the animal's reproduction record: an insemination not yet
+  /// confirmed, and the date a pregnancy is reckoned from.
+  Future<void> _loadHistory(String animalId) async {
+    setState(() => _loadingHistory = true);
+    ReproSummary? summary;
+    try {
+      summary = (await context.read<HerdRecordsProvider>().timeline(animalId)).summary;
+    } catch (_) {
+      summary = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _loadingHistory = false;
+      if (summary == null || _statusTouched) return;
+      final initial = summary.pregnant
+          ? PregnancyChoice.pregnant
+          : summary.inseminatedUnconfirmed
+              ? PregnancyChoice.inseminated
+              : PregnancyChoice.open;
+      _preg = _initialPreg = initial;
+      final served = summary.pregnancy?.conceivedAt ?? (initial == PregnancyChoice.inseminated ? summary.lastBreeding?.occurredAt : null);
+      _serviceDate = _initialServiceDate = served?.toLocal();
+      final type = summary.lastBreeding?.eventType;
+      if (type != null && kServiceTypes.contains(type)) _serviceType = type;
+      _milk = _initialMilk = summary.lactation != null ? MilkChoice.milking : MilkChoice.dry;
+    });
+  }
+
+  /// The life stage / profile an answer needs, when the current ones do
+  /// not allow it: a "young" female cannot be recorded pregnant, a cow with
+  /// no dairy profile cannot be milked. Null when nothing needs to change,
+  /// or when nothing would help (a male, a species that is never milked).
+  ({String stage, String? profile})? _fixFor(LivestockProvider livestock, String cap) {
+    bool grants(String? stage, String? profile) =>
+        livestock.resolve(species: _speciesCode, sex: _sex, lifeStage: stage, managementProfile: profile).has(cap);
+    if (grants(_lifeStage, _profile)) return null;
+    final config = livestock.configurationFor(_speciesCode);
+    final profiles = [for (final p in config?.managementProfiles ?? const <ManagementProfile>[]) p.code];
+    final stages = [
+      if (_lifeStage != null) _lifeStage!,
+      for (final s in const [kDefaultLifeStage, 'senior'])
+        if (s != _lifeStage && (config?.lifeStages ?? const <LifeStage>[]).any((x) => x.code == s)) s,
+    ];
+    for (final stage in stages) {
+      if (grants(stage, _profile)) return (stage: stage, profile: _profile);
+      for (final p in profiles) {
+        if (grants(stage, p)) return (stage: stage, profile: p);
+      }
+    }
+    return null;
+  }
+
+  bool _speciesCan(LivestockProvider livestock, String cap) =>
+      _sex == Sex.female && (_resolve(livestock).has(cap) || _fixFor(livestock, cap) != null);
+
+  /// Moves stage / profile to what [cap] needs, and says so.
+  void _ensureCapability(LivestockProvider livestock, String cap) {
+    final fix = _fixFor(livestock, cap);
+    if (fix == null) return;
+    final lang = Localizations.localeOf(context).languageCode;
+    final config = livestock.configurationFor(_speciesCode);
+    final parts = <String>[];
+    if (fix.stage != _lifeStage) {
+      final label = (config?.lifeStages ?? const <LifeStage>[]).where((s) => s.code == fix.stage).map((s) => s.label(lang)).firstOrNull ?? fix.stage;
+      parts.add('${context.t('lifeStage')}: $label');
+      _lifeStage = fix.stage;
+    }
+    if (fix.profile != _profile) {
+      final label =
+          (config?.managementProfiles ?? const <ManagementProfile>[]).where((p) => p.code == fix.profile).map((p) => p.label(lang)).firstOrNull ??
+              fix.profile ?? context.t('noProfile');
+      parts.add('${context.t('managementProfile')}: $label');
+      _profile = fix.profile;
+    }
+    if (parts.isNotEmpty) _adjustedNote = '${context.t('stAdjusted')} ${parts.join(' · ')}';
   }
 
   static String _sexCode(String raw) => switch (raw.trim().toUpperCase()) {
@@ -168,17 +277,10 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       return;
     }
 
-    // The same rules the server applies (§12), checked here first so the
-    // farmer hears "this species needs an ear tag" before the round trip
-    // — and hears it offline, where there is no round trip.
+    // Identifiers typed now are optional — the server adds the farm number
+    // every animal gets. The ear tag a species expects can come later.
     final identifiers = <Map<String, dynamic>>[];
     if (!_isEdit) {
-      for (final type in caps.requiredIdentifierTypes) {
-        if ((_identifiers[type]?.text.trim() ?? '').isEmpty) {
-          setState(() => _error = '${context.t('requiredIdentifierMissing')} ${context.t('id_$type')}');
-          return;
-        }
-      }
       var primaryTaken = false;
       for (final type in _identifierTypes(caps)) {
         final value = _identifiers[type]?.text.trim() ?? '';
@@ -186,6 +288,14 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         identifiers.add({'identifier_type': type, 'identifier_value': value, 'is_primary': !primaryTaken});
         primaryTaken = true;
       }
+    }
+
+    final askPregnancy = _sex == Sex.female && caps.has(Cap.pregnancy);
+    final askMilk = _sex == Sex.female && caps.has(Cap.lactation);
+    final served = askPregnancy && _preg != PregnancyChoice.open;
+    if (served && _preg == PregnancyChoice.inseminated && _serviceDate == null) {
+      setState(() => _error = context.t('stServiceDateNeeded'));
+      return;
     }
 
     setState(() {
@@ -221,30 +331,154 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       'color_markings': _blank(_colorMarkings.text),
       'status': _status,
       // Opening state at registration only: an animal bought in pregnant
-      // or in milk arrives with that episode. After that, pregnancy and
-      // milking are records (pregnancy check, birth, dry-off) — an edit
-      // never sends them (REPRODUCTION-SCHEMA: status is a projection).
-      if (!_isEdit) 'pregnant': caps.has(Cap.pregnancy) && _pregnant,
-      if (!_isEdit) 'lactating': caps.has(Cap.lactation) && _lactating,
+      // or in milk arrives with that episode, dated from the insemination
+      // when one is given. On an edit the answers become records after the
+      // save ([_applyStatus]) — status is a projection (REPRODUCTION-SCHEMA).
+      if (!_isEdit) 'pregnant': askPregnancy && _preg == PregnancyChoice.pregnant,
+      if (!_isEdit && served && _serviceDate != null) 'service_date': _utcDate(_serviceDate!),
+      if (!_isEdit && served && _serviceDate != null) 'service_type': _serviceType,
+      if (!_isEdit) 'lactating': askMilk && _milk == MilkChoice.milking,
       'purchase_cost': double.tryParse(_purchaseCost.text),
       'current_value': double.tryParse(_currentValue.text),
       'notes': _blank(_notes.text),
     };
 
-    final result = _isEdit ? await provider.updateAnimal(widget.animal!.id, body) : await provider.createAnimal(body);
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final hostContext = navigator.context;
+    final speciesName = livestock.speciesName(_speciesCode, Localizations.localeOf(context).languageCode);
+    final startMilk = askMilk && _milk == MilkChoice.milking && _initialMilk != MilkChoice.milking;
+    final tUpdated = context.t('animalUpdated');
+    final tAdded = context.t('animalAdded');
+    final tOffline = context.t('stAddedOffline');
+    final tQrReady = context.t('stQrReady');
+    final tQrNote = context.t('stQrReadyNote');
+
+    // An edit that already saved the animal and part of the records is not
+    // sent again: only what is still missing.
+    final result = _isEdit
+        ? (_statusDone.contains('animal') ? const WriteResult.ok() : await provider.updateAnimal(widget.animal!.id, body))
+        : await provider.createAnimal(body);
     if (!mounted) return;
-    if (result.success) {
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_isEdit ? context.t('animalUpdated') : context.t('animalAdded'))),
-      );
+    if (!result.success) {
+      setState(() {
+        _saving = false;
+        _error = result.error;
+      });
       return;
     }
-    setState(() {
-      _saving = false;
-      _error = result.error;
-    });
+    if (_isEdit) {
+      _statusDone.add('animal');
+      final failure = await _applyStatus(widget.animal!, askPregnancy: askPregnancy, askMilk: askMilk);
+      if (!mounted) return;
+      if (failure != null) {
+        setState(() {
+          _saving = false;
+          _error = failure;
+        });
+        return;
+      }
+      await provider.load();
+      navigator.pop();
+      messenger.showSnackBar(SnackBar(content: Text(tUpdated)));
+      final updated = provider.find(widget.animal!.id) ?? widget.animal!;
+      if (startMilk && hostContext.mounted) await showMilkDialog(hostContext, updated);
+      return;
+    }
+
+    navigator.pop();
+    final id = result.serverId;
+    final created = id == null ? null : provider.find(id);
+    if (created == null) {
+      // Saved in the outbox: the server has not numbered it yet, and a QR
+      // label must carry the id the server will know.
+      messenger.showSnackBar(SnackBar(content: Text(result.queued ? tOffline : tAdded)));
+      return;
+    }
+    messenger.showSnackBar(SnackBar(content: Text(tAdded)));
+    if (!hostContext.mounted) return;
+    await showQrLabels(
+      hostContext,
+      labels: [QrLabel.forAnimal(created, speciesName: speciesName)],
+      title: '${created.name} — $tQrReady',
+      note: tQrNote,
+    );
+    if (startMilk && hostContext.mounted) await showMilkDialog(hostContext, created);
   }
+
+  static String _utcDate(DateTime d) => _noonUtc(d).toIso8601String();
+
+  /// Turns the changed answers of an edit into the herd's records, in the
+  /// order the server needs them: a "not pregnant" check before a new
+  /// service, the service before the check that confirms it. Returns the
+  /// server's refusal, if any.
+  Future<String?> _applyStatus(Animal animal, {required bool askPregnancy, required bool askMilk}) async {
+    final herd = context.read<HerdRecordsProvider>();
+    final couldNotSave = context.t('couldNotSave');
+    Future<String?> step(String key, Future<WriteResult> Function() write) async {
+      if (_statusDone.contains(key)) return null;
+      final r = await write();
+      if (!r.success) return r.error ?? couldNotSave;
+      _statusDone.add(key);
+      return null;
+    }
+
+    if (askPregnancy && (_preg != _initialPreg || !_sameDay(_serviceDate, _initialServiceDate))) {
+      final wasPregnant = _initialPreg == PregnancyChoice.pregnant;
+      final wasServed = _initialPreg == PregnancyChoice.inseminated;
+      final newService = _serviceDate != null && (!_sameDay(_serviceDate, _initialServiceDate) || _initialPreg == PregnancyChoice.open || wasPregnant);
+      String? error;
+      switch (_preg) {
+        case PregnancyChoice.open:
+          if (wasPregnant || wasServed) {
+            error = await step('negative', () => herd.recordPregnancyCheck(animal.id, assessmentType: 'OBSERVATION', resultCode: 'NEGATIVE'));
+          }
+        case PregnancyChoice.inseminated:
+          if (wasPregnant) {
+            error = await step('negative', () => herd.recordPregnancyCheck(animal.id, assessmentType: 'OBSERVATION', resultCode: 'NEGATIVE'));
+          }
+          if (error == null && newService) {
+            error = await step('service', () => herd.recordBreeding(animal.id, eventType: _serviceType, occurredAt: _noonUtc(_serviceDate!)));
+          }
+        case PregnancyChoice.pregnant:
+          if (!wasPregnant) {
+            if (newService) {
+              error = await step('service', () => herd.recordBreeding(animal.id, eventType: _serviceType, occurredAt: _noonUtc(_serviceDate!)));
+            }
+            // Dated by the server from the service just recorded (or the
+            // one already on record).
+            error ??= await step('positive', () => herd.recordPregnancyCheck(animal.id, assessmentType: 'OBSERVATION', resultCode: 'POSITIVE'));
+          } else if (_serviceDate != null) {
+            // Already pregnant, the insemination date corrected: a check
+            // that re-dates the pregnancy from it.
+            final days = DateTime.now().difference(_serviceDate!).inDays;
+            error = await step('redate', () => herd.recordPregnancyCheck(animal.id, assessmentType: 'OBSERVATION', resultCode: 'POSITIVE', gestationDays: days));
+          }
+      }
+      if (error != null) return error;
+    }
+    if (askMilk) {
+      if (_milk == MilkChoice.milking && _initialMilk != MilkChoice.milking) {
+        final error = await step('lactation', () => herd.startLactation(animal.id));
+        if (error != null) return error;
+      } else if (_milk == MilkChoice.dry && _initialMilk == MilkChoice.milking) {
+        final error = await step('dryoff', () => herd.dryOff(animal.id));
+        if (error != null) return error;
+      }
+    }
+    return null;
+  }
+
+  /// A picked calendar day as an instant: midday UTC, or now when that is
+  /// still ahead (the server refuses a service dated in the future).
+  static DateTime _noonUtc(DateTime d) {
+    final noon = DateTime.utc(d.year, d.month, d.day, 12);
+    final now = DateTime.now().toUtc();
+    return noon.isAfter(now) ? now : noon;
+  }
+
+  static bool _sameDay(DateTime? a, DateTime? b) =>
+      (a == null && b == null) || (a != null && b != null && a.year == b.year && a.month == b.month && a.day == b.day);
 
   String? _blank(String v) => v.trim().isEmpty ? null : v.trim();
 
@@ -347,6 +581,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         Row(children: [
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: speciesValue,
               decoration: InputDecoration(labelText: context.t('species')),
               items: [for (final s in species) DropdownMenuItem(value: s.code, child: Text(s.name(lang)))],
@@ -358,6 +593,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _sex,
               decoration: InputDecoration(labelText: context.t('sex')),
               items: [
@@ -371,6 +607,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: stageValue,
                 decoration: InputDecoration(labelText: context.t('lifeStage')),
                 items: [for (final s in stages) DropdownMenuItem(value: s.code, child: Text(s.label(lang)))],
@@ -384,6 +621,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
           if (breeds.isNotEmpty) ...[
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: breedValue,
                 decoration: InputDecoration(labelText: context.t('breed')),
                 items: [
@@ -402,6 +640,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
           if (profiles.isNotEmpty)
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: profileValue,
                 decoration: InputDecoration(labelText: context.t('managementProfile')),
                 items: [
@@ -414,25 +653,35 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
           else
             const Spacer(),
         ]),
-        if (!_isEdit && identifierTypes.isNotEmpty) ...[
+        if (!_isEdit) ...[
           const SizedBox(height: FarmSpacing.md),
           _label(context, 'identification'),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              for (final type in identifierTypes)
-                SizedBox(
-                  width: 220,
-                  child: TextField(
-                    controller: _identifierField(type),
-                    decoration: InputDecoration(
-                      labelText: requiredTypes.contains(type) ? '${context.t('id_$type')} *' : context.t('id_$type'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.qr_code_2, size: 18, color: FarmColors.cedar),
+              const SizedBox(width: 8),
+              Expanded(child: Text(context.t('stAutoIdNote'), style: FarmTypography.textTheme.bodySmall)),
+            ]),
+          ),
+          if (identifierTypes.isNotEmpty)
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                for (final type in identifierTypes)
+                  SizedBox(
+                    width: 220,
+                    child: TextField(
+                      controller: _identifierField(type),
+                      decoration: InputDecoration(
+                        labelText: context.t('id_$type'),
+                        hintText: requiredTypes.contains(type) ? context.t('stTagLater') : context.t('optional'),
+                      ),
                     ),
                   ),
-                ),
-            ],
-          ),
+              ],
+            ),
         ],
         const SizedBox(height: FarmSpacing.md),
         _label(context, 'whatWillBeTracked'),
@@ -484,6 +733,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _status,
               decoration: InputDecoration(labelText: context.t('healthStatus')),
               items: [
@@ -495,37 +745,41 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
             ),
           ),
         ]),
-        // Reproduction and lactation switches exist only for an animal
-        // that can be pregnant or lactating: a bull, a hen and a horse
-        // kept for meat never see them.
-        if (_isEdit && (caps.has(Cap.pregnancy) || caps.has(Cap.lactation))) ...[
-          const SizedBox(height: 6),
-          Text(context.t('reproFromRecords'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
-        ],
-        if (!_isEdit && (caps.has(Cap.pregnancy) || caps.has(Cap.lactation))) ...[
-          const SizedBox(height: 6),
-          Row(children: [
-            if (caps.has(Cap.pregnancy))
-              Expanded(
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _pregnant,
-                  title: Text(context.t('pregnant')),
-                  onChanged: (v) => setState(() => _pregnant = v ?? false),
-                ),
-              ),
-            if (caps.has(Cap.lactation))
-              Expanded(
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: _lactating,
-                  title: Text(context.t('lactating')),
-                  onChanged: (v) => setState(() => _lactating = v ?? false),
-                ),
-              ),
-          ]),
+        // Pregnancy & milk: asked of every female whose species has them —
+        // a bull, a hen and a gelding never see it. An answer the current
+        // stage / profile does not allow moves them, and says so.
+        if (_speciesCan(livestock, Cap.pregnancy) || _speciesCan(livestock, Cap.lactation)) ...[
+          const SizedBox(height: FarmSpacing.md),
+          _label(context, 'stSection'),
+          AnimalStatusSection(
+            showPregnancy: _speciesCan(livestock, Cap.pregnancy),
+            showMilk: _speciesCan(livestock, Cap.lactation),
+            pregnancy: _preg,
+            serviceDate: _serviceDate,
+            serviceType: _serviceType,
+            milk: _milk,
+            gestationDays: livestock.speciesByCode(_speciesCode)?.gestationDays,
+            dryOffDays: context.watch<HerdRecordsProvider>().overview.dryOffDays,
+            isEdit: _isEdit,
+            wasLactating: _initialMilk == MilkChoice.milking,
+            adjustedNote: _adjustedNote,
+            loadingHistory: _loadingHistory,
+            onPregnancy: (c) => setState(() {
+              _statusTouched = true;
+              _preg = c;
+              if (c != PregnancyChoice.open) _ensureCapability(livestock, Cap.pregnancy);
+            }),
+            onServiceDate: (d) => setState(() {
+              _statusTouched = true;
+              _serviceDate = d;
+            }),
+            onServiceType: (t) => setState(() => _serviceType = t),
+            onMilk: (c) => setState(() {
+              _statusTouched = true;
+              _milk = c;
+              if (c == MilkChoice.milking) _ensureCapability(livestock, Cap.lactation);
+            }),
+          ),
         ],
         if (showFinance) ...[
           const SizedBox(height: FarmSpacing.md),

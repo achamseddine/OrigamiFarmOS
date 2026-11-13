@@ -92,7 +92,29 @@ available = on_hand − unusable lots (quarantined | blocked | recalled | expire
   `availability` computes the formula above per product and per purpose.
 - `allow_negative` is a legacy override (`POST /feed/transactions` on a
   non-lot item) recorded against no lot; nothing in the new endpoints uses
-  it silently.
+  it silently. The animal feeding form and the quick-entry screen send it
+  on `POST /feeding-events` only when the worker ticks *"Stock not entered
+  yet — record anyway"*, which they show when an amount exceeds the stock
+  the tablet last saw or the server refuses for lack of stock; the
+  shortfall is then an `out` movement against no lot, visible in the ledger
+  until a delivery is entered.
+
+### 3a. Standard feeds of the animal feeding form
+
+The feeding form opens with three rows — **Concentrate, Corn silage, Wheat
+straw** — every row optional, plus *Add another feed*
+(`features/feed/feeding_event_dialog.dart`). Each row points at the farm's
+own feed for it, matched server-side once
+(`feed_inventory_service.standard_feed_slots`,
+`GET /feed-products/standard-slots`): a product coded `CONCENTRATE` /
+`CORN-SILAGE` / `WHEAT-STRAW` first, then one whose English or Arabic name
+says it, then — for concentrate — any concentrate by category. A farm with
+no such feed gets it as an ordinary purchased, feedable product with an
+**empty ledger** (no invented stock): migration `a8d0c2e4f6b1` for existing
+farms, `seed_production` for new ones, and `POST /feed-products/standard`
+(Feed create permission; idempotent) from the form's *Set up* button. A
+plan's amounts fill the row of the same feed; other planned feeds become
+extra rows. The worker can change the product in any row.
 - `reconcile_opening_balance` pins an item's figure into an opening lot
   only when the product has no lots yet, so a backfilled farm starts clean.
 

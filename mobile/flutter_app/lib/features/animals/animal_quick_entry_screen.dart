@@ -97,6 +97,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   String? _groupId;
   String _session = milkSessionForHour(DateTime.now().hour);
   bool _secondMilking = false;
+  // The server refused a feed for lack of entered stock; the worker may say
+  // the stock was simply never entered and record it anyway.
+  bool _feedStockShort = false;
+  bool _feedStockOverride = false;
   bool _loadingPlan = false;
   bool _saving = false;
   bool _autoScan = false;
@@ -196,10 +200,14 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     }
     if (!mounted || _animalId != animalId) return;
     final seeds = feedRowsFromPlan(plan);
+    // With no program, the farm's three standard feeds, each row already
+    // pointing at the farm's product for it (the worker can change it).
+    final slots = context.read<FeedingProvider>().feedSlots;
+    const keys = {'concentrate': 'concentrate', 'corn_silage': 'silage', 'wheat_straw': 'straw'};
     setState(() {
       _loadingPlan = false;
       _replaceFeeds(seeds.isEmpty
-          ? [for (final key in const ['concentrate', 'silage', 'straw']) _FeedRow(slotKey: key)]
+          ? [for (final s in slots) _FeedRow(slotKey: keys[s.slot] ?? s.slot, productId: s.feedProductId, unit: s.unit)]
           : [for (final s in seeds) _FeedRow(productId: s.productId, productName: s.productName, unit: s.unit, planned: s.plannedPerFeeding, fromPlan: true)]);
     });
   }
@@ -329,15 +337,21 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
           'subject_type': 'animal',
           'subject_id': animal.id,
           'event_type': 'offered',
+          if (_feedStockOverride) 'allow_negative': true,
           'components': components,
         });
         if (!mounted) return;
         if (!result.success) {
-          setState(() => _error = milkSaved
-              ? '${context.t('qrMilkSavedPartial')} ${result.error ?? context.t('couldNotSave')}'
-              : result.error ?? context.t('couldNotSave'));
+          final message = result.error ?? context.t('couldNotSave');
+          final short = message.startsWith('Not enough');
+          final shown = short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
+          setState(() {
+            _feedStockShort = _feedStockShort || short;
+            _error = milkSaved ? '${context.t('qrMilkSavedPartial')} $shown' : shown;
+          });
           return;
         }
+        _feedStockOverride = false;
         for (final row in _feeds) {
           row.offered.clear();
           row.refused.clear();
@@ -610,6 +624,20 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                 label: Text(context.t('qrAddFeed')),
               ),
             ),
+            if (_feedStockShort) ...[
+              NoticeBanner(title: context.t('feedStockShortTitle'), text: context.t('feedStockShortBody')),
+              Material(
+                type: MaterialType.transparency,
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  value: _feedStockOverride,
+                  title: Text(context.t('feedRecordAnyway')),
+                  onChanged: _saving ? null : (v) => setState(() => _feedStockOverride = v ?? false),
+                ),
+              ),
+            ],
           ]),
         ),
       ],

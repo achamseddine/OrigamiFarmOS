@@ -277,7 +277,9 @@ class TestBirth:
 
     def test_a_newborn_the_rules_refuse_refuses_the_whole_birth(self, client):
         h = _h(client)
-        calf = {**self.CALF, "identifiers": []}
+        # A microchip is not an identifier cattle carry: the registration
+        # rules refuse it, so the whole birth is refused.
+        calf = {**self.CALF, "identifiers": [{"identifier_type": "MICROCHIP", "identifier_value": "985000111"}]}
         r = client.post(f"{API}/animals/{BELLA}/births", json={"offspring": [calf]}, headers=h)
         assert r.status_code == 422 and r.json()["detail"].startswith("Newborn 1:")
         assert _twin(client, BELLA)["pregnant"] is True, "nothing half-recorded"

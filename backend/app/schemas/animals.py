@@ -139,6 +139,11 @@ class AnimalCreate(BaseModel):
     # Production
     pregnant: bool = False
     pregnancy_days: int | None = None
+    # The insemination / mating she was served at, if known: recorded as a
+    # breeding event, and — when she is registered pregnant — the date the
+    # pregnancy and its expected birth are reckoned from.
+    service_date: datetime | None = None
+    service_type: str = "ARTIFICIAL_INSEMINATION"
     lactating: bool = False
     lactation_cycle: int | None = None
     # Financial (only stored when the caller may see Finance — see the router)

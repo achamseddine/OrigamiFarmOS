@@ -53,6 +53,7 @@ CREATE TABLE farms (
     region VARCHAR(100) NOT NULL,
     timezone VARCHAR(50) NOT NULL,
     default_currency VARCHAR(10) NOT NULL,
+    dry_off_days_before_birth INTEGER DEFAULT '60' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (id)
 );

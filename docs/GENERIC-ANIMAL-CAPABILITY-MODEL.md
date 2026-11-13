@@ -69,14 +69,41 @@ stated):
 
 | Species | Identification | Reproduction | Production | Care |
 | --- | --- | --- | --- | --- |
-| cow (dairy) | EAR_TAG **required**, RFID | breeding, pregnancy, live birth | milk, lactation, growth | hoof care |
+| cow (dairy) | EAR_TAG **required** (expected — see §4a), RFID | breeding, pregnancy, live birth | milk, lactation, growth | hoof care |
 | cow (meat) | same | same | growth only | hoof care |
 | bull | same | breeding | growth | hoof care |
 | sheep (dairy / meat / wool) | EAR_TAG required, RFID | breeding, pregnancy, live birth | milk+lactation only on `dairy`; wool on `wool` | hoof care |
 | goat | as sheep, no wool | | | |
-| horse | MICROCHIP **required**, PASSPORT; **no** EAR_TAG | breeding, pregnancy, live birth | growth | hoof care |
+| horse | MICROCHIP **required** (expected — see §4a), PASSPORT; **no** EAR_TAG | breeding, pregnancy, live birth | growth | hoof care |
 | layer hen / duck / turkey (layer) | LEG_BAND, group tracking | breeding | eggs, growth | — |
 | poultry (broiler) | LEG_BAND, group tracking | — (vetoed) | growth only (eggs vetoed) | — |
+
+Every adult-only rule also holds for the **senior** stage (`catalog.SENIOR_RULES`,
+migration `a8d0c2e4f6b1`): an old cow still calves and is milked, an old mare
+still foals. Before that, a female registered "senior" could not be recorded
+pregnant or in milk.
+
+### 4a. Registering with nothing to scan (decision 2026-11-13)
+
+The table above marks the identifier a species is *expected* to carry. After
+on-farm testing the farm decided — resolving the conflict between this
+document's earlier "required identifier missing → 422" and
+`database/LIVESTOCK-SCHEMA.md` §19 ("ear tag is not universally mandatory") —
+that a missing expected identifier **does not block registration**:
+
+- every new animal gets the farm's next **farm number** (`FARM_NUMBER`, one
+  farm-level sequence for all species, zero-padded, never reused; a typed
+  farm number is kept and the sequence continues after the highest in use) —
+  `identifier_service.with_farm_number`;
+- its QR label (`origami://animal/{uuid}`, ADR-003) is shown to print as soon
+  as the server has saved it; a registration still in the offline outbox
+  prints once synced, because the label must carry the id the server knows;
+- the farm number is primary only when nothing else was given; a typed ear
+  tag stays primary;
+- the Digital Twin's identification list says "Not recorded yet: ear tag"
+  (microchip, …) until the expected identifier is added;
+- retiring the only expected identifier is still refused (add the
+  replacement first), and uniqueness rules are unchanged (409).
 
 ## 4. Identification
 
@@ -138,11 +165,26 @@ memberships, the head-count ledger and the rest of the livestock record.
 
 The tablet draws what the capability set allows and nothing else:
 
-- **Add Animal** (`features/animals/add_animal_form.dart`): species from the
-  catalog → sex → life stage → profile; the device resolves; identifier
-  fields appear per allowed type with required ones marked; *pregnant* and
-  *lactating* exist only with `PREGNANCY` / `LACTATION`; a "tracked" summary
-  shows the consequence of the profile chosen.
+- **Add / Edit Animal** (`features/animals/add_animal_form.dart`): species
+  from the catalog → sex → life stage → profile; the device resolves;
+  identifier fields appear per allowed type, all optional ("nothing to scan",
+  §4a); a "tracked" summary shows the consequence of the profile chosen.
+  **Pregnancy & milk** (`animal_status_section.dart`) is asked of every
+  female whose species has `PREGNANCY` / `LACTATION` under *some* stage and
+  profile — on a new animal and on an existing one: *Not pregnant /
+  Inseminated — not confirmed / Pregnant* with the insemination date and
+  method, the expected birth and the farm's dry-off date; *Producing milk /
+  Not milked — dried off*. An answer the current stage or profile does not
+  allow moves them to the first combination that does (a goat with no
+  profile said to be milked becomes `dairy`; a "young" female said to be
+  pregnant becomes `adult`) and says so on the form. Nothing is saved as a
+  flag: a new animal arrives with `service_date` / `service_type` /
+  `pregnant` / `lactating` in one request (breeding event + pregnancy episode
+  dated from the service + lactation episode); an edit turns each changed
+  answer into the record the herd keeps — a NEGATIVE / POSITIVE pregnancy
+  check, a breeding event, a lactation start, a dry-off — after the PUT, in
+  that order, skipping what an earlier partial save already wrote. Saying
+  an animal is milked opens the milk record straight after the save.
 - **Digital Twin** (`animal_digital_twin_screen.dart`): identifiers (add /
   retire), life stage, profile, "Female · Cow", a pregnancy line only where
   it can exist, a milk quick action and milk trend only with
@@ -155,7 +197,7 @@ The tablet draws what the capability set allows and nothing else:
 | Rule | Where |
 | --- | --- |
 | identifier type not allowed for the animal → 422 | `identifier_service.collect` |
-| required identifier type missing at registration → 422 | same |
+| required (expected) identifier type missing at registration → **registered**, farm number generated, shown as missing (§4a) | `identifier_service.with_farm_number` |
 | identifier value already used in the farm → 409 | `identifier_service.ensure_unique` |
 | retiring the only required identifier → 422 | `DELETE /animals/{id}/identifiers/{iid}` |
 | `pregnant` / `lactating` on an animal without `PREGNANCY` / `LACTATION` → 422 | `api/v1/animals.py::_check_state_against` |

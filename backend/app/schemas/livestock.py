@@ -22,6 +22,10 @@ class SpeciesOut(ORMModel):
     profiles_json: list[str] = []
     active: bool
     sort_order: int
+    # Configuration for the dates the tablet shows before the server is
+    # asked (expected birth from an insemination, expected hatch).
+    gestation_days: int | None = None
+    incubation_days: int | None = None
 
 
 class BreedOut(ORMModel):

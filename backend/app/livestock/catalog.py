@@ -353,6 +353,15 @@ RULES: tuple[dict, ...] = tuple(
     ]
 )
 
+# A senior animal keeps what it had as an adult: an old cow still calves and
+# is milked, an old mare still foals, an old hen still lays a little. Every
+# adult-only rule therefore also holds for the senior stage — written out as
+# rules rather than inferred by the resolver, so a farm can still switch one
+# off for its older animals. Migration a8d0c2e4f6b1 inserts these on
+# databases created before they existed.
+SENIOR_RULES: tuple[dict, ...] = tuple({**r, "life_stage": "senior"} for r in RULES if r["life_stage"] == "adult")
+RULES = RULES + SENIOR_RULES
+
 # The default life stage when none is given: an animal registered with no
 # stage is assumed adult — that is when almost every capability applies,
 # and the form asks for a date of birth to refine it.

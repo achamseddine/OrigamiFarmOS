@@ -795,6 +795,11 @@ class _IdentityCard extends StatelessWidget {
               ),
           ]),
           if (identifiers.isEmpty) FactRow(label: context.t('noIdentifiers'), value: '—'),
+          // An ear tag (a horse's microchip) the species expects but the
+          // animal was registered without: said here until it is added.
+          for (final type in caps.requiredIdentifierTypes)
+            if (!identifiers.any((i) => i.type == type))
+              FactRow(label: context.t('id_$type'), value: '${context.t('stIdMissing')} ${context.t('id_$type').toLowerCase()}', valueColor: FarmColors.warningInk),
           for (final i in identifiers)
             FactRow(
               label: i.isPrimary ? '${context.t('id_${i.type}')} ★' : context.t('id_${i.type}'),

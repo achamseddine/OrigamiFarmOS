@@ -32,6 +32,10 @@ class Farm(Base):
     region: Mapped[str] = mapped_column(String(100), default="Bekaa Valley")
     timezone: Mapped[str] = mapped_column(String(50), default="Asia/Beirut")
     default_currency: Mapped[str] = mapped_column(String(10), default="USD")
+    # Farm setting: how many days before an expected birth a lactating
+    # animal is dried off (milking stops). Drives the "dry off from" date on
+    # every pregnant animal in milk; species-neutral, set by the manager.
+    dry_off_days_before_birth: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

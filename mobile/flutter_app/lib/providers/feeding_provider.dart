@@ -35,6 +35,10 @@ class FeedingProvider extends ChangeNotifier {
   /// what the day's routine and the feed intake tab tick off against.
   List<FeedingEvent> recentEvents = [];
 
+  /// The default rows of the animal feeding form, as the server matched
+  /// them to this farm's feeds (`GET /feed-products/standard-slots`).
+  List<StandardFeedSlot> standardSlots = [];
+
   // Feed performance intelligence: the server's explanations, read-only
   // here except for acknowledging and closing alerts and asking for a run.
   FeedPerformanceSummary performance = FeedPerformanceSummary.empty;
@@ -79,6 +83,7 @@ class FeedingProvider extends ChangeNotifier {
         _fetch('/feed-reconciliations', (j) => reconciliations = [for (final r in j as List<dynamic>) FeedReconciliation.fromJson(r as Map<String, dynamic>)]),
         _fetch('/feed-costs', (j) => costs = FeedCostSummary.fromJson(j as Map<String, dynamic>), query: {'days': 30}),
         _fetch('/feed-nutrients', (j) => nutrients = [for (final n in j as List<dynamic>) NutrientDef.fromJson(n as Map<String, dynamic>)]),
+        _fetchStandardSlots(),
         _fetchRecentEvents(),
         ..._performanceFetches(),
       ]);
@@ -87,6 +92,53 @@ class FeedingProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> _fetchStandardSlots() =>
+      _fetch('/feed-products/standard-slots', (j) => standardSlots = [for (final r in j as List<dynamic>) StandardFeedSlot.fromJson(r as Map<String, dynamic>)]);
+
+  /// Concentrate, corn silage and wheat straw, each with the farm feed that
+  /// fills it. From the server's matching; on a server or cache that does
+  /// not have it yet, the same three rows with the feed picked by its name
+  /// — only a starting choice the worker sees and can change.
+  List<StandardFeedSlot> get feedSlots {
+    if (standardSlots.isNotEmpty) {
+      return [
+        for (final s in standardSlots)
+          // A slot whose product has since been deactivated is empty.
+          s.feedProductId != null && !feedable.any((p) => p.id == s.feedProductId) ? s.withoutProduct() : s,
+      ];
+    }
+    return [
+      for (final d in StandardFeedSlot.defaults)
+        d.withProduct(_guessSlotProduct(d)),
+    ];
+  }
+
+  // The server's precedence: coded for the slot, then named for it, then
+  // (concentrate) any concentrate.
+  FeedProduct? _guessSlotProduct(StandardFeedSlot slot) {
+    final feeds = feedable;
+    for (final p in feeds) {
+      if (p.code.toUpperCase() == slot.code) return p;
+    }
+    for (final p in feeds) {
+      final names = '${p.name} ${p.nameAr ?? ''}'.toLowerCase();
+      if (slot.keywords.any(names.contains)) return p;
+    }
+    if (slot.slot == 'concentrate') {
+      for (final p in feeds) {
+        if ((p.category ?? '').toLowerCase() == 'concentrate') return p;
+      }
+    }
+    return null;
+  }
+
+  /// Creates whichever standard feed the farm lacks (a feed product with an
+  /// empty ledger), then reloads the products and the slots.
+  Future<WriteResult> ensureStandardFeeds() => _write(() => _api.post('/feed-products/standard'), then: () async {
+        await Future.wait([refreshStock(), _fetchStandardSlots()]);
+        notifyListeners();
+      });
 
   Future<void> _fetchRecentEvents() => _fetch('/feeding-events', (j) => recentEvents = [for (final e in j as List<dynamic>) FeedingEvent.fromJson(e as Map<String, dynamic>)],
       query: {'days': 7});

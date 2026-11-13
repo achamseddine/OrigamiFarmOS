@@ -35,10 +35,10 @@ class TestBootstrapAndAnimals:
         assert body["farm"]["id"] == "farm-origami"
         assert len(body["animals"]) == 12
         # 7 original items + the feed architecture's barley, concentrate,
-        # premix and broiler grower (app/feeding/seed.py).
-        # 11 feed and supply items plus the six medicines the farm pharmacy
+        # premix, broiler grower and wheat straw (app/feeding/seed.py).
+        # 12 feed and supply items plus the six medicines the farm pharmacy
         # stocks (MEDICINE-PHARMACY-SCHEMA.md): one inventory, one ledger.
-        assert len(body["inventory_items"]) == 17
+        assert len(body["inventory_items"]) == 18
 
     def test_list_animals_filters_by_species(self, client):
         headers = auth_headers(client)

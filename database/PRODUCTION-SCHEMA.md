@@ -128,6 +128,8 @@ lactation_episode (
 ```
 Only animals with LACTATION capability may have an episode. Milk production records can reference the effective lactation through a future optional FK/mapping.
 
+**Dry-off plan (farm setting).** `farm.dry_off_days_before_birth` (integer, default 60, 0–200; `PATCH /farms/me`, Settings permission) is how many days before an expected birth a lactating animal is dried off. For every active pregnancy the reproduction overview and the animal's reproduction summary expose `dry_off_from = expected_due_date − dry_off_days_before_birth`, `days_to_dry_off`, and `dry_off_due` (in milk and the date has come). It is a plan, never a record: the dry-off is recorded as `LactationEnded` (reason `DRY_OFF`) when milking actually stops. Changing the setting is an audited `farm_settings_changed` event with the old and new value.
+
 ## 9. Current metrics projections
 Rebuildable projections may expose:
 - latest weight;

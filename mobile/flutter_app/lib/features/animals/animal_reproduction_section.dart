@@ -107,6 +107,7 @@ class AnimalReproductionSection extends StatelessWidget {
       );
     }
     if (s.awaitingCheck) return StatusPill(label: context.t('reproAwaitingCheck'), level: FarmStatusLevel.watch);
+    if (s.inseminatedUnconfirmed) return StatusPill(label: context.t('stPreg_inseminated'), level: FarmStatusLevel.info);
     if (s.applies.pregnancy) return StatusPill(label: context.t('reproOpen'), level: FarmStatusLevel.neutral);
     return const SizedBox.shrink();
   }
@@ -114,8 +115,16 @@ class AnimalReproductionSection extends StatelessWidget {
   Widget _lactationLine(BuildContext context, ReproSummary s) {
     final l = s.lactation;
     if (l == null) return _line(context, context.t('reproLactations'), context.t('reproDry'));
-    return _line(context, context.t('reproLactations'),
+    final line = _line(context, context.t('reproLactations'),
         '${context.t('reproInMilk')} ${l.number ?? s.lactationNumber ?? '–'}${l.daysInMilk != null ? ' · ${l.daysInMilk} ${context.t('reproDaysInMilk')}' : ''}');
+    final dryFrom = s.dryOffFrom;
+    if (dryFrom == null) return line;
+    // Pregnant and in milk: when milking stops, from the farm's setting.
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      line,
+      _line(context, context.t('stDryOffDueOn'),
+          '${feedDate(dryFrom)} (${s.dryOffDays} ${context.t('stDaysBefore')})${s.dryOffDue ? ' · ${context.t('stDryOffDue')}' : ''}'),
+    ]);
   }
 }
 
@@ -265,6 +274,7 @@ class ReproOverviewCard extends StatelessWidget {
     final o = context.watch<HerdRecordsProvider>().overview;
     if (o.isEmpty) return const SizedBox.shrink();
     final dueSoon = [for (final p in o.pregnant) if (p['due_soon'] == true) p];
+    final dryOff = [for (final p in o.pregnant) if (p['dry_off_due'] == true) p];
     String stat(int n, String key) => '$n ${context.t(key)}';
     return SectionCard(
       title: context.t('reproOverviewTitle'),
@@ -276,6 +286,12 @@ class ReproOverviewCard extends StatelessWidget {
         if (o.incubations.isNotEmpty) stat(o.incubations.length, 'reproIncubating'),
       ].join(' · '),
       child: Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final p in dryOff)
+          ActionChip(
+            avatar: const Icon(Icons.do_not_disturb_on_outlined, size: 16, color: FarmColors.warningInk),
+            label: Text('${p['name']} · ${context.t('stDryOffDue')}'),
+            onPressed: () => onOpenAnimal(p['animal_id'] as String),
+          ),
         for (final p in dueSoon)
           ActionChip(
             avatar: const Icon(Icons.child_friendly_outlined, size: 16),

@@ -1,5 +1,20 @@
 # Releases
 
+## v0.7.1 — Corrections from on-farm testing
+
+From testing the v0.7.0 build on the farm (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Corrections after on-farm testing*).
+
+**Delivered:**
+- **Add an animal with nothing to scan.** The ear tag (cattle) and microchip (horse) no longer block registration; the server gives every new animal the farm's next farm number (one sequence for all species, never reused) and the form shows its QR label to print right after saving. The Digital Twin lists an expected identifier as "Not recorded yet" until it is added. This resolves the conflict between `docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md` and `database/LIVESTOCK-SCHEMA.md` §19 in favour of "ear tag is not universally mandatory" (§4a).
+- **Pregnancy and milk on the animal form**, new and existing animals: *Not pregnant / Inseminated — not confirmed / Pregnant* with the insemination date and method, the expected birth and the dry-off date; *Producing milk / Not milked — dried off*. Answers become records (breeding event, pregnancy check, lactation start, dry-off), never flags; saying she is milked opens the milk record. An answer the stage or profile does not allow adjusts them and says so (a goat with no profile → dairy). Senior females keep the adult reproduction and milk capabilities.
+- **Farm setting: dry-off before birth** (days, default 60) in Settings; the twin and the reproduction overview show *dry off from* for every pregnant animal in milk and flag it when due.
+- **Animal feed record fixed.** The production farm had no feed products, so the form had nothing to choose; the feeding form now opens with three optional rows — Concentrate, Corn silage, Wheat straw — each already pointing at the farm's feed (`GET /feed-products/standard-slots`), plus *Add another feed*. The farm gets the three standard feeds with an empty ledger (migration, production seed, or the form's *Set up* button). Feeding more than the stock entered is no longer a dead end: the form says so and records it only when the worker ticks *Stock not entered yet — record anyway*. The quick-entry screen uses the same rows and override.
+- Fixed: the Add Animal form's dropdowns overflowed ("Female · Cow") on narrower tablets.
+- Migration `a8d0c2e4f6b1` (farm setting, senior rules, standard feeds) — **run it on the server before using this build.**
+- Tests: backend +13 (registration, farm numbers, pregnancy from an insemination, dry-off setting and permission, standard feeds, the stock override), four updated for the new identifier rule; Flutter 247 (+7). PostgreSQL migration parity, downgrade and re-upgrade verified, including the data step on a farm that already has a silage.
+
+**Next:** the health requests from the same testing.
+
 ## v0.7.0 — Scan-first worker rounds (QR)
 
 Merges PR #11's QR quick entry (withheld milk enforced server-side, medicine only through the pharmacy, no guessed routes, Arabic/Persian digits) and builds its follow-ups, from a workflow analysis of the 06:00 round (`docs/QR-ANIMAL-QUICK-ENTRY.md`).

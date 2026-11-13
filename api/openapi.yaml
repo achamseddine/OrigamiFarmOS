@@ -877,6 +877,39 @@ paths:
                 title: Response My Farm Api V1 Farms Me Get
       security:
       - HTTPBearer: []
+    patch:
+      tags:
+      - farms
+      summary: Update My Farm
+      description: 'Changes the signed-in user''s farm settings. Settings are not history-
+
+        bearing facts, so the row is updated in place — and every change is an
+
+        audit entry and a `farm_settings_changed` event with the old value.'
+      operationId: update_my_farm_api_v1_farms_me_patch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FarmSettingsUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Update My Farm Api V1 Farms Me Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/farms/{farm_id}/bootstrap:
     get:
       tags:
@@ -2751,6 +2784,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-products/standard-slots:
+    get:
+      tags:
+      - feeding
+      summary: Standard Feed Slots
+      description: 'The default rows of the animal feeding form — concentrate, corn
+
+        silage, wheat straw — and which of the farm''s feeds fills each.'
+      operationId: standard_feed_slots_api_v1_feed_products_standard_slots_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/StandardFeedSlotOut'
+                type: array
+                title: Response Standard Feed Slots Api V1 Feed Products Standard Slots Get
+      security:
+      - HTTPBearer: []
+  /api/v1/feed-products/standard:
+    post:
+      tags:
+      - feeding
+      summary: Ensure Standard Feeds
+      description: 'Creates whichever standard feed the farm lacks (idempotent): an
+
+        ordinary feed product with an empty ledger, never invented stock.'
+      operationId: ensure_standard_feeds_api_v1_feed_products_standard_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/StandardFeedSlotOut'
+                type: array
+                title: Response Ensure Standard Feeds Api V1 Feed Products Standard Post
+      security:
+      - HTTPBearer: []
   /api/v1/feed-products/{product_id}:
     get:
       tags:
@@ -10816,6 +10891,16 @@ components:
           - type: integer
           - type: 'null'
           title: Pregnancy Days
+        service_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Service Date
+        service_type:
+          type: string
+          title: Service Type
+          default: ARTIFICIAL_INSEMINATION
         lactating:
           type: boolean
           title: Lactating
@@ -13954,6 +14039,20 @@ components:
       - currency
       - incurred_at
       title: ExpenseOut
+    FarmSettingsUpdate:
+      properties:
+        dry_off_days_before_birth:
+          anyOf:
+          - type: integer
+            maximum: 200.0
+            minimum: 0.0
+          - type: 'null'
+          title: Dry Off Days Before Birth
+      type: object
+      title: FarmSettingsUpdate
+      description: 'The farm-level settings a manager changes from the tablet. Only the
+
+        fields sent are changed.'
     FeedAvailabilityOut:
       properties:
         feed_product_id:
@@ -20325,6 +20424,16 @@ components:
         sort_order:
           type: integer
           title: Sort Order
+        gestation_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Gestation Days
+        incubation_days:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Incubation Days
       type: object
       required:
       - code
@@ -20337,6 +20446,44 @@ components:
       - active
       - sort_order
       title: SpeciesOut
+    StandardFeedSlotOut:
+      properties:
+        slot:
+          type: string
+          title: Slot
+        code:
+          type: string
+          title: Code
+        label_en:
+          type: string
+          title: Label En
+        label_ar:
+          type: string
+          title: Label Ar
+        unit:
+          type: string
+          title: Unit
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        feed_product_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Name
+      type: object
+      required:
+      - slot
+      - code
+      - label_en
+      - label_ar
+      - unit
+      title: StandardFeedSlotOut
+      description: 'One default row of the animal feeding form, and the farm feed that
+
+        fills it (None when the farm has none yet).'
     StartRunIn:
       properties:
         match_id:

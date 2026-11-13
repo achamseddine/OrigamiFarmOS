@@ -1447,3 +1447,60 @@ class LotTrace {
         exposedSubjects: _maps(json['exposed_subjects']),
       );
 }
+
+
+/// One default row of the animal feeding form — concentrate, corn silage,
+/// wheat straw — and the farm feed that fills it (none when the farm has
+/// not set that feed up yet).
+class StandardFeedSlot {
+  const StandardFeedSlot({
+    required this.slot,
+    required this.code,
+    required this.labelEn,
+    required this.labelAr,
+    this.unit = 'kg',
+    this.feedProductId,
+    this.feedProductName,
+  });
+
+  final String slot;
+  final String code;
+  final String labelEn;
+  final String labelAr;
+  final String unit;
+  final String? feedProductId;
+  final String? feedProductName;
+
+  String label(String lang) => lang == 'ar' ? labelAr : labelEn;
+
+  /// Words a feed's name carries when it is this slot's feed — used only
+  /// to pick a starting product when the server has not matched one.
+  List<String> get keywords => switch (slot) {
+        'concentrate' => const ['concentrate', 'مركز', 'مركّز'],
+        'corn_silage' => const ['silage', 'سيلاج'],
+        'wheat_straw' => const ['straw', 'تبن'],
+        _ => const [],
+      };
+
+  StandardFeedSlot withProduct(FeedProduct? p) => StandardFeedSlot(
+        slot: slot, code: code, labelEn: labelEn, labelAr: labelAr, unit: p?.unit ?? unit, feedProductId: p?.id, feedProductName: p?.name,
+      );
+
+  StandardFeedSlot withoutProduct() => withProduct(null);
+
+  static const defaults = [
+    StandardFeedSlot(slot: 'concentrate', code: 'CONCENTRATE', labelEn: 'Concentrate', labelAr: 'علف مركّز'),
+    StandardFeedSlot(slot: 'corn_silage', code: 'CORN-SILAGE', labelEn: 'Corn silage', labelAr: 'سيلاج الذرة'),
+    StandardFeedSlot(slot: 'wheat_straw', code: 'WHEAT-STRAW', labelEn: 'Wheat straw', labelAr: 'تبن القمح'),
+  ];
+
+  factory StandardFeedSlot.fromJson(Map<String, dynamic> j) => StandardFeedSlot(
+        slot: j['slot'] as String? ?? '',
+        code: j['code'] as String? ?? '',
+        labelEn: j['label_en'] as String? ?? '',
+        labelAr: j['label_ar'] as String? ?? j['label_en'] as String? ?? '',
+        unit: j['unit'] as String? ?? 'kg',
+        feedProductId: j['feed_product_id'] as String?,
+        feedProductName: j['feed_product_name'] as String?,
+      );
+}

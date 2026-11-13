@@ -83,6 +83,7 @@ class Species {
     required this.terminology,
     required this.profiles,
     required this.sortOrder,
+    this.gestationDays,
   });
 
   final String code;
@@ -105,6 +106,11 @@ class Species {
   /// Management profile codes this species is offered; empty means all.
   final List<String> profiles;
   final int sortOrder;
+
+  /// Days from conception to birth (cow 283, ewe 147…); null where the
+  /// species has none configured. A preview only — the server dates the
+  /// pregnancy.
+  final int? gestationDays;
 
   String name(String languageCode) => languageCode == 'ar' ? nameAr : nameEn;
 
@@ -129,6 +135,7 @@ class Species {
         },
         profiles: [for (final p in (json['profiles_json'] as List<dynamic>? ?? const [])) p as String],
         sortOrder: (json['sort_order'] as num?)?.toInt() ?? 100,
+        gestationDays: (json['gestation_days'] as num?)?.toInt(),
       );
 }
 
