@@ -428,8 +428,10 @@ class TestLifecycleReview:
         return [t for t in tasks if t.get("source_type") == "feeding_review" and t.get("source_id") == subject_id]
 
     def test_dry_off_raises_a_review_and_changes_nothing_by_itself(self, client: TestClient):
-        """§10: an event triggers a review task; the assignment stays."""
-        r = client.put(f"{API}/animals/{LUNA}", json={"lactating": False}, headers=_h(client))
+        """§10: an event triggers a review task; the assignment stays. The
+        dry-off is recorded as the lactation it ends (PRODUCTION-SCHEMA §8),
+        not by editing a flag."""
+        r = client.post(f"{API}/animals/{LUNA}/dry-off", json={}, headers=_h(client))
         assert r.status_code == 200, r.text
         tasks = self._review_tasks(client, LUNA)
         assert len(tasks) == 1 and "Luna" in tasks[0]["title"]
@@ -438,7 +440,8 @@ class TestLifecycleReview:
         assert plan["program"]["program_code"] == "DAIRY-HIGH" and plan["program"]["source"] == "inherited"
         assert plan["review"]["required"] is True and plan["review"]["recommended"]["program_code"] == "DRY-COW"
         # A second state change while the review is open does not add a task.
-        client.put(f"{API}/animals/{LUNA}", json={"pregnant": True}, headers=_h(client))
+        r = client.post(f"{API}/animals/{LUNA}/pregnancy-checks", json={"result_code": "POSITIVE", "estimated_gestation_days": 40}, headers=_h(client))
+        assert r.status_code == 201, r.text
         assert len(self._review_tasks(client, LUNA)) == 1
         # Acting on it — an explicit assignment — closes the review.
         r = client.post(f"{API}/livestock-subjects/{LUNA}/feeding-assignments", json={"program_id": "prog-dry-cow"}, headers=_h(client))
@@ -467,7 +470,11 @@ class TestLifecycleReview:
         assert _plan(client, noor)["review"]["recommended"]["program_code"] == "DAIRY-MEDIUM"
 
     def test_a_group_change_is_accepted_and_reviewed(self, client: TestClient):
+        # The herd counts its registered cows (LIVESTOCK-SCHEMA §6): its
+        # count is not typed over, a change to what it is kept for is.
         r = client.patch(f"{API}/animal-groups/{HERD}", json={"count": 4}, headers=_h(client))
+        assert r.status_code == 422, r.text
+        r = client.patch(f"{API}/animal-groups/{HERD}", json={"management_profile": "dual_purpose"}, headers=_h(client))
         assert r.status_code == 200, r.text
 
 

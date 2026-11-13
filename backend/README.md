@@ -130,8 +130,12 @@ DATABASE_URL=sqlite:///./ci.db pytest -q   # DATABASE_URL only affects the FastA
                                             # (see tests/conftest.py) regardless.
 ```
 
-375 tests, all passing as of this build (on SQLite; the migration parity
-test also ran against a real PostgreSQL 16, as CI does). Among them the
+478 tests, all passing as of this build on SQLite (and the migration
+parity and backfill tests also on a real PostgreSQL 16, as CI runs them). Among them
+`tests/test_livestock_records.py` and `tests/test_livestock_backfill.py`
+(the livestock record — see "What's complete"),
+`tests/test_farm_scope.py` (farm isolation and module permissions — see
+"Farm scope and module permissions" below), and the
 foundation, health-case, procurement, migration-parity and generated-artifact
 suites (`tests/test_platform.py`, `test_health_cases.py`,
 `test_procurement.py`, `test_migrations.py`, `test_generated_artifacts.py`)
@@ -181,7 +185,8 @@ app/
     visits_service.py          Reads DB state (bookings, sessions, costs), calls visits/analytics.py
     reports_service.py         Morning-briefing + daily-summary aggregation
   api/
-    deps.py                  get_current_user, require_roles(...), require_module_license(...) RBAC/license dependencies
+    deps.py                  get_current_user, require_roles / require_permission / require_any_permission, require_module_license,
+                             and the farm-scope gates require_farm_access / ensure_own_farm / owned_or_404
     v1/*.py                  One router per resource, matching tech spec §12's endpoint table
     v1/modules.py             Super-user module license activate/deactivate (tech spec v0.5 REQ-MOU-001)
     v1/mouneh.py               Products, recipes, raw materials, batches, finished goods, sales, dashboard
@@ -226,6 +231,7 @@ caught and fixed by the test suite during development — see git history.
 - Event log + audit-log tables written by every mutating endpoint (Constitution: "every important change is an event").
 - **Mouneh & Farm Product Processing module (tech spec v0.5):** license-gated per farm by a super user (`api/v1/modules.py`); a manager can define any product type through the Product Builder (no code changes — `POST /mouneh/products`); recipes (raw materials + packaging + labor + optional overhead costs) are versioned, never mutated in place; `POST /mouneh/cost-preview` and batch creation compute planned unit cost via the pure `app/mouneh/costing.py` engine; completing a batch consumes remaining raw-material stock and creates finished-goods stock at a frozen unit cost; sales deduct from that stock and compute profit against the batch's actual (not recomputed) cost; the dashboard aggregates cost, sales, remaining stock and a continue/slow-mover/review-pricing recommendation per product. Makdous is seeded purely as example data (`app/mouneh/seed.py`) — the module has no hard-coded product types anywhere.
 - **Generic animal model (`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md`):** one `Animal` entity for every species; species, breeds, life stages, management profiles, capabilities and the rules between them are rows (`app/livestock/catalog.py`, served by `GET /species` and `GET /species/{code}/configuration`); `app/services/capability_service.py` resolves species → sex → life stage → profile into a capability set (most specific grant wins, any `enabled=false` rule is a veto, biological invariants last); identifiers are typed child rows (`animal_identifiers`) with per-farm uniqueness and retire-not-delete, and `animals.tag` is only the denormalised primary value; every animal, milk and egg write is checked against the resolved set (`tests/test_livestock.py`, 39 tests, including registering a camel through the API after adding nothing but configuration).
+- **Livestock history, groups and reproduction (`docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md` §16, migration `b5e7a9c1d3f8`):** effective-dated state history for status, stage, profile and location (`services/livestock_state_service.py`); explicit exits (dead / sold / culled / slaughtered / transferred) that close memberships, lactation, pregnancy and feeding and block later milk and feeding records; first-class groups with effective-dated memberships, exclusive and overlapping group types and a head-count ledger behind `flocks.count` (`services/group_service.py`), which the feeding resolver now inherits from; breeding events, pregnancy checks and episodes, births that register or count their newborns and link parentage in one transaction, lactations started by a birth and ended by a dry-off, incubation batches and hatches (`services/reproduction_service.py`, `api/v1/reproduction.py`), every one checked against the resolved capabilities; `pregnant` / `lactating` / due date are a projection the edit form can no longer set; identifier search and `GET /animals/lookup`; the existing flags, herd names and flock counts backfilled into those records (`tests/test_livestock_records.py`, 43 tests; `tests/test_livestock_backfill.py` on SQLite and PostgreSQL 16).
 - **Generic feed architecture (`docs/GENERIC-FEED-ARCHITECTURE.md`):** feed products over the existing inventory ledger (one `inventory_items` row each, no shadow stock), lots as the only physical quantities with every movement carrying a `lot_id` and FIFO issue from usable lots; versioned formulas locked on first use, batches that consume ingredient lots, price themselves from lot costs and produce a `farm_produced` lot; versioned feeding programs with applicability rules over species / sex / life stage / profile / reproductive and lactation state / production band / weight / age, resolved by `services/feeding_program_service.py` (most specific wins, explainable, a missing metric is a warning not a match) with group inheritance computed at read time and per-animal supplements, overrides and restrictions; lifecycle and milk-band changes raise `feeding_program_review_required` and open one task rather than reassigning; feeding events drawn from lots and priced from them, reversed never deleted; usage policies (`feed_policy_service.py`) ANDed across product and lot and enforced at formula, batch, assignment and feeding time; allocations by purpose, days of cover from program demand, reorder recommendations with reasons that become tasks, ledger-versus-count reconciliations with posted adjustments, and lot traceability both ways (`api/v1/feeding.py`, 59 endpoints; migration `b4d7e2f9a1c3` backfills existing feed stock into opening lots; `tests/test_feeding.py`, 44 tests).
 - **Numbered feed mixes (`docs/GENERIC-FEED-ARCHITECTURE.md` §27):** one immutable farm-wide sequence (`feed_mix_sequences`, row-locked, taken only after the usage-policy checks so a refused or replayed start never consumes a number); `mix_number` / `mix_code` / intended species and profile / production and use-by dates / mixer on every batch; the output lot carries the mix code; `GET /feed-mixes/{n}` reads the whole life of a mix from the lot ledger (migration `c9e1a7b2d4f6` backfills; `tests/test_feeding.py::TestNumberedMixes`).
 - **Feed Performance Intelligence, deterministic first increment (`database/FEED-PERFORMANCE-INTELLIGENCE.md`):** six rebuildable projection tables — monitors with explicit baselines, exposure windows with lineage, assessments with likelihood / confidence / confounders / missing context, per-mix score cards, supplier × ingredient rows, deduplicated self-resolving alerts — written only by `services/feed_performance_service.py`; batch completion and milk/egg records re-evaluate; HIGH-likelihood declines open a review task; open alerts reach the bell (`api/v1/feed_performance.py`, migration `d2f4a6c8e0b1`, `tests/test_feed_performance.py`, 10 tests).
@@ -250,6 +256,42 @@ the schema's output. If an endpoint changes shape, re-running the export
 is the whole update. The script exits non-zero and names any endpoint
 that did not return 200, so a gap shows up at build time rather than as
 an empty screen on a tablet.
+
+## Farm scope and module permissions
+
+A token for one farm never reads or writes another farm's records, and a
+screen the tablet offers only to the holders of a module is refused,
+server-side, to anyone who does not hold it. Three gates in
+`app/api/deps.py` carry this:
+
+- **`require_farm_access(*modules)`** for routes that take `farm_id` from
+  the client (a query parameter, or the `/farms/{farm_id}/...` path). The
+  farm must be the caller's own, and the caller must hold view on at
+  least one of the listed modules; the route then reads the farm from the
+  user, never from the request. It declares `farm_id` itself, so the API
+  contract is unchanged.
+- **`ensure_own_farm(user, payload.farm_id)`** for request bodies that
+  carry a farm id (`POST /observations`, `/tasks`, `/sync/push`).
+- **`owned_or_404(db, Model, id, user, label)`** for an id of a farm-owned
+  record in the request. Another farm's record answers exactly like a
+  missing one. People named in a body (an observer, a milk recorder, a
+  task assignee) must be on the same farm.
+
+Where one record type appears on several modules' screens, the gate
+lists each of them (`require_any_permission`): expenses belong to
+Expenses and Finance; milk and egg records also to Produce & Harvest,
+because the tablet's `ProductionProvider` loads fields, milk, eggs and
+harvest in one batch for that module and one refusal would blank the
+Produce screen. Writes require the same modules the tablet's record
+sheet offers each action to. A recommendation decision needs Approve on
+AI / Health Intelligence (a manager's by default) and is recorded in the
+caller's name. `/farms/{farm_id}/bootstrap` never returns password
+hashes.
+
+`tests/test_farm_scope.py` walks the OpenAPI contract: every GET that
+takes `farm_id` must refuse another farm's manager and serve the farm's
+own, so a new endpoint that forgets the check fails without anyone
+remembering to add a test.
 
 ## Offline writes
 

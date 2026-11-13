@@ -886,7 +886,10 @@ paths:
 
         §12). The tablet writes this straight into SQLite on first login /
 
-        when activating demo mode, per the offline-first flow in §10.'
+        when activating demo mode, per the offline-first flow in §10.
+
+
+        Only the caller''s own farm, and never a password hash.'
       operationId: bootstrap_api_v1_farms__farm_id__bootstrap_get
       security:
       - HTTPBearer: []
@@ -979,12 +982,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: cursor
         in: query
         required: false
@@ -1003,6 +1000,12 @@ paths:
           maximum: 500
           default: 100
           title: Limit
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -1156,12 +1159,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: species
         in: query
         required: false
@@ -1186,6 +1183,21 @@ paths:
           - type: string
           - type: 'null'
           title: Search
+      - name: include_exited
+        in: query
+        required: false
+        schema:
+          type: boolean
+          description: Also list animals that were sold, died, or otherwise left the farm.
+          default: false
+          title: Include Exited
+        description: Also list animals that were sold, died, or otherwise left the farm.
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -1213,7 +1225,13 @@ paths:
 
         the capability resolver first; it decides which identifiers this
 
-        animal may and must carry and whether it can be pregnant or lactating.'
+        animal may and must carry and whether it can be pregnant or lactating.
+
+        An animal registered pregnant or in milk gets the pregnancy or lactation
+
+        episode that says so; `group_name` must name an existing group of its
+
+        species, which it then joins.'
       operationId: create_animal_api_v1_animals_post
       security:
       - HTTPBearer: []
@@ -1236,12 +1254,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/lookup:
+    get:
+      tags:
+      - animals
+      summary: Lookup Animal
+      description: 'Every animal on this farm an identifier value could mean, exact
+
+        matches only (LIVESTOCK-SCHEMA §16). More than one result is an
+
+        ambiguity for the person to resolve — the server never silently picks
+
+        one. A retired tag still resolves, flagged, so an old paper record can
+
+        be matched to its animal.'
+      operationId: lookup_animal_api_v1_animals_lookup_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: value
+        in: query
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          description: 'An identifier value as written on the animal: ear tag, RFID, microchip, band,
+            name…'
+          title: Value
+        description: 'An identifier value as written on the animal: ear tag, RFID, microchip, band, name…'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response Lookup Animal Api V1 Animals Lookup Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/animals/{animal_id}:
     put:
       tags:
       - animals
       summary: Update Animal
-      description: Full edit of an animal record (tech spec §12).
+      description: "Full edit of an animal record (tech spec §12).\n\nWhat an edit cannot do, by design:\n\
+        - change `pregnant` or `lactating` — a pregnancy check, a birth, a loss,\n  a lactation start\
+        \ or a dry-off records that (`/animals/{id}/...`); a\n  re-sent unchanged value is fine, and `pregnancy_days`\
+        \ is derived;\n- change species once anything has been recorded about the animal.\n\nWhat an edit\
+        \ does on the way: a new stage, profile or location is\nwritten to the state history first; a\
+        \ new herd name moves the animal's\ngroup membership (it must name an existing group of its species);\n\
+        archiving closes its memberships, lactation and pregnancy like an exit."
       operationId: update_animal_api_v1_animals__animal_id__put
       security:
       - HTTPBearer: []
@@ -1275,6 +1344,9 @@ paths:
       tags:
       - animals
       summary: Move Animal
+      description: 'Moves the animal to another place — written to its location history
+
+        (LIVESTOCK-SCHEMA §5 LOCATION) before the current value changes.'
       operationId: move_animal_api_v1_animals__animal_id__patch
       security:
       - HTTPBearer: []
@@ -1681,6 +1753,940 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CapabilitySetOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animal-group-types:
+    get:
+      tags:
+      - livestock
+      summary: List Group Types
+      operationId: list_group_types_api_v1_animal_group_types_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+                title: Response List Group Types Api V1 Animal Group Types Get
+      security:
+      - HTTPBearer: []
+  /api/v1/animal-groups/{group_id}/members:
+    get:
+      tags:
+      - livestock
+      summary: List Members
+      description: 'Who is in the group now — or, with `include_past`, everyone who ever
+
+        was, with the dates (membership is closed, never deleted).'
+      operationId: list_members_api_v1_animal_groups__group_id__members_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      - name: include_past
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Past
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Members Api V1 Animal Groups  Group Id  Members Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - livestock
+      summary: Add Member
+      description: 'Puts an animal in the group. In an exclusive group (a herd, a pen)
+
+        this is a move: the animal''s previous exclusive membership closes.'
+      operationId: add_member_api_v1_animal_groups__group_id__members_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Add Member Api V1 Animal Groups  Group Id  Members Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animal-groups/{group_id}/members/{animal_id}/end:
+    post:
+      tags:
+      - livestock
+      summary: End Member
+      operationId: end_member_api_v1_animal_groups__group_id__members__animal_id__end_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MembershipEndIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response End Member Api V1 Animal Groups  Group Id  Members  Animal Id  End Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animal-groups/{group_id}/quantity-events:
+    get:
+      tags:
+      - livestock
+      summary: List Quantity Events
+      operationId: list_quantity_events_api_v1_animal_groups__group_id__quantity_events_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Quantity Events Api V1 Animal Groups  Group Id  Quantity Events Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - livestock
+      summary: Record Quantity Event
+      description: 'A flock''s deaths, sales, purchases, transfers or a recount — one row
+
+        of its head-count ledger; `count` follows.'
+      operationId: record_quantity_event_api_v1_animal_groups__group_id__quantity_events_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: group_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Group Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuantityEventIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Quantity Event Api V1 Animal Groups  Group Id  Quantity Events
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/history:
+    get:
+      tags:
+      - livestock
+      summary: Animal History
+      description: The animal's effective-dated status, stage, profile and location.
+      operationId: animal_history_api_v1_animals__animal_id__history_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      - name: state_type
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: State Type
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response Animal History Api V1 Animals  Animal Id  History Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/groups:
+    get:
+      tags:
+      - livestock
+      summary: Animal Groups
+      operationId: animal_groups_api_v1_animals__animal_id__groups_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response Animal Groups Api V1 Animals  Animal Id  Groups Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/exit:
+    post:
+      tags:
+      - livestock
+      summary: Exit Animal
+      description: 'The animal left the farm: sold, dead, culled, slaughtered or
+
+        transferred. Its groups, lactation, pregnancy and feeding close; its
+
+        record stays. A death is recorded by whoever looks after the animal
+
+        (Animals · edit); the others are a manager''s call (Animals · approve).'
+      operationId: exit_animal_api_v1_animals__animal_id__exit_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalExitIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Exit Animal Api V1 Animals  Animal Id  Exit Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/restore:
+    post:
+      tags:
+      - livestock
+      summary: Restore Animal
+      description: 'Brings back an animal archived by mistake. A sale or a death is not
+
+        undone this way.'
+      operationId: restore_animal_api_v1_animals__animal_id__restore_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnimalRestoreIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Restore Animal Api V1 Animals  Animal Id  Restore Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/relationships:
+    get:
+      tags:
+      - livestock
+      summary: Animal Relationships
+      operationId: animal_relationships_api_v1_animals__animal_id__relationships_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Animal Relationships Api V1 Animals  Animal Id  Relationships Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/parents:
+    post:
+      tags:
+      - livestock
+      summary: Record Parent
+      description: 'Parentage for an animal that arrived with known parents on this
+
+        farm. A birth recorded here links its own parentage.'
+      operationId: record_parent_api_v1_animals__animal_id__parents_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParentIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Parent Api V1 Animals  Animal Id  Parents Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/reproduction:
+    get:
+      tags:
+      - reproduction
+      summary: Reproduction Record
+      description: 'The animal''s whole reproductive life: services, checks, pregnancies,
+
+        births with their newborns, lactations and recorded parentage.'
+      operationId: reproduction_record_api_v1_animals__animal_id__reproduction_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reproduction Record Api V1 Animals  Animal Id  Reproduction Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reproduction/overview:
+    get:
+      tags:
+      - reproduction
+      summary: Reproduction Overview
+      description: 'Who is due, who is waiting for a pregnancy check, recent births, how
+
+        many are in milk and what is in the incubator.'
+      operationId: reproduction_overview_api_v1_reproduction_overview_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Reproduction Overview Api V1 Reproduction Overview Get
+      security:
+      - HTTPBearer: []
+  /api/v1/animals/{animal_id}/breedings:
+    post:
+      tags:
+      - reproduction
+      summary: Record Breeding
+      operationId: record_breeding_api_v1_animals__animal_id__breedings_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BreedingIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Breeding Api V1 Animals  Animal Id  Breedings Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/breedings/{breeding_id}/void:
+    post:
+      tags:
+      - reproduction
+      summary: Void Breeding
+      operationId: void_breeding_api_v1_animals__animal_id__breedings__breeding_id__void_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      - name: breeding_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Breeding Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BreedingVoidIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Void Breeding Api V1 Animals  Animal Id  Breedings  Breeding Id  Void
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/pregnancy-checks:
+    post:
+      tags:
+      - reproduction
+      summary: Record Pregnancy Check
+      operationId: record_pregnancy_check_api_v1_animals__animal_id__pregnancy_checks_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PregnancyCheckIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Pregnancy Check Api V1 Animals  Animal Id  Pregnancy Checks Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/pregnancy-loss:
+    post:
+      tags:
+      - reproduction
+      summary: Record Pregnancy Loss
+      operationId: record_pregnancy_loss_api_v1_animals__animal_id__pregnancy_loss_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PregnancyLossIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Pregnancy Loss Api V1 Animals  Animal Id  Pregnancy Loss Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/births:
+    post:
+      tags:
+      - reproduction
+      summary: Record Birth
+      description: 'A calving / lambing / kidding / foaling. Newborns marked
+
+        `register_now` become animals in the same transaction — with the
+
+        identifiers their species requires — and any refusal refuses the birth.'
+      operationId: record_birth_api_v1_animals__animal_id__births_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BirthIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Birth Api V1 Animals  Animal Id  Births Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/births/{birth_id}/offspring/{sequence_no}/register:
+    post:
+      tags:
+      - reproduction
+      summary: Register Offspring
+      operationId: register_offspring_api_v1_births__birth_id__offspring__sequence_no__register_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: birth_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Birth Id
+      - name: sequence_no
+        in: path
+        required: true
+        schema:
+          type: integer
+          title: Sequence No
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffspringRegisterIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Register Offspring Api V1 Births  Birth Id  Offspring  Sequence No  Register
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/lactations:
+    post:
+      tags:
+      - reproduction
+      summary: Start Lactation
+      description: 'A lactation that did not start from a recorded birth. After a
+
+        recorded birth the dam''s lactation starts by itself.'
+      operationId: start_lactation_api_v1_animals__animal_id__lactations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LactationStartIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Start Lactation Api V1 Animals  Animal Id  Lactations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/dry-off:
+    post:
+      tags:
+      - reproduction
+      summary: Dry Off
+      operationId: dry_off_api_v1_animals__animal_id__dry_off_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DryOffIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Dry Off Api V1 Animals  Animal Id  Dry Off Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/incubations:
+    get:
+      tags:
+      - reproduction
+      summary: List Incubations
+      operationId: list_incubations_api_v1_incubations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status_filter
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status Filter
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Incubations Api V1 Incubations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - reproduction
+      summary: Start Incubation
+      operationId: start_incubation_api_v1_incubations_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncubationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Start Incubation Api V1 Incubations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/incubations/{batch_id}/hatch:
+    post:
+      tags:
+      - reproduction
+      summary: Record Hatch
+      description: 'The hatch: live chicks counted into the destination flock''s ledger.'
+      operationId: record_hatch_api_v1_incubations__batch_id__hatch_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: batch_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HatchIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Hatch Api V1 Incubations  Batch Id  Hatch Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/incubations/{batch_id}/cancel:
+    post:
+      tags:
+      - reproduction
+      summary: Cancel Incubation
+      operationId: cancel_incubation_api_v1_incubations__batch_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: batch_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Batch Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncubationCancelIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Incubation Api V1 Incubations  Batch Id  Cancel Post
         '422':
           description: Validation Error
           content:
@@ -7057,12 +8063,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: entity_type
         in: query
         required: false
@@ -7079,6 +8079,12 @@ paths:
           - type: string
           - type: 'null'
           title: Entity Id
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7105,7 +8111,16 @@ paths:
 
         this endpoint cannot be used to smuggle one in regardless of caller
 
-        role.'
+        role.
+
+
+        The farm, the subject and the observer must all be the caller''s own:
+
+        an observation is evidence the emergency engine and the health case
+
+        act on, so it cannot be planted on another farm''s animal or in
+
+        another farm''s staff member''s name.'
       operationId: create_observation_api_v1_observations_post
       security:
       - HTTPBearer: []
@@ -7137,12 +8152,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: status_filter
         in: query
         required: false
@@ -7159,6 +8168,12 @@ paths:
           - type: string
           - type: 'null'
           title: Assigned To
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7308,12 +8323,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7323,6 +8332,12 @@ paths:
           minimum: 1
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7417,12 +8432,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7430,6 +8439,12 @@ paths:
           type: integer
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7490,12 +8505,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7503,6 +8512,12 @@ paths:
           type: integer
           default: 30
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7559,12 +8574,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: days
         in: query
         required: false
@@ -7572,6 +8581,12 @@ paths:
           type: integer
           default: 90
           title: Days
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -7705,12 +8720,6 @@ paths:
       security:
       - HTTPBearer: []
       parameters:
-      - name: farm_id
-        in: query
-        required: true
-        schema:
-          type: string
-          title: Farm Id
       - name: category
         in: query
         required: false
@@ -7734,6 +8743,12 @@ paths:
           type: boolean
           default: true
           title: Refresh
+      - name: farm_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Farm Id
       responses:
         '200':
           description: Successful Response
@@ -9994,6 +11009,40 @@ components:
           type: boolean
           title: Active
           default: true
+        lifecycle_status:
+          type: string
+          title: Lifecycle Status
+          default: active
+        exited_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Exited At
+        pregnancy_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Pregnancy Started At
+        expected_due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Due Date
+        lactation_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Lactation Started At
+        dried_off_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Dried Off At
         identifiers:
           items:
             $ref: '#/components/schemas/IdentifierOut'
@@ -10063,6 +11112,31 @@ components:
             type: object
           - type: 'null'
           title: Emergency
+        reproduction:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Reproduction
+        groups:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Groups
+          default: []
+        relationships:
+          additionalProperties: true
+          type: object
+          title: Relationships
+          default: {}
+        recent_history:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Recent History
+          default: []
       type: object
       required:
       - id
@@ -10074,6 +11148,32 @@ components:
       - pregnant
       - lactating
       title: AnimalDigitalTwinOut
+    AnimalExitIn:
+      properties:
+        exit_type:
+          type: string
+          title: Exit Type
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Reason
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - exit_type
+      title: AnimalExitIn
     AnimalGroupCreate:
       properties:
         name:
@@ -10091,6 +11191,11 @@ components:
           minimum: 0.0
           title: Count
           default: 0
+        tracking_mode:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tracking Mode
         sex_composition:
           anyOf:
           - type: string
@@ -10159,6 +11264,16 @@ components:
           - type: string
           - type: 'null'
           title: Location Label
+        tracking_mode:
+          type: string
+          title: Tracking Mode
+          default: QUANTITY_MANAGED
+        created_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Created At
       type: object
       required:
       - id
@@ -10375,6 +11490,40 @@ components:
           type: boolean
           title: Active
           default: true
+        lifecycle_status:
+          type: string
+          title: Lifecycle Status
+          default: active
+        exited_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Exited At
+        pregnancy_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Pregnancy Started At
+        expected_due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Due Date
+        lactation_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Lactation Started At
+        dried_off_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Dried Off At
         identifiers:
           items:
             $ref: '#/components/schemas/IdentifierOut'
@@ -10392,6 +11541,16 @@ components:
       - pregnant
       - lactating
       title: AnimalOut
+    AnimalRestoreIn:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Reason
+      type: object
+      title: AnimalRestoreIn
     AnimalUpdate:
       properties:
         tag:
@@ -11401,6 +12560,47 @@ components:
       required:
       - target_quantity
       title: BatchStart
+    BirthIn:
+      properties:
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        assistance_code:
+          type: string
+          title: Assistance Code
+          default: NONE
+        sire_animal_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sire Animal Id
+        sire_reference:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Sire Reference
+        start_lactation:
+          type: boolean
+          title: Start Lactation
+          default: true
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        offspring:
+          items:
+            $ref: '#/components/schemas/NewbornIn'
+          type: array
+          title: Offspring
+      type: object
+      required:
+      - offspring
+      title: BirthIn
     BookingActivityOut:
       properties:
         id:
@@ -11555,6 +12755,58 @@ components:
       - name
       - active
       title: BreedOut
+    BreedingIn:
+      properties:
+        event_type:
+          type: string
+          title: Event Type
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        male_animal_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Male Animal Id
+        sire_reference:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Sire Reference
+        semen_batch_reference:
+          anyOf:
+          - type: string
+            maxLength: 120
+          - type: 'null'
+          title: Semen Batch Reference
+        technician_user_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Technician User Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - event_type
+      title: BreedingIn
+    BreedingVoidIn:
+      properties:
+        reason:
+          type: string
+          maxLength: 200
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: BreedingVoidIn
     CapabilityOut:
       properties:
         code:
@@ -12259,6 +13511,16 @@ components:
       - diagnosis_code
       title: DiagnosisIn
       description: '`POST /health/cases/{id}/diagnoses` — a diagnostic role only.'
+    DryOffIn:
+      properties:
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+      type: object
+      title: DryOffIn
     EggRecordCreate:
       properties:
         flock_id:
@@ -13892,6 +15154,44 @@ components:
       - waste_qty
       - recorded_at
       title: HarvestRecordOut
+    HatchIn:
+      properties:
+        hatched_live:
+          type: integer
+          minimum: 0.0
+          title: Hatched Live
+        unhatched:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Unhatched
+        culled:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Culled
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        destination_group_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination Group Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - hatched_live
+      title: HatchIn
     HealthCaseClose:
       properties:
         outcome:
@@ -14068,6 +15368,58 @@ components:
       - status
       - created_at
       title: IdentifierOut
+    IncubationCancelIn:
+      properties:
+        reason:
+          type: string
+          maxLength: 300
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: IncubationCancelIn
+    IncubationIn:
+      properties:
+        species_code:
+          type: string
+          title: Species Code
+        eggs_set:
+          type: integer
+          exclusiveMinimum: 0.0
+          title: Eggs Set
+        set_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Set At
+        source_group_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Group Id
+        expected_hatch_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Hatch Date
+        code:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Code
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - species_code
+      - eggs_set
+      title: IncubationIn
     InventoryItemOut:
       properties:
         id:
@@ -14175,6 +15527,22 @@ components:
       - occurred_at
       title: InventoryMovementOut
       description: '`GET /feed/transactions` — the movement history the tablet shows.'
+    LactationStartIn:
+      properties:
+        started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Started At
+        lactation_number:
+          anyOf:
+          - type: integer
+            minimum: 1.0
+          - type: 'null'
+          title: Lactation Number
+      type: object
+      title: LactationStartIn
     LifeStageOut:
       properties:
         code:
@@ -14958,6 +16326,43 @@ components:
           title: Active
       type: object
       title: MedicineProductPatch
+    MembershipEndIn:
+      properties:
+        valid_to:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Valid To
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Reason
+      type: object
+      title: MembershipEndIn
+    MembershipIn:
+      properties:
+        animal_id:
+          type: string
+          title: Animal Id
+        valid_from:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Valid From
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 80
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - animal_id
+      title: MembershipIn
     MilkRecordCreate:
       properties:
         animal_id:
@@ -15715,6 +17120,71 @@ components:
       description: 'What the signed-in user may do — the tablet builds its navigation
 
         and hides its action buttons from this.'
+    NewbornIn:
+      properties:
+        outcome_code:
+          type: string
+          title: Outcome Code
+          default: LIVE
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        birth_weight_kg:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Birth Weight Kg
+        register_now:
+          type: boolean
+          title: Register Now
+          default: false
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Name
+        tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+        identifiers:
+          items:
+            $ref: '#/components/schemas/IdentifierIn'
+          type: array
+          title: Identifiers
+          default: []
+        management_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Management Profile
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        destination_group_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination Group Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: NewbornIn
+      description: 'One newborn. `register_now: true` makes it an animal now (name and the
+
+        identifiers its species requires); a live newborn not registered can be
+
+        counted into a group, or registered later from the birth.'
     NotificationOut:
       properties:
         id:
@@ -16217,6 +17687,47 @@ components:
       required:
       - protocol_step_id
       title: OfflineStepIn
+    OffspringRegisterIn:
+      properties:
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Name
+        sex:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sex
+        tag:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tag
+        identifiers:
+          items:
+            $ref: '#/components/schemas/IdentifierIn'
+          type: array
+          title: Identifiers
+          default: []
+        management_profile:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Management Profile
+        group_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Name
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: OffspringRegisterIn
     OpeningCalendarDayOut:
       properties:
         id:
@@ -16289,6 +17800,25 @@ components:
       required:
       - weekday
       title: OpeningCalendarDayUpsert
+    ParentIn:
+      properties:
+        parent_animal_id:
+          type: string
+          title: Parent Animal Id
+        relationship_type:
+          type: string
+          title: Relationship Type
+        evidence:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Evidence
+      type: object
+      required:
+      - parent_animal_id
+      - relationship_type
+      title: ParentIn
     PermissionSet:
       properties:
         permissions:
@@ -16631,6 +18161,66 @@ components:
       type: object
       title: PolicyValidate
       description: Either name the subject, or describe the use.
+    PregnancyCheckIn:
+      properties:
+        assessment_type:
+          type: string
+          title: Assessment Type
+          default: ULTRASOUND
+        result_code:
+          type: string
+          title: Result Code
+        assessed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Assessed At
+        estimated_gestation_days:
+          anyOf:
+          - type: integer
+            minimum: 0.0
+          - type: 'null'
+          title: Estimated Gestation Days
+        expected_due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Due Date
+        examiner_user_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Examiner User Id
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - result_code
+      title: PregnancyCheckIn
+    PregnancyLossIn:
+      properties:
+        outcome_code:
+          type: string
+          title: Outcome Code
+          default: LOSS
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: PregnancyLossIn
     PrepareStepIn:
       properties:
         weight_kg:
@@ -17573,6 +19163,31 @@ components:
           title: Steps
       type: object
       title: ProtocolVersionIn
+    QuantityEventIn:
+      properties:
+        event_type:
+          type: string
+          title: Event Type
+        quantity_delta:
+          type: integer
+          title: Quantity Delta
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - event_type
+      - quantity_delta
+      title: QuantityEventIn
     RawMaterialCreate:
       properties:
         name:

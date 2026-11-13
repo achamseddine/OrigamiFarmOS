@@ -1,5 +1,18 @@
 # Releases
 
+## v0.5.0 — The livestock record: history, groups and reproduction
+
+Completes the generic animal model's remaining steps (docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md §13: reproduction, groups, incubation) from LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA and PRODUCTION-SCHEMA §8.
+
+**Delivered:**
+- Backend: migration `b5e7a9c1d3f8` (animal state history; group type policies, memberships, head-count ledger, relationships; breeding events, pregnancy episodes and checks, births and offspring, lactation episodes, incubation batches and hatches; species gestation / incubation days) with a backfill of existing flags, herd names and flock counts. 27 new endpoints. Pregnancy and lactation are a projection of their episodes; an exit closes memberships, lactation, pregnancy and feeding and blocks later milk and feeding; feed inheritance follows real memberships. Identifier search and lookup.
+- Tablet: Reproduction & milking and Herd & family on the Digital Twin, the full reproductive record with registration of untagged newborns, Record exit, the reproduction day on the Animals screen, group sheets (members, ledger, incubator) from the Animals and Egg screens, a group picker in the animal form; Milk and Egg screens now load for animal-care staff. Offline and standalone through cache effects; 142 new AR/EN strings.
+- Tests: backend 478 (SQLite; the parity and backfill tests also on PostgreSQL 16); Flutter 196.
+
+**Next:**
+- Unified production records (§13 step 9) and an admin UI for the species catalog (step 12).
+- The cross-cutting move of quantities and money to `numeric`.
+
 ## v0.4.0 — Feed intelligence, farm pharmacy, emergency protocols and the specification gap closure
 
 Adds the generic animal and feed architectures' later increments (numbered

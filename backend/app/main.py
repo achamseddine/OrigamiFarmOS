@@ -35,6 +35,7 @@ from app.api.v1 import (
     production,
     recommendations,
     reports,
+    reproduction,
     sales,
     sync,
     tasks,
@@ -55,6 +56,7 @@ from app.domain import procurement_models  # noqa: F401 - purchase requisitions 
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
+from app.domain import reproduction_models  # noqa: F401 - breeding, pregnancy, birth, lactation, incubation
 
 settings = get_settings()
 
@@ -123,6 +125,7 @@ app.include_router(sync.router, prefix=api_prefix)
 app.include_router(sales.router, prefix=api_prefix)
 app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
+app.include_router(reproduction.router, prefix=api_prefix)
 app.include_router(feeding.router, prefix=api_prefix)
 app.include_router(feed_performance.router, prefix=api_prefix)
 app.include_router(pharmacy.router, prefix=api_prefix)

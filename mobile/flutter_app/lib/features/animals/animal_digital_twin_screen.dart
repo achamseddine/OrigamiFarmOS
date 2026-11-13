@@ -22,6 +22,9 @@ import '../../providers/production_provider.dart';
 import '../health/emergency_tab.dart' show showAssessDialog;
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import 'animal_care_section.dart';
+import 'animal_herd_section.dart';
+import 'animal_reproduction_section.dart';
+import 'reproduction_forms.dart' show showExitForm;
 import 'animal_feeding_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
@@ -143,7 +146,7 @@ class _AnimalDigitalTwinScreenState extends State<AnimalDigitalTwinScreen> {
                   child: LayoutBuilder(builder: (context, constraints) {
                     final wide = constraints.maxWidth > kTabletBreakpoint;
                     final left = _ProfileColumn(animal: animal, caps: caps, onRecordChanged: _refreshRecord);
-                    final center = _HistoryColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading, twinError: _twinError);
+                    final center = _HistoryColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading, twinError: _twinError, onRecordChanged: _refreshRecord);
                     final right = _InsightsColumn(animal: animal, caps: caps, twin: _twin, twinLoading: _twinLoading);
                     if (!wide) {
                       return Column(children: [left, const SizedBox(height: FarmSpacing.md), center, const SizedBox(height: FarmSpacing.md), right]);
@@ -390,12 +393,13 @@ class _QuickAction {
 }
 
 class _HistoryColumn extends StatelessWidget {
-  const _HistoryColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading, required this.twinError});
+  const _HistoryColumn({required this.animal, required this.caps, required this.twin, required this.twinLoading, required this.twinError, required this.onRecordChanged});
   final Animal animal;
   final CapabilitySet caps;
   final Map<String, dynamic>? twin;
   final bool twinLoading;
   final String? twinError;
+  final Future<void> Function() onRecordChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -502,6 +506,12 @@ class _HistoryColumn extends StatelessWidget {
           const SizedBox(height: FarmSpacing.md),
           AnimalCareSection(twin: twin, loading: twinLoading),
         ],
+        // Reproduction & milking (only when a reproduction capability
+        // applies) and the herd record: groups, parentage, history.
+        const SizedBox(height: FarmSpacing.md),
+        AnimalReproductionSection(animal: animal, twin: twin, loading: twinLoading, onChanged: onRecordChanged),
+        const SizedBox(height: FarmSpacing.md),
+        AnimalHerdSection(animal: animal, twin: twin, loading: twinLoading, onChanged: onRecordChanged),
       ],
     );
   }

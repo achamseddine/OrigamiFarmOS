@@ -135,6 +135,13 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
               children: [for (final card in cards) SizedBox(width: w, child: card)],
             );
           }),
+          // Due dates, pregnancy checks waiting, the incubator.
+          Padding(
+            padding: const EdgeInsets.only(top: FarmSpacing.md),
+            child: ReproOverviewCard(
+              onOpenAnimal: (id) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => AnimalDigitalTwinScreen(animalId: id))),
+            ),
+          ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
@@ -151,7 +158,7 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                         ],
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: TextButton(onPressed: () {}, child: Text(context.t('viewAllGroups'))),
+                          child: TextButton(onPressed: () => showAllGroupsSheet(context), child: Text(context.t('viewAllGroups'))),
                         ),
                       ],
                     ),

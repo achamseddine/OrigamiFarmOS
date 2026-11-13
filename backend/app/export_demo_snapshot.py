@@ -149,6 +149,15 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/animals/{animal_id}/capabilities", None) for animal_id in animal_ids]
     paths += [(f"/animals/{animal_id}/identifiers", None) for animal_id in animal_ids]
     paths += [(f"/animal-groups/{group_id}", None) for group_id in group_ids]
+    # Livestock records (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): every
+    # animal's reproduction record and state history, every group's
+    # members and head-count ledger, the farm's reproduction day and the
+    # incubator — what the Digital Twin and the group screens draw.
+    paths += [("/reproduction/overview", None), ("/incubations", None), ("/animal-group-types", None)]
+    paths += [(f"/animals/{animal_id}/reproduction", None) for animal_id in animal_ids]
+    paths += [(f"/animals/{animal_id}/history", None) for animal_id in animal_ids]
+    paths += [(f"/animal-groups/{group_id}/members", None) for group_id in group_ids]
+    paths += [(f"/animal-groups/{group_id}/quantity-events", None) for group_id in group_ids]
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]
     # Generic feed architecture: the whole feed workspace, the plan and the
     # feeding section of every animal and group profile.

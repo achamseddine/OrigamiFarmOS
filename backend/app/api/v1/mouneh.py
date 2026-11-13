@@ -308,9 +308,11 @@ def cost_preview(payload: CostPreviewRequest, db: Session = Depends(get_db), cur
             if payload.recipe_id
             else mouneh_service.get_active_recipe(db, payload.product_id)
         )
-        if recipe is None:
+        product = db.get(mouneh_models.MounehProduct, recipe.product_id) if recipe is not None else None
+        # A recipe is the farm's through its product; another farm's prices
+        # and margins answer exactly like a recipe that does not exist.
+        if product is None or product.farm_id != current_user.farm_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No recipe found to price")
-        product = db.get(mouneh_models.MounehProduct, recipe.product_id)
         output_qty = payload.output_qty or recipe.basis_quantity
         materials = mouneh_service.recipe_materials(recipe, output_qty=output_qty)
         components = mouneh_service.components_as_lines(
@@ -322,7 +324,7 @@ def cost_preview(payload: CostPreviewRequest, db: Session = Depends(get_db), cur
         materials = []
         for line in payload.materials:
             material = db.get(mouneh_models.RawMaterial, line.material_id)
-            if material is None:
+            if material is None or material.farm_id != current_user.farm_id:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"Raw material {line.material_id} not found")
             materials.append(
                 costing.MaterialLine(

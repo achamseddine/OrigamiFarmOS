@@ -83,7 +83,28 @@ by `tests/test_api.py::TestRecommendations`.
 Every endpoint in the spec's table is implemented — see
 `backend/app/api/v1/*.py` and `api/openapi.yaml` for the generated
 OpenAPI 3.1 spec. RBAC roles (tech spec §17) are enforced in
-`backend/app/api/deps.py`.
+`backend/app/api/deps.py`, together with farm isolation
+(`require_farm_access`, `ensure_own_farm`, `owned_or_404`) and per-module
+permissions on the core read and write endpoints
+(`require_any_permission`); `backend/tests/test_farm_scope.py` covers both,
+including a sweep over every OpenAPI operation that takes `farm_id`.
+
+## Livestock record (LIVESTOCK-SCHEMA §5–§10, REPRODUCTION-SCHEMA, PRODUCTION-SCHEMA §8)
+
+| Requirement | Backend | Tablet |
+|---|---|---|
+| State history; never only the current field (§5, §14) | `services/livestock_state_service.py` `record`, `GET /animals/{id}/history` | `features/animals/animal_herd_section.dart` |
+| Explicit exit closes assignments, blocks production/feeding (behavioural §14) | `livestock_state_service.exit_animal`, `POST /animals/{id}/exit` | Digital Twin "Record exit", `reproduction_forms.dart` `showExitForm` |
+| AnimalGroup first-class, effective-dated membership, type policy (§6–§8) | `services/group_service.py`, `/animal-groups/{id}/members`, `/animal-group-types` | `animal_herd_section.dart` `GroupSheet`, `showMoveToGroupForm` |
+| Quantity-managed flocks keep count history (§9) | `group_service.record_quantity`, `/animal-groups/{id}/quantity-events` | `GroupSheet` ledger, `showQuantityForm` |
+| Parentage without embedding reproduction in Animal (§10) | `animal_relationships`, `/animals/{id}/relationships`, `/animals/{id}/parents` | `AnimalHerdSection` dam / sire / offspring |
+| Pregnancy never inferred from mating; capability-gated; one active episode | `services/reproduction_service.py` `record_breeding`, `record_assessment`, `end_pregnancy` | `animal_reproduction_section.dart`, `reproduction_forms.dart` |
+| Birth registers / counts offspring and links parentage atomically | `reproduction_service.record_birth`, `register_offspring` | `showBirthForm`, "Register" in the full record |
+| Lactation episode, linked to birth; dry-off (PRODUCTION §8) | `reproduction_service.start_lactation`, `end_lactation` | Reproduction & milking card |
+| Poultry incubation / hatch, not pregnancy | `reproduction_service.start_incubation`, `record_hatch`, `/incubations` | `GroupSheet` incubator, `showHatchForm` |
+| Reproductive status is a projection (no editable `pregnant`, §1.8) | `refresh_projection`; `PUT /animals` refuses the change | edit form shows a note instead of the switches |
+| Search by identifiers; ambiguity returned, not resolved (§16) | `GET /animals?search=`, `GET /animals/lookup` | — |
+| Existing data migrated without loss | migration `b5e7a9c1d3f8`, `tests/test_livestock_backfill.py` | demo snapshot regenerated |
 
 ## Mouneh & Farm Product Processing module (tech spec v0.5)
 

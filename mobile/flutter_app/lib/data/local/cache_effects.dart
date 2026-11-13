@@ -59,6 +59,15 @@ class PatchDocument extends CacheEffect {
   final Map<String, dynamic> patch;
 }
 
+/// A patch onto a map *inside* a cached document — the reproduction
+/// summary on an animal's Digital Twin, where the shallow [PatchDocument]
+/// would replace the whole summary.
+class PatchNested extends CacheEffect {
+  const PatchNested(super.collectionPath, this.field, this.patch);
+  final String field;
+  final Map<String, dynamic> patch;
+}
+
 /// Adds [delta] to one numeric field of the cached record — stock moving
 /// in or out, where the new value depends on the old one.
 class AdjustNumber extends CacheEffect {
@@ -159,6 +168,11 @@ final List<_Rule> _rules = [
       ]),
   // Herds, flocks and batches managed as one unit (§7).
   ..._crud('/animal-groups'),
+  // The livestock record (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): what a
+  // breeding, a check, a birth, a dry-off or an exit does to the herd list,
+  // the Digital Twin and its reproduction summary, predicted until the
+  // server's own answer replaces it.
+  ..._livestockRecordRules(),
   _Rule('POST', '/health/treatments', (m) => [AppendRecord('/health/treatments', _newRecord(m))]),
   _Rule('POST', '/production/milk', (m) => [AppendRecord('/production/milk', _newRecord(m))]),
   _Rule('POST', '/production/eggs', (m) => [AppendRecord('/production/eggs', _newRecord(m))]),
@@ -508,6 +522,12 @@ Object? _applyToBody(Object? body, CacheEffect effect) {
     if (body is! Map<String, dynamic>) return null;
     return <String, dynamic>{...body, ...effect.patch, kPendingFlag: true};
   }
+  if (effect is PatchNested) {
+    if (body is! Map<String, dynamic>) return null;
+    final inner = body[effect.field];
+    final base = inner is Map ? inner.cast<String, dynamic>() : const <String, dynamic>{};
+    return <String, dynamic>{...body, effect.field: <String, dynamic>{...base, ...effect.patch}, kPendingFlag: true};
+  }
 
   final listKey = effect.listKey;
   if (listKey != null) {
@@ -582,5 +602,99 @@ List<dynamic>? _applyToList(List<dynamic> list, CacheEffect effect) {
       ];
     case PatchDocument():
       return null; // handled in _applyToBody
+    case PatchNested():
+      return null; // handled in _applyToBody
   }
 }
+
+
+/// The animal-level effects shared by the reproduction rules: the flag on
+/// its herd row, on its twin, and inside the twin's reproduction summary.
+List<CacheEffect> _animalState(String animalId, Map<String, dynamic> animal, Map<String, dynamic> summary) => [
+      if (animal.isNotEmpty) MergeRecord('/animals', animalId, animal),
+      if (animal.isNotEmpty) PatchDocument('/animals/$animalId', animal),
+      if (summary.isNotEmpty) PatchNested('/animals/$animalId', 'reproduction', summary),
+    ];
+
+List<_Rule> _livestockRecordRules() => [
+      _Rule('POST', '/animals/$_id/breedings', (m) {
+        final record = _newRecord(m, extra: {'status': 'recorded', 'occurred_at': m.body['occurred_at'] ?? _now()});
+        return [
+          AppendRecord('/animals/${m.ids[0]}/reproduction', record, listKey: 'breedings'),
+          ..._animalState(m.ids[0], const {}, {'last_breeding': record, 'awaiting_pregnancy_check': false}),
+        ];
+      }),
+      _Rule('POST', '/animals/$_id/pregnancy-checks', (m) {
+        final record = _newRecord(m, extra: {'assessed_at': m.body['assessed_at'] ?? _now()});
+        final result = m.body['result_code'];
+        final pregnant = result == 'POSITIVE' ? true : (result == 'NEGATIVE' ? false : null);
+        return [
+          AppendRecord('/animals/${m.ids[0]}/reproduction', record, listKey: 'assessments'),
+          ..._animalState(
+            m.ids[0],
+            {'pregnant': ?pregnant},
+            {'last_check': record, 'awaiting_pregnancy_check': false, 'pregnant': ?pregnant, if (pregnant == false) 'pregnancy': null},
+          ),
+        ];
+      }),
+      _Rule('POST', '/animals/$_id/pregnancy-loss', (m) => _animalState(m.ids[0], const {'pregnant': false}, const {'pregnant': false, 'pregnancy': null})),
+      _Rule('POST', '/animals/$_id/births', (m) {
+        final offspring = (m.body['offspring'] as List<dynamic>? ?? const []);
+        final live = offspring.where((o) => o is Map && o['outcome_code'] == 'LIVE').length;
+        final birth = _newRecord(m, extra: {'occurred_at': m.body['occurred_at'] ?? _now(), 'offspring_count': offspring.length, 'live_count': live});
+        final milking = m.body['start_lactation'] == true;
+        return [
+          AppendRecord('/animals/${m.ids[0]}/reproduction', birth, listKey: 'births'),
+          ..._animalState(
+            m.ids[0],
+            {'pregnant': false, if (milking) 'lactating': true},
+            {
+              'pregnant': false,
+              'pregnancy': null,
+              'last_birth': {'id': m.localId, 'occurred_at': birth['occurred_at'], 'live_count': live, 'offspring_count': offspring.length},
+              if (milking) 'lactation': {'id': m.localId, 'status': 'active', 'started_at': birth['occurred_at'], 'days_in_milk': 0},
+            },
+          ),
+        ];
+      }),
+      _Rule('POST', '/animals/$_id/lactations', (m) => _animalState(m.ids[0], const {'lactating': true},
+          {'lactation': {'id': m.localId, 'status': 'active', 'started_at': _now(), 'days_in_milk': 0}})),
+      _Rule('POST', '/animals/$_id/dry-off', (m) => _animalState(m.ids[0], {'lactating': false, 'dried_off_at': _now()}, const {'lactation': null})),
+      // An animal that left is no longer in the herd list (which lists the
+      // animals on the farm); its own record stays, marked.
+      _Rule('POST', '/animals/$_id/exit', (m) => [
+            RemoveRecord('/animals', m.ids[0]),
+            PatchDocument('/animals/${m.ids[0]}', {'active': false, 'lifecycle_status': m.body['exit_type'] ?? 'archived', 'exited_at': _now(), 'groups': const []}),
+          ]),
+      _Rule('POST', '/animal-groups/$_id/members', (m) {
+        final animalId = m.body['animal_id'] as String?;
+        if (animalId == null) return const [];
+        final name = m.body['group_name'] as String?;
+        return [
+          AppendRecord('/animal-groups/${m.ids[0]}/members', _newRecord(m, extra: {'group_id': m.ids[0], 'valid_from': _now()})),
+          if (name != null) MergeRecord('/animals', animalId, {'group_name': name}),
+          if (name != null) PatchDocument('/animals/$animalId', {'group_name': name}),
+        ];
+      }),
+      _Rule('POST', '/animal-groups/$_id/members/$_id/end', (m) => [
+            RemoveRecord('/animal-groups/${m.ids[0]}/members', m.ids[1], idField: 'animal_id'),
+            MergeRecord('/animals', m.ids[1], const {'group_name': null}),
+          ]),
+      _Rule('POST', '/animal-groups/$_id/quantity-events', (m) {
+        final delta = (m.body['quantity_delta'] as num?)?.toDouble();
+        if (delta == null) return const [];
+        return [
+          AdjustNumber('/animal-groups', m.ids[0], 'count', delta),
+          AppendRecord('/animal-groups/${m.ids[0]}/quantity-events', _newRecord(m, extra: {'occurred_at': _now()})),
+        ];
+      }),
+      _Rule('POST', '/incubations', (m) => [AppendRecord('/incubations', _newRecord(m, extra: {'status': 'incubating', 'code': '…', 'set_at': _now()}))]),
+      _Rule('POST', '/incubations/$_id/hatch', (m) {
+        final hatched = (m.body['hatched_live'] as num?)?.toDouble() ?? 0;
+        final destination = m.body['destination_group_id'] as String?;
+        return [
+          MergeRecord('/incubations', m.ids[0], {'status': 'hatched', 'hatch': {'hatched_live': hatched.toInt()}}),
+          if (destination != null && hatched > 0) AdjustNumber('/animal-groups', destination, 'count', hatched),
+        ];
+      }),
+    ];

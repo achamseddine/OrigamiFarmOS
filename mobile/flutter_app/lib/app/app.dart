@@ -17,6 +17,7 @@ import '../providers/feeding_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/pharmacy_provider.dart';
 import '../providers/livestock_provider.dart';
+import '../providers/herd_records_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/notifications_provider.dart';
 import '../providers/production_provider.dart';
@@ -98,6 +99,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => TasksProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => HerdRecordsProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
@@ -200,7 +202,12 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       if (access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) quietly(() => context.read<PharmacyProvider>().load()),
       // Emergency triage and approved protocols: animal health.
       if (access.isModuleAvailable('animal_health')) quietly(() => context.read<EmergencyProvider>().load()),
-      ifAllowed(FarmModuleShortcuts.produce, () => context.read<ProductionProvider>().load()),
+      // Milk, eggs and produce all read ProductionProvider; whoever holds
+      // any of them gets it (its load tolerates a module the user lacks).
+      if (access.isModuleAvailable(FarmModuleShortcuts.produce) || access.isModuleAvailable('milk_production') || access.isModuleAvailable('egg_production'))
+        quietly(() => context.read<ProductionProvider>().load()),
+      // The herd's reproduction day: due dates, checks, the incubator.
+      if (access.isModuleAvailable(FarmModuleShortcuts.animals)) quietly(() => context.read<HerdRecordsProvider>().loadOverview()),
       ifAllowed(FarmModuleShortcuts.agriculture, () => context.read<AgricultureProvider>().load()),
       ifAllowed(FarmModuleShortcuts.ai, () => context.read<RecommendationsProvider>().load()),
       ifAllowed(FarmModuleShortcuts.finance, () => context.read<SalesProvider>().load()),
