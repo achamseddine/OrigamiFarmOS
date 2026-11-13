@@ -3,7 +3,9 @@
 *Design specification and implementation map. Companion to
 `GENERIC-ANIMAL-CAPABILITY-MODEL.md`. The specification came in as a
 developer handoff; the "In this codebase" notes under each section say where
-it lives and where the implementation deliberately differs.*
+it lives and where the implementation deliberately differs.
+
+**Current flow and correction register:** [Animal + Feed workflow audit](ANIMAL-FEED-FLOW-AUDIT.md). Its AF-01/02/04/14/05/06 findings are **open code gaps**, not solved by this documentation update. [Operational staff flow](../handbook/06-Operational-Workflows/README.md).*
 
 ---
 
@@ -76,8 +78,8 @@ batch's output, or an opening balance. A lot carries its supplier, received
 / accepted / rejected quantities, expiry, unit cost and a status —
 `active`, `quarantined`, `blocked`, `recalled`, `expired`, `depleted`.
 
-Every movement is an `inventory_transactions` row **with a `lot_id`**.
-Consumption is drawn **FIFO from usable lots** unless a lot is named.
+Normal physical feed movements are `inventory_transactions` rows **with a `lot_id`**.
+Consumption is drawn **FIFO from usable lots** unless a lot is named. **Exception requiring correction:** the current `allow_negative=true` override can issue beyond available lots and writes an **un-lotted** transaction. This is a provenance gap, not traceable physical stock; see [AF-02](ANIMAL-FEED-FLOW-AUDIT.md).
 
 ```
 available = on_hand − unusable lots (quarantined | blocked | recalled | expired)
@@ -90,9 +92,7 @@ available = on_hand − unusable lots (quarantined | blocked | recalled | expire
   `consume` draws FIFO (or from a chosen lot) and writes one `out` movement
   per lot touched, returning the draws so callers can price them;
   `availability` computes the formula above per product and per purpose.
-- `allow_negative` is a legacy override (`POST /feed/transactions` on a
-  non-lot item) recorded against no lot; nothing in the new endpoints uses
-  it silently.
+- **Correction needed:** `allow_negative` is also exposed by `POST /feeding-events` and `POST /feed-batches/{id}/complete` to callers with feed-create permission. When stock is short, it can create a transaction without a lot. It must not be described as legacy-only or as an approved feed issue. [AF-02](ANIMAL-FEED-FLOW-AUDIT.md) requires a reasoned, approval-controlled exception or removal of this bypass.
 - `reconcile_opening_balance` pins an item's figure into an opening lot
   only when the product has no lots yet, so a backfilled farm starts clean.
 
@@ -130,9 +130,7 @@ per day), a weight band, an age band, and a priority. A dimension a rule
 leaves unset matches anything. A program with no rules is **manual
 assignment only**.
 
-Programs are versioned like formulas; the version an assignment points at
-is the one that was current when the assignment was made, and activating a
-new version moves open assignments onto it (`feeding_program_activated`).
+Programs are versioned like formulas. **Current implementation caveat:** activating a new version moves active explicit assignments **in place** onto it (`feeding_program_activated`), rather than preserving the originally assigned version on the assignment. Both program creation and version creation default to `activate=true` and require only feed-create permission, even though the dedicated activation endpoint requires approval. This is a **high-priority authorization and ration-change defect**, not the desired workflow: draft → preview affected animals/groups → authorized activation/rollout → preserve per-subject history. See [AF-14](ANIMAL-FEED-FLOW-AUDIT.md).
 
 ## 7. The resolver
 
@@ -184,7 +182,7 @@ On top of that an animal may carry individual assignments of type
 `supplement` (an extra quantity of a product), `override` (a different
 quantity for a product the program already gives) or `restriction` (a
 product it must never get, which the feeding endpoint refuses). The plan
-shows each with its reason and validity.
+shows each with its reason and validity. **Operational gap:** the farm-level daily aggregation currently does not subtract individually assigned animals from group totals or apply individual override deltas correctly (AF-01); the per-animal plan view and the whole-farm demand projection must be reconciled.
 
 A group's own state for the resolver is aggregated from its members:
 lactation state by majority, milk by average, life stage and profile from
@@ -199,8 +197,7 @@ the resolver runs again. If the best program is not the current one the
 system raises **`feeding_program_review_required`** and opens **one** Task
 (`source_type = feeding_review`) per subject — it never swaps the program
 itself. An explicit assignment closes the task. The animal's profile shows
-the banner with the recommended program and the reasons; only a user with
-`approve` on the feed module can assign it.
+the banner with the recommended program and the reasons; the **intended** role is a user with feed `approve` permission. **The current assignment API enforces `create`, not `approve`**; this must be fixed before treating that UI control as authoritative. See [AF-04](ANIMAL-FEED-FLOW-AUDIT.md).
 
 **In this codebase** — hooks in `api/v1/animals.py` (relevant fields
 only), `api/v1/production.py` (after a milk record) and
@@ -215,7 +212,7 @@ only), `api/v1/production.py` (after a milk record) and
 (product, quantity offered, optional quantity consumed, optional lot). Each
 component is drawn from stock (FIFO or the named lot), the lot is written on
 the component, and the event is **priced from the lots it drew**. A
-refusal or a consumption estimate moves no stock. Events are reversed, not
+refusal or a consumption estimate moves no stock. **The current `fed_7d` summary incorrectly includes those non-stock event quantities**; the server also lacks a cross-field check that consumed cannot exceed offered. These are open gaps [AF-05/06](ANIMAL-FEED-FLOW-AUDIT.md). Events are reversed, not
 deleted: `POST /feeding-events/{id}/reverse` writes a compensating
 `reversal` event and returns the stock to the lots.
 
@@ -346,7 +343,7 @@ event in the log (the specification's `FeedBatchCompleted` is
 ## 22. The tablet
 
 `FeedWorkspaceScreen` replaces the single Feed screen in the navigation
-and holds nine tabs over one `FeedingProvider`: **Stock** (the previous
+and holds **ten** tabs over one `FeedingProvider`: **Stock** (the previous
 screen, embedded), **Feeds & lots** (availability, lots, receive a
 delivery with ordered / received / rejected, reserve, lot status),
 **Formulas** (versions, scaling, calculated nutrients), **Mixing** (start
@@ -355,7 +352,7 @@ a batch with scaled targets, complete it with actuals and lot choice),
 list: every group and animal, planned against fed, one-tap record),
 **Nutrition** (declared and lab profiles side by side), **Costs**, and
 **Trace & control** (lot trace both ways, days of cover, reorder
-recommendations with acknowledge, reconciliations with close).
+recommendations with acknowledge, reconciliations with close), and **Performance** (deterministic assessments, alerts, ingredient/supplier signals and effective-feed-value metrics; not a validated ration optimizer).
 
 The animal profile gains a **Feeding** section: the effective program with
 an *assigned directly* / *from group* pill, the review banner with the
@@ -377,22 +374,21 @@ Entities: `lib/domain/entities/feeding.dart`.
 
 - **Feed item and feed product are one row** (`is_ingredient` /
   `is_feedable`), see §2.
-- **No unit-of-measure table**; `uom.py` is the catalog.
-- **No procurement / purchase-order module.** Acknowledging a reorder opens
-  a Task; the requisition itself lives outside this system.
+- **Feed-specific units:** `app/feeding/uom.py` handles feed conversions. **The platform does have a `units_of_measure` registry** for medicine/pharmacy/procurement and related records (ADR-002); do not claim the whole system lacks a UOM table. Feed integration with that registry is a separate alignment decision.
+- **Procurement is partial, not absent:** purchase requisitions and approvals exist in `api/v1/procurement.py` and the procurement schema. Feed reorder acknowledgement currently opens a Task; a complete reorder → approved requisition → PO → receipt linkage is **not established by this feed flow** and needs explicit integration/acceptance tests.
 - **No LIMS integration.** Lab profiles are entered by hand on the
   Nutrition tab.
 - **Refusal and consumption-estimate events move no stock** — they are
   records of behaviour, not movements.
-- **Group membership is the animal's `group_name` within the same
-  species**, as the animal model defines it; there is no separate
-  membership table.
+- **Group membership is effective-dated** in `animal_group_memberships`; the feeding resolver reads the current exclusive membership. `animals.group_name` is a **legacy fallback** only where an animal has no membership history. See `group_for_animal` and `animals_in_group` in `feeding_program_service.py`.
 - **The tablet predicts no stock offline** (§22); availability comes back
-  with the next refresh.
+  with the next refresh. An offline-queued feed issue is not an authoritative stock deduction until accepted by the server. Group + direct individual demand can be double-counted in the current daily plan and forecasts (AF-01).
 - Formula and program **versions are created and activated, not edited**;
   there is no draft editing UI beyond creating the next version.
 
 ## 24. Acceptance criteria (specification §22 / §34)
+
+**Test coverage note:** the existing suite covers the scenarios below but does **not** establish the newly audited group/individual aggregation, approval-path, negative-override and duplicate-measurement controls. Those are explicit new acceptance tests in [the audit](ANIMAL-FEED-FLOW-AUDIT.md).
 
 `backend/tests/test_feeding.py` — 44 tests — covers: a purchased product
 and a farm-made product with lots; formula version locking on first batch
@@ -422,8 +418,7 @@ covers the offline effects and outbox labels.
 3. **Does a lifecycle change ever change a ration silently?** No — it
    raises a review and opens a task; a person assigns.
 4. **Is stock ever counted twice or drawn from a lot that may not be fed?**
-   No — one ledger, lots as the only physical quantities, availability net
-   of unusable and reserved, and policies enforced at consumption.
+   **Design intent:** one inventory ledger, lot eligibility and reservation checks. **Current caveats:** the demand projection can double-count group + individual planned quantities (AF-01), and an authorized-by-create `allow_negative` request can create an un-lotted issue (AF-02). These must pass targeted tests before the answer is an unqualified “no”.
 
 ## 26. Continuous Feed Performance Intelligence — required extension
 The canonical target architecture now includes `database/FEED-PERFORMANCE-INTELLIGENCE.md`. Existing feed implementation already provides much of the required lineage (supplier/lot, actual batch components, feeding events and milk-linked costs), but continuous baseline evaluation, confounder-aware AI assessments, supplier/batch performance projections and persistent feed-performance alerts are a separate implementation increment and must not be considered complete merely because traceability exists.
