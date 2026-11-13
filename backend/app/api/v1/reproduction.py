@@ -26,6 +26,7 @@ from app.schemas.reproduction import (
     HatchIn,
     IncubationCancelIn,
     IncubationIn,
+    LactationCorrectIn,
     LactationStartIn,
     OffspringRegisterIn,
     PregnancyCheckIn,
@@ -145,6 +146,17 @@ def start_lactation(animal_id: str, payload: LactationStartIn, db: Session = Dep
     recorded birth the dam's lactation starts by itself."""
     animal = _animal(db, animal_id, user)
     row = repro.start_lactation(db, animal, at=payload.started_at, lactation_number=payload.lactation_number, user=user)
+    db.commit()
+    return {"lactation": repro.lactation_dict(row), "summary": _summary(db, animal)}
+
+
+@router.patch("/animals/{animal_id}/lactation")
+def correct_lactation(animal_id: str, payload: LactationCorrectIn, db: Session = Depends(get_db), user: models.User = Depends(_LACTATION)) -> dict:
+    """Corrects the calving / start-of-milking date of the current lactation
+    (audited, with the old value). A lactation a recorded birth started is
+    corrected through that birth."""
+    animal = _animal(db, animal_id, user)
+    row = repro.correct_lactation_start(db, animal, started_at=payload.started_at, reason=payload.reason, user=user)
     db.commit()
     return {"lactation": repro.lactation_dict(row), "summary": _summary(db, animal)}
 

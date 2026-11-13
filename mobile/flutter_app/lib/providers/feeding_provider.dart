@@ -66,7 +66,16 @@ class FeedingProvider extends ChangeNotifier {
 
   FeedingPlan? cachedPlan(String subjectId) => _plans[subjectId];
 
-  Future<void> load() async {
+  /// Whether the feed workspace's own figures (cover, reorder, costs,
+  /// reservations, reconciliations, nutrients, performance) have loaded.
+  bool workspaceLoaded = false;
+
+  /// Everything, or — at sign-in ([essentialsOnly]) — only what recording a
+  /// feeding or a mix needs: products, lots, the standard rows, formulas,
+  /// batches, programs, today's plan and the week's feedings. The heavier
+  /// workspace figures load the first time the Feed screen opens
+  /// ([ensureWorkspace]).
+  Future<void> load({bool essentialsOnly = false}) async {
     loading = true;
     notifyListeners();
     try {
@@ -77,20 +86,34 @@ class FeedingProvider extends ChangeNotifier {
         _fetch('/feed-batches', (j) => batches = [for (final b in j as List<dynamic>) FeedBatch.fromJson(b as Map<String, dynamic>)]),
         _fetch('/feeding-programs', (j) => programs = [for (final p in j as List<dynamic>) FeedingProgram.fromJson(p as Map<String, dynamic>)]),
         _fetch('/feeding-plan/today', (j) => dailyPlan = DailyPlan.fromJson(j as Map<String, dynamic>)),
+        _fetchStandardSlots(),
+        _fetchRecentEvents(),
+        if (!essentialsOnly) _loadWorkspace(),
+      ]);
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  /// The workspace figures, once; the Feed screen calls this when it opens.
+  Future<void> ensureWorkspace() async {
+    if (workspaceLoaded) return;
+    await _loadWorkspace();
+    notifyListeners();
+  }
+
+  Future<void> _loadWorkspace() async {
+    await Future.wait([
         _fetch('/feed-inventory/days-of-cover', (j) => cover = [for (final c in j as List<dynamic>) FeedCover.fromJson(c as Map<String, dynamic>)]),
         _fetch('/feed-inventory/reorder-recommendations', (j) => reorder = [for (final c in j as List<dynamic>) FeedCover.fromJson(c as Map<String, dynamic>)]),
         _fetch('/feed-allocations', (j) => allocations = [for (final a in j as List<dynamic>) FeedAllocation.fromJson(a as Map<String, dynamic>)]),
         _fetch('/feed-reconciliations', (j) => reconciliations = [for (final r in j as List<dynamic>) FeedReconciliation.fromJson(r as Map<String, dynamic>)]),
         _fetch('/feed-costs', (j) => costs = FeedCostSummary.fromJson(j as Map<String, dynamic>), query: {'days': 30}),
         _fetch('/feed-nutrients', (j) => nutrients = [for (final n in j as List<dynamic>) NutrientDef.fromJson(n as Map<String, dynamic>)]),
-        _fetchStandardSlots(),
-        _fetchRecentEvents(),
         ..._performanceFetches(),
-      ]);
-    } finally {
-      loading = false;
-      notifyListeners();
-    }
+    ]);
+    workspaceLoaded = true;
   }
 
   Future<void> _fetchStandardSlots() =>
@@ -300,6 +323,30 @@ class FeedingProvider extends ChangeNotifier {
   }
 
   Future<WriteResult> startBatch(Map<String, dynamic> body) => _write(() => _api.post('/feed-batches', body: body), then: _reloadBatches);
+
+  /// A mix recorded in one step (`POST /feed-mixes`): date, ingredients as
+  /// weighed, output — the server numbers it and receives its output lot.
+  Future<WriteResult> recordMix(Map<String, dynamic> body) => _write(() => _api.post('/feed-mixes', body: body), then: () async {
+        await Future.wait([_reloadBatches(), _reloadFormulas(), refreshStock(), _fetchStandardSlots()]);
+        notifyListeners();
+      });
+
+  /// A purchase: a new feed (when named) and its delivery lot, in that
+  /// order, so the delivery is never left without its feed.
+  Future<WriteResult> recordPurchase({Map<String, dynamic>? newProduct, required Map<String, dynamic> lot}) async {
+    var body = lot;
+    if (newProduct != null) {
+      final created = await _api.write(() => _api.post('/feed-products', body: newProduct));
+      if (!created.success) return created;
+      final id = (created.data is Map) ? (created.data! as Map)['id'] as String? : null;
+      if (id == null) return const WriteResult.fail('The new feed could not be created.');
+      body = {...lot, 'feed_product_id': id};
+    }
+    return _write(() => _api.post('/feed-lots/receive', body: body), then: () async {
+      await Future.wait([refreshStock(), _fetchStandardSlots()]);
+      notifyListeners();
+    });
+  }
   Future<WriteResult> completeBatch(String batchId, Map<String, dynamic> body) =>
       _write(() => _api.post('/feed-batches/$batchId/complete', body: body), then: () async {
         await _reloadBatches();

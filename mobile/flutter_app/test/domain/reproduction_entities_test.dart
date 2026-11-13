@@ -74,7 +74,8 @@ void main() {
     expect(animal.onFarm, isTrue);
     expect(animal.lifecycleStatus, 'active');
     final groups = [for (final m in twin['groups'] as List<dynamic>) GroupMembership.fromJson(m as Map<String, dynamic>)];
-    expect(groups.single.groupName, 'Dairy Herd');
+    // Her herd, and the rule group the records put her in (not pregnant).
+    expect(groups.map((g) => g.groupName), containsAll(['Dairy Herd', 'Open cows']));
     final history = [for (final h in twin['recent_history'] as List<dynamic>) StateChange.fromJson(h as Map<String, dynamic>)];
     expect(history.map((h) => h.stateType).toSet(), containsAll(['STATUS', 'LIFE_STAGE', 'LOCATION']));
   });

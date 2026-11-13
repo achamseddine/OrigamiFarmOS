@@ -268,6 +268,9 @@ def update_animal(
         # confounders, so the reading is taken again.
         if {"life_stage", "management_profile", "status"} & changed:
             feed_performance_service.on_context_changed(db, "animal", animal, trigger="lifecycle_changed", user_id=current_user.id)
+        if {"sex", "life_stage"} & changed:
+            # A heifer that became an adult now belongs in "Open cows".
+            group_service.sync_rule_groups(db, animal, user_id=current_user.id)
     if new_tag is not None and new_tag.strip() and new_tag.strip() != (animal.tag or ""):
         identifier_service.replace_primary_value(
             db, animal, new_tag.strip(), cap_set or capability_service.resolve_for_animal(db, animal)

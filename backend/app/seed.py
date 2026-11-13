@@ -419,6 +419,7 @@ def seed_demo_data(db: Session) -> None:
     seed_mouneh_demo_data(db, FARM_ID)
     db.flush()
     seed_visits_demo_data(db, FARM_ID)
+    _seed_rule_groups_and_responsibilities(db)
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")
@@ -428,3 +429,27 @@ if __name__ == "__main__":
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:
         seed_demo_data(session)
+
+
+
+def _seed_rule_groups_and_responsibilities(db: Session) -> None:
+    """The herd split by the records (pregnant cows / open cows) and the
+    animal-care worker made responsible for the dairy herd's milking,
+    feeding and observations."""
+    from app.repositories.base import now as _now
+    from app.services import group_service, responsibility_service
+
+    for gid, name, rule in (("grp-cows-pregnant", "Pregnant cows", "PREGNANT"), ("grp-cows-open", "Open cows", "NOT_PREGNANT")):
+        if db.get(models.Flock, gid) is not None:
+            continue
+        group = models.Flock(id=gid, farm_id=FARM_ID, name=name, species="cow", group_type="cohort", count=0,
+                             tracking_mode=group_service.MEMBERSHIP_DERIVED, membership_rule=rule, status="healthy", created_at=_now())
+        db.add(group)
+        db.flush()
+        group_service.fill_rule_group(db, group, user_id="user-rami")
+    karim = db.get(models.User, "user-worker-1")
+    manager = db.get(models.User, "user-rami")
+    if karim is not None and manager is not None and not responsibility_service.of_user(db, karim.id):
+        responsibility_service.assign(db, employee=karim, scope_type="group", scope_id="grp-dairy-herd",
+                                      duties=["milking", "feeding", "observation"], notes="Morning and evening rounds.", by=manager)
+    db.flush()

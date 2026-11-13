@@ -36,6 +36,14 @@ class Farm(Base):
     # animal is dried off (milking stops). Drives the "dry off from" date on
     # every pregnant animal in milk; species-neutral, set by the manager.
     dry_off_days_before_birth: Mapped[int] = mapped_column(Integer, default=60, server_default="60")
+    # The milking and breeding calendar after a birth (days after calving /
+    # kidding / lambing): when the milk peak is expected, the voluntary
+    # waiting period before the next insemination, and the heat cycle used
+    # to watch for a return to heat after a service. Plans, never records.
+    milk_peak_start_days: Mapped[int] = mapped_column(Integer, default=40, server_default="40")
+    milk_peak_end_days: Mapped[int] = mapped_column(Integer, default=70, server_default="70")
+    breeding_wait_days: Mapped[int] = mapped_column(Integer, default=50, server_default="50")
+    heat_cycle_days: Mapped[int] = mapped_column(Integer, default=21, server_default="21")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -65,6 +73,36 @@ class User(Base):
     working_days: Mapped[list | None] = mapped_column(JSON, nullable=True)  # ["mon","tue",...]
     working_hours: Mapped[str | None] = mapped_column(String(100), nullable=True)  # "07:00-15:00"
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class WorkResponsibility(Base):
+    """What an employee looks after, and which duties that means (Settings >
+    Employees): the animals of a group, one animal, a species, or a field,
+    with duties such as milking, feeding and observations. It routes the
+    work — their day shows these animals and what is still to record — and
+    grants the module access the duties need; it does not hide the rest of
+    the farm from someone whose grants already show it."""
+
+    __tablename__ = "work_responsibilities"
+    __table_args__ = (Index("ix_work_responsibilities_user", "user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"))
+    # animal | group | species | field
+    scope_type: Mapped[str] = mapped_column(String(20))
+    # The animal / group / field id, or the species code.
+    scope_id: Mapped[str] = mapped_column(String(36))
+    # milking | feeding | observation | health_care | egg_collection | crop_care | harvest
+    duties: Mapped[list] = mapped_column(JSON, default=list)
+    # active | ended — ended, never deleted, so "who looked after Bella in
+    # March" stays answerable.
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class UserModulePermission(Base):
@@ -297,6 +335,10 @@ class Flock(Base):
     # the latest row of `animal_group_quantity_events`, and individuals
     # registered in a hybrid flock never redefine its total.
     tracking_mode: Mapped[str] = mapped_column(String(30), default="QUANTITY_MANAGED")
+    # A group whose members follow the herd records instead of being moved
+    # by hand: PREGNANT | NOT_PREGNANT | IN_MILK | DRY (group_service.
+    # sync_rule_groups). Null for an ordinary group.
+    membership_rule: Mapped[str | None] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=_now)
 
 

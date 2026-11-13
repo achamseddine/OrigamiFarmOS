@@ -37,7 +37,9 @@ void main() {
       }
       expect(cs.has(Cap.eggProduction), isFalse);
       expect(cs.requiredIdentifierTypes, ['EAR_TAG']);
-      expect(cs.subjectKind, 'individual');
+      // Registered one by one, and worked in groups too (milking, pregnant,
+      // dry) since cattle got GROUP_TRACKING.
+      expect(cs.subjectKind, 'either');
     });
 
     test('bull: biology removes pregnancy and milk, and says so', () {

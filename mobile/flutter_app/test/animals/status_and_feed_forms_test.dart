@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:farmos/core/i18n/locale_controller.dart';
+import 'package:farmos/core/widgets/section_card.dart';
 import 'package:farmos/domain/entities/reproduction.dart';
 import 'package:farmos/features/animals/add_animal_form.dart';
 import 'package:farmos/features/feed/feeding_event_dialog.dart';
@@ -154,9 +155,11 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('dry-off-days')));
     expect(find.text('60'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('dry-off-days')), '45');
-    await tester.tap(find.descendant(of: find.ancestor(of: find.byKey(const ValueKey('dry-off-days')), matching: find.byType(Row)), matching: find.text('Save')));
+    await tester.tap(find.descendant(of: find.ancestor(of: find.byKey(const ValueKey('dry-off-days')), matching: find.byType(SectionCard)), matching: find.text('Save')));
     await settle(tester);
-    expect(writeTo(farm, 'PATCH', '/farms/me'), {'dry_off_days_before_birth': 45});
+    final body = writeTo(farm, 'PATCH', '/farms/me');
+    expect(body['dry_off_days_before_birth'], 45);
+    expect(body['breeding_wait_days'], 50, reason: 'the rest of the calendar is sent as it stands');
   });
 
   test('the dry-off date is the expected birth less the farm setting', () {

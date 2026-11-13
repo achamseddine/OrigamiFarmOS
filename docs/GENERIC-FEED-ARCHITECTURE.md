@@ -99,6 +99,18 @@ available = on_hand − unusable lots (quarantined | blocked | recalled | expire
   shortfall is then an `out` movement against no lot, visible in the ledger
   until a delivery is entered.
 
+### 3b. Purchases with their quality
+
+A purchase is recorded as a lot in one form (`purchase_and_mix_dialogs.dart`,
+*Record purchase* on the Feed screen): what arrived (an existing feed, or a
+new one named there — grain / raw material, forage, ready-made feed,
+minerals), the date received, quantity received and rejected, unit cost,
+supplier, invoice, and the **quality at receipt** — a grade (`good` /
+`fair` / `poor`), moisture %, and what was seen (mould, dust, foreign
+matter) on `feed_lots.quality_grade`, `moisture_pct`, `quality_notes`
+(migration `c3e5a7b9d1f4`). A rejected share stays rejected quantity; the
+grade describes what was accepted.
+
 ### 3a. Standard feeds of the animal feeding form
 
 The feeding form opens with three rows — **Concentrate, Corn silage, Wheat
@@ -140,6 +152,26 @@ lot of the produced product with `source_type = farm_produced`
 (`feed_batch_completed`). Variance per component and against the planned
 cost is kept on the batch. A batch can be quarantined, which quarantines
 its output lot.
+
+### 5a. A mix in one step
+
+`POST /feed-mixes` (`feed_batch_service.quick_mix`, *Record a mix* on the
+Feed screen) records a mix the way it happens in the shed — the date, the
+ingredients as weighed, the output — without a formula having to be set up
+first. It is still formula version → numbered batch → output lot: the
+output feed's active formula is used (its targets are the comparison, the
+weighed quantities the actuals, a left-out ingredient recorded as zero); a
+farm-made feed with no formula gets version 1 from this first mix. A new
+output feed can be named in the form (farm-produced, feedable). Ingredients
+are drawn from their lots FIFO, the output is received as a lot, the mix
+gets the farm's next mix number (§20). A mix cannot make a bought-in feed or
+contain itself. The standard **Concentrate** is farm-produced for this
+reason (bought concentrate is still received into it as purchased lots).
+
+The Feed screen opens with the farm's order of work — *Record purchase*,
+*Make feed mix*, *Record feeding* — and, until all four have happened, a
+*Get the feed room going* card (buy grain → buy corn silage and wheat straw →
+mix the concentrate → feed the animals) ticked from the records.
 
 ## 6. Feeding programs
 

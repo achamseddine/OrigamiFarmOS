@@ -22,9 +22,10 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core import permissions as perms
+from app.core import read_cache
 from app.domain import feed_models as fm
 from app.domain import livestock_models as lm
 from app.domain import models
@@ -97,6 +98,9 @@ def find_subject(db: Session, subject_id: str, farm_id: str) -> tuple[str, objec
 
 
 def _milk_per_day(db: Session, animal_id: str, days: int = 7) -> float | None:
+    prefetched = read_cache.peek(db, ("milk_per_day", days))
+    if prefetched is not None:
+        return prefetched.get(animal_id)
     since = now() - timedelta(days=days)
     rows = db.execute(
         select(func.sum(models.MilkRecord.liters), func.count(func.distinct(func.date(models.MilkRecord.recorded_at))))
@@ -295,10 +299,14 @@ def _match_rule(rule: fm.FeedingProgramRule, state: SubjectState, program_name: 
 
 
 def active_versions(db: Session, farm_id: str) -> list[fm.FeedingProgramVersion]:
-    return list(db.scalars(
+    """Read once per request (with their rules, components and program) —
+    the resolver asks for them for every subject on the farm."""
+    return read_cache.cached(db, ("active_versions", farm_id), lambda: list(db.scalars(
         select(fm.FeedingProgramVersion).join(fm.FeedingProgram)
         .where(fm.FeedingProgram.farm_id == farm_id, fm.FeedingProgram.status == "active", fm.FeedingProgramVersion.status == "active")
-    ))
+        .options(selectinload(fm.FeedingProgramVersion.rules), selectinload(fm.FeedingProgramVersion.components),
+                 selectinload(fm.FeedingProgramVersion.program))
+    )))
 
 
 def resolve_state(db: Session, state: SubjectState, *, current_program_id: str | None = None) -> dict:
@@ -353,10 +361,39 @@ def _active(rows):
 
 
 def active_assignments(db: Session, subject_type: str, subject_id: str) -> list[fm.FeedingAssignment]:
+    prefetched = read_cache.peek(db, ("assignments",))
+    if prefetched is not None and subject_id in prefetched["subjects"]:
+        return _active(prefetched["rows"].get((subject_type, subject_id), []))
     rows = db.scalars(select(fm.FeedingAssignment).where(
         fm.FeedingAssignment.subject_type == subject_type, fm.FeedingAssignment.subject_id == subject_id,
     ).order_by(fm.FeedingAssignment.created_at)).all()
     return _active(rows)
+
+
+def prefetch_farm(db: Session, farm_id: str, *, days: int = 7) -> None:
+    """Loads, in three queries, what resolving every subject of the farm
+    asks for one subject at a time: every feeding assignment, and the week's
+    milk per animal. Used by the farm-wide reads (today's plan, demand, days
+    of cover); dropped on the first write (app/core/read_cache.py)."""
+    if read_cache.peek(db, ("assignments",)) is not None:
+        return
+    rows: dict[tuple, list] = {}
+    for a in db.scalars(select(fm.FeedingAssignment).where(fm.FeedingAssignment.farm_id == farm_id).order_by(fm.FeedingAssignment.created_at)):
+        rows.setdefault((a.subject_type, a.subject_id), []).append(a)
+    subjects = set(db.scalars(select(models.Animal.id).where(models.Animal.farm_id == farm_id)))
+    subjects |= set(db.scalars(select(models.Flock.id).where(models.Flock.farm_id == farm_id)))
+    since = now() - timedelta(days=days)
+    milk: dict[str, float] = {}
+    for animal_id, total, day_count in db.execute(
+        select(models.MilkRecord.animal_id, func.sum(models.MilkRecord.liters), func.count(func.distinct(func.date(models.MilkRecord.recorded_at))))
+        .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
+        .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= since)
+        .group_by(models.MilkRecord.animal_id)
+    ):
+        if total and day_count:
+            milk[animal_id] = round(float(total) / int(day_count), 2)
+    read_cache.put(db, ("assignments",), {"rows": rows, "subjects": subjects})
+    read_cache.put(db, ("milk_per_day", days), milk)
 
 
 def explicit_program(db: Session, subject_type: str, subject_id: str) -> fm.FeedingAssignment | None:
@@ -954,6 +991,7 @@ def daily_plan(db: Session, farm_id: str) -> dict:
     """Today's planned feeding for the whole farm (§17 Daily Feeding):
     every group with an assignment, every individually assigned animal,
     with per-product totals — the list a feed-room worker ticks off."""
+    prefetch_farm(db, farm_id)
     lines: list[dict] = []
     totals: dict[str, dict] = {}
     groups = db.scalars(select(models.Flock).where(models.Flock.farm_id == farm_id)).all()

@@ -332,6 +332,149 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{employee_id}/responsibilities:
+    get:
+      tags:
+      - employees
+      summary: List Responsibilities
+      operationId: list_responsibilities_api_v1_employees__employee_id__responsibilities_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      - name: include_ended
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Ended
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Responsibilities Api V1 Employees  Employee Id  Responsibilities
+                  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - employees
+      summary: Add Responsibility
+      description: 'Makes the employee responsible for an animal / group / species / field
+
+        with these duties, and gives them the module access the duties need.'
+      operationId: add_responsibility_api_v1_employees__employee_id__responsibilities_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponsibilityIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Add Responsibility Api V1 Employees  Employee Id  Responsibilities Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/employees/{employee_id}/responsibilities/{responsibility_id}/end:
+    post:
+      tags:
+      - employees
+      summary: End Responsibility
+      operationId: end_responsibility_api_v1_employees__employee_id__responsibilities__responsibility_id__end_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: employee_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Employee Id
+      - name: responsibility_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Responsibility Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResponsibilityEndIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response End Responsibility Api V1 Employees  Employee Id  Responsibilities  Responsibility
+                  Id  End Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/me/responsibilities:
+    get:
+      tags:
+      - employees
+      summary: My Responsibilities
+      description: 'The signed-in employee''s own animals, groups and fields and their
+
+        duties — what their day is built from.'
+      operationId: my_responsibilities_api_v1_me_responsibilities_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+                title: Response My Responsibilities Api V1 Me Responsibilities Get
+      security:
+      - HTTPBearer: []
   /api/v1/notifications:
     get:
       tags:
@@ -2555,6 +2698,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/{animal_id}/lactation:
+    patch:
+      tags:
+      - reproduction
+      summary: Correct Lactation
+      description: 'Corrects the calving / start-of-milking date of the current lactation
+
+        (audited, with the old value). A lactation a recorded birth started is
+
+        corrected through that birth.'
+      operationId: correct_lactation_api_v1_animals__animal_id__lactation_patch
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LactationCorrectIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Correct Lactation Api V1 Animals  Animal Id  Lactation Patch
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/animals/{animal_id}/dry-off:
     post:
       tags:
@@ -3504,6 +3688,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-mixes:
+    post:
+      tags:
+      - feeding
+      summary: Record Mix
+      description: 'A mix recorded in one step (date, ingredients as weighed, output):
+
+        a numbered mix from the output feed''s formula — created from this mix
+
+        when the feed has none — with its ingredient lots drawn and its output
+
+        lot received.'
+      operationId: record_mix_api_v1_feed_mixes_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuickMixIn'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/feed-mix-settings:
     get:
       tags:
@@ -10905,6 +11123,12 @@ components:
           type: boolean
           title: Lactating
           default: false
+        lactation_started_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Lactation Started At
         lactation_cycle:
           anyOf:
           - type: integer
@@ -11301,6 +11525,11 @@ components:
           - type: string
           - type: 'null'
           title: Location Label
+        membership_rule:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Membership Rule
       type: object
       required:
       - name
@@ -11353,6 +11582,11 @@ components:
           type: string
           title: Tracking Mode
           default: QUANTITY_MANAGED
+        membership_rule:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Membership Rule
         created_at:
           anyOf:
           - type: string
@@ -14048,6 +14282,34 @@ components:
             minimum: 0.0
           - type: 'null'
           title: Dry Off Days Before Birth
+        milk_peak_start_days:
+          anyOf:
+          - type: integer
+            maximum: 365.0
+            minimum: 0.0
+          - type: 'null'
+          title: Milk Peak Start Days
+        milk_peak_end_days:
+          anyOf:
+          - type: integer
+            maximum: 365.0
+            minimum: 0.0
+          - type: 'null'
+          title: Milk Peak End Days
+        breeding_wait_days:
+          anyOf:
+          - type: integer
+            maximum: 365.0
+            minimum: 0.0
+          - type: 'null'
+          title: Breeding Wait Days
+        heat_cycle_days:
+          anyOf:
+          - type: integer
+            maximum: 60.0
+            minimum: 10.0
+          - type: 'null'
+          title: Heat Cycle Days
       type: object
       title: FarmSettingsUpdate
       description: 'The farm-level settings a manager changes from the tablet. Only the
@@ -14167,6 +14429,21 @@ components:
           - type: string
           - type: 'null'
           title: Reference
+        quality_grade:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Grade
+        moisture_pct:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Moisture Pct
+        quality_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Notes
         notes:
           anyOf:
           - type: string
@@ -15626,6 +15903,23 @@ components:
       - occurred_at
       title: InventoryMovementOut
       description: '`GET /feed/transactions` — the movement history the tablet shows.'
+    LactationCorrectIn:
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - started_at
+      title: LactationCorrectIn
+      description: The current lactation's calving / start-of-milking date, corrected.
     LactationStartIn:
       properties:
         started_at:
@@ -15772,6 +16066,23 @@ components:
             format: date-time
           - type: 'null'
           title: Received At
+        quality_grade:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Grade
+        moisture_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Moisture Pct
+        quality_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Notes
       type: object
       required:
       - feed_product_id
@@ -19287,6 +19598,82 @@ components:
       - event_type
       - quantity_delta
       title: QuantityEventIn
+    QuickMixComponentIn:
+      properties:
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        actual_quantity:
+          type: number
+          minimum: 0.0
+          title: Actual Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        lot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Id
+      type: object
+      required:
+      - feed_product_id
+      - actual_quantity
+      title: QuickMixComponentIn
+    QuickMixIn:
+      properties:
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        new_product_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: New Product Name
+        components:
+          items:
+            $ref: '#/components/schemas/QuickMixComponentIn'
+          type: array
+          title: Components
+        output_quantity:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Output Quantity
+        unit:
+          type: string
+          title: Unit
+          default: kg
+        produced_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Produced At
+        intended_species_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Intended Species Code
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+      type: object
+      required:
+      - components
+      title: QuickMixIn
+      description: 'One mix as it was made: what it makes, what went in, when.'
     RawMaterialCreate:
       properties:
         name:
@@ -20143,6 +20530,45 @@ components:
       - label_ar
       - required
       title: ResolvedCapabilityOut
+    ResponsibilityEndIn:
+      properties:
+        reason:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Reason
+      type: object
+      title: ResponsibilityEndIn
+    ResponsibilityIn:
+      properties:
+        scope_type:
+          type: string
+          title: Scope Type
+        scope_id:
+          type: string
+          title: Scope Id
+        duties:
+          items:
+            type: string
+          type: array
+          minItems: 1
+          title: Duties
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - scope_type
+      - scope_id
+      - duties
+      title: ResponsibilityIn
+      description: 'What the employee looks after (an animal, a group, a species, a field)
+
+        and the duties it means.'
     RetailSaleLine:
       properties:
         inventory_item_id:

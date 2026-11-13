@@ -25,6 +25,7 @@ import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
 import '../priorities/priority_card.dart';
 import '../../core/widgets/hero_band.dart';
+import 'my_duties_card.dart';
 import 'today_routine_card.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
@@ -142,6 +143,8 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
+          // The animals and duties this person is responsible for.
+          const MyDutiesCard(),
           // The day's husbandry routine, ticked off from today's records.
           const TodayRoutineCard(),
           const SizedBox(height: FarmSpacing.md),

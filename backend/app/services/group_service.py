@@ -39,6 +39,65 @@ QUANTITY_EVENT_TYPES = {
 }
 
 
+# Groups whose members follow the herd records (flocks.membership_rule):
+# the pregnant cows, the open (not pregnant) cows, those in milk, those dry.
+# Membership is still effective-dated rows opened and closed here — a cow
+# confirmed pregnant leaves "Open cows" and joins "Pregnant cows" the day
+# the check is recorded, and the history says so.
+MEMBERSHIP_RULES = ("PREGNANT", "NOT_PREGNANT", "IN_MILK", "DRY")
+_BREEDING_STAGES = ("adult", "senior")
+
+
+def rule_matches(rule: str, animal: models.Animal) -> bool:
+    """Whether an animal on the farm belongs in a group of this rule. "Not
+    pregnant" and "dry" mean breeding-age females — a calf is neither."""
+    if not animal.active:
+        return False
+    female = (animal.sex or "").upper() == "F"
+    breeding_age = (animal.life_stage or catalog.DEFAULT_LIFE_STAGE) in _BREEDING_STAGES
+    if rule == "PREGNANT":
+        return bool(animal.pregnant)
+    if rule == "NOT_PREGNANT":
+        return female and breeding_age and not animal.pregnant
+    if rule == "IN_MILK":
+        return bool(animal.lactating)
+    if rule == "DRY":
+        return female and breeding_age and not animal.lactating
+    return False
+
+
+def sync_rule_groups(db: Session, animal: models.Animal, *, user_id: str, groups: list[models.Flock] | None = None) -> None:
+    """Moves the animal into, or out of, every rule group of its species on
+    its farm, so the groups always say what the records say."""
+    if groups is None:
+        groups = list(db.scalars(select(models.Flock).where(
+            models.Flock.farm_id == animal.farm_id, models.Flock.species == animal.species, models.Flock.membership_rule.is_not(None),
+        )))
+    if not groups:
+        return
+    current = {m.animal_group_id for m in memberships_of_animal(db, animal.id, current_only=True)}
+    for group in groups:
+        if group.status in ("closed", "archived") or group.membership_rule not in MEMBERSHIP_RULES:
+            continue
+        should = rule_matches(group.membership_rule, animal)
+        if should and group.id not in current:
+            add_member(db, group, animal, reason=f"rule:{group.membership_rule}", user_id=user_id, review=False)
+        elif not should and group.id in current:
+            remove_member(db, group, animal, reason=f"rule:{group.membership_rule}", user_id=user_id)
+
+
+def fill_rule_group(db: Session, group: models.Flock, *, user_id: str) -> int:
+    """A new rule group starts with every animal that already matches."""
+    added = 0
+    for animal in db.scalars(select(models.Animal).where(
+        models.Animal.farm_id == group.farm_id, models.Animal.species == group.species, models.Animal.active.is_(True),
+    )):
+        if rule_matches(group.membership_rule or "", animal):
+            add_member(db, group, animal, reason=f"rule:{group.membership_rule}", user_id=user_id, review=False)
+            added += 1
+    return added
+
+
 def policy(db: Session, group_type: str | None) -> lm.AnimalGroupTypePolicy:
     """The type's policy; an unknown type is a physical, exclusive group —
     the safe reading, since it never lets an animal be in two pens."""

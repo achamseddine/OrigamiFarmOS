@@ -65,6 +65,14 @@ STANDARD_FEEDS: tuple[tuple[str, str, str, str, str, str, tuple[str, ...]], ...]
     ("wheat_straw", "WHEAT-STRAW", "Wheat straw", "تبن القمح", "forage", "kg", ("straw", "تبن")),
 )
 STANDARD_FEED_SLOTS = tuple(row[0] for row in STANDARD_FEEDS)
+# The farm mixes its own concentrate from grain (a numbered mix, §20), so the
+# standard concentrate is a farm-produced feed — a formula can produce it.
+# Bought-in concentrate is still received into it as purchased lots.
+STANDARD_FEED_SOURCE = {"concentrate": "farm_produced"}
+
+# The grade a farm gives a delivery at receipt (FEED-SCHEMA §26). A rejected
+# share is recorded as rejected quantity; a grade is what was accepted.
+LOT_QUALITY_GRADES = ("good", "fair", "poor")
 
 
 def ensure_feed_reference_data(db: Session) -> None:

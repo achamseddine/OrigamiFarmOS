@@ -16,6 +16,7 @@ import '../../providers/employees_provider.dart';
 import 'audit_history_screen.dart';
 import 'employee_form.dart';
 import 'permission_matrix.dart';
+import 'responsibilities_dialog.dart';
 
 /// Settings > Employees & Responsibilities (tech spec §8/§9).
 ///
@@ -212,6 +213,14 @@ class _EmployeeCard extends StatelessWidget {
                 onPressed: () => showPermissionMatrix(context, employee),
                 icon: const AppIcon(FarmIcon.check, size: 15),
                 label: Text(context.t('responsibilities')),
+              ),
+            // The animals, groups or fields this person looks after and the
+            // duties there (milking, feeding, observations…).
+            if (canAssign && employee.active)
+              OutlinedButton.icon(
+                onPressed: () => showResponsibilitiesDialog(context, employee),
+                icon: const Icon(Icons.pets_outlined, size: 15),
+                label: Text(context.t('wrButton')),
               ),
             if (canDelete && employee.active)
               TextButton(

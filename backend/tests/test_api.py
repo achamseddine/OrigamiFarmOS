@@ -59,8 +59,9 @@ class TestBootstrapAndAnimals:
         # the events on Bella are her feeding supplement, the feeding that
         # delivered it (app/feeding/seed.py) and the emergency triage her
         # fever opened (app/emergency/seed.py).
+        # Joining the "Open cows" rule group is an event too (app/seed.py).
         assert {e["event_type"] for e in body["recent_events"]} <= {
-            "feeding_event_recorded", "feeding_program_assigned",
+            "feeding_event_recorded", "feeding_program_assigned", "animal_added_to_group",
             "emergency_assessment_started", "emergency_pattern_detected", "emergency_protocol_matched",
         }
 

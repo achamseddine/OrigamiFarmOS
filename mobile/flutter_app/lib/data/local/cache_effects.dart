@@ -284,6 +284,19 @@ final List<_Rule> _rules = [
         }),
       ]),
   _Rule('POST', '/feed-batches/$_id/quarantine', (m) => [MergeRecord('/feed-batches', m.ids[0], const {'status': 'quarantined'})]),
+  // A one-step mix: shown at once as a completed mix whose number the
+  // server gives when it syncs (FEED-SCHEMA §20 — never numbered here).
+  _Rule('POST', '/feed-mixes', (m) => [
+        AppendRecord('/feed-batches', _newRecord(m, extra: {
+          'status': 'completed',
+          'mix_number': null,
+          'mix_code': null,
+          'batch_code': m.localId,
+          'produced_at': m.body['produced_at'] ?? _now(),
+          'actual_quantity': m.body['output_quantity'],
+          'unit': m.body['unit'] ?? 'kg',
+        })),
+      ]),
   _Rule('POST', '/feeding-programs', (m) => [AppendRecord('/feeding-programs', _newRecord(m, extra: {'status': 'active'}))]),
   _Rule('POST', '/livestock-subjects/$_id/feeding-assignments', (m) => [
         AppendRecord('/livestock-subjects/${m.ids[0]}/feeding-assignments', _newRecord(m, extra: {'subject_id': m.ids[0], 'status': 'active', 'valid_from': m.body['valid_from'] ?? _now()})),
@@ -444,6 +457,14 @@ final List<_Rule> _rules = [
     if (granted is! List) return const [];
     return [MergeRecord('/employees', m.ids[0], {'permissions': granted})];
   }),
+  // An employee's animals & duties (work_responsibilities).
+  _Rule('POST', '/employees/$_id/responsibilities', (m) => [
+        AppendRecord('/employees/${m.ids[0]}/responsibilities',
+            _newRecord(m, extra: {'user_id': m.ids[0], 'status': 'active', 'scope_name': m.body['scope_id'], 'valid_from': _now()})),
+      ]),
+  _Rule('POST', '/employees/$_id/responsibilities/$_id/end', (m) => [
+        MergeRecord('/employees/${m.ids[0]}/responsibilities', m.ids[1], {'status': 'ended', 'valid_to': _now()}),
+      ]),
   // Turning a licensed module on or off, keyed by module_code.
   _Rule('POST', '/modules/$_id/$_id', (m) {
     final status = switch (m.ids[1]) { 'activate' => 'active', 'deactivate' => 'inactive', _ => null };

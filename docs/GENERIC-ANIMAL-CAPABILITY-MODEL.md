@@ -78,6 +78,11 @@ stated):
 | layer hen / duck / turkey (layer) | LEG_BAND, group tracking | breeding | eggs, growth | — |
 | poultry (broiler) | LEG_BAND, group tracking | — (vetoed) | growth only (eggs vetoed) | — |
 
+Cattle also have `GROUP_TRACKING` (migration `c3e5a7b9d1f4`): a herd is
+registered one by one *and* can be kept as a counted group (heifers on
+pasture); groups of registered cows — milking, pregnant, open, dry — need
+only individual tracking (`database/LIVESTOCK-SCHEMA.md`, *Rule groups*).
+
 Every adult-only rule also holds for the **senior** stage (`catalog.SENIOR_RULES`,
 migration `a8d0c2e4f6b1`): an old cow still calves and is milked, an old mare
 still foals. Before that, a female registered "senior" could not be recorded

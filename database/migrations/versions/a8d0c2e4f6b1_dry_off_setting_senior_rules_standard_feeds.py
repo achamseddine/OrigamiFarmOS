@@ -19,8 +19,9 @@ Reference data
 
 Farm data
 - For every farm, the three standard feeds of the animal feeding form —
-  Concentrate, Corn silage, Wheat straw — as ordinary purchased, feedable
-  feed products, each with its inventory item and an EMPTY ledger (no stock
+  Concentrate (farm-produced: the farm's mixes make it), Corn silage, Wheat
+  straw (purchased) — as ordinary feedable feed products, each with its
+  inventory item and an EMPTY ledger (no stock
   is invented; feeding beyond counted stock stays an explicit override).
   A farm that already has a matching feed (same code, the keyword in its
   name, or for concentrate any concentrate) keeps it and gets no second one.
@@ -149,7 +150,8 @@ def upgrade() -> None:
                                     "current_qty": 0.0, "reorder_level": 0.0}])
             op.bulk_insert(products, [{
                 "id": str(uuid.uuid4()), "farm_id": farm_id, "code": _free_code(bind, farm_id, code), "name": name_en, "name_ar": name_ar,
-                "source_type": "purchased", "is_ingredient": True, "is_feedable": True, "category": category, "unit": unit,
+                "source_type": "farm_produced" if slot == "concentrate" else "purchased", "is_ingredient": True, "is_feedable": True,
+                "category": category, "unit": unit,
                 "inventory_item_id": item_id, "status": "active", "notes": "Standard feed of the animal feeding form.", "created_at": at,
             }])
 

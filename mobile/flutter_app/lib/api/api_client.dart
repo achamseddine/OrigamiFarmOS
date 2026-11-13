@@ -361,6 +361,14 @@ class ApiClient {
     } catch (_) {
       // Non-JSON error body (e.g. a proxy's HTML error page) — keep the generic message.
     }
+    // A route the server does not have at all ("Method Not Allowed", a bare
+    // "Not Found"): the server is older than this tablet build, or the
+    // server address points at something that is not the farm API. Say
+    // that, instead of the framework's two words.
+    if (response.statusCode == 405 || (response.statusCode == 404 && message == 'Not Found')) {
+      message = 'The farm server at $baseUrl does not have this function (HTTP ${response.statusCode}). '
+          'It is probably running an older version than this app — update the server, then try again.';
+    }
     throw ApiException(response.statusCode, message);
   }
 

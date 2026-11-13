@@ -104,6 +104,7 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
         ("/users", None),
         ("/employees", {"include_inactive": False}),
         ("/employees", {"include_inactive": True}),
+        ("/me/responsibilities", None),
         ("/notifications", None),
         ("/priorities", None),
         ("/morning-briefing", farm),
@@ -163,6 +164,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]
     # Generic feed architecture: the whole feed workspace, the plan and the
     # feeding section of every animal and group profile.
+    # Every employee's animals & duties (Settings > Employees).
+    paths += [(f"/employees/{u.id}/responsibilities", None) for u in db.query(models.User).filter_by(farm_id=FARM_ID).all()]
     feed_product_ids = [p.id for p in db.query(feed_models.FeedProduct).filter_by(farm_id=FARM_ID).all()]
     formula_ids = [f.id for f in db.query(feed_models.FeedFormula).filter_by(farm_id=FARM_ID).all()]
     batch_ids = [b.id for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all()]

@@ -28,7 +28,7 @@ from app.schemas.feeding import (
     LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
-    StandardFeedSlotOut,
+    QuickMixIn, StandardFeedSlotOut,
 )
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
@@ -55,7 +55,8 @@ def _lot_out(lot: fm.FeedLot) -> dict:
         "received_at": lot.received_at, "expiry_date": lot.expiry_date, "ordered_quantity": lot.ordered_quantity,
         "received_quantity": lot.received_quantity, "accepted_quantity": lot.accepted_quantity, "rejected_quantity": lot.rejected_quantity,
         "quantity_on_hand": round(lot.quantity_on_hand, 3), "unit": lot.unit, "unit_cost": lot.unit_cost, "status": lot.status,
-        "reference": lot.reference, "notes": lot.notes,
+        "reference": lot.reference, "quality_grade": lot.quality_grade, "moisture_pct": lot.moisture_pct,
+        "quality_notes": lot.quality_notes, "notes": lot.notes,
     }
 
 
@@ -464,6 +465,21 @@ def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models
     return _batch_out(db, batch)
 
 
+@router.post("/feed-mixes", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
+def record_mix(payload: QuickMixIn, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+    """A mix recorded in one step (date, ingredients as weighed, output):
+    a numbered mix from the output feed's formula — created from this mix
+    when the feed has none — with its ingredient lots drawn and its output
+    lot received."""
+    batch = batches.quick_mix(db, user.farm_id, feed_product_id=payload.feed_product_id, new_product_name=payload.new_product_name,
+                              components=[c.model_dump() for c in payload.components], output_quantity=payload.output_quantity, unit=payload.unit,
+                              produced_at=payload.produced_at, intended_species_code=payload.intended_species_code, notes=payload.notes,
+                              allow_negative=payload.allow_negative, user_id=user.id)
+    perf.on_batch_completed(db, batch, user_id=user.id)
+    _commit(db, batch)
+    return _batch_out(db, batch)
+
+
 @router.get("/feed-mix-settings", response_model=MixSettingsOut)
 def get_mix_settings(db: Session = Depends(get_db), user: models.User = Depends(_view)):
     """The farm's one mix sequence (FEED-SCHEMA §20): last number, next
@@ -559,7 +575,11 @@ def create_nutrient_profile(payload: NutrientProfileCreate, db: Session = Depend
 # --------------------------------------------------------------- programs
 @router.get("/feeding-programs", response_model=list[ProgramOut])
 def list_programs(db: Session = Depends(get_db), user: models.User = Depends(_view)):
-    rows = db.scalars(select(fm.FeedingProgram).where(fm.FeedingProgram.farm_id == user.farm_id).order_by(fm.FeedingProgram.name)).all()
+    from sqlalchemy.orm import selectinload
+
+    rows = db.scalars(select(fm.FeedingProgram).where(fm.FeedingProgram.farm_id == user.farm_id).order_by(fm.FeedingProgram.name)
+                      .options(selectinload(fm.FeedingProgram.versions).selectinload(fm.FeedingProgramVersion.components),
+                               selectinload(fm.FeedingProgram.versions).selectinload(fm.FeedingProgramVersion.rules))).all()
     return [_program_out(db, p) for p in rows]
 
 

@@ -61,6 +61,9 @@ class FeedLotOut(BaseModel):
     unit_cost: float | None = None
     status: str
     reference: str | None = None
+    quality_grade: str | None = None
+    moisture_pct: float | None = None
+    quality_notes: str | None = None
     notes: str | None = None
 
 
@@ -122,6 +125,10 @@ class LotReceive(BaseModel):
     reference: str | None = None
     notes: str | None = None
     received_at: datetime | None = None
+    # Quality at receipt: good | fair | poor, moisture %, what was seen.
+    quality_grade: str | None = None
+    moisture_pct: float | None = Field(None, ge=0, le=100)
+    quality_notes: str | None = None
 
 
 class LotStatusUpdate(BaseModel):
@@ -314,6 +321,27 @@ class BatchComplete(BaseModel):
     allow_negative: bool = False
     operator_id: str | None = None
     mixer_asset_id: str | None = None
+
+
+class QuickMixComponentIn(BaseModel):
+    feed_product_id: str
+    actual_quantity: float = Field(ge=0)
+    unit: str | None = None
+    lot_id: str | None = None
+
+
+class QuickMixIn(BaseModel):
+    """One mix as it was made: what it makes, what went in, when."""
+
+    feed_product_id: str | None = None
+    new_product_name: str | None = None
+    components: list[QuickMixComponentIn]
+    output_quantity: float | None = Field(None, gt=0)
+    unit: str = "kg"
+    produced_at: datetime | None = None
+    intended_species_code: str | None = None
+    notes: str | None = None
+    allow_negative: bool = False
 
 
 class BatchQuarantine(BaseModel):

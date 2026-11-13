@@ -73,6 +73,7 @@ class AnimalReproductionSection extends StatelessWidget {
                 _line(context, '${context.t('reproLastBirth')} (${summary.birthTerm(arabic)})',
                     '${_date(summary.lastBirthAt)}${summary.lastBirthLive != null ? ' · ${summary.lastBirthLive} ${context.t('nb_LIVE')}' : ''}'),
               if (summary.applies.lactation) _lactationLine(context, summary),
+              ..._calendarLines(context, summary),
               if (summary.lastBreeding == null && summary.lastCheck == null && summary.lastBirthAt == null && summary.lactation == null && !summary.pregnant)
                 Text(context.t('reproNone'), style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted)),
               if (canRecord || canMilking) ...[
@@ -111,6 +112,24 @@ class AnimalReproductionSection extends StatelessWidget {
     if (s.applies.pregnancy) return StatusPill(label: context.t('reproOpen'), level: FarmStatusLevel.neutral);
     return const SizedBox.shrink();
   }
+
+  /// The calendar after the last calving, from the farm's settings: when
+  /// to watch her milk peak, from when to inseminate, when to watch for a
+  /// return to heat after a service.
+  List<Widget> _calendarLines(BuildContext context, ReproSummary s) => [
+        if (s.calvingAt != null)
+          _line(context, context.t('calvingDate'),
+              '${feedDate(s.calvingAt!)}${s.daysInMilk != null ? ' · ${context.t('reproDaysInMilk')} ${s.daysInMilk}' : ''}'),
+        if (s.milkPeakFrom != null && s.lactation != null)
+          _line(context, context.t('stMilkPeak'),
+              '${feedDate(s.milkPeakFrom!)} – ${feedDate(s.milkPeakTo!)}${s.inMilkPeak ? ' · ${context.t('stNow')}' : ''}'),
+        if (s.breedingFrom != null && !s.pregnant)
+          _line(context, context.t('stInseminateFrom'),
+              '${feedDate(s.breedingFrom!)}${s.readyForBreeding ? ' · ${context.t('stReadyToInseminate')}' : ''}'),
+        if (s.heatWatchFrom != null)
+          _line(context, context.t('stHeatWatch'),
+              '${feedDate(s.heatWatchFrom!)} – ${feedDate(s.heatWatchTo!)}${s.heatWatchNow ? ' · ${context.t('stNow')}' : ''}'),
+      ];
 
   Widget _lactationLine(BuildContext context, ReproSummary s) {
     final l = s.lactation;
@@ -275,6 +294,9 @@ class ReproOverviewCard extends StatelessWidget {
     if (o.isEmpty) return const SizedBox.shrink();
     final dueSoon = [for (final p in o.pregnant) if (p['due_soon'] == true) p];
     final dryOff = [for (final p in o.pregnant) if (p['dry_off_due'] == true) p];
+    // The breeding and milk calendar: who to inseminate, who to watch for
+    // heat, who is at her peak.
+    String name(Map<String, dynamic> r) => r['name'] as String? ?? '';
     String stat(int n, String key) => '$n ${context.t(key)}';
     return SectionCard(
       title: context.t('reproOverviewTitle'),
@@ -286,6 +308,24 @@ class ReproOverviewCard extends StatelessWidget {
         if (o.incubations.isNotEmpty) stat(o.incubations.length, 'reproIncubating'),
       ].join(' · '),
       child: Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final r in o.readyForBreeding)
+          ActionChip(
+            avatar: const Icon(Icons.favorite_border, size: 16, color: FarmColors.cedar),
+            label: Text('${name(r)} · ${context.t('stReadyToInseminate')}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
+        for (final r in o.heatWatch)
+          ActionChip(
+            avatar: const Icon(Icons.visibility_outlined, size: 16, color: FarmColors.warningInk),
+            label: Text('${name(r)} · ${context.t('stHeatWatch')}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
+        for (final r in o.inMilkPeak)
+          ActionChip(
+            avatar: const Icon(Icons.trending_up, size: 16, color: FarmColors.milkBlue),
+            label: Text('${name(r)} · ${context.t('stMilkPeak')} · ${context.t('reproDaysInMilk')} ${r['days_in_milk'] ?? '–'}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
         for (final p in dryOff)
           ActionChip(
             avatar: const Icon(Icons.do_not_disturb_on_outlined, size: 16, color: FarmColors.warningInk),

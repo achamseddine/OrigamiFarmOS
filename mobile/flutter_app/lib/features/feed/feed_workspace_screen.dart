@@ -14,7 +14,7 @@ import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
 import 'feed_inventory_screen.dart';
-import 'feed_movement_dialog.dart';
+import 'purchase_and_mix_dialogs.dart';
 import 'tabs/costs_tab.dart';
 import 'tabs/daily_feeding_tab.dart';
 import 'tabs/feeds_and_lots_tab.dart';
@@ -44,6 +44,15 @@ enum FeedWorkspaceTab { mixing, materials, stock, formulas, intake, programs, nu
 class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
   FeedWorkspaceTab _tab = FeedWorkspaceTab.mixing;
 
+  @override
+  void initState() {
+    super.initState();
+    // Sign-in loads only what recording needs; the workspace figures load here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FeedingProvider>().ensureWorkspace();
+    });
+  }
+
   static const _labels = {
     FeedWorkspaceTab.mixing: 'fwTabMixing',
     FeedWorkspaceTab.materials: 'fwTabMaterials',
@@ -63,7 +72,6 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
     final feeding = context.watch<FeedingProvider>();
     final canStock = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
     final canFeed = access.canCreate(FarmModule.feedNutrition);
-    final canMix = canFeed && feeding.formulas.any((f) => f.active != null);
     final atRisk = feeding.reorder.where((r) => r.coveredByTaskId == null).length;
     final tabs = FeedWorkspaceTab.values;
 
@@ -78,20 +86,20 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
           trailing: atRisk == 0
               ? null
               : StatusPill(label: '$atRisk ${context.t('stockoutRisk')}', level: FarmStatusLevel.alert),
+          // The feed room's day in its own order: what arrived, what was
+          // mixed, what was fed (purchase_and_mix_dialogs.dart).
           actions: [
-            if (canMix)
-              HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('fwMakeMix'), onPressed: () => showStartMixDialog(context)),
+            if (canStock)
+              HeroAction(primary: true, icon: FarmIcon.inventory, label: context.t('fpRecordPurchase'), onPressed: () => showRecordPurchaseDialog(context)),
+            if (canFeed)
+              HeroAction(icon: FarmIconMap.add, label: context.t('fwMakeMix'), onPressed: () => showRecordMixDialog(context)),
             if (canFeed)
               HeroAction(icon: FarmIcon.feedBag, label: context.t('fwRecordFeeding'), onPressed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
-            if (canStock)
-              HeroAction(
-                icon: FarmIcon.inventory,
-                label: context.t('addFeed'),
-                onPressed: () => showFeedMovementDialog(context, direction: FeedMovementDirection.inbound),
-              ),
           ],
         ),
         const SizedBox(height: FarmSpacing.md),
+        FeedGettingStartedCard(onFeed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
+        const SizedBox(height: FarmSpacing.sm),
         FeedKpiRow(feeding: feeding),
         const SizedBox(height: FarmSpacing.sm),
         UnderlineTabs(

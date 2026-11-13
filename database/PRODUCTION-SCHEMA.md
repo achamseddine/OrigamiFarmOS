@@ -130,6 +130,10 @@ Only animals with LACTATION capability may have an episode. Milk production reco
 
 **Dry-off plan (farm setting).** `farm.dry_off_days_before_birth` (integer, default 60, 0–200; `PATCH /farms/me`, Settings permission) is how many days before an expected birth a lactating animal is dried off. For every active pregnancy the reproduction overview and the animal's reproduction summary expose `dry_off_from = expected_due_date − dry_off_days_before_birth`, `days_to_dry_off`, and `dry_off_due` (in milk and the date has come). It is a plan, never a record: the dry-off is recorded as `LactationEnded` (reason `DRY_OFF`) when milking actually stops. Changing the setting is an audited `farm_settings_changed` event with the old and new value.
 
+**The calendar after a birth (farm settings).** `farm.milk_peak_start_days` (40), `milk_peak_end_days` (70), `breeding_wait_days` (50, the voluntary waiting period) and `heat_cycle_days` (21) — migration `c3e5a7b9d1f4`, Settings → *Breeding & milk calendar*. From the calving that started the current lactation (`lactation_episode.started_at`; else the last recorded birth) the reproduction summary and overview derive: `days_in_milk`, `milk_peak_from/to` and `in_milk_peak`; `breeding_from` and `ready_for_breeding` (not pregnant, past the wait, not served since calving); and, after a service not yet confirmed either way, `heat_watch_from/to` (service + cycle ± 3 days) and `heat_watch_now`. The overview lists who is at her peak, who is ready to inseminate and who to watch for a return to heat — read in a few farm-wide queries, not one summary per animal.
+
+**Calving date.** Registration takes `lactation_started_at` (the calving that started the lactation). A lactation recorded before its calving date was known is corrected with `PATCH /animals/{id}/lactation` (`started_at`, reason) — a `lactation_corrected` event and an audit entry with the old and new date; a lactation a recorded birth started is dated by that birth (409).
+
 ## 9. Current metrics projections
 Rebuildable projections may expose:
 - latest weight;

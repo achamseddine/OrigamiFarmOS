@@ -169,6 +169,13 @@ class DryOffIn(BaseModel):
     ended_at: datetime | None = None
 
 
+class LactationCorrectIn(BaseModel):
+    """The current lactation's calving / start-of-milking date, corrected."""
+
+    started_at: datetime
+    reason: str | None = Field(None, max_length=300)
+
+
 class IncubationIn(BaseModel):
     species_code: str
     eggs_set: int = Field(..., gt=0)

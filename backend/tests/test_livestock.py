@@ -36,7 +36,8 @@ class TestResolver:
         assert not cs.has(Cap.EGG_PRODUCTION)
         assert Cap.EAR_TAG in cs.required_codes()
         assert cs.required_identifier_types() == {"EAR_TAG"}
-        assert cs.subject_kind == "individual"
+        # Registered one by one, and a herd can also be a counted group.
+        assert cs.subject_kind == "either"
 
     def test_bull_never_pregnant_or_milked(self, db_session):
         session, _ = db_session

@@ -59,10 +59,11 @@ class SyncController extends ChangeNotifier {
   DateTime? lastSyncAt;
   SyncOutcome? lastOutcome;
 
-  /// Set by the app's data loader: refresh every provider once queued
-  /// work has actually landed, so the farmer sees server truth (real ids,
-  /// server-computed totals) rather than the local prediction.
-  Future<void> Function()? onSynced;
+  /// Set by the app's data loader: refresh the providers of the modules
+  /// whose queued work has actually landed, so the farmer sees server truth
+  /// (real ids, server-computed totals) rather than the local prediction —
+  /// and only those: a synced milk record does not reload the feed room.
+  Future<void> Function(Set<String> modules)? onSynced;
 
   bool get hasPending => pendingCount > 0;
   bool get hasFailed => failedCount > 0;
@@ -146,6 +147,7 @@ class SyncController extends ChangeNotifier {
 
       final remap = _IdRemap(await store.metaJson(_idMapKey) ?? const {});
       var sent = 0;
+      final sentModules = <String>{};
       var rejectedAny = false;
       var outcome = SyncOutcome.sent;
 
@@ -156,6 +158,7 @@ class SyncController extends ChangeNotifier {
           remap.learn(item, response);
           await store.removeFromOutbox(item.id);
           sent++;
+          sentModules.add(item.moduleCode ?? '');
         } on ApiException catch (e) {
           if (e.isOffline) {
             // Went out of range again mid-queue. Everything still in the
@@ -183,7 +186,7 @@ class SyncController extends ChangeNotifier {
       await _finish(store, outcome, touchTimestamp: sent > 0);
       if (sent > 0) {
         // Local predictions are now stale — replace them with the real rows.
-        await onSynced?.call();
+        await onSynced?.call(sentModules);
         final remaining = await store.pendingCount();
         if (remaining == 0) await store.setMeta(_idMapKey, null);
       }

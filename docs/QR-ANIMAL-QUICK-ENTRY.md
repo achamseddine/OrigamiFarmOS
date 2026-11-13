@@ -37,8 +37,20 @@ Per cow that is roughly: scan → (check) → litres → *Fill planned amounts* 
 | Dry-off before birth had no farm rule | **Settings → Dry-off before birth** (days, default 60). The twin and the reproduction overview show *dry off from* for every pregnant animal in milk and flag it when due | `farms.dry_off_days_before_birth`, `PATCH /farms/me`, `database/PRODUCTION-SCHEMA.md` §8 |
 | The animal feed record did not work: the farm had no feed products (production DB), and a feed with no stock entered was refused | Three default rows — **Concentrate, Corn silage, Wheat straw** — each already pointing at the farm's feed, every row optional, *Add another feed*; the farm gets the three standard feeds (empty ledger) by migration/seed or the form's *Set up* button; feeding more than the entered stock asks *"Stock not entered yet — record anyway"* explicitly | `feeding_event_dialog.dart`, `GET /feed-products/standard-slots`, `docs/GENERIC-FEED-ARCHITECTURE.md` §3a |
 
-Deploying: the backend needs migration `a8d0c2e4f6b1` (run *Migrate & seed DB* with
-`migrate_only`) before the new tablet build is used against it.
+Second round (same day):
+
+| Finding | Correction | Where |
+|---|---|---|
+| The feed module seemed inactive: *Make feed mix* only appeared once a formula existed, *Add feed* wrote to the old stock ledger, purchases had no date or quality | *Record purchase* (date, supplier, invoice, grade, moisture, notes; a new grain named in the form), *Record a mix* in one step (date, ingredients as weighed, output; formula v1 from the first mix), *Get the feed room going* card | `purchase_and_mix_dialogs.dart`, `POST /feed-mixes`, `docs/GENERIC-FEED-ARCHITECTURE.md` §3b, §5a |
+| No calving date; no way to know when to watch the milk peak or when to inseminate | Calving / start-of-milking date on the form (correctable), farm calendar settings (peak window, waiting period, heat cycle), the twin's calendar lines, *ready to inseminate* / *watch for heat* / *peak* chips on the herd overview | `PATCH /animals/{id}/lactation`, `database/PRODUCTION-SCHEMA.md` §8 |
+| Recording an insemination kept "now" and an error said "method not allowed" | Every reproduction form has its date; the tablet's calls all match the current API, so a "method not allowed" means the server is older than the app — the app now says that in plain words | `reproduction_forms.dart`, `api_client.dart` |
+| Cows could not be grouped; pregnant and not-pregnant cows should be groups | The tablet had no way to create a group — *New group* on the Animals screen; cattle can also be kept as counted groups; groups that follow the records (pregnant, not pregnant, in milk, dry) and a one-tap pregnant / not-pregnant pair | `group_form.dart`, `database/LIVESTOCK-SCHEMA.md` *Rule groups* |
+| No status on the profile for a cow that died or was sold | *Status on the farm* on the edit form: active, sold, died, culled, slaughtered, transferred — recorded as the exit with its date and reason | `add_animal_form.dart` |
+| Responsibilities could not express "this worker milks and feeds the dairy herd" | Work responsibilities: animals / group / species / field + duties, granting the access the duties need; *My animals & duties* on My Day | `docs/WORK-RESPONSIBILITIES.md` |
+| The app felt slower | Farm-wide reads load programs, rules, assignments and milk once per request (today's plan 322 → 66 queries, days of cover 410 → 154, notifications 479 → 212, reproduction overview without a summary per animal); the tablet loads only what recording needs at sign-in and refreshes only the synced modules after a sync | `app/core/read_cache.py`, `app.dart`, `feeding_provider.dart` |
+
+Deploying: the backend needs migrations `a8d0c2e4f6b1` and `c3e5a7b9d1f4` (run *Migrate & seed DB*
+with `migrate_only`) **and** the server must run this code, before the new tablet build is used against it.
 
 ## Implemented in the second increment
 

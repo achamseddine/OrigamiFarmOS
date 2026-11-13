@@ -203,6 +203,13 @@ def create_group(
 ):
     species = _species_or_422(db, payload.species)
     data = payload.model_dump()
+    if data.get("membership_rule"):
+        # A rule group (pregnant, open, in milk, dry) overlaps the herd and
+        # the pen the animal is in — it is a cohort counting its members.
+        if group_service.policy(db, data.get("group_type")).exclusive_membership:
+            data["group_type"] = "cohort"
+        data["tracking_mode"] = group_service.MEMBERSHIP_DERIVED
+        data["count"] = 0
     # LIVESTOCK-SCHEMA §6: a group either counts heads or counts its
     # registered members. Unstated: a head count given means a counted
     # group; otherwise a species kept individually counts members.
@@ -231,6 +238,9 @@ def create_group(
         db, farm_id=group.farm_id, user_id=current_user.id, action="group_created", entity_type="flock",
         entity_id=group.id, module_code=perms.ANIMALS, summary=f"{current_user.name} created {group.name}",
     )
+    if group.membership_rule:
+        db.flush()
+        group_service.fill_rule_group(db, group, user_id=current_user.id)
     db.commit()
     db.refresh(group)
     return group

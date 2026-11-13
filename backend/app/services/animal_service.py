@@ -29,7 +29,7 @@ from app.services.capability_service import CapabilitySet
 FINANCIAL_FIELDS = ("purchase_cost", "current_value")
 # Reproduction and lactation are not columns a registration sets: they
 # become episodes (reproduction_service.open_registration_state).
-_OPENING_STATE_FIELDS = ("pregnant", "pregnancy_days", "lactating", "lactation_cycle", "service_date", "service_type")
+_OPENING_STATE_FIELDS = ("pregnant", "pregnancy_days", "lactating", "lactation_cycle", "service_date", "service_type", "lactation_started_at")
 
 
 def species_or_422(db: Session, code: str) -> None:
@@ -92,9 +92,11 @@ def create_animal(db: Session, user: models.User, data: dict, *, identifiers_in:
     reproduction_service.open_registration_state(
         db, animal, pregnant=pregnant, pregnancy_days=opening["pregnancy_days"], lactating=lactating,
         lactation_cycle=opening["lactation_cycle"], user_id=user.id, breeding=breeding if pregnant else None,
+        lactation_started_at=opening["lactation_started_at"],
     )
     if group_name and group_name.strip():
         group_service.move_by_name(db, animal, group_name, user_id=user.id, review=False)
+    group_service.sync_rule_groups(db, animal, user_id=user.id)
     write_event(
         db, farm_id=user.farm_id, entity_type="animal", entity_id=animal.id, event_type="animal_created",
         payload={"tag": animal.tag, "name": animal.name, "species": animal.species, "source": source}, created_by=user.id,

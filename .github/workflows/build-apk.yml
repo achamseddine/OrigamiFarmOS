@@ -101,14 +101,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.7.1-build-${{ github.run_number }}
+          tag_name: tablet-v0.7.2-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.7.1 — tablet APK 0.7.${{ github.run_number }}"
+          name: "Origami FarmOS v0.7.2 — tablet APK 0.7.${{ github.run_number }}"
           body: |
             **Build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **Second round (v0.7.2):** *Record purchase* with supplier, date and quality, *Record a mix* in one step, a getting-started guide for the feed room; calving date with the milk-peak and insemination calendar (farm settings) and herd chips for who to inseminate, watch for heat or is at her peak; every reproduction form dated; groups for cows including pregnant / not-pregnant groups that follow the records; status on the farm (sold, died…) on the profile; work responsibilities with *My animals & duties*; faster server reads and lighter sign-in. **The server needs migrations `a8d0c2e4f6b1` and `c3e5a7b9d1f4`.**
             - **On-farm corrections (v0.7.1):** add an animal with nothing to scan — the app gives it a farm number and shows its QR label to print; *Is she pregnant?* (with the insemination date) and *Is she being milked?* on new and existing animals, saved as breeding / pregnancy-check / lactation / dry-off records, the milk record opening right after; **Settings → Dry-off before birth** (days) with the dry-off date on every pregnant animal in milk; the feeding form opens with **Concentrate, Corn silage, Wheat straw** rows (each optional) plus *Add another feed*, and asks before recording feed whose stock was never entered. **The server needs migration `a8d0c2e4f6b1`** (Actions → *Migrate & seed DB* → `migrate_only`).
             - **Scan-first worker rounds:** the tablet camera reads animal and pen QR labels offline; labels print from the tablet as an A4 PDF; pen labels open the group's feeding round; already-recorded-today and a second-milking check; feed rows from the animal's own program; morning/evening milking rounds from My Day.
             - **Layout from the V3 prototype:** Digital Twin with header, figures and tabs (milk, feed, weight, reproduction, health, timeline); animal registry with search; My Day routine; Feed & nutrition; Health command centre with health cases; Mouneh translated to Arabic.

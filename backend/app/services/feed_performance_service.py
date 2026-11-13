@@ -192,7 +192,10 @@ def ensure_default_monitors(db: Session, farm_id: str, *, user_id: str) -> list[
     members have milk records, eggs for flocks with egg records. Explicit
     per-animal and growth monitors are the farm's to add."""
     created = []
-    for group in db.scalars(select(models.Flock).where(models.Flock.farm_id == farm_id)):
+    # A group that follows the records (pregnant, open, in milk, dry) is a
+    # status list over the herd, not a feeding unit: monitoring it would
+    # read the same cows twice.
+    for group in db.scalars(select(models.Flock).where(models.Flock.farm_id == farm_id, models.Flock.membership_rule.is_(None))):
         members = programs.animals_in_group(db, group)
         has_milk = bool(members) and db.scalar(select(func.count(models.MilkRecord.id)).where(models.MilkRecord.animal_id.in_([m.id for m in members]))) > 0
         has_eggs = db.scalar(select(func.count(models.EggRecord.id)).where(models.EggRecord.flock_id == group.id)) > 0

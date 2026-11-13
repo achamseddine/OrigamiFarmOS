@@ -4,6 +4,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/util/record_dates.dart';
 import '../../api/api_client.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
@@ -106,6 +107,17 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
   String _serviceType = kServiceTypes.first;
   late MilkChoice _milk = widget.animal?.lactating == true ? MilkChoice.milking : MilkChoice.dry;
   late MilkChoice _initialMilk = _milk;
+  // The calving that started the current lactation (days in milk, the peak
+  // and the breeding wait count from it); locked when a recorded birth
+  // dates it.
+  DateTime? _calving;
+  DateTime? _initialCalving;
+  bool _calvingLocked = false;
+  // Status on the farm: null keeps the animal on the farm; an exit type
+  // (sold, dead…) records its exit with the day and the reason.
+  String? _exitType;
+  DateTime _exitDay = DateTime.now();
+  final _exitReason = TextEditingController();
   String? _adjustedNote;
   bool _loadingHistory = false;
   bool _statusTouched = false;
@@ -157,6 +169,8 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       final type = summary.lastBreeding?.eventType;
       if (type != null && kServiceTypes.contains(type)) _serviceType = type;
       _milk = _initialMilk = summary.lactation != null ? MilkChoice.milking : MilkChoice.dry;
+      _calving = _initialCalving = summary.lactation?.startedAt?.toLocal();
+      _calvingLocked = summary.lactation?.birthEventId != null;
     });
   }
 
@@ -246,7 +260,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
   void dispose() {
     for (final c in [
       _name, _breed, _primaryId, _location, _group, _weight, _colorMarkings,
-      _acquisitionSource, _sireTag, _damTag, _purchaseCost, _currentValue, _notes,
+      _acquisitionSource, _sireTag, _damTag, _purchaseCost, _currentValue, _notes, _exitReason,
       ..._identifiers.values,
     ]) {
       c.dispose();
@@ -338,6 +352,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       if (!_isEdit && served && _serviceDate != null) 'service_date': _utcDate(_serviceDate!),
       if (!_isEdit && served && _serviceDate != null) 'service_type': _serviceType,
       if (!_isEdit) 'lactating': askMilk && _milk == MilkChoice.milking,
+      if (!_isEdit && askMilk && _milk == MilkChoice.milking && _calving != null) 'lactation_started_at': _utcDate(_calving!),
       'purchase_cost': double.tryParse(_purchaseCost.text),
       'current_value': double.tryParse(_currentValue.text),
       'notes': _blank(_notes.text),
@@ -369,7 +384,11 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
     }
     if (_isEdit) {
       _statusDone.add('animal');
-      final failure = await _applyStatus(widget.animal!, askPregnancy: askPregnancy, askMilk: askMilk);
+      // Leaving the farm is the whole story: the exit closes the pregnancy,
+      // the lactation and the group memberships itself.
+      final failure = _exitType != null
+          ? await _recordExit(widget.animal!)
+          : await _applyStatus(widget.animal!, askPregnancy: askPregnancy, askMilk: askMilk);
       if (!mounted) return;
       if (failure != null) {
         setState(() {
@@ -382,7 +401,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       navigator.pop();
       messenger.showSnackBar(SnackBar(content: Text(tUpdated)));
       final updated = provider.find(widget.animal!.id) ?? widget.animal!;
-      if (startMilk && hostContext.mounted) await showMilkDialog(hostContext, updated);
+      if (startMilk && _exitType == null && hostContext.mounted) await showMilkDialog(hostContext, updated);
       return;
     }
 
@@ -407,6 +426,14 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
   }
 
   static String _utcDate(DateTime d) => _noonUtc(d).toIso8601String();
+
+  Future<String?> _recordExit(Animal animal) async {
+    if (_statusDone.contains('exit')) return null;
+    final r = await context.read<HerdRecordsProvider>().exitAnimal(animal.id, exitType: _exitType!, occurredAt: recordedInstant(_exitDay), reason: _exitReason.text);
+    if (!r.success) return r.error;
+    _statusDone.add('exit');
+    return null;
+  }
 
   /// Turns the changed answers of an edit into the herd's records, in the
   /// order the server needs them: a "not pregnant" check before a new
@@ -459,7 +486,10 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
     }
     if (askMilk) {
       if (_milk == MilkChoice.milking && _initialMilk != MilkChoice.milking) {
-        final error = await step('lactation', () => herd.startLactation(animal.id));
+        final error = await step('lactation', () => herd.startLactation(animal.id, at: _calving == null ? null : _noonUtc(_calving!)));
+        if (error != null) return error;
+      } else if (_milk == MilkChoice.milking && !_calvingLocked && _calving != null && !_sameDay(_calving, _initialCalving)) {
+        final error = await step('calving', () => herd.correctLactationStart(animal.id, _noonUtc(_calving!), reason: 'calving date entered on the profile'));
         if (error != null) return error;
       } else if (_milk == MilkChoice.dry && _initialMilk == MilkChoice.milking) {
         final error = await step('dryoff', () => herd.dryOff(animal.id));
@@ -764,6 +794,12 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
             wasLactating: _initialMilk == MilkChoice.milking,
             adjustedNote: _adjustedNote,
             loadingHistory: _loadingHistory,
+            calvingDate: _calving,
+            calvingLocked: _calvingLocked,
+            onCalvingDate: _speciesCan(livestock, Cap.lactation) ? (d) => setState(() => _calving = d) : null,
+            peakStartDays: context.watch<HerdRecordsProvider>().overview.calendarDays('milk_peak_start_days', 40),
+            peakEndDays: context.watch<HerdRecordsProvider>().overview.calendarDays('milk_peak_end_days', 70),
+            breedingWaitDays: context.watch<HerdRecordsProvider>().overview.calendarDays('breeding_wait_days', 50),
             onPregnancy: (c) => setState(() {
               _statusTouched = true;
               _preg = c;
@@ -780,6 +816,11 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
               if (c == MilkChoice.milking) _ensureCapability(livestock, Cap.lactation);
             }),
           ),
+        ],
+        if (_isEdit) ...[
+          const SizedBox(height: FarmSpacing.md),
+          _label(context, 'stFarmStatus'),
+          _farmStatus(context),
         ],
         if (showFinance) ...[
           const SizedBox(height: FarmSpacing.md),
@@ -807,6 +848,35 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         const SizedBox(height: FarmSpacing.md),
       ],
     );
+  }
+
+  /// On the farm, or gone — sold, died, culled, slaughtered, transferred.
+  /// Leaving is recorded as the exit it is (date, reason), never by editing
+  /// a status field, and the record stays.
+  Widget _farmStatus(BuildContext context) {
+    final animal = widget.animal!;
+    if (!animal.onFarm) {
+      return Text(
+        '${context.t('exit_${animal.lifecycleStatus}')}${animal.exitedAt != null ? ' · ${dayLabel(animal.exitedAt!.toLocal())}' : ''}',
+        style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.danger),
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        ChoiceChip(label: Text(context.t('active')), selected: _exitType == null, onSelected: (_) => setState(() => _exitType = null)),
+        for (final t in ReproCodes.exitTypes)
+          ChoiceChip(label: Text(context.t('exit_$t')), selected: _exitType == t, onSelected: (_) => setState(() => _exitType = t)),
+      ]),
+      if (_exitType != null) ...[
+        const SizedBox(height: 10),
+        Wrap(spacing: 12, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          RecordDateButton(label: context.t('reproDate'), value: _exitDay, onPicked: (d) => setState(() => _exitDay = d)),
+          SizedBox(width: 320, child: TextField(controller: _exitReason, decoration: InputDecoration(labelText: context.t('reason')))),
+        ]),
+        const SizedBox(height: 6),
+        Text(context.t('exitWarning'), style: const TextStyle(fontSize: 12.5, color: FarmColors.dangerInk)),
+      ],
+    ]);
   }
 
   /// "Female · Cow", "Male · Bull": the generic word, then what this farm

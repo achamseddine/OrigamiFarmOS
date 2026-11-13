@@ -35,6 +35,9 @@ class FeedLot {
     this.unitCost,
     required this.status,
     this.reference,
+    this.qualityGrade,
+    this.moisturePct,
+    this.qualityNotes,
   });
 
   final String id;
@@ -58,6 +61,11 @@ class FeedLot {
   final String status;
   final String? reference;
 
+  /// Quality at receipt: good | fair | poor, moisture %, what was seen.
+  final String? qualityGrade;
+  final double? moisturePct;
+  final String? qualityNotes;
+
   bool get usable => status == 'active' && quantityOnHand > 0;
 
   factory FeedLot.fromJson(Map<String, dynamic> json) => FeedLot(
@@ -77,6 +85,9 @@ class FeedLot {
         unitCost: _dn(json['unit_cost']),
         status: json['status'] as String? ?? 'active',
         reference: json['reference'] as String?,
+        qualityGrade: json['quality_grade'] as String?,
+        moisturePct: _dn(json['moisture_pct']),
+        qualityNotes: json['quality_notes'] as String?,
       );
 }
 

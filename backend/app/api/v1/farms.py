@@ -52,6 +52,12 @@ class FarmSettingsUpdate(BaseModel):
 
     # Days before an expected birth that a lactating animal is dried off.
     dry_off_days_before_birth: int | None = Field(None, ge=0, le=200)
+    # The calendar after a birth: milk peak window, voluntary waiting
+    # period before the next insemination, heat cycle length.
+    milk_peak_start_days: int | None = Field(None, ge=0, le=365)
+    milk_peak_end_days: int | None = Field(None, ge=0, le=365)
+    breeding_wait_days: int | None = Field(None, ge=0, le=365)
+    heat_cycle_days: int | None = Field(None, ge=10, le=60)
 
 
 @router.patch("/me")
@@ -67,6 +73,10 @@ def update_my_farm(
     if farm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")
     changes = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None and getattr(farm, k) != v}
+    start = changes.get("milk_peak_start_days", farm.milk_peak_start_days)
+    end = changes.get("milk_peak_end_days", farm.milk_peak_end_days)
+    if start is not None and end is not None and start > end:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The milk peak window must start before it ends.")
     if changes:
         before = {k: getattr(farm, k) for k in changes}
         for k, v in changes.items():

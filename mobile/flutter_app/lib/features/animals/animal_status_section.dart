@@ -3,6 +3,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/util/record_dates.dart';
 import '../../core/widgets/ux_blocks.dart';
 
 /// Where a female stands on the pregnancy line, as the farmer says it.
@@ -51,6 +52,12 @@ class AnimalStatusSection extends StatelessWidget {
     required this.onMilk,
     this.adjustedNote,
     this.loadingHistory = false,
+    this.calvingDate,
+    this.onCalvingDate,
+    this.calvingLocked = false,
+    this.peakStartDays = 40,
+    this.peakEndDays = 70,
+    this.breedingWaitDays = 50,
   });
 
   final bool showPregnancy;
@@ -72,6 +79,15 @@ class AnimalStatusSection extends StatelessWidget {
   /// to be in milk becomes a dairy cow) — said, never done silently.
   final String? adjustedNote;
   final bool loadingHistory;
+
+  /// The calving (start of milking) of the current lactation, and the
+  /// farm's calendar after it. [calvingLocked] when a recorded birth dates it.
+  final DateTime? calvingDate;
+  final ValueChanged<DateTime>? onCalvingDate;
+  final bool calvingLocked;
+  final int peakStartDays;
+  final int peakEndDays;
+  final int breedingWaitDays;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +169,27 @@ class AnimalStatusSection extends StatelessWidget {
               onSelected: (_) => onMilk(c),
             ),
         ]),
+        if (milk == MilkChoice.milking && onCalvingDate != null) ...[
+          const SizedBox(height: 10),
+          if (calvingLocked)
+            Text('${context.t('calvingDate')}: ${calvingDate != null ? shortDate(calvingDate!) : '—'} · ${context.t('stCalvingFromBirth')}',
+                style: FarmTypography.textTheme.bodySmall)
+          else
+            RecordDateButton(
+              label: context.t('calvingDate'),
+              value: calvingDate ?? DateTime.now(),
+              maxDaysBack: 700,
+              onPicked: onCalvingDate!,
+            ),
+          if (calvingDate != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${context.t('stMilkPeak')} ${shortDate(calvingDate!.add(Duration(days: peakStartDays)))} – ${shortDate(calvingDate!.add(Duration(days: peakEndDays)))}'
+              '${pregnancy == PregnancyChoice.open ? ' · ${context.t('stInseminateFrom')} ${shortDate(calvingDate!.add(Duration(days: breedingWaitDays)))}' : ''}',
+              style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.cedarDark, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
         const SizedBox(height: 6),
         if (milk == MilkChoice.milking && !wasLactating)
           Text(context.t('stMilkOpensAfterSave'), style: FarmTypography.textTheme.bodySmall)

@@ -422,6 +422,7 @@ class AnimalGroup {
     required this.status,
     this.location,
     this.trackingMode = 'QUANTITY_MANAGED',
+    this.membershipRule,
   });
 
   final String id;
@@ -441,6 +442,9 @@ class AnimalGroup {
 
   bool get countsMembers => trackingMode == 'MEMBERSHIP_DERIVED';
 
+  /// PREGNANT | NOT_PREGNANT | IN_MILK | DRY: members follow the records.
+  final String? membershipRule;
+
   factory AnimalGroup.fromJson(Map<String, dynamic> json) => AnimalGroup(
         id: json['id'] as String,
         name: json['name'] as String,
@@ -453,5 +457,6 @@ class AnimalGroup {
         status: json['status'] as String? ?? 'healthy',
         location: json['location_label'] as String?,
         trackingMode: json['tracking_mode'] as String? ?? 'QUANTITY_MANAGED',
+        membershipRule: json['membership_rule'] as String?,
       );
 }

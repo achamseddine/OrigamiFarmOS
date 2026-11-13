@@ -1,5 +1,21 @@
 # Releases
 
+## v0.7.2 — Feed room, breeding calendar, groups, responsibilities, speed
+
+From the second round of on-farm testing (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Second round*).
+
+**Delivered:**
+- **Feed room in the farm's order:** *Record purchase* (date, supplier, invoice, quality grade, moisture, what was seen; a new grain named in the form), *Record a mix* in one step (date, ingredients as weighed, output — a numbered mix; formula v1 from the first mix), *Record feeding*; a *Get the feed room going* card until purchase → silage & straw → mix → feeding have all happened. The standard Concentrate is farm-made so the farm's mixes make it.
+- **Calving date and the breeding calendar:** calving / start of milking on the animal form (correctable, audited); farm settings for the milk peak window, the waiting period before insemination and the heat cycle (with the dry-off days); the twin shows days in milk, peak window, *inseminate from*, *watch for heat*; the herd overview lists who is ready to inseminate, who to watch for heat, who is at her peak.
+- **Reproduction forms dated:** insemination, pregnancy check, loss, birth, start of milking, dry-off and exit all take their date (before, every insemination was saved as "now"). A "method not allowed" from an older server is explained in plain words.
+- **Groups for cows:** *New group* on the Animals screen (the tablet had no way to create one); cattle can also be kept as counted groups; groups that follow the records (pregnant, not pregnant, in milk, dry) and a one-tap pregnant / not-pregnant pair; the demo farm has "Pregnant cows" and "Open cows".
+- **Status on the farm** on the edit form: active, sold, died, culled, slaughtered, transferred — recorded as the exit with its date and reason.
+- **Work responsibilities:** an employee looks after a group, an animal, a species or a field, with duties (milking, feeding, observations, health care, eggs, crop care, harvest); assigning grants the access the duties need; *My animals & duties* on My Day with today's progress.
+- **Speed:** per-request read cache for the farm-wide feeding reads (today's plan 322 → 66 queries, days of cover 410 → 154, notifications 479 → 212), the reproduction overview in a handful of queries, the program list eager-loaded; the tablet loads only what recording needs at sign-in, the feed workspace figures when opened, and after a sync refreshes only the modules whose writes landed.
+- Fixed: newborns can be registered with a name only (the farm number follows).
+- Migration `c3e5a7b9d1f4` (calendar settings, rule groups, lot quality, responsibilities, cattle/horse group tracking) — run it with `a8d0c2e4f6b1`.
+- Tests: backend +7 (purchase → mix → feed, mix refusals, calendar, calving correction, rule groups, responsibilities and their permission); Flutter 252 (+5 new, 3 updated).
+
 ## v0.7.1 — Corrections from on-farm testing
 
 From testing the v0.7.0 build on the farm (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Corrections after on-farm testing*).

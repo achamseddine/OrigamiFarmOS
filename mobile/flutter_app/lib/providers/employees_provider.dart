@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
+import '../domain/entities/responsibility.dart';
 import '../domain/entities/employee.dart';
 import '../domain/entities/notification.dart';
 
@@ -85,6 +86,43 @@ class EmployeesProvider extends ChangeNotifier {
     if (result.success) await load();
     return result;
   }
+
+  // ------------------------------------------------------------ responsibilities
+  /// What the signed-in person looks after — their day is built from it.
+  List<WorkResponsibility> mine = [];
+
+  Future<void> loadMine() async {
+    try {
+      final json = await _api.get('/me/responsibilities') as List<dynamic>;
+      mine = [for (final r in json) WorkResponsibility.fromJson(r as Map<String, dynamic>)];
+      notifyListeners();
+    } on ApiException {
+      // An older server, or offline with nothing cached: no card.
+    }
+  }
+
+  Future<List<WorkResponsibility>> responsibilitiesOf(String employeeId) async {
+    final json = await _api.get('/employees/$employeeId/responsibilities') as List<dynamic>;
+    return [for (final r in json) WorkResponsibility.fromJson(r as Map<String, dynamic>)];
+  }
+
+  /// Makes the employee responsible for an animal / group / species /
+  /// field with these duties; the server adds the module access they need.
+  Future<WriteResult> assignResponsibility(String employeeId, {required String scopeType, required String scopeId, required List<String> duties, String? notes}) async {
+    final result = await _api.write(() => _api.post('/employees/$employeeId/responsibilities', body: {
+          'scope_type': scopeType,
+          'scope_id': scopeId,
+          'duties': duties,
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        }));
+    if (result.success) await load();
+    return result;
+  }
+
+  Future<WriteResult> endResponsibility(String employeeId, String responsibilityId, {String? reason}) =>
+      _api.write(() => _api.post('/employees/$employeeId/responsibilities/$responsibilityId/end', body: {
+            if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+          }));
 
   /// Replaces the employee's whole responsibility set — anything not sent
   /// is revoked, which is what the permission matrix means when it saves.

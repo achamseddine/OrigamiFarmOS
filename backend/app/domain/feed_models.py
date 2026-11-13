@@ -102,6 +102,11 @@ class FeedLot(Base):
     # active | quarantined | blocked | recalled | expired | depleted
     status: Mapped[str] = mapped_column(String(20), default="active")
     reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # Quality at receipt (§26): the grade the farm gave the delivery, the
+    # moisture measured, and what was seen (mould, dust, foreign matter).
+    quality_grade: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    moisture_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    quality_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)

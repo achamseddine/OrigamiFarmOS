@@ -295,6 +295,9 @@ RULES: tuple[dict, ...] = tuple(
     # ---- cattle: dairy females milk; everyone else does not
     _mammal_base("cow", hoof=True)
     + [
+        # A herd is worked in groups (milking cows, pregnant, dry, heifers):
+        # migration c3e5a7b9d1f4 adds this rule to existing databases.
+        _r("cow", Cap.GROUP_TRACKING),
         _r("cow", Cap.MILK_PRODUCTION, sex=FEMALE, stage="adult", profile="dairy"),
         _r("cow", Cap.LACTATION, sex=FEMALE, stage="adult", profile="dairy"),
         _r("cow", Cap.MILK_PRODUCTION, sex=FEMALE, stage="adult", profile="dual_purpose"),

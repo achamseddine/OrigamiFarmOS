@@ -110,10 +110,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: FarmSpacing.md),
             if (_farm != null) ...[
-              _DryOffCard(
-                days: (_farm!['dry_off_days_before_birth'] as num?)?.toInt() ?? 60,
-                onSaved: (farm) => setState(() => _farm = farm),
-              ),
+              _CalendarCard(farm: _farm!, onSaved: (farm) => setState(() => _farm = farm)),
               const SizedBox(height: FarmSpacing.md),
             ],
           ],
@@ -254,34 +251,55 @@ class _IncludedModule extends StatelessWidget {
   }
 }
 
-/// The farm's dry-off setting: how many days before an expected birth a
-/// milking animal stops being milked. Changes the "dry off from" date on
-/// every pregnant animal in milk; the dry-off itself is still recorded on
-/// the animal when it happens.
-class _DryOffCard extends StatefulWidget {
-  const _DryOffCard({required this.days, required this.onSaved});
-  final int days;
+/// The farm's breeding and milk calendar: when the milk peak is expected
+/// after a calving, the waiting period before the next insemination, the
+/// heat cycle watched after a service, and how many days before an
+/// expected birth a milking animal is dried off. They set the dates shown on
+/// every animal and the herd's to-do chips; they record nothing.
+class _CalendarCard extends StatefulWidget {
+  const _CalendarCard({required this.farm, required this.onSaved});
+  final Map<String, dynamic> farm;
   final ValueChanged<Map<String, dynamic>> onSaved;
 
   @override
-  State<_DryOffCard> createState() => _DryOffCardState();
+  State<_CalendarCard> createState() => _CalendarCardState();
 }
 
-class _DryOffCardState extends State<_DryOffCard> {
-  late final _days = TextEditingController(text: '${widget.days}');
+class _CalendarCardState extends State<_CalendarCard> {
+  // key, label, default, min, max
+  static const _fields = [
+    ('dry_off_days_before_birth', 'fsDryOffTitle', 60, 0, 200),
+    ('milk_peak_start_days', 'fsPeakStart', 40, 0, 365),
+    ('milk_peak_end_days', 'fsPeakEnd', 70, 0, 365),
+    ('breeding_wait_days', 'fsBreedingWait', 50, 0, 365),
+    ('heat_cycle_days', 'fsHeatCycle', 21, 10, 60),
+  ];
+  late final Map<String, TextEditingController> _c = {
+    for (final f in _fields) f.$1: TextEditingController(text: '${(widget.farm[f.$1] as num?)?.toInt() ?? f.$3}'),
+  };
   bool _saving = false;
   String? _error;
 
   @override
   void dispose() {
-    _days.dispose();
+    for (final c in _c.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _save() async {
-    final days = parseLocalizedInt(_days.text);
-    if (days == null || days < 0 || days > 200) {
-      setState(() => _error = context.t('fsDryOffInvalid'));
+    final body = <String, dynamic>{};
+    for (final (key, _, _, min, max) in _fields) {
+      final v = parseLocalizedInt(_c[key]!.text);
+      if (v == null || v < min || v > max) {
+        setState(() => _error = '${context.t('fsCalendarInvalid')} ($min–$max)');
+        return;
+      }
+      body[key] = v;
+    }
+    if ((body['milk_peak_start_days'] as int) > (body['milk_peak_end_days'] as int)) {
+      setState(() => _error = context.t('fsPeakOrder'));
       return;
     }
     setState(() {
@@ -292,7 +310,7 @@ class _DryOffCardState extends State<_DryOffCard> {
     final herd = context.read<HerdRecordsProvider>();
     final messenger = ScaffoldMessenger.of(context);
     final saved = context.t('fsSaved');
-    final result = await api.write(() => api.patch('/farms/me', body: {'dry_off_days_before_birth': days}));
+    final result = await api.write(() => api.patch('/farms/me', body: body));
     if (!mounted) return;
     setState(() {
       _saving = false;
@@ -307,30 +325,33 @@ class _DryOffCardState extends State<_DryOffCard> {
   @override
   Widget build(BuildContext context) {
     return SectionCard(
-      title: context.t('fsDryOffTitle'),
+      title: context.t('fsCalendarTitle'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(context.t('fsDryOffBody'), style: FarmTypography.textTheme.bodySmall),
+        Text(context.t('fsCalendarBody'), style: FarmTypography.textTheme.bodySmall),
+        const SizedBox(height: FarmSpacing.sm),
+        Wrap(spacing: 12, runSpacing: 12, children: [
+          for (final (key, label, _, _, _) in _fields)
+            SizedBox(
+              width: 210,
+              child: TextField(
+                key: ValueKey(key == 'dry_off_days_before_birth' ? 'dry-off-days' : 'cal-$key'),
+                controller: _c[key],
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: context.t(label), suffixText: context.t('fsDays'), isDense: true),
+              ),
+            ),
+        ]),
         const SizedBox(height: FarmSpacing.sm),
         Row(children: [
-          SizedBox(
-            width: 140,
-            child: TextField(
-              key: const ValueKey('dry-off-days'),
-              controller: _days,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: context.t('fsDryOffTitle'), suffixText: context.t('fsDays'), isDense: true),
-            ),
-          ),
-          const SizedBox(width: FarmSpacing.md),
           FilledButton(
             onPressed: _saving ? null : _save,
             child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
           ),
+          if (_error != null) ...[
+            const SizedBox(width: 12),
+            Expanded(child: Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
+          ],
         ]),
-        if (_error != null) ...[
-          const SizedBox(height: 6),
-          Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-        ],
       ]),
     );
   }

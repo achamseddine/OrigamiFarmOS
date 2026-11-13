@@ -158,7 +158,8 @@ class TestGroups:
         cohort = client.post(f"{API}/animal-groups", json={"name": "Spring scan list", "species": "cow", "group_type": "cohort"}, headers=h).json()
         assert client.post(f"{API}/animal-groups/{cohort['id']}/members", json={"animal_id": BELLA}, headers=h).status_code == 201
         assert _twin(client, BELLA)["group_name"] == "Dairy Herd"
-        assert {g["group_name"] for g in _twin(client, BELLA)["groups"]} == {"Dairy Herd", "Spring scan list"}
+        # Her herd, the cohort, and the rule group her pregnancy puts her in.
+        assert {g["group_name"] for g in _twin(client, BELLA)["groups"]} == {"Dairy Herd", "Spring scan list", "Pregnant cows"}
 
     def test_a_group_holds_one_species_and_one_farm(self, client):
         h = _h(client)
@@ -432,7 +433,7 @@ class TestLookupAndTwin:
         twin = _twin(client, LUNA)
         assert twin["reproduction"]["applies"] == {"breeding": True, "pregnancy": True, "live_birth": True, "lactation": True}
         assert twin["reproduction"]["terminology"]["birth_en"] == "Calving" and twin["reproduction"]["last_birth"]["live_count"] == 1
-        assert twin["groups"][0]["group_name"] == "Dairy Herd" and twin["recent_history"]
+        assert "Dairy Herd" in {g["group_name"] for g in twin["groups"]} and twin["recent_history"]
         hen = _twin(client, HEN)
         assert hen["reproduction"]["applies"]["pregnancy"] is False and hen["reproduction"]["applies"]["live_birth"] is False
 

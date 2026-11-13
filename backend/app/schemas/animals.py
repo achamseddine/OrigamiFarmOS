@@ -145,6 +145,10 @@ class AnimalCreate(BaseModel):
     service_date: datetime | None = None
     service_type: str = "ARTIFICIAL_INSEMINATION"
     lactating: bool = False
+    # The calving (kidding, lambing…) that started the current lactation,
+    # when known: days in milk, the milk peak and the breeding wait count
+    # from it. Defaults to the registration date.
+    lactation_started_at: datetime | None = None
     lactation_cycle: int | None = None
     # Financial (only stored when the caller may see Finance — see the router)
     purchase_cost: float | None = None

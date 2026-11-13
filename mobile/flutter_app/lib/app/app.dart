@@ -165,26 +165,34 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
     final sync = context.read<SyncController>();
     // Once the queue drains, throw away the local predictions and take the
     // server's version: real IDs, server-computed totals, fresh signals.
-    sync.onSynced = _refreshAll;
+    sync.onSynced = (modules) => _refreshAll(only: modules);
     await _refreshAll();
     if (!mounted) return;
     await sync.start();
   }
 
-  Future<void> _refreshAll() async {
+  /// Everything at sign-in; after a sync, only the modules whose writes
+  /// landed ([only]: the outbox's module codes) — reloading the whole farm
+  /// after every synced milk record was a large part of the app feeling slow.
+  Future<void> _refreshAll({Set<String>? only}) async {
     final access = context.read<AccessProvider>();
-    try {
-      await access.load();
-    } catch (_) {
-      // Offline with nothing cached yet: the shell renders its empty
-      // state rather than a crash, and the sync pill explains why.
+    if (only == null) {
+      try {
+        await access.load();
+      } catch (_) {
+        // Offline with nothing cached yet: the shell renders its empty
+        // state rather than a crash, and the sync pill explains why.
+      }
     }
     if (!mounted) return;
+    // An unknown module code (an older outbox row) refreshes everything.
+    final partial = only != null && !only.contains('');
+    bool touched(List<String> modules) => !partial || modules.any(only.contains);
 
     // A failed module load must not take the whole app down with it — a
     // farm with no Visits data should still get its animals.
     Future<void> ifAllowed(String module, Future<void> Function() load) async {
-      if (!access.isModuleAvailable(module)) return;
+      if (!access.isModuleAvailable(module) || !touched([module])) return;
       try {
         await load();
       } catch (_) {
@@ -194,24 +202,30 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
 
     await Future.wait([
       ifAllowed(FarmModuleShortcuts.tasks, () => context.read<TasksProvider>().load(includeRoster: access.isFullAccess)),
-      ifAllowed(FarmModuleShortcuts.animals, () => context.read<AnimalsProvider>().load()),
+      if (access.isModuleAvailable(FarmModuleShortcuts.animals) && touched(const ['animals', 'animal_health', 'milk_production']))
+        quietly(() => context.read<AnimalsProvider>().load()),
       ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedProvider>().load()),
       // The generic feed architecture: products, lots, formulas, programs,
       // today's plan. Same module as the stock screen it sits behind.
-      ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedingProvider>().load()),
+      // At sign-in only what recording a feeding needs; the rest of the feed
+      // workspace (cover, costs, performance) loads when it is opened.
+      ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedingProvider>().load(essentialsOnly: true)),
       // The farm pharmacy sits between stock and animal health: whoever
       // can see either gets the essential-medicine dashboard.
-      if (access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) quietly(() => context.read<PharmacyProvider>().load()),
+      if ((access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) && touched(const ['inventory', 'animal_health']))
+        quietly(() => context.read<PharmacyProvider>().load()),
       // Emergency triage and approved protocols: animal health.
-      if (access.isModuleAvailable('animal_health')) quietly(() => context.read<EmergencyProvider>().load()),
+      if (access.isModuleAvailable('animal_health') && touched(const ['animal_health'])) quietly(() => context.read<EmergencyProvider>().load()),
       // Health cases and the farm's observations: the Health screen.
-      if (access.isModuleAvailable('animal_health')) quietly(() => context.read<HealthRecordsProvider>().load()),
+      if (access.isModuleAvailable('animal_health') && touched(const ['animal_health', 'animals'])) quietly(() => context.read<HealthRecordsProvider>().load()),
       // Milk, eggs and produce all read ProductionProvider; whoever holds
       // any of them gets it (its load tolerates a module the user lacks).
-      if (access.isModuleAvailable(FarmModuleShortcuts.produce) || access.isModuleAvailable('milk_production') || access.isModuleAvailable('egg_production'))
+      if ((access.isModuleAvailable(FarmModuleShortcuts.produce) || access.isModuleAvailable('milk_production') || access.isModuleAvailable('egg_production')) &&
+          touched(const ['produce_harvest', 'milk_production', 'egg_production']))
         quietly(() => context.read<ProductionProvider>().load()),
       // The herd's reproduction day: due dates, checks, the incubator.
-      if (access.isModuleAvailable(FarmModuleShortcuts.animals)) quietly(() => context.read<HerdRecordsProvider>().loadOverview()),
+      if (access.isModuleAvailable(FarmModuleShortcuts.animals) && touched(const ['animals', 'milk_production']))
+        quietly(() => context.read<HerdRecordsProvider>().loadOverview()),
       ifAllowed(FarmModuleShortcuts.agriculture, () => context.read<AgricultureProvider>().load()),
       ifAllowed(FarmModuleShortcuts.ai, () => context.read<RecommendationsProvider>().load()),
       ifAllowed(FarmModuleShortcuts.finance, () => context.read<SalesProvider>().load()),
@@ -224,7 +238,7 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       // animal anywhere — a herd card, a milk record, a flock — so it is
       // not gated on a module. Small, cached, and what the Add Animal
       // form resolves against with no signal.
-      quietly(() => context.read<LivestockProvider>().load()),
+      if (touched(const ['animals'])) quietly(() => context.read<LivestockProvider>().load()),
     ]);
   }
 
