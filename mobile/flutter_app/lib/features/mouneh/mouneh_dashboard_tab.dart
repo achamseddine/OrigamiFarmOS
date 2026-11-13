@@ -1,107 +1,99 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../core/theme/colors.dart';
+import '../../core/i18n/strings.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
-import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/mouneh.dart';
 import '../../providers/mouneh_provider.dart';
 
 /// Mouneh Dashboard (tech spec v0.5 §6, screen 1): "simple for a farm
-/// manager, not an accountant" — cost per jar, selling price, margin,
-/// stock remaining, units sold, batch status, all as clear cards.
+/// manager, not an accountant" — what sells, what needs a look, what is
+/// being made. The figures sit above the tabs, on the module's header.
 class MounehDashboardTab extends StatelessWidget {
   const MounehDashboardTab({super.key, this.onNavigate});
+
+  /// Opens another tab by its index in `MounehTab`.
   final ValueChanged<int>? onNavigate;
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<MounehProvider>();
     final profitability = provider.allProfitability;
-    final bestSellers = [...profitability]..sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
-    final slowMovers = profitability.where((p) => p.recommendation == 'slow_mover').toList();
+    final bestSellers = [...profitability.where((p) => p.totalRevenue > 0)]..sort((a, b) => b.totalRevenue.compareTo(a.totalRevenue));
+    final attention = profitability.where((p) => p.recommendation == 'slow_mover' || p.recommendation == 'review_pricing').toList();
+    final active = provider.batches.where((b) => b.isInProgress).toList();
 
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LayoutBuilder(builder: (context, c) {
-            final perRow = c.maxWidth > 900 ? 4 : 2;
-            final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
-            final cards = [
-              KpiCard(icon: FarmIcon.inventory, label: 'Products', value: '${provider.products.length}', onTap: () => onNavigate?.call(1)),
-              KpiCard(icon: FarmIcon.barn, label: 'Active Batches', value: '${provider.activeBatchCount}', onTap: () => onNavigate?.call(4)),
-              KpiCard(icon: FarmIcon.harvestBasket, label: 'Stock Remaining', value: provider.totalFinishedUnits.toStringAsFixed(0), unit: 'units', onTap: () => onNavigate?.call(5)),
-              KpiCard(icon: FarmIcon.money, label: 'Stock Value', value: '\$${provider.totalStockValue.toStringAsFixed(0)}'),
-              KpiCard(icon: FarmIcon.chartLine, label: 'Revenue', value: '\$${provider.totalRevenue.toStringAsFixed(0)}', tint: FarmColors.success, onTap: () => onNavigate?.call(6)),
-              KpiCard(icon: FarmIcon.report, label: 'Profit', value: '\$${provider.totalProfit.toStringAsFixed(0)}', tint: provider.totalProfit >= 0 ? FarmColors.success : FarmColors.danger),
-            ];
-            return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
-          }),
-          const SizedBox(height: FarmSpacing.md),
-          LayoutBuilder(builder: (context, c) {
-            final wide = c.maxWidth > kTabletBreakpoint;
             final best = SectionCard(
-              title: 'Best Sellers',
-              subtitle: 'Ranked by revenue',
+              title: context.t('mnBestSellers'),
+              subtitle: context.t('mnBestSellersSub'),
+              trailing: context.t('mnTabSales'),
+              onTrailingTap: () => onNavigate?.call(6),
               child: bestSellers.isEmpty
-                  ? Text('No sales recorded yet.', style: FarmTypography.textTheme.bodySmall)
-                  : Column(children: [for (final p in bestSellers.take(5)) _ProductRow(p: p)]),
+                  ? EmptyState(message: context.t('mnNoSales'), icon: FarmIcon.money, compact: true)
+                  : Column(children: [for (final p in bestSellers.take(5)) MounehProductRow(p: p)]),
             );
             final slow = SectionCard(
-              title: 'Needs Attention',
-              subtitle: 'Slow movers & pricing reviews',
-              child: slowMovers.isEmpty
-                  ? Text('Every product is selling at a healthy pace.', style: FarmTypography.textTheme.bodySmall)
-                  : Column(children: [for (final p in slowMovers) _ProductRow(p: p)]),
+              title: context.t('mnAttention'),
+              subtitle: context.t('mnAttentionSub'),
+              child: attention.isEmpty
+                  ? EmptyState(message: context.t('mnAttentionNone'), icon: FarmIcon.check, compact: true)
+                  : Column(children: [for (final p in attention) MounehProductRow(p: p)]),
             );
-            if (!wide) return Column(children: [best, const SizedBox(height: FarmSpacing.md), slow]);
-            return IntrinsicHeight(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: best),
-                const SizedBox(width: FarmSpacing.md),
-                Expanded(child: slow),
-              ]),
-            );
+            if (c.maxWidth < kTabletBreakpoint) return Column(children: [best, const SizedBox(height: FarmSpacing.md), slow]);
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: best),
+              const SizedBox(width: FarmSpacing.md),
+              Expanded(child: slow),
+            ]);
           }),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Active Batches',
-            child: provider.batches.where((b) => b.isInProgress).isEmpty
-                ? Text('No batch in progress right now.', style: FarmTypography.textTheme.bodySmall)
-                : Column(
-                    children: [
-                      for (final batch in provider.batches.where((b) => b.isInProgress))
-                        _BatchRow(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
-                    ],
-                  ),
+            title: context.t('mnActiveBatches'),
+            trailing: context.t('mnTabBatches'),
+            onTrailingTap: () => onNavigate?.call(4),
+            child: active.isEmpty
+                ? EmptyState(message: context.t('mnNoActiveBatch'), icon: FarmIcon.barn, compact: true)
+                : Column(children: [
+                    for (final batch in active) _BatchRow(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
+                  ]),
           ),
+          const SizedBox(height: FarmSpacing.md),
+          NoticeBanner(text: context.t('mnProfitCaveat')),
         ],
       ),
     );
   }
 }
 
-class _ProductRow extends StatelessWidget {
-  const _ProductRow({required this.p});
-  final MounehProductProfitability p;
+/// "Continue production", "Slow mover", "Review pricing" — the server's
+/// call on a product, in the reader's language.
+String mounehRecommendationLabel(BuildContext context, String code) {
+  final key = 'mnRec_$code';
+  final label = context.t(key);
+  return label == key ? code.replaceAll('_', ' ') : label;
+}
 
-  @override
-  Widget build(BuildContext context) {
-    final recLabel = switch (p.recommendation) {
-      'continue_production' => 'Continue production',
-      'slow_mover' => 'Slow mover',
-      'review_pricing' => 'Review pricing',
-      _ => p.recommendation,
-    };
-    final recLevel = switch (p.recommendation) {
+FarmStatusLevel mounehRecommendationLevel(String code) => switch (code) {
       'continue_production' => FarmStatusLevel.good,
       'review_pricing' => FarmStatusLevel.alert,
       _ => FarmStatusLevel.watch,
     };
+
+class MounehProductRow extends StatelessWidget {
+  const MounehProductRow({super.key, required this.p});
+  final MounehProductProfitability p;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -111,7 +103,10 @@ class _ProductRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(p.productName, style: FarmTypography.textTheme.titleSmall),
-                Text('${p.unitsRemaining.toStringAsFixed(0)} units left · \$${p.avgUnitCost.toStringAsFixed(2)}/unit cost', style: FarmTypography.textTheme.bodySmall),
+                Text(
+                  '${p.unitsRemaining.toStringAsFixed(0)} ${context.t('mnUnitsLeft')} · \$${p.avgUnitCost.toStringAsFixed(2)} ${context.t('mnCostPerUnit')}',
+                  style: FarmTypography.textTheme.bodySmall,
+                ),
               ],
             ),
           ),
@@ -119,7 +114,7 @@ class _ProductRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text('\$${p.totalRevenue.toStringAsFixed(0)}', style: FarmTypography.textTheme.titleSmall),
-              StatusPill(label: recLabel, level: recLevel, dense: true),
+              StatusPill(label: mounehRecommendationLabel(context, p.recommendation), level: mounehRecommendationLevel(p.recommendation), dense: true),
             ],
           ),
         ],
@@ -135,6 +130,8 @@ class _BatchRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final days = DateTime.now().difference(batch.startedAt).inDays;
+    final when = days <= 0 ? context.t('twToday') : (days == 1 ? context.t('twYesterday') : '$days ${context.t('twDaysAgo')}');
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -144,20 +141,14 @@ class _BatchRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('$productName — ${batch.batchCode}', style: FarmTypography.textTheme.titleSmall),
-                Text('Planned ${batch.plannedQty.toStringAsFixed(0)} units · started ${_relative(batch.startedAt)}', style: FarmTypography.textTheme.bodySmall),
+                Text('${context.t('mnPlanned')} ${batch.plannedQty.toStringAsFixed(0)} · ${context.t('mnStarted')} $when', style: FarmTypography.textTheme.bodySmall),
               ],
             ),
           ),
-          if (batch.plannedUnitCost != null) Text('\$${batch.plannedUnitCost!.toStringAsFixed(2)}/unit planned', style: FarmTypography.textTheme.bodySmall),
+          if (batch.plannedUnitCost != null)
+            Text('\$${batch.plannedUnitCost!.toStringAsFixed(2)} ${context.t('mnPlannedPerUnit')}', style: FarmTypography.textTheme.bodySmall),
         ],
       ),
     );
-  }
-
-  String _relative(DateTime dt) {
-    final days = DateTime.now().difference(dt).inDays;
-    if (days <= 0) return 'today';
-    if (days == 1) return '1 day ago';
-    return '$days days ago';
   }
 }

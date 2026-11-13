@@ -17,7 +17,14 @@ import '../../providers/tasks_provider.dart';
 import '../../core/widgets/directional_icon.dart';
 import '../../app/app_navigator.dart';
 import '../navigation/entity_router.dart';
+import '../../core/theme/farm_icon_map.dart';
+import '../../domain/entities/access.dart';
+import '../../providers/access_provider.dart';
+import '../../providers/health_records_provider.dart';
+import '../animals/animal_quick_actions.dart' show showObserveDialog;
 import 'emergency_tab.dart';
+import 'health_cases.dart';
+import 'health_overview.dart';
 import 'pharmacy_tab.dart';
 
 class HealthIntelligenceScreen extends StatefulWidget {
@@ -27,195 +34,183 @@ class HealthIntelligenceScreen extends StatefulWidget {
   State<HealthIntelligenceScreen> createState() => _HealthIntelligenceScreenState();
 }
 
-class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
-  int _tab = 0;
-  String? _selectedId;
+/// The Health screen's tabs. The first is the V3 prototype's command
+/// centre; the others are the records behind it. The old "All animals",
+/// "Trends" and "Insights" tabs said "coming soon" and are gone.
+enum HealthTab { overview, recommendations, cases, pharmacy, emergency }
 
-  /// A notification or priority card that names a pharmacy or emergency
-  /// record lands on the right tab — and a medicine opens its detail —
-  /// rather than on the alerts list the user then has to leave.
+class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
+  HealthTab _tab = HealthTab.overview;
+  String? _selectedId;
+  bool _allCases = false;
+
+  /// A notification or priority card that names a health case, a pharmacy
+  /// or an emergency record lands on the right tab — and a case or a
+  /// medicine opens itself — rather than on a list the user then has to
+  /// leave.
   void _consumeFocus(BuildContext context) {
     final navigator = context.watch<AppNavigator>();
     final type = navigator.focusEntityType;
     if (type == null) return;
+    final isCase = type == 'health_case';
     final pharmacy = EntityRouter.pharmacyEntities.contains(type);
-    final emergency = EntityRouter.emergencyEntities.contains(type);
-    if (!pharmacy && !emergency) return;
+    final emergency = !isCase && EntityRouter.emergencyEntities.contains(type);
+    if (!isCase && !pharmacy && !emergency) return;
     final id = navigator.focusEntityId;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _tab = pharmacy ? 4 : 5);
+      setState(() => _tab = isCase ? HealthTab.cases : (pharmacy ? HealthTab.pharmacy : HealthTab.emergency));
       navigator.clearFocus();
       if (type == 'medicine_product' && id != null) showMedicineDetailDialog(this.context, id);
+      if (isCase && id != null) {
+        for (final c in this.context.read<HealthRecordsProvider>().cases) {
+          if (c.id == id) showCaseSheet(this.context, c);
+        }
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final alerts = context.watch<RecommendationsProvider>().forCategory(RecommendationCategory.health);
-    final selected = alerts.isEmpty ? null : alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
-    final tasksProvider = context.watch<TasksProvider>();
-    final taskCreated = selected != null && tasksProvider.tasks.any((t) => t.sourceId == selected.id);
     final pharmacyUnseen = context.watch<PharmacyProvider>().unseenAlerts.length;
     final emergencyLive = context.watch<EmergencyProvider>().escalated.length;
+    final access = context.watch<AccessProvider>();
+    final canCreate = access.canCreate(FarmModule.animalHealth);
+    final health = context.watch<HealthRecordsProvider>();
     _consumeFocus(context);
+
+    String counted(String key, int n) => n == 0 ? context.t(key) : '${context.t(key)} · $n';
+    final labels = {
+      HealthTab.overview: context.t('hlTabOverview'),
+      HealthTab.recommendations: counted('hlTabRecommendations', alerts.length),
+      HealthTab.cases: counted('hlTabCases', health.openCases.length),
+      HealthTab.pharmacy: counted('phTab', pharmacyUnseen),
+      HealthTab.emergency: counted('emTab', emergencyLive),
+    };
+    final tabs = HealthTab.values;
 
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           HeroBand(
             eyebrow: context.t('hlEyebrow'),
             title: context.t('healthIntelligenceTitle'),
             subtitle: context.t('healthIntelligenceSubtitle'),
             icon: FarmIcon.stethoscope,
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          Row(
-            children: [
-              _Tab(label: context.t('currentAlerts'), count: alerts.length, selected: _tab == 0, onTap: () => setState(() => _tab = 0)),
-              const SizedBox(width: FarmSpacing.lg),
-              _Tab(label: context.t('allAnimals'), selected: _tab == 1, onTap: () => setState(() => _tab = 1)),
-              const SizedBox(width: FarmSpacing.lg),
-              _Tab(label: context.t('trends'), selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
-              const SizedBox(width: FarmSpacing.lg),
-              _Tab(label: context.t('insights'), selected: _tab == 3, onTap: () => setState(() => _tab = 3)),
-              const SizedBox(width: FarmSpacing.lg),
-              // The farm pharmacy (MEDICINE-PHARMACY-SCHEMA.md): stock kept
-              // whether or not anyone is sick; the badge is alerts unseen.
-              _Tab(label: context.t('phTab'), count: pharmacyUnseen == 0 ? null : pharmacyUnseen, selected: _tab == 4, onTap: () => setState(() => _tab = 4)),
-              const SizedBox(width: FarmSpacing.lg),
-              // Emergency triage and approved protocols; the badge is the
-              // cases escalated to the veterinarian.
-              _Tab(label: context.t('emTab'), count: emergencyLive == 0 ? null : emergencyLive, selected: _tab == 5, onTap: () => setState(() => _tab = 5)),
+            actions: [
+              if (canCreate) HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('hcOpenCase'), onPressed: () => showOpenCaseForm(context)),
+              HeroAction(icon: FarmIcon.eye, label: context.t('twRecordObservation'), onPressed: () => _observe(context)),
+              if (canCreate) HeroAction(icon: FarmIcon.bell, label: context.t('emAssess'), onPressed: () => showAssessDialog(context)),
             ],
           ),
-          const Divider(height: 24, color: FarmColors.border),
-          if (_tab == 5) const EmergencyTab() else if (_tab == 4) const PharmacyTab() else if (_tab != 0) _PlaceholderTab(tab: _tab) else ...[
-            if (alerts.isEmpty)
-              SectionCard(
-                // The prototype's wording: an empty list is a statement
-                // about the records, never about the herd.
-                child: EmptyState(message: context.t('noHealthAlerts'), detail: context.t('hlNoAlertsCaveat'), icon: FarmIcon.heart),
-              )
-            else
-              LayoutBuilder(builder: (context, c) {
-                final wide = c.maxWidth > kTabletBreakpoint;
-                final list = SectionCard(
-                  padding: const EdgeInsets.all(FarmSpacing.sm),
-                  child: Column(
-                    children: [
-                      for (final rec in alerts) ...[
-                        _AlertRow(rec: rec, selected: rec.id == selected!.id, onTap: () => setState(() => _selectedId = rec.id)),
-                        const SizedBox(height: 6),
-                      ],
-                      Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () {}, child: Text(context.t('viewAllAlerts')))),
-                    ],
-                  ),
-                );
-                final detail = _DetailCard(rec: selected!, taskCreated: taskCreated);
-                if (!wide) return Column(children: [list, const SizedBox(height: FarmSpacing.md), detail]);
-                return IntrinsicHeight(
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Expanded(flex: 4, child: list),
-                    const SizedBox(width: FarmSpacing.md),
-                    Expanded(flex: 6, child: detail),
-                  ]),
-                );
-              }),
-            const SizedBox(height: FarmSpacing.md),
-            NoticeBanner(text: context.t('twAiCaveat')),
-            const SizedBox(height: FarmSpacing.md),
-            SectionCard(
-              title: context.t('fromObservationToRecommendation'),
-              child: LayoutBuilder(builder: (context, c) {
-                final wide = c.maxWidth > 640;
-                final steps = [
-                  _ChainStep(icon: FarmIcon.eye, title: context.t('observationStep'), body: '1 Observation', bullets: [context.t('observationStepBody')]),
-                  _ChainStep(icon: FarmIcon.chartLine, title: context.t('knowledgeStep'), body: 'Knowledge', bullets: const ['AI models + farm history turn data into insight.']),
-                  _ChainStep(icon: FarmIcon.check, title: context.t('recommendationStep'), body: 'Recommendation', bullets: [context.t('recommendationStepBody')]),
-                ];
-                if (!wide) {
-                  return Column(children: [for (final s in steps) ...[s, const SizedBox(height: 8)]]);
-                }
-                return Row(children: [
-                  for (var i = 0; i < steps.length; i++) ...[
-                    Expanded(child: steps[i]),
-                    if (i != steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardArrow(color: FarmColors.muted)),
-                  ],
-                ]);
-              }),
-            ),
-            const SizedBox(height: FarmSpacing.md),
-            Container(
-              padding: const EdgeInsets.all(FarmSpacing.md),
-              decoration: BoxDecoration(color: FarmColors.mist, borderRadius: BorderRadius.circular(FarmRadii.md)),
-              child: Row(children: [
-                const Icon(Icons.verified_outlined, color: FarmColors.cedar2, size: 18),
-                const SizedBox(width: 10),
-                Expanded(child: Text(context.t('evidenceFooter'), style: FarmTypography.textTheme.bodySmall)),
-                TextButton(onPressed: () {}, child: Text(context.t('learnMoreModels'))),
-              ]),
-            ),
-          ],
+          const SizedBox(height: FarmSpacing.md),
+          const HealthKpiRow(),
+          const SizedBox(height: FarmSpacing.sm),
+          UnderlineTabs(
+            labels: [for (final t in tabs) labels[t]!],
+            selected: tabs.indexOf(_tab),
+            onSelect: (i) => setState(() => _tab = tabs[i]),
+          ),
+          const SizedBox(height: FarmSpacing.md),
+          switch (_tab) {
+            HealthTab.overview => HealthOverviewTab(onAllCases: () => setState(() => _tab = HealthTab.cases)),
+            HealthTab.recommendations => _recommendations(context, alerts),
+            HealthTab.cases => _cases(context, health),
+            HealthTab.pharmacy => const PharmacyTab(),
+            HealthTab.emergency => const EmergencyTab(),
+          },
         ],
       ),
     );
   }
-}
 
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.tab});
-  final int tab;
+  /// Who was it? Then what was seen.
+  Future<void> _observe(BuildContext context) async {
+    final subject = await showSubjectPicker(context, title: context.t('twRecordObservation'));
+    if (subject == null || !context.mounted) return;
+    await showObserveDialog(context, subject.id);
+    if (context.mounted) await context.read<HealthRecordsProvider>().load();
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    final labels = ['', context.t('allAnimals'), context.t('trends'), context.t('insights')];
+  Widget _cases(BuildContext context, HealthRecordsProvider health) {
+    final shown = _allCases ? ([...health.cases]..sort((a, b) => (b.openedAt ?? DateTime(2000)).compareTo(a.openedAt ?? DateTime(2000)))) : health.openCases;
     return SectionCard(
-      child: SizedBox(
-        height: 220,
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.insights_outlined, size: 32, color: FarmColors.muted),
-              const SizedBox(height: 8),
-              Text('${labels[tab]} — coming soon in this build.', style: FarmTypography.textTheme.bodyMedium),
-            ],
-          ),
-        ),
-      ),
+      title: context.t('hcCasesTitle'),
+      subtitle: context.t('hcCasesSub'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Wrap(spacing: 8, children: [
+          ChoiceChip(label: Text(context.t('hcFilterOpen')), selected: !_allCases, onSelected: (_) => setState(() => _allCases = false)),
+          ChoiceChip(label: Text(context.t('hcFilterAll')), selected: _allCases, onSelected: (_) => setState(() => _allCases = true)),
+        ]),
+        const SizedBox(height: FarmSpacing.sm),
+        if (shown.isEmpty)
+          EmptyState(message: context.t(_allCases ? 'hcNoCases' : 'hcNoOpenCases'), icon: FarmIcon.heart)
+        else
+          for (final c in shown) CaseRow(healthCase: c),
+      ]),
     );
   }
-}
 
-class _Tab extends StatelessWidget {
-  const _Tab({required this.label, required this.selected, required this.onTap, this.count});
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-  final int? count;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: selected ? FarmColors.cedar : Colors.transparent, width: 2))),
-        child: Row(children: [
-          Text(label, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: selected ? FarmColors.cedar : FarmColors.muted)),
-          if (count != null) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: const BoxDecoration(color: FarmColors.danger, borderRadius: BorderRadius.all(Radius.circular(999))),
-              child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.w700)),
+  Widget _recommendations(BuildContext context, List<Recommendation> alerts) {
+    final selected = alerts.isEmpty ? null : alerts.firstWhere((r) => r.id == _selectedId, orElse: () => alerts.first);
+    final taskCreated = selected != null && context.watch<TasksProvider>().tasks.any((t) => t.sourceId == selected.id);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (alerts.isEmpty)
+        SectionCard(
+          // The prototype's wording: an empty list is a statement about
+          // the records, never about the herd.
+          child: EmptyState(message: context.t('noHealthAlerts'), detail: context.t('hlNoAlertsCaveat'), icon: FarmIcon.heart),
+        )
+      else
+        LayoutBuilder(builder: (context, c) {
+          final wide = c.maxWidth > kTabletBreakpoint;
+          final list = SectionCard(
+            padding: const EdgeInsets.all(FarmSpacing.sm),
+            child: Column(
+              children: [
+                for (final rec in alerts) ...[
+                  _AlertRow(rec: rec, selected: rec.id == selected!.id, onTap: () => setState(() => _selectedId = rec.id)),
+                  const SizedBox(height: 6),
+                ],
+              ],
             ),
-          ],
-        ]),
+          );
+          final detail = _DetailCard(rec: selected!, taskCreated: taskCreated);
+          if (!wide) return Column(children: [list, const SizedBox(height: FarmSpacing.md), detail]);
+          // No IntrinsicHeight: the detail card lays its evidence out with
+          // a LayoutBuilder, which cannot report an intrinsic height.
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(flex: 4, child: list),
+            const SizedBox(width: FarmSpacing.md),
+            Expanded(flex: 6, child: detail),
+          ]);
+        }),
+      const SizedBox(height: FarmSpacing.md),
+      NoticeBanner(text: context.t('twAiCaveat')),
+      const SizedBox(height: FarmSpacing.md),
+      SectionCard(
+        title: context.t('fromObservationToRecommendation'),
+        child: LayoutBuilder(builder: (context, c) {
+          final wide = c.maxWidth > 640;
+          final steps = [
+            _ChainStep(icon: FarmIcon.eye, title: '1', body: context.t('observationStep'), bullets: [context.t('observationStepBody')]),
+            _ChainStep(icon: FarmIcon.chartLine, title: '2', body: context.t('knowledgeStep'), bullets: [context.t('hlKnowledgeBody')]),
+            _ChainStep(icon: FarmIcon.check, title: '3', body: context.t('recommendationStep'), bullets: [context.t('recommendationStepBody')]),
+          ];
+          if (!wide) {
+            return Column(children: [for (final s in steps) ...[s, const SizedBox(height: 8)]]);
+          }
+          return Row(children: [
+            for (var i = 0; i < steps.length; i++) ...[
+              Expanded(child: steps[i]),
+              if (i < steps.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardChevron(color: FarmColors.muted)),
+            ],
+          ]);
+        }),
       ),
-    );
+    ]);
   }
 }
 

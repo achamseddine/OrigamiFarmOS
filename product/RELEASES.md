@@ -1,5 +1,14 @@
 # Releases
 
+## v0.6.1 — Health and Mouneh in the V3 layout
+
+**Delivered:**
+- Health: the prototype's command centre (open cases and follow-up, withdrawal review with its caveat, the clinical record), header actions for opening a case, recording an observation and emergency triage, and real tabs in place of three "coming soon" placeholders. Health cases reach the tablet for the first time — list, detail with the veterinarian's diagnoses and plans, open / monitoring / close, offline through cache rules — and on each animal's Health tab. Fixed: the recommendations view crashed its layout on a wide tablet (`IntrinsicHeight` around a `LayoutBuilder`).
+- Mouneh: every screen translated to Arabic (196 strings), the module header with *Start a batch* / *Record a sale* / *New product*, figures, underlined tabs, empty states and caveats; the add-material dialog no longer hides a refusal.
+- Shared: a header band with an eyebrow over a two-line subtitle no longer overflows on the plain (no-artwork) header.
+- Demo data: Bella's two earlier mastitis treatments now sit in closed health cases with the veterinarian's diagnosis and plan; the snapshot carries the cases and the farm's observations.
+- Tests: Flutter 222 (+9); backend suite unchanged and passing.
+
 ## v0.6.0 — The V3 prototype's layout on the tablet
 
 Brings the farm-wide V3 prototype's UX (`prototypes/origami-farmos-v3.html`) into the Flutter tablet on the real backend, as the prototype's own README asks, starting with animals, My Day and feed.

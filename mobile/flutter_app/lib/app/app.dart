@@ -17,6 +17,7 @@ import '../providers/feeding_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/pharmacy_provider.dart';
 import '../providers/livestock_provider.dart';
+import '../providers/health_records_provider.dart';
 import '../providers/herd_records_provider.dart';
 import '../providers/mouneh_provider.dart';
 import '../providers/notifications_provider.dart';
@@ -100,6 +101,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => HerdRecordsProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
@@ -202,6 +204,8 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       if (access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) quietly(() => context.read<PharmacyProvider>().load()),
       // Emergency triage and approved protocols: animal health.
       if (access.isModuleAvailable('animal_health')) quietly(() => context.read<EmergencyProvider>().load()),
+      // Health cases and the farm's observations: the Health screen.
+      if (access.isModuleAvailable('animal_health')) quietly(() => context.read<HealthRecordsProvider>().load()),
       // Milk, eggs and produce all read ProductionProvider; whoever holds
       // any of them gets it (its load tolerates a module the user lacks).
       if (access.isModuleAvailable(FarmModuleShortcuts.produce) || access.isModuleAvailable('milk_production') || access.isModuleAvailable('egg_production'))

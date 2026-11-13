@@ -71,7 +71,8 @@ class HeroBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = this.height ?? (scenery ? 170 : 128);
+    // The eyebrow takes a line of its own above the title.
+    final height = this.height ?? (scenery ? 170 : 128) + (eyebrow != null ? 20 : 0);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final wide = screenWidth >= kTabletBreakpoint;
     final gutter = wide ? FarmSpacing.lg : FarmSpacing.md;

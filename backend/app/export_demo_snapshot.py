@@ -216,6 +216,13 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/emergency/assessments/{aid}", None) for aid in assessment_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-plan", None) for sid in animal_ids + group_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-history", None) for sid in animal_ids + group_ids]
+    # Health cases and the farm's observations (HEALTH-VETERINARY-SCHEMA):
+    # the Health screen's cases, follow-up and clinical record.
+    from app.domain import health_models  # local, as above
+
+    case_ids = [c.id for c in db.query(health_models.HealthCase).filter_by(farm_id=FARM_ID).all()]
+    paths += [("/health/cases", None), ("/health/cases", {"status": "all"}), ("/observations", {"farm_id": FARM_ID})]
+    paths += [(f"/health/cases/{cid}", None) for cid in case_ids]
     return paths
 
 

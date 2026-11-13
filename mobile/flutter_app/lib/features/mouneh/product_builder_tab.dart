@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/widgets/ux_blocks.dart';
+import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -53,9 +55,7 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Create a New Product', style: FarmTypography.textTheme.titleLarge),
-          const SizedBox(height: 4),
-          Text('Add any farm product — jam, labneh, kishk, pickles, dried herbs, cheese, or a custom item.', style: FarmTypography.textTheme.bodySmall),
+          SectionHeading(eyebrow: context.t('mnTabProducts'), title: context.t('mnNewProductTitle'), subtitle: context.t('mnNewProductSub')),
           const SizedBox(height: FarmSpacing.md),
           _StepIndicator(step: _step),
           const SizedBox(height: FarmSpacing.md),
@@ -70,7 +70,7 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (_step > 0)
-                OutlinedButton(onPressed: _saving ? null : () => setState(() => _step -= 1), child: const Text('Back')),
+                OutlinedButton(onPressed: _saving ? null : () => setState(() => _step -= 1), child: Text(context.t('mnBack'))),
               const SizedBox(width: 10),
               if (_step < 2)
                 FilledButton(
@@ -78,12 +78,12 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
                     if (_step == 0 && !(_formKey.currentState?.validate() ?? false)) return;
                     setState(() => _step += 1);
                   },
-                  child: const Text('Next'),
+                  child: Text(context.t('mnNext')),
                 )
               else
                 FilledButton(
                   onPressed: _saving ? null : _submit,
-                  child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create Product'),
+                  child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnCreateProduct')),
                 ),
             ],
           ),
@@ -97,7 +97,7 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: FarmColors.tint(FarmColors.success, 0.12), borderRadius: BorderRadius.circular(FarmRadii.sm)),
               child: Text(
-                '"$_createdProductName" was created as a draft. Go to Recipes & Materials to add its ingredients and costs.',
+                '"$_createdProductName" ${context.t('mnCreatedDraft')}',
                 style: FarmTypography.textTheme.bodySmall,
               ),
             ),
@@ -111,34 +111,34 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Basics', style: FarmTypography.textTheme.titleMedium),
+        Text(context.t('mnStepBasics'), style: FarmTypography.textTheme.titleMedium),
         const SizedBox(height: FarmSpacing.md),
         TextFormField(
           controller: _name,
-          decoration: const InputDecoration(labelText: 'Product name', hintText: 'e.g. Makdous, Labneh, Kishk...'),
-          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+          decoration: InputDecoration(labelText: context.t('mnProductName'), hintText: context.t('mnProductNameHint')),
+          validator: (v) => (v == null || v.trim().isEmpty) ? context.t('mnRequired') : null,
         ),
         const SizedBox(height: 12),
-        TextFormField(controller: _category, decoration: const InputDecoration(labelText: 'Category', hintText: 'e.g. Mouneh, Dairy, Herbs')),
+        TextFormField(controller: _category, decoration: InputDecoration(labelText: context.t('mnCategory'), hintText: context.t('mnCategoryHint'))),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
-          value: _outputUnit,
-          decoration: const InputDecoration(labelText: 'Output unit'),
-          items: [for (final u in kMounehOutputUnits) DropdownMenuItem(value: u, child: Text(u[0].toUpperCase() + u.substring(1)))],
+          initialValue: _outputUnit,
+          decoration: InputDecoration(labelText: context.t('mnOutputUnit')),
+          items: [for (final u in kMounehOutputUnits) DropdownMenuItem(value: u, child: Text(context.t('mnU_$u')))],
           onChanged: (v) => setState(() => _outputUnit = v ?? _outputUnit),
         ),
         if (_outputUnit == 'custom') ...[
           const SizedBox(height: 12),
-          TextFormField(controller: _customUnit, decoration: const InputDecoration(labelText: 'Custom unit label')),
+          TextFormField(controller: _customUnit, decoration: InputDecoration(labelText: context.t('mnCustomUnit'))),
         ],
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: TextFormField(controller: _batchSize, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Default batch size'))),
+          Expanded(child: TextFormField(controller: _batchSize, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnDefaultBatch')))),
           const SizedBox(width: 12),
-          Expanded(child: TextFormField(controller: _shelfLife, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Shelf life (days)'))),
+          Expanded(child: TextFormField(controller: _shelfLife, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnShelfLife')))),
         ]),
         const SizedBox(height: 12),
-        TextFormField(controller: _warehouseRules, maxLines: 2, decoration: const InputDecoration(labelText: 'Warehouse / storage rules (optional)')),
+        TextFormField(controller: _warehouseRules, maxLines: 2, decoration: InputDecoration(labelText: context.t('mnStorageRules'))),
       ],
     );
   }
@@ -147,21 +147,21 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Pricing & Stock Rules', style: FarmTypography.textTheme.titleMedium),
+        Text(context.t('mnStepPricingTitle'), style: FarmTypography.textTheme.titleMedium),
         const SizedBox(height: FarmSpacing.md),
         Row(children: [
-          Expanded(child: TextFormField(controller: _targetPrice, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Selling price (\$)'))),
+          Expanded(child: TextFormField(controller: _targetPrice, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnSellingPrice')} (\$)'))),
           const SizedBox(width: 12),
-          Expanded(child: TextFormField(controller: _wholesalePrice, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Wholesale price (\$)'))),
+          Expanded(child: TextFormField(controller: _wholesalePrice, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnWholesalePrice')} (\$)'))),
         ]),
         const SizedBox(height: 12),
         Row(children: [
-          Expanded(child: TextFormField(controller: _targetMargin, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target margin (%)'))),
+          Expanded(child: TextFormField(controller: _targetMargin, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnTargetMargin')))),
           const SizedBox(width: 12),
-          Expanded(child: TextFormField(controller: _lowStockThreshold, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Low stock threshold'))),
+          Expanded(child: TextFormField(controller: _lowStockThreshold, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnLowStock')))),
         ]),
         const SizedBox(height: 8),
-        Text('You can fine-tune pricing after seeing the real recipe cost on the Cost Preview screen.', style: FarmTypography.textTheme.bodySmall),
+        Text(context.t('mnPricingNote'), style: FarmTypography.textTheme.bodySmall),
       ],
     );
   }
@@ -170,16 +170,16 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Review', style: FarmTypography.textTheme.titleMedium),
+        Text(context.t('mnStepReview'), style: FarmTypography.textTheme.titleMedium),
         const SizedBox(height: FarmSpacing.md),
-        _reviewRow('Name', _name.text),
-        _reviewRow('Category', _category.text),
-        _reviewRow('Output unit', _outputUnit == 'custom' ? _customUnit.text : _outputUnit),
-        _reviewRow('Default batch size', _batchSize.text),
-        _reviewRow('Shelf life', _shelfLife.text.isEmpty ? '—' : '${_shelfLife.text} days'),
-        _reviewRow('Selling price', _targetPrice.text.isEmpty ? '—' : '\$${_targetPrice.text}'),
-        _reviewRow('Wholesale price', _wholesalePrice.text.isEmpty ? '—' : '\$${_wholesalePrice.text}'),
-        _reviewRow('Target margin', '${_targetMargin.text.isEmpty ? '0' : _targetMargin.text}%'),
+        _reviewRow(context.t('mnProductName'), _name.text),
+        _reviewRow(context.t('mnCategory'), _category.text),
+        _reviewRow(context.t('mnOutputUnit'), _outputUnit == 'custom' ? _customUnit.text : context.t('mnU_$_outputUnit')),
+        _reviewRow(context.t('mnDefaultBatch'), _batchSize.text),
+        _reviewRow(context.t('mnShelfLife'), _shelfLife.text.isEmpty ? '—' : _shelfLife.text),
+        _reviewRow(context.t('mnSellingPrice'), _targetPrice.text.isEmpty ? '—' : '\$${_targetPrice.text}'),
+        _reviewRow(context.t('mnWholesalePrice'), _wholesalePrice.text.isEmpty ? '—' : '\$${_wholesalePrice.text}'),
+        _reviewRow(context.t('mnTargetMargin'), '${_targetMargin.text.isEmpty ? '0' : _targetMargin.text}%'),
       ],
     );
   }
@@ -239,15 +239,17 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
 class _StepIndicator extends StatelessWidget {
   const _StepIndicator({required this.step});
   final int step;
-  static const _labels = ['Basics', 'Pricing', 'Review'];
+  static const _labels = ['mnStepBasics', 'mnStepPricing', 'mnStepReview'];
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      runSpacing: 6,
       children: [
         for (var i = 0; i < _labels.length; i++) ...[
           StatusPill(
-            label: '${i + 1}. ${_labels[i]}',
+            label: '${i + 1}. ${context.t(_labels[i])}',
             level: i == step ? FarmStatusLevel.info : (i < step ? FarmStatusLevel.good : FarmStatusLevel.neutral),
           ),
           if (i != _labels.length - 1) const Padding(padding: EdgeInsets.symmetric(horizontal: 6), child: ForwardChevron(size: 16, color: FarmColors.muted)),

@@ -227,6 +227,10 @@ The farm-wide browser prototype (`prototypes/origami-farmos-v3.html`, on the `or
 
 Widget tests draw these screens over the bundled snapshot through `test/support/snapshot_farm.dart`, which serves the server's own responses as the API.
 
+**Health** (`features/health/health_intelligence_screen.dart`, `health_overview.dart`, `health_cases.dart`, `providers/health_records_provider.dart`) now follows the prototype's "Health command center": *Open case*, *Observation* and *Assess animal* in the header (each starting from a searchable picker of the farm's animals and groups); four figures (open cases, emergency reassessments due, animals on withdrawal, health records in 30 days); and tabs **Overview · Recommendations · Health cases · Pharmacy · Emergency**. The overview puts open cases and follow-up beside the animals whose milk or meat is held (with the caveat that no flag is not a clearance) above the clinical record — observations, treatments and doses, newest first. **Health cases** are on the tablet for the first time (`GET/POST/PATCH /health/cases`, close): open, move to monitoring, close with an outcome — offline too — and a case sheet that shows the veterinarian's diagnoses and treatment plans without offering to write one. The old "All animals", "Trends" and "Insights" tabs said "coming soon" and are gone. An animal's own cases are listed on its Health tab.
+
+**Mouneh** (`features/mouneh/`) is translated end to end (it was English only) and laid out the same way: *Start a batch*, *Record a sale* and *New product* in the header, four figures above underlined tabs, section headings, dashed empty states, and caveats where a figure could be over-read (a cost preview is not a batch's real cost; profit counts recorded sales only; available stock moves only through batches and sales). Adding a raw material now shows the server's refusal instead of closing as if it had worked.
+
 ## Data entry
 
 Every module's responsible employee can actually run their area, not just
@@ -416,7 +420,7 @@ The backend's full test suite does run here and passes, including the
 permission, employee, notification, priority, audit, agriculture, feed,
 feed-performance, pharmacy and emergency suites that back these screens.
 The Flutter SDK was later made available in the development session, so
-`flutter analyze` and `flutter test` (213 tests: the Digital Twin's tabs and the registry drawn over the bundled farm, the day's routine, registry filters, finished mix on hand and the weight cache rule, the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
+`flutter analyze` and `flutter test` (222 tests: the Health command centre, health cases and Mouneh in English and Arabic, the Digital Twin's tabs and the registry drawn over the bundled farm, the day's routine, registry filters, finished mix on hand and the weight cache rule, the livestock record's entities, cache effects and Digital Twin sections, entity parsing against
 the bundled snapshot, offline cache effects, visit rules, the offline
 protocol engine against a hand-built package and the bundled farm's real
 one, the entity routes, and the animal care card rendered from the

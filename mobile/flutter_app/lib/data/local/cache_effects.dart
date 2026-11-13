@@ -183,6 +183,21 @@ final List<_Rule> _rules = [
       PatchDocument('/animals/${m.ids[0]}', {'weight_kg': ?kg, 'latest_weight': record}),
     ];
   }),
+  // Health cases (HEALTH-VETERINARY-SCHEMA): opened, set to monitoring or
+  // closed out of range, the case list and the case itself show it at
+  // once; the case number is the server's to give, so it reads "…" until
+  // the queue drains.
+  _Rule('POST', '/health/cases', (m) => [
+        AppendRecord('/health/cases', _newRecord(m, extra: {'status': 'open', 'opened_at': _now(), 'case_code': '…', 'active_diagnoses': <dynamic>[]})),
+      ]),
+  _Rule('PATCH', '/health/cases/$_id', (m) => [
+        MergeRecord('/health/cases', m.ids[0], m.body),
+        PatchDocument('/health/cases/${m.ids[0]}', m.body),
+      ]),
+  _Rule('POST', '/health/cases/$_id/close', (m) {
+    final patch = {'status': m.body['status'] ?? 'resolved', 'outcome': m.body['outcome'], 'closed_at': _now()};
+    return [MergeRecord('/health/cases', m.ids[0], patch), PatchDocument('/health/cases/${m.ids[0]}', patch)];
+  }),
   // Herds, flocks and batches managed as one unit (§7).
   ..._crud('/animal-groups'),
   // The livestock record (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): what a

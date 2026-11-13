@@ -25,6 +25,8 @@ import '../../providers/production_provider.dart';
 import '../../sync/sync_controller.dart';
 import '../feed/feed_workspace_screen.dart' show feedDate;
 import '../health/emergency_tab.dart' show showAssessDialog;
+import '../health/health_cases.dart' show CaseRow, showOpenCaseForm;
+import '../../providers/health_records_provider.dart';
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../sync/sync_pill.dart' show PendingChip;
 import 'add_animal_form.dart' show showAnimalForm;
@@ -921,6 +923,9 @@ class _HealthTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final healthActions = [for (final a in actions) if (a.id == 'observe' || a.group == RecordGroup.health) a];
     final treatments = context.watch<AnimalsProvider>().treatmentsFor(animal.id);
+    final cases = context.watch<HealthRecordsProvider>().casesFor(animal.id)
+      ..sort((a, b) => (b.openedAt ?? DateTime(2000)).compareTo(a.openedAt ?? DateTime(2000)));
+    final canOpenCase = animal.onFarm && context.watch<AccessProvider>().canCreate(FarmModule.animalHealth);
     final observations = (twin?['recent_observations'] as List<dynamic>? ?? const []).whereType<Map<String, dynamic>>().toList();
 
     final treatmentsCard = SectionCard(
@@ -955,6 +960,16 @@ class _HealthTab extends StatelessWidget {
         // Doses and their lots, the withdrawal in force, standing
         // conditions, the latest weight, the open case, a live emergency.
         AnimalCareSection(twin: twin, loading: loading),
+        const SizedBox(height: FarmSpacing.md),
+        // Every case this animal has had, open first by date.
+        SectionCard(
+          title: context.t('hlTabCases'),
+          trailing: canOpenCase ? context.t('hcOpenCase') : null,
+          onTrailingTap: canOpenCase ? () => showOpenCaseForm(context, subject: (type: 'animal', id: animal.id, name: animal.name)) : null,
+          child: cases.isEmpty
+              ? EmptyState(message: context.t('hcNoCasesAnimal'), icon: FarmIcon.stethoscope, compact: true)
+              : Column(children: [for (final c in cases) CaseRow(healthCase: c, showSubject: false)]),
+        ),
         const SizedBox(height: FarmSpacing.md),
         LayoutBuilder(builder: (context, c) {
           if (c.maxWidth < 700) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [treatmentsCard, const SizedBox(height: FarmSpacing.md), observationsCard]);

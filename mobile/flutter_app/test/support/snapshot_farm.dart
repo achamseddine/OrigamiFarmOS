@@ -16,6 +16,7 @@ import 'package:farmos/providers/emergency_provider.dart';
 import 'package:farmos/providers/employees_provider.dart';
 import 'package:farmos/providers/feed_provider.dart';
 import 'package:farmos/providers/feeding_provider.dart';
+import 'package:farmos/providers/health_records_provider.dart';
 import 'package:farmos/providers/herd_records_provider.dart';
 import 'package:farmos/providers/livestock_provider.dart';
 import 'package:farmos/providers/mouneh_provider.dart';
@@ -102,14 +103,15 @@ class SnapshotFarm {
         ChangeNotifierProvider(create: (_) => AnimalsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)..load()),
         ChangeNotifierProvider(create: (_) => LivestockProvider(apiClient: api)..load()),
         ChangeNotifierProvider(create: (_) => HerdRecordsProvider(apiClient: api)..loadOverview()),
+        ChangeNotifierProvider(create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)..load()),
-        ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
-        ChangeNotifierProvider(create: (_) => EmergencyProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)..load()),
+        ChangeNotifierProvider(create: (_) => EmergencyProvider(apiClient: api)..load()),
         ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(create: (_) => RecommendationsProvider(apiClient: api, farmId: user.farmId, currentUserId: user.id)..load()),
         ChangeNotifierProvider(create: (_) => SalesProvider(apiClient: api, farmId: user.farmId)),
-        ChangeNotifierProvider(create: (_) => MounehProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => MounehProvider(apiClient: api)..load()),
         ChangeNotifierProvider(create: (_) => VisitsProvider(apiClient: api)),
       ],
       child: MaterialApp(
