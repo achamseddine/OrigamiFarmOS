@@ -2,7 +2,9 @@
 
 *Design specification and implementation map. The specification came in as a
 developer handoff; the "In this codebase" notes under each section say where
-it lives and where the implementation deliberately differs.*
+it lives and where the implementation deliberately differs.
+
+**Operator flow:** [Animal Digital Twin index](../handbook/05-Animal-Digital-Twin/README.md), [QR Animal Quick Entry](QR-ANIMAL-QUICK-ENTRY.md), [Operational Workflows](../handbook/06-Operational-Workflows/README.md). **Open flow and safety gaps:** [Animal + Feed workflow audit](ANIMAL-FEED-FLOW-AUDIT.md) (especially AF-01/03/04/07/08/14). The audit is a static code review, not evidence that its proposed fixes are implemented.*
 
 ---
 
