@@ -34,6 +34,7 @@ import 'animal_care_section.dart';
 import 'animal_herd_section.dart';
 import 'animal_identifier_dialog.dart';
 import 'animal_quick_actions.dart';
+import 'animal_quick_entry_screen.dart';
 import 'animal_twin_tabs.dart';
 import 'capability_chips.dart';
 import 'reproduction_forms.dart';
@@ -332,6 +333,11 @@ List<RecordAction> animalRecordActions(
   final canWeigh = access.canEdit(FarmModule.animals) || access.canCreate(FarmModule.animalHealth);
   final canRepro = access.canCreate(FarmModule.animals) || access.canCreate(FarmModule.animalHealth);
   final canHerd = access.canEdit(FarmModule.animals);
+  // The QR workflow's gating (docs/QR-ANIMAL-QUICK-ENTRY.md): an action is
+  // offered only to someone the server would let record it.
+  final canObserve = access.canCreate(FarmModule.animalHealth) || access.canCreate(FarmModule.animals);
+  final canFeed = access.canCreate(FarmModule.feedNutrition);
+  final canMilk = caps.has(Cap.milkProduction) && access.canCreate(FarmModule.milkProduction);
   final arabic = Localizations.localeOf(context).languageCode == 'ar';
 
   Future<void> then(Future<Object?> work) async {
@@ -340,16 +346,23 @@ List<RecordAction> animalRecordActions(
   }
 
   return [
-    if (caps.has(Cap.milkProduction))
+    // Milk, feed and the rest of a visit in one sheet — the scan-first
+    // worker screen, opened on this animal.
+    if (canMilk || canFeed || canObserve || canCare)
+      RecordAction('quick', FarmIcon.qr, context.t('qrQuickEntry'), () => then(Navigator.of(context).push<void>(
+            MaterialPageRoute<void>(builder: (_) => AnimalQuickEntryScreen(initialAnimalId: animal.id)),
+          ))),
+    if (canMilk)
       RecordAction('milk', FarmIcon.milkBottle, context.t('twRecordMilk'), accent: FarmColors.milkBlue, () async {
         await showMilkDialog(context, animal);
         if (context.mounted) await context.read<ProductionProvider>().load();
         await onChanged();
       }),
-    if (access.isModuleAvailable(FarmModule.feedNutrition)) RecordAction('feed', FarmIcon.feedBag, context.t('twRecordFeeding'), () => then(showFeedDialog(context, animal))),
+    if (canFeed) RecordAction('feed', FarmIcon.feedBag, context.t('twRecordFeeding'), () => then(showFeedDialog(context, animal))),
     if (canWeigh) RecordAction('weight', FarmIcon.scale, context.t('twRecordWeight'), () => then(showWeightForm(context, animal))),
-    RecordAction('observe', FarmIcon.eye, context.t('twRecordObservation'), () => then(showObserveDialog(context, animal.id))),
-    RecordAction('treat', FarmIcon.stethoscope, context.t('treat'), group: RecordGroup.health, () => then(showTreatDialog(context, animal))),
+    if (canObserve) RecordAction('observe', FarmIcon.eye, context.t('twRecordObservation'), () => then(showObserveDialog(context, animal.id))),
+    // Medicine is given through the pharmacy — lot, route and withdrawal
+    // from the record — never as free text.
     if (canCare)
       RecordAction('administer', FarmIcon.syringe, context.t('phAdminister'), accent: FarmColors.lilac, group: RecordGroup.health,
           () => then(showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id))),
@@ -362,7 +375,7 @@ List<RecordAction> animalRecordActions(
       RecordAction('check', FarmIcon.pregnancy, context.t('reproActCheck'), group: RecordGroup.breeding, () => then(showPregnancyCheckForm(context, animal))),
     if (canRepro && repro != null && repro.applies.liveBirth && repro.pregnant)
       RecordAction('birth', FarmIcon.pregnancy, repro.birthTerm(arabic), group: RecordGroup.breeding, () => then(showBirthForm(context, animal, repro))),
-    RecordAction('move', FarmIcon.location, context.t('twMoveLocation'), group: RecordGroup.herd, () => then(showMoveDialog(context, animal))),
+    if (canHerd) RecordAction('move', FarmIcon.location, context.t('twMoveLocation'), group: RecordGroup.herd, () => then(showMoveDialog(context, animal))),
     if (canHerd) RecordAction('group', FarmIcon.people, context.t('herdMove'), group: RecordGroup.herd, () => then(showMoveToGroupForm(context, animal))),
     if (canHerd) RecordAction('exit', FarmIcon.logout, context.t('exitAction'), accent: FarmColors.danger, group: RecordGroup.herd, () => then(showExitForm(context, animal))),
   ];
@@ -665,7 +678,7 @@ class _OverviewTab extends StatelessWidget {
   Widget build(BuildContext context) {
     // The four the prototype keeps under a thumb: milk, feeding, weight,
     // an observation — whichever of them this animal and person have.
-    const quick = ['milk', 'feed', 'weight', 'observe', 'treat'];
+    const quick = ['quick', 'milk', 'feed', 'weight', 'observe', 'administer'];
     final quickActions = [
       for (final id in quick)
         for (final a in actions)

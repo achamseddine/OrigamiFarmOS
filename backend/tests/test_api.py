@@ -140,9 +140,19 @@ class TestMilkValidation:
         assert r.status_code == 422
         assert "withdrawal" in r.json()["detail"].lower()
 
-    def test_storing_milk_from_withdrawn_animal_is_allowed(self, client):
+    def test_withdrawal_milk_is_recorded_only_as_withheld(self, client):
         headers = auth_headers(client)
-        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "goat-willow", "session": "morning", "liters": 5, "destination": "stored"})
+        for destination in ("stored", "sold", "processed", "consumed"):
+            r = client.post("/api/v1/production/milk", headers=headers, json={
+                "animal_id": "goat-willow", "session": "morning",
+                "liters": 5, "destination": destination,
+            })
+            assert r.status_code == 422
+            assert "withdrawal" in r.json()["detail"].lower()
+        r = client.post("/api/v1/production/milk", headers=headers, json={
+            "animal_id": "goat-willow", "session": "morning",
+            "liters": 5, "destination": "withheld",
+        })
         assert r.status_code == 201
         assert r.json()["under_withdrawal_warning"] is True
 

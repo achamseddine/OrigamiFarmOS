@@ -231,6 +231,14 @@ Widget tests draw these screens over the bundled snapshot through `test/support/
 
 **Mouneh** (`features/mouneh/`) is translated end to end (it was English only) and laid out the same way: *Start a batch*, *Record a sale* and *New product* in the header, four figures above underlined tabs, section headings, dashed empty states, and caveats where a figure could be over-read (a cost preview is not a batch's real cost; profit counts recorded sales only; available stock moves only through batches and sales). Adding a raw material now shows the server's refusal instead of closing as if it had worked.
 
+## Animal quick entry (QR workflow — first increment)
+
+From **Morning Briefing**, **Animals**, the centre **Record** sheet or an animal's **Digital Twin**, choose **Animal quick entry**. Scan a label with a keyboard-wedge QR reader, type the animal's tag or select an animal. The current payload contract is `origami://animal/<canonical-animal-id>`. The tablet checks the animal's identity and capability/permissions, then offers measured milk (AM/PM) and three explicit feed rows (concentrate, corn silage and straw, kg decimals, optional measured refusals). A separate button records dated scale/tape weight; observations and medicines open the existing clinical/pharmacy forms. **Save & scan next** returns focus to the next animal. A failed feed submission does not silently re-send milk already saved.
+
+Milk during withdrawal is recorded as **withheld**; the backend rejects any other destination during an active withdrawal. The medicine shortcut uses the lot-bound pharmacy administration flow rather than the old free-text Treat dialog.
+
+**Current limitation:** no built-in camera QR decoder, printable QR artwork, photo attachments or BCS/photo-derived weight; no multi-animal milking-round sheet or cross-device duplicate-session reconciliation. QR codes must currently be printed using a trusted offline label tool and scanned with a reader that types into the input. Workers must check sync status and physically segregate withdrawn milk. See [QR worker workflow specification](../../docs/QR-ANIMAL-QUICK-ENTRY.md).
+
 ## Data entry
 
 Every module's responsible employee can actually run their area, not just
