@@ -10,7 +10,8 @@
 /// `flutter run` reports "dev" rather than pretending to know.
 const String kAppVersion = String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 
-/// The human-readable build number, `0.1.<CI run number>`.
+/// The human-readable build number, `<release>.<CI run number>` (0.7.N
+/// for release v0.7.0 — see .github/workflows/build-apk.yml).
 ///
 /// A commit hash tells a developer which code is on the tablet; it tells
 /// a farm worker nothing about whether this build is newer than the last
