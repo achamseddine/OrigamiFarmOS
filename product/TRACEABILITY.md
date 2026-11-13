@@ -195,6 +195,10 @@ See `mobile/flutter_app/README.md` and `backend/README.md` "What's
 complete / mocked / remaining" sections for the current implementation
 boundary (per tech spec Definition of Done).
 
+## Animal + Feed flow audit — 2026-11-13
+
+The [implementation-backed correction register](../docs/ANIMAL-FEED-FLOW-AUDIT.md) identifies **open** defects and missing controls in group/individual daily demand aggregation, feed negative-stock provenance, feeding-program creation/activation and assignment permissions, intake/refusal summaries, offline withdrawal handling and duplicate milk sessions. The presence of the corresponding API or UI does **not** close these end-to-end workflow requirements. No code fix or new runtime test is claimed by the documentation changes. See [operator handbook](../handbook/06-Operational-Workflows/README.md) and [documentation index](../docs/README.md).
+
 ## Feed Performance Intelligence traceability requirement
 Canonical requirement: `database/FEED-PERFORMANCE-INTELLIGENCE.md`. Implementation must trace Supplier → receipt/ingredient lot → actual FeedBatchComponent → FeedBatch/output lot → FeedingEvent → Animal/AnimalGroup → Production/Milk, while joining Health/Lifecycle/Cost context analytically. Required outputs include explicit-baseline assessments, formula-compliance deviations, confidence-scored batch/ingredient/supplier signals, deduplicated alerts and feed-cost/output metrics. Until corresponding backend/database/mobile work is implemented and tested, this remains a required architecture capability and must not be represented as completed functionality.
 
