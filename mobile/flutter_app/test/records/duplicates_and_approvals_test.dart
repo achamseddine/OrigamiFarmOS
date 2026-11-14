@@ -122,6 +122,42 @@ void main() {
     });
   });
 
+  group('milk and the lactation record', () {
+    testWidgets('a cow not marked as being milked is started first, then her milk record opens', (tester) async {
+      late SnapshotFarm farm;
+      // Mira (goat-g032) is on the farm but not in milk.
+      farm = await open(tester, (c) => showMilkDialog(c, c.read<AnimalsProvider>().find('goat-g032')!));
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      expect(find.textContaining('Mira is not marked as being milked yet'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Quantity (liters)'), findsNothing, reason: 'no milk field before she is in milk');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await settle(tester);
+      expect(farm.api.writes.any((w) => w.$1 == 'POST' && w.$2 == '/animals/goat-g032/lactations'), isTrue);
+      expect(find.textContaining('Mira'), findsWidgets, reason: 'the milk record opened after the start');
+      expect(farm.api.writes.where((w) => w.$2 == '/production/milk'), isEmpty);
+    });
+  });
+
+  group('server refusals are readable', () {
+    test('a field-by-field validation refusal becomes sentences', () {
+      final text = readableValidation([
+        {
+          'type': 'value_error',
+          'loc': ['body', 'liters'],
+          'msg': 'Value error, 185 L is more than one animal gives in one milking — check the amount',
+        },
+        {
+          'type': 'greater_than_equal',
+          'loc': ['body', 'unit_cost'],
+          'msg': 'Input should be greater than or equal to 0',
+        },
+      ]);
+      expect(text, 'Liters: 185 L is more than one animal gives in one milking — check the amount\nUnit cost: Input should be greater than or equal to 0');
+      expect(text, isNot(contains('value_error')));
+    });
+  });
+
   group('the API client', () {
     tearDown(() => ApiClient.confirmPossibleDuplicate = null);
 

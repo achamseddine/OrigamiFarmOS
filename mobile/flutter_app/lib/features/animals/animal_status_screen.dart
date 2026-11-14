@@ -433,13 +433,15 @@ class _HerdGroupRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(group['name'] as String, style: FarmTypography.textTheme.titleSmall),
-              Row(
+              // Wraps onto a second line on a narrow card instead of
+              // running past its edge.
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text('${group['speciesLabel']}', style: FarmTypography.textTheme.bodySmall),
-                  const SizedBox(width: 8),
                   Text('${context.t('healthy')} ${group['healthy']}',
                       style: const TextStyle(fontSize: 11, color: FarmColors.success, fontWeight: FontWeight.w700)),
-                  const SizedBox(width: 8),
                   Text('${group['attention']}',
                       style: const TextStyle(fontSize: 11, color: FarmColors.warning, fontWeight: FontWeight.w700)),
                 ],

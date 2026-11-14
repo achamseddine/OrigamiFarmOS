@@ -96,6 +96,7 @@ class _ActivityManagerTabState extends State<ActivityManagerTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _type,
                       decoration: const InputDecoration(labelText: 'Type'),
                       items: [for (final t in kVisitActivityTypes) DropdownMenuItem(value: t, child: Text(t))],

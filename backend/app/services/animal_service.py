@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import user_can
 from app.core import permissions as perms
+from app.core.record_time import not_in_future
 from app.domain import models
 from app.livestock.catalog import Cap
 from app.repositories.base import ensure_utc, new_id, write_audit_log, write_event
@@ -42,6 +43,14 @@ def species_or_422(db: Session, code: str) -> None:
         ) from None
 
 
+def check_dates(birth_date: datetime | None, acquisition_date: datetime | None) -> None:
+    """An animal is not born tomorrow, and does not arrive before it is born."""
+    born = not_in_future(birth_date, "A birth date")
+    acquired = not_in_future(acquisition_date, "An acquisition date")
+    if born is not None and acquired is not None and acquired.date() < born.date():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The acquisition date cannot be before the birth date.")
+
+
 def check_state_against(cap_set: CapabilitySet, *, name: str, pregnant: bool, lactating: bool) -> None:
     """Generic animal model §12: pregnancy needs PREGNANCY, lactation needs
     LACTATION. A male, a hen, or a meat ewe cannot be recorded as either."""
@@ -59,6 +68,7 @@ def create_animal(db: Session, user: models.User, data: dict, *, identifiers_in:
 
     data = dict(data)
     species_or_422(db, data["species"])
+    check_dates(data.get("birth_date"), data.get("acquisition_date"))
     cap_set = capability_service.resolve(db, data["species"], data.get("sex"), data.get("life_stage"), data.get("management_profile"))
     pregnant = bool(data.get("pregnant"))
     lactating = bool(data.get("lactating"))

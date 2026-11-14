@@ -39,6 +39,7 @@ class _VisitDayBriefingTabState extends State<VisitDayBriefingTab> {
           SectionCard(
             title: 'Choose a Session',
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _sessionId,
               decoration: const InputDecoration(labelText: 'Session'),
               items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime} · ${s.status}'))],
@@ -208,6 +209,7 @@ class _IncidentLoggerState extends State<_IncidentLogger> {
           Row(children: [
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _type,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: [for (final t in kVisitIncidentTypes) DropdownMenuItem(value: t, child: Text(t))],
@@ -217,6 +219,7 @@ class _IncidentLoggerState extends State<_IncidentLogger> {
             const SizedBox(width: 12),
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _severity,
                 decoration: const InputDecoration(labelText: 'Severity'),
                 items: [for (final s in kVisitIncidentSeverities) DropdownMenuItem(value: s, child: Text(s))],

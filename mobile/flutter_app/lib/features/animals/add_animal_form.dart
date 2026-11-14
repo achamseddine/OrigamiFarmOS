@@ -401,7 +401,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       navigator.pop();
       messenger.showSnackBar(SnackBar(content: Text(tUpdated)));
       final updated = provider.find(widget.animal!.id) ?? widget.animal!;
-      if (startMilk && _exitType == null && hostContext.mounted) await showMilkDialog(hostContext, updated);
+      if (startMilk && _exitType == null && hostContext.mounted) await showMilkDialog(hostContext, updated, justStarted: true);
       return;
     }
 
@@ -422,7 +422,7 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
       title: '${created.name} — $tQrReady',
       note: tQrNote,
     );
-    if (startMilk && hostContext.mounted) await showMilkDialog(hostContext, created);
+    if (startMilk && hostContext.mounted) await showMilkDialog(hostContext, created, justStarted: true);
   }
 
   static String _utcDate(DateTime d) => _noonUtc(d).toIso8601String();

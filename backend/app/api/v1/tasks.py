@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_own_farm, owned_or_404, require_any_permission, require_farm_access, require_manager_role
+from app.core import duplicates
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
@@ -42,7 +43,17 @@ def create_task(payload: TaskCreate, db: Session = Depends(get_db), current_user
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a farm manager or owner can assign a task to someone else.")
     if payload.assigned_to:
         owned_or_404(db, models.User, payload.assigned_to, current_user, "Assignee")
-    task = models.Task(id=new_id(), **payload.model_dump())
+    # The same job written down twice (two people, or one person twice).
+    # Tasks the system raised itself (source_type) are de-duplicated there.
+    twin = None
+    if payload.source_type is None:
+        twin = db.scalar(select(models.Task).where(
+            models.Task.farm_id == payload.farm_id, func.lower(models.Task.title) == payload.title.lower(),
+            models.Task.status.notin_(("done", "completed", "cancelled")),
+            models.Task.assigned_to.is_(None) if payload.assigned_to is None else models.Task.assigned_to == payload.assigned_to,
+        ))
+    duplicates.guard(twin, f"the task \"{payload.title}\" is already open.", confirm=payload.confirm_duplicate)
+    task = models.Task(id=new_id(), **payload.model_dump(exclude={"confirm_duplicate"}))
     db.add(task)
     write_event(
         db,

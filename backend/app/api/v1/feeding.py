@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_stock_override, require_permission, user_can
 from app.core import duplicates
+from app.core.record_time import not_in_future
 from app.core import permissions as perms
 from app.feeding import uom
 from app.db.base import get_db
@@ -349,6 +350,7 @@ def list_lots(feed_product_id: str | None = None, lot_status: str | None = Query
 @router.post("/feed-lots/receive", response_model=FeedLotOut, status_code=status.HTTP_201_CREATED)
 def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
+    not_in_future(payload.received_at, "A delivery")
     if payload.lot_code and db.scalar(select(fm.FeedLot.id).where(fm.FeedLot.farm_id == user.farm_id, fm.FeedLot.lot_code == payload.lot_code.strip())):
         raise FeedError(f"Lot {payload.lot_code.strip()} is already recorded; a delivery is received once.", 409)
     match = duplicates.guard(_duplicate_receipt(db, product, payload), _receipt_message(product, payload), confirm=payload.confirm_duplicate)

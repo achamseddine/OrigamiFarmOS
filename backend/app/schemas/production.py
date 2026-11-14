@@ -9,6 +9,12 @@ from app.schemas.common import ORMModel
 ALLOWED_MILK_DESTINATIONS = {"stored", "sold", "processed", "consumed", "withheld"}
 
 
+# The milkings of a day (the tablet's morning / evening rounds; midday for
+# a herd milked three times).
+MILK_SESSIONS = frozenset({"morning", "midday", "evening"})
+MAX_LITERS_PER_MILKING = 100.0
+
+
 class MilkRecordCreate(BaseModel):
     """POST /production/milk.
 
@@ -31,9 +37,20 @@ class MilkRecordCreate(BaseModel):
 
     @field_validator("liters")
     @classmethod
-    def liters_non_negative(cls, v: float) -> float:
+    def liters_plausible(cls, v: float) -> float:
         if v < 0:
             raise ValueError("liters cannot be negative")
+        # No animal gives this in one milking: a slipped decimal (185 for
+        # 18.5) is caught here rather than in the month's totals.
+        if v > MAX_LITERS_PER_MILKING:
+            raise ValueError(f"{v:g} L is more than one animal gives in one milking — check the amount")
+        return v
+
+    @field_validator("session")
+    @classmethod
+    def session_known(cls, v: str) -> str:
+        if v not in MILK_SESSIONS:
+            raise ValueError(f"session must be one of {sorted(MILK_SESSIONS)}")
         return v
 
     @field_validator("destination")

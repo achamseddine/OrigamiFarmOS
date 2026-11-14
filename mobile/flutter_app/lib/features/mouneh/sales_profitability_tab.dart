@@ -72,6 +72,7 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
                   Expanded(
                     flex: 2,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: _productId,
                       decoration: InputDecoration(labelText: context.t('mnColProduct')),
                       items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
@@ -89,6 +90,7 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       initialValue: _channel,
                       decoration: InputDecoration(labelText: context.t('mnChannel')),
                       items: [for (final c in kMounehSaleChannels) DropdownMenuItem(value: c, child: Text(mounehChannelLabel(context, c)))],

@@ -55,6 +55,7 @@ class _VisitorProfitabilityTabState extends State<VisitorProfitabilityTab> {
                 if (_scope == _Scope.session) ...[
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _sessionId,
                     decoration: const InputDecoration(labelText: 'Session'),
                     items: [for (final s in provider.sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime}'))],

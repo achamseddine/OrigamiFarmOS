@@ -178,6 +178,7 @@ class _AnalysisDialogState extends State<_AnalysisDialog> {
             Row(children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _source,
                   decoration: InputDecoration(labelText: context.t('sourceType')),
                   items: [DropdownMenuItem(value: 'lab', child: Text(context.t('profileSource_lab'))), DropdownMenuItem(value: 'declared', child: Text(context.t('profileSource_declared')))],
@@ -187,6 +188,7 @@ class _AnalysisDialogState extends State<_AnalysisDialog> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _basis,
                   decoration: InputDecoration(labelText: context.t('basis')),
                   items: [DropdownMenuItem(value: 'as_fed', child: Text(context.t('basis_as_fed'))), DropdownMenuItem(value: 'dry_matter', child: Text(context.t('basis_dry_matter')))],

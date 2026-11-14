@@ -31,7 +31,7 @@ import 'animal_herd_section.dart' show showGroupSheet;
 import 'animal_quick_actions.dart' show showObserveDialog;
 import 'animal_scan.dart';
 import 'quick_round.dart';
-import 'reproduction_forms.dart' show showWeightForm;
+import 'reproduction_forms.dart' show confirmLactationChange, showWeightForm;
 
 /// The worker's screen at the animal (docs/QR-ANIMAL-QUICK-ENTRY.md):
 /// scan the label — with the tablet's camera, a keyboard-wedge reader, or
@@ -558,6 +558,27 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         SectionCard(
           title: context.t('qrMilkTitle'),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // Milk belongs to an animal in milk: one not yet marked as being
+            // milked is started first (calving date), then the field opens.
+            if (!animal.lactating) ...[
+              NoticeBanner(text: context.t('milkNotInMilk').replaceAll('{name}', animal.name)),
+              const SizedBox(height: FarmSpacing.sm),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: OutlinedButton.icon(
+                  key: const ValueKey('qr-start-milking'),
+                  onPressed: _saving
+                      ? null
+                      : () async {
+                          final animals = context.read<AnimalsProvider>();
+                          final started = await confirmLactationChange(context, animal, start: true);
+                          if (started) await animals.load();
+                        },
+                  icon: const Icon(Icons.play_arrow, size: 18),
+                  label: Text(context.t('reproActStartMilking')),
+                ),
+              ),
+            ] else ...[
             SegmentedButton<String>(
               segments: [
                 ButtonSegment(value: 'morning', label: Text(context.t('sessionMorning'))),
@@ -597,6 +618,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                   controlAffinity: ListTileControlAffinity.leading,
                 ),
               ),
+            ],
             ],
           ]),
         ),

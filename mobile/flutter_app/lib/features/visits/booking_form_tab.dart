@@ -188,6 +188,7 @@ class _BookingFormTabState extends State<BookingFormTab> {
                 Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _sessionId,
                       decoration: const InputDecoration(labelText: 'Session'),
                       items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month} · ${s.startTime}–${s.endTime}'))],
@@ -197,6 +198,7 @@ class _BookingFormTabState extends State<BookingFormTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _packageId,
                       decoration: const InputDecoration(labelText: 'Package'),
                       items: [for (final p in provider.packages) DropdownMenuItem(value: p.id, child: Text(p.name))],
@@ -206,6 +208,7 @@ class _BookingFormTabState extends State<BookingFormTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _source,
                       decoration: const InputDecoration(labelText: 'Source'),
                       items: [for (final s in kVisitBookingSources) DropdownMenuItem(value: s, child: Text(s))],
@@ -222,6 +225,7 @@ class _BookingFormTabState extends State<BookingFormTab> {
                 const SizedBox(height: 12),
                 if (!_walkIn)
                   DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _visitorId,
                     decoration: const InputDecoration(labelText: 'Visitor'),
                     items: [for (final v in provider.visitors) DropdownMenuItem(value: v.id, child: Text(v.fullName))],
@@ -304,6 +308,7 @@ class _ActivityLineRowState extends State<_ActivityLineRow> {
         Expanded(
           flex: 2,
           child: DropdownButtonFormField<String>(
+            isExpanded: true,
             value: widget.line.activityId,
             decoration: const InputDecoration(labelText: 'Activity'),
             items: [for (final a in activities) DropdownMenuItem(value: a.id, child: Text('${a.name} (\$${a.price.toStringAsFixed(2)})'))],

@@ -69,12 +69,18 @@ class StatusPill extends StatelessWidget {
         children: [
           Icon(icon ?? _defaultIcon, size: dense ? 12 : 14, color: color),
           const SizedBox(width: 5),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.w700,
-              fontSize: dense ? 11 : 12.5,
+          // In a narrow column the label shortens; it never pushes past
+          // the edge of its card.
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: dense ? 11 : 12.5,
+              ),
             ),
           ),
         ],

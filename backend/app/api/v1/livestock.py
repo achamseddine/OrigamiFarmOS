@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_any_permission, get_current_user, owned_or_404, require_any_permission, require_permission
+from app.core import duplicates
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import livestock_models as lm
@@ -360,8 +361,18 @@ def record_quantity_event(group_id: str, payload: QuantityEventIn, db: Session =
     """A flock's deaths, sales, purchases, transfers or a recount — one row
     of its head-count ledger; `count` follows."""
     group = _group_or_404(db, group_id, user)
+    lo, hi = duplicates.near(payload.occurred_at)
+    twin = db.scalar(select(lm.AnimalGroupQuantityEvent).where(
+        lm.AnimalGroupQuantityEvent.animal_group_id == group.id, lm.AnimalGroupQuantityEvent.event_type == payload.event_type,
+        lm.AnimalGroupQuantityEvent.quantity_delta == payload.quantity_delta, lm.AnimalGroupQuantityEvent.source_type == "manual",
+        lm.AnimalGroupQuantityEvent.occurred_at >= lo, lm.AnimalGroupQuantityEvent.occurred_at <= hi,
+    ))
+    duplicates.guard(twin, f"{payload.event_type.lower().replace('_', ' ')} {payload.quantity_delta:+d} on {group.name} was already recorded within half an hour.",
+                     confirm=payload.confirm_duplicate)
     event = group_service.record_quantity(db, group, payload.event_type, payload.quantity_delta, at=payload.occurred_at, reason=payload.reason,
                                           source_type="manual", user_id=user.id)
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="group", entity_id=group.id, match_id=twin.id if twin else None,
+                             what=f"quantity_event:{event.id}", user_id=user.id)
     group_service.audit(db, group, user, "group_quantity_changed",
                         f"{user.name} recorded {payload.event_type.lower().replace('_', ' ')} {payload.quantity_delta:+d} on {group.name}",
                         changes={"count": {"to": group.count}})

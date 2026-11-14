@@ -168,6 +168,7 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
                     Row(children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _role,
                           decoration: InputDecoration(labelText: context.t('role')),
                           items: [
@@ -180,6 +181,7 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _employmentStatus,
                           decoration: InputDecoration(labelText: context.t('employmentStatus')),
                           items: [
@@ -199,6 +201,7 @@ class _EmployeeFormDialogState extends State<_EmployeeFormDialog> {
                     Row(children: [
                       Expanded(
                         child: DropdownButtonFormField<String?>(
+                          isExpanded: true,
                           value: _department,
                           decoration: InputDecoration(
                             labelText: context.t('startingArea'),

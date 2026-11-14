@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.domain import health_models as hm
 from app.domain import models
+from app.core.record_time import not_in_future
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services.feed_inventory_service import FeedError
 
@@ -82,10 +83,21 @@ def _on_case_changed(db: Session, case: hm.HealthCase, *, user_id: str) -> None:
 
 
 # ------------------------------------------------------------------ cases
+def _on_farm(subject_type: str, subject, action: str) -> None:
+    """Behavioural model §14: an animal that left the farm blocks ordinary
+    health records afterwards, the same as milk, feeding and breeding."""
+    if subject_type == "animal":
+        from app.services.livestock_state_service import ensure_on_farm
+
+        ensure_on_farm(subject, action)
+
+
 def open_case(db: Session, farm_id: str, *, subject_type: str, subject_id: str, severity_code: str | None = None, primary_problem_code: str | None = None,
               responsible_user_id: str | None = None, source_type: str = "manual", source_id: str | None = None, notes: str | None = None,
               opened_at: datetime | None = None, user_id: str) -> hm.HealthCase:
     subject = _subject(db, subject_type, subject_id, farm_id)
+    _on_farm(subject_type, subject, "a health case")
+    opened_at = not_in_future(opened_at, "A health case")
     if severity_code is not None and severity_code not in hm.CASE_SEVERITIES:
         raise HealthError(f"severity_code must be one of {list(hm.CASE_SEVERITIES)}")
     case = hm.HealthCase(
@@ -228,6 +240,7 @@ def record_treatment(db: Session, farm_id: str, *, entity_type: str, entity_id: 
     _require_diagnostic(user, "record a treatment")
     subject_type = "animal" if entity_type == "animal" else "group"
     subject = _subject(db, subject_type, entity_id, farm_id)
+    _on_farm(subject_type, subject, "a treatment")
     product = None
     if medicine_product_id:
         from app.domain import pharmacy_models as pm  # local: the pharmacy depends on treatments, not the reverse
@@ -312,6 +325,10 @@ def record_weight(db: Session, farm_id: str, animal: models.Animal, *, weight_kg
     at = ensure_utc(measured_at) if measured_at else now()
     if at > now() + timedelta(minutes=5):
         raise HealthError("A weight cannot be measured in the future.")
+    if not animal.active and (animal.exited_at is None or at >= ensure_utc(animal.exited_at)):
+        # A weight from before she left (the sale weight) can still be
+        # entered; one dated after she left cannot.
+        _on_farm("animal", animal, "a weight")
     row = hm.AnimalWeightRecord(id=new_id(), farm_id=farm_id, animal_id=animal.id, weight_kg=float(weight_kg), measured_at=at, method=method,
                                 recorded_by=user_id, source_type=source_type, source_id=source_id, notes=notes, created_at=now())
     db.add(row)

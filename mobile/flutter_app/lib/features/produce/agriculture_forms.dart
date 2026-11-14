@@ -111,6 +111,7 @@ class _FieldFormDialogState extends State<_FieldFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _areaUnit,
               decoration: InputDecoration(labelText: context.t('areaUnit')),
               items: [for (final u in kAreaUnits) DropdownMenuItem(value: u, child: Text(context.t('unit_$u')))],
@@ -126,6 +127,7 @@ class _FieldFormDialogState extends State<_FieldFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               value: _irrigation,
               decoration: InputDecoration(labelText: context.t('irrigationMethod')),
               items: [
@@ -138,6 +140,7 @@ class _FieldFormDialogState extends State<_FieldFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _status,
               decoration: InputDecoration(labelText: context.t('status')),
               items: [for (final s in kFieldStatuses) DropdownMenuItem(value: s, child: Text(context.t('fieldStatus_$s')))],
@@ -221,6 +224,7 @@ class _CropFormDialogState extends State<_CropFormDialog> {
         Row(children: [
           Expanded(
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               value: _category,
               decoration: InputDecoration(labelText: context.t('category')),
               items: [
@@ -334,6 +338,7 @@ class _PlantingFormDialogState extends State<_PlantingFormDialog> {
         Row(children: [
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _fieldId,
               decoration: InputDecoration(labelText: context.t('field')),
               items: [for (final f in fields) DropdownMenuItem(value: f.id, child: Text(f.name))],
@@ -343,6 +348,7 @@ class _PlantingFormDialogState extends State<_PlantingFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _cropId,
               decoration: InputDecoration(labelText: context.t('crop')),
               items: [for (final c in agriculture.crops) DropdownMenuItem(value: c.id, child: Text(c.name))],
@@ -409,6 +415,7 @@ class _PlantingFormDialogState extends State<_PlantingFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _stage,
               decoration: InputDecoration(labelText: context.t('cropStage')),
               items: [for (final s in kPlantingStages) DropdownMenuItem(value: s, child: Text(context.t('stage_$s')))],
@@ -522,6 +529,7 @@ class _HarvestFormDialogState extends State<_HarvestFormDialog> {
         Row(children: [
           Expanded(
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _fieldId,
               decoration: InputDecoration(labelText: context.t('field')),
               items: [for (final f in fields) DropdownMenuItem(value: f.id, child: Text(f.name))],
@@ -531,6 +539,7 @@ class _HarvestFormDialogState extends State<_HarvestFormDialog> {
           const SizedBox(width: 12),
           Expanded(
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               value: _cropId,
               decoration: InputDecoration(
                 labelText: context.t('crop'),
@@ -578,6 +587,7 @@ class _HarvestFormDialogState extends State<_HarvestFormDialog> {
           SizedBox(
             width: 90,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _unit,
               decoration: InputDecoration(labelText: context.t('unit')),
               items: const [

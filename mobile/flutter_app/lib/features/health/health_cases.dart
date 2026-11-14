@@ -185,6 +185,7 @@ class _OpenCaseDialogState extends State<_OpenCaseDialog> {
             NoticeBanner(tone: NoticeTone.info, text: context.t('hcOpenNote')),
             const SizedBox(height: FarmSpacing.sm),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: _severity,
               decoration: InputDecoration(labelText: context.t('hcSeverity')),
               items: [for (final s in HealthCaseCodes.severities) DropdownMenuItem(value: s, child: Text(context.t('hcSev_$s')))],
@@ -274,6 +275,7 @@ class _CloseCaseDialogState extends State<_CloseCaseDialog> {
           TextField(controller: _outcome, autofocus: true, maxLines: 2, decoration: InputDecoration(labelText: context.t('hcOutcome'))),
           const SizedBox(height: FarmSpacing.sm),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             initialValue: _status,
             decoration: InputDecoration(labelText: context.t('hcStatus')),
             items: [for (final s in const ['resolved', 'closed']) DropdownMenuItem(value: s, child: Text(context.t('hcSt_$s')))],

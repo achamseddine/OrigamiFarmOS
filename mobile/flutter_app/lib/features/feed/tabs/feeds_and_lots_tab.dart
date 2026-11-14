@@ -273,6 +273,7 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
             Row(children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _source,
                   decoration: InputDecoration(labelText: context.t('sourceType')),
                   items: [
@@ -285,6 +286,7 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
               const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _category,
                   decoration: InputDecoration(labelText: context.t('category')),
                   items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(context.t('feedCategory_$c')))],
@@ -295,6 +297,7 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
               SizedBox(
                 width: 90,
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   value: _unit,
                   decoration: const InputDecoration(labelText: 'Unit'),
                   items: const [

@@ -154,6 +154,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
           SizedBox(
             width: 170,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _species,
               decoration: InputDecoration(labelText: context.t('species')),
               items: [for (final s in livestock.species) DropdownMenuItem(value: s.code, child: Text(s.name(lang)))],
@@ -167,6 +168,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
           SizedBox(
             width: 130,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _sex,
               decoration: InputDecoration(labelText: context.t('sex')),
               items: [DropdownMenuItem(value: 'F', child: Text(context.t('female'))), DropdownMenuItem(value: 'M', child: Text(context.t('male')))],
@@ -177,6 +179,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
             SizedBox(
               width: 150,
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: config.lifeStages.any((s) => s.code == _stage) ? _stage : config.lifeStages.first.code,
                 decoration: InputDecoration(labelText: context.t('lifeStage')),
                 items: [for (final s in config.lifeStages) DropdownMenuItem(value: s.code, child: Text(s.label(lang)))],
@@ -187,6 +190,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
             SizedBox(
               width: 160,
               child: DropdownButtonFormField<String?>(
+                isExpanded: true,
                 value: _profile,
                 decoration: InputDecoration(labelText: context.t('managementProfile')),
                 items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), for (final p in config.managementProfiles) DropdownMenuItem<String?>(value: p.code, child: Text(p.label(lang)))],
@@ -197,6 +201,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
             SizedBox(
               width: 150,
               child: DropdownButtonFormField<String?>(
+                isExpanded: true,
                 value: _lactation,
                 decoration: InputDecoration(labelText: context.t('lactationState')),
                 items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), DropdownMenuItem<String?>(value: 'lactating', child: Text(context.t('lactating'))), DropdownMenuItem<String?>(value: 'dry', child: Text(context.t('dry')))],
@@ -206,6 +211,7 @@ class _ResolverPanelState extends State<_ResolverPanel> {
             SizedBox(
               width: 150,
               child: DropdownButtonFormField<String?>(
+                isExpanded: true,
                 value: _reproduction,
                 decoration: InputDecoration(labelText: context.t('reproductiveState')),
                 items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), DropdownMenuItem<String?>(value: 'pregnant', child: Text(context.t('pregnant'))), DropdownMenuItem<String?>(value: 'open', child: Text(context.t('openNotPregnant')))],
@@ -403,6 +409,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
                   Expanded(
                     flex: 2,
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _ration[i].frequency,
                       decoration: const InputDecoration(labelText: ' '),
                       items: [DropdownMenuItem(value: 'per_day', child: Text(context.t('perHeadPerDay'))), DropdownMenuItem(value: 'per_feeding', child: Text(context.t('perFeeding')))],
@@ -438,6 +445,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 140,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: r.species,
             decoration: InputDecoration(labelText: context.t('species')),
             items: [DropdownMenuItem<String?>(value: null, child: Text(context.t('anySpecies'))), for (final s in livestock.species) DropdownMenuItem<String?>(value: s.code, child: Text(s.name(lang)))],
@@ -451,6 +459,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 100,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: r.sex,
             decoration: InputDecoration(labelText: context.t('sex')),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), DropdownMenuItem<String?>(value: 'F', child: Text(context.t('female'))), DropdownMenuItem<String?>(value: 'M', child: Text(context.t('male')))],
@@ -460,6 +469,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 130,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: config?.lifeStages.any((s) => s.code == r.stage) == true ? r.stage : null,
             decoration: InputDecoration(labelText: context.t('lifeStage')),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), for (final s in config?.lifeStages ?? const []) DropdownMenuItem<String?>(value: s.code, child: Text(s.label(lang)))],
@@ -469,6 +479,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 140,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: config?.managementProfiles.any((p) => p.code == r.profile) == true ? r.profile : null,
             decoration: InputDecoration(labelText: context.t('managementProfile')),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), for (final p in config?.managementProfiles ?? const []) DropdownMenuItem<String?>(value: p.code, child: Text(p.label(lang)))],
@@ -478,6 +489,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 130,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: r.lactation,
             decoration: InputDecoration(labelText: context.t('lactationState')),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), DropdownMenuItem<String?>(value: 'lactating', child: Text(context.t('lactating'))), DropdownMenuItem<String?>(value: 'dry', child: Text(context.t('dry')))],
@@ -487,6 +499,7 @@ class _ProgramDialogState extends State<_ProgramDialog> {
         SizedBox(
           width: 130,
           child: DropdownButtonFormField<String?>(
+            isExpanded: true,
             value: r.reproduction,
             decoration: InputDecoration(labelText: context.t('reproductiveState')),
             items: [const DropdownMenuItem<String?>(value: null, child: Text('—')), DropdownMenuItem<String?>(value: 'pregnant', child: Text(context.t('pregnant'))), DropdownMenuItem<String?>(value: 'open', child: Text(context.t('openNotPregnant')))],

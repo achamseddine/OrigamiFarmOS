@@ -70,6 +70,7 @@ Future<void> showStartMounehBatchDialog(BuildContext context) {
                 EmptyState(message: context.t('mnNeedRecipeFirst'), icon: FarmIcon.package, compact: true)
               else ...[
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: productId,
                   decoration: InputDecoration(labelText: context.t('mnColProduct')),
                   items: [for (final p in eligible) DropdownMenuItem(value: p.id, child: Text(p.name))],
@@ -288,6 +289,7 @@ class _BatchCard extends StatelessWidget {
                 ]),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: qualityStatus,
                   decoration: InputDecoration(labelText: context.t('mnQuality')),
                   items: [for (final s in kMounehQualityStatuses) DropdownMenuItem(value: s, child: Text(context.t('mnQ_$s')))],

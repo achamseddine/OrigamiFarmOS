@@ -37,6 +37,30 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
+/// The server's field-by-field validation refusal (a list of
+/// `{loc: [body, liters], msg: "Value error, …"}`) as sentences a farmer
+/// can act on — "Liters: 185 L is more than one animal gives in one
+/// milking — check the amount" — instead of the raw structure.
+String readableValidation(List<dynamic> errors) {
+  final lines = <String>[];
+  for (final e in errors) {
+    if (e is! Map) continue;
+    var msg = '${e['msg'] ?? ''}'.trim();
+    if (msg.isEmpty) continue;
+    msg = msg.replaceFirst(RegExp(r'^Value error,\s*'), '');
+    final loc = e['loc'];
+    final field = loc is List && loc.isNotEmpty ? '${loc.last}' : '';
+    // A field the person can recognise: "unit_cost" → "Unit cost".
+    final label = field.isEmpty || field == 'body' || int.tryParse(field) != null
+        ? ''
+        : '${field[0].toUpperCase()}${field.substring(1).replaceAll('_', ' ')}';
+    msg = '${msg[0].toUpperCase()}${msg.substring(1)}';
+    final line = label.isEmpty ? msg : '$label: $msg';
+    if (!lines.contains(line)) lines.add(line);
+  }
+  return lines.isEmpty ? 'The server could not accept this entry. Check the values and try again.' : lines.join('\n');
+}
+
 /// How the server starts a refusal that a person may override by saying
 /// "this is a second one" (backend app/core/duplicates.py PREFIX).
 const kPossibleDuplicate = 'Possible duplicate:';
@@ -406,7 +430,7 @@ class ApiClient {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is Map && decoded['detail'] != null) {
         final detail = decoded['detail'];
-        message = detail is String ? detail : detail.toString();
+        message = detail is String ? detail : (detail is List ? readableValidation(detail) : detail.toString());
       }
     } catch (_) {
       // Non-JSON error body (e.g. a proxy's HTML error page) — keep the generic message.

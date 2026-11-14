@@ -7,12 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
-from app.services import capability_service, feed_performance_service, feeding_program_service, livestock_state_service
+from app.services import capability_service, feed_performance_service, feeding_program_service, livestock_state_service, reproduction_service
 from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.core import duplicates
+from app.core.record_time import not_in_future
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
@@ -82,6 +83,7 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     animal = owned_or_404(db, models.Animal, payload.animal_id, current_user, "Animal")
     ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
     livestock_state_service.ensure_on_farm(animal, "milk")
+    recorded_at = not_in_future(payload.recorded_at, "Milk")
 
     # Milk is a capability (generic animal model §12): a bull, a hen, a
     # meat ewe or a mare cannot have a milk record, however the form was
@@ -91,6 +93,24 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             capability_service.describe_missing(cap_set, Cap.MILK_PRODUCTION, animal.name),
+        )
+
+    # Milk belongs to a lactation (PRODUCTION-SCHEMA §8): the round, the
+    # days in milk and the dry-off plan all read "in milk" from the record,
+    # so milk from an animal that is not being milked is refused with what
+    # to do instead — never a second, silent idea of who is in milk.
+    lactation = reproduction_service.active_lactation(db, animal.id)
+    if lactation is None and not animal.lactating:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"{animal.name} is not recorded as being milked. Start her milking first (her profile → Is she being milked? → "
+            "Producing milk), then record the milk.",
+        )
+    if lactation is not None and recorded_at is not None and recorded_at < ensure_utc(lactation.started_at) - timedelta(days=1):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"{animal.name} started this lactation on {ensure_utc(lactation.started_at).date().isoformat()}; milk cannot be dated before it. "
+            "If she calved earlier, correct the calving date on her profile.",
         )
 
     under_withdrawal = animal.withdrawal_until is not None and ensure_utc(animal.withdrawal_until) > datetime.now(timezone.utc)
@@ -104,7 +124,7 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
 
     # The same cow, the same session, the same farm day: two people (or one
     # person twice) recording one milking. A second milking is confirmed.
-    at = payload.recorded_at or now()
+    at = recorded_at or now()
     day_start, day_end = duplicates.farm_day(db, animal.farm_id, at)
     earlier = db.scalar(select(models.MilkRecord).where(
         models.MilkRecord.animal_id == animal.id, models.MilkRecord.session == payload.session,
@@ -165,7 +185,7 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
             f"Allocation ({payload.allocation_total()}) exceeds total eggs ({payload.total_eggs}).",
         )
 
-    at = payload.recorded_at or now()
+    at = not_in_future(payload.recorded_at, "An egg collection") or now()
     lo, hi = duplicates.near(at)
     earlier = db.scalar(select(models.EggRecord).where(
         models.EggRecord.flock_id == flock.id, models.EggRecord.total_eggs == payload.total_eggs,
@@ -206,7 +226,10 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
 @router.post("/harvest", status_code=status.HTTP_201_CREATED)
 def record_harvest(payload: HarvestRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_HARVEST_CREATE)) -> dict:
     field = owned_or_404(db, models.Field, payload.field_id, current_user, "Field")
-    at = payload.recorded_at or now()
+    if payload.waste_qty > payload.quantity:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"Waste ({payload.waste_qty:g}) cannot be more than the quantity harvested ({payload.quantity:g}).")
+    at = not_in_future(payload.recorded_at, "A harvest") or now()
     lo, hi = duplicates.near(at)
     earlier = db.scalar(select(models.HarvestRecord).where(
         models.HarvestRecord.field_id == field.id, models.HarvestRecord.product_name == payload.product_name,

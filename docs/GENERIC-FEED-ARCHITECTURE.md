@@ -187,6 +187,13 @@ the stock on record (`allow_negative`) needs Feed or Inventory approve — the
 an existing feed's name as a new output reuses that feed; the same mix saved
 twice within half an hour is asked as a possible duplicate.
 
+Lineage checks on the mix and the feeding: a mix is not dated in the future
+and cannot draw a lot that was received after the mix's date ("a mix cannot
+use feed that had not arrived yet" — correct one of the two dates); an
+ingredient that is not feedable (a grain, a premix) is refused at
+`POST /feeding-events` with "record the mix it goes into, then feed that";
+a delivery's unit cost is not negative.
+
 The Feed screen opens with the farm's order of work — *Record purchase*,
 *Make feed mix*, *Record feeding* — and, until all four have happened, a
 *Get the feed room going* card (buy grain → buy corn silage and wheat straw →

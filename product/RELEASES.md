@@ -1,5 +1,31 @@
 # Releases
 
+## v0.7.4 — Review: contradictions, complex steps and layout faults
+
+A review of the whole app, driven three ways: real end-to-end scenarios against the server on a fresh farm as the manager and as a worker; every main screen and form drawn at three tablet sizes in English and Arabic; a scan of the translations and of the offline labels.
+
+**Contradictions closed (server):**
+- Records dated in the future were accepted (a birth date, milk, eggs, a harvest, a feeding, a delivery, a mix, an observation) — the calendars on the tablet stopped at today but the server did not check. All refused now; backdating is unchanged.
+- Milk could be recorded for a cow not marked as being milked, so her milk and her status disagreed. Milk now needs her to be in milk; the tablet asks to start her milking (with the calving date) and then opens the milk record. The record sheet's milk picker lists only animals that can be milked, those in milk first.
+- Weights, treatments, medicine doses, health cases and observations could still be recorded on an animal that had been sold or had died.
+- A raw grain could be fed directly; a mix could be dated before its ingredients arrived; a delivery could carry a negative cost; a harvest's waste could exceed the harvest.
+- An unknown milking session, or 185 L from one milking (a slipped decimal), was accepted.
+- A task could be saved with a blank title or written down twice; the same flock loss could be counted twice.
+- A species change is refused once the animal has feeding records (as it already was for milk, health and breeding records).
+
+**Glitches fixed (tablet):**
+- 83 of the app's 117 dropdown lists could overflow their field when the chosen text was long (medicine, task, feed and other forms); all now shorten the text instead.
+- The page header clipped its buttons on portrait and small tablets (Animals, Feed, Health, Mouneh, Employees, My Day) and ran off the edge on a 10" in landscape; buttons now fold or scroll and the band grows.
+- Card titles with a long link, status tags in narrow columns and four rows (milk, animals, health, tasks) overflowed.
+- Two pharmacy forms showed the raw text `enterQuantity`.
+- Server validation refusals were shown as a raw technical dump; they read as sentences now.
+- A feed mix or a farm-settings change made offline showed as an unnamed "Change" in the sync panel.
+
+**Checked and left as is:** worker access follows the duties given (an observation duty includes registering animals — adjust on the employee's card if not wanted); a birth is accepted from a cow whose pregnancy was never recorded; a treatment may start in the future. The demo farm runs without a server, so the server's checks (duplicates, approvals, the above) do not show there.
+
+- No migration.
+- Tests: backend +9 (`test_record_consistency.py`); Flutter +14 (a layout sweep of 15 screens and 11 forms × 3 tablet sizes × 2 languages, the start-milking step, readable refusals).
+
 ## v0.7.3 — No duplicate entries, approval levels respected
 
 Before more testing: every record workflow checked against the documentation for duplicate entries and approval levels (`architecture/API-STANDARDS.md`, *Duplicate entries and approvals*).

@@ -105,6 +105,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
                     flex: 2,
                     child: _lineType == _PosLineType.mouneh
                         ? DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: _itemId,
                             decoration: const InputDecoration(labelText: 'Product (finished-goods stock)'),
                             items: [
@@ -121,6 +122,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
                             },
                           )
                         : DropdownButtonFormField<String>(
+                            isExpanded: true,
                             value: _itemId,
                             decoration: const InputDecoration(labelText: 'Inventory item'),
                             items: [for (final i in feed.items.where((i) => i.currentQty > 0)) DropdownMenuItem(value: i.id, child: Text('${i.name} · ${i.currentQty.toStringAsFixed(0)} ${i.unit} left'))],
@@ -142,6 +144,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
                 Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String?>(
+                      isExpanded: true,
                       value: _bookingId,
                       decoration: const InputDecoration(labelText: 'Link to visitor booking (optional)'),
                       items: [
@@ -154,6 +157,7 @@ class _FarmShopPosTabState extends State<FarmShopPosTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _channel,
                       decoration: const InputDecoration(labelText: 'Channel'),
                       items: [for (final c in kVisitRetailChannels) DropdownMenuItem(value: c, child: Text(c.replaceAll('_', ' ')))],

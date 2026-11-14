@@ -442,6 +442,7 @@ class _ReconcileDialogState extends State<_ReconcileDialog> {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               value: _days,
               decoration: InputDecoration(labelText: context.t('period')),
               items: [for (final d in const [7, 14, 30]) DropdownMenuItem(value: d, child: Text('$d ${context.t('days')}'))],

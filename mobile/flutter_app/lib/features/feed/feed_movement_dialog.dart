@@ -82,6 +82,7 @@ class _FeedMovementDialogState extends State<FeedMovementDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: selected,
               decoration: InputDecoration(labelText: context.t('feedItem')),
               items: [
@@ -103,6 +104,7 @@ class _FeedMovementDialogState extends State<FeedMovementDialog> {
             if (!_inbound) ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _reason,
                 decoration: InputDecoration(labelText: context.t('reason')),
                 items: [
