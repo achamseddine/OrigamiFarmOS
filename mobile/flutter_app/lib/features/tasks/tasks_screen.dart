@@ -135,6 +135,7 @@ class _NewTaskFormState extends State<_NewTaskForm> {
             if (widget.user.isManager) ...[
               Expanded(
                 child: DropdownButtonFormField<String?>(
+                  isExpanded: true,
                   value: _assignedTo,
                   decoration: InputDecoration(labelText: context.t('assignTo')),
                   items: [
@@ -148,6 +149,7 @@ class _NewTaskFormState extends State<_NewTaskForm> {
             ],
             Expanded(
               child: DropdownButtonFormField<String>(
+                isExpanded: true,
                 value: _priority,
                 decoration: InputDecoration(labelText: context.t('priority')),
                 items: [DropdownMenuItem(value: 'high', child: Text(context.t('high'))), DropdownMenuItem(value: 'medium', child: Text(context.t('medium'))), DropdownMenuItem(value: 'low', child: Text(context.t('low')))],

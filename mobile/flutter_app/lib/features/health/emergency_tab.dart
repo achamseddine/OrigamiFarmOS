@@ -524,6 +524,7 @@ class _SignsDialogState extends State<_SignsDialog> {
             const SizedBox(height: 12),
             if (!reassess)
               DropdownButtonFormField<String>(
+                isExpanded: true,
                 initialValue: subject,
                 decoration: InputDecoration(labelText: context.t('animalOrGroup')),
                 items: [for (final e in subjects.entries) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
@@ -545,6 +546,7 @@ class _SignsDialogState extends State<_SignsDialog> {
                 SizedBox(
                   width: 150,
                   child: DropdownButtonFormField<String?>(
+                    isExpanded: true,
                     initialValue: _choices[c.code],
                     decoration: InputDecoration(labelText: c.label),
                     items: [

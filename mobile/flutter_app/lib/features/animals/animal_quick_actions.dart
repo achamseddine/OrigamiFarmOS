@@ -9,6 +9,7 @@ import '../../domain/entities/animal.dart';
 import '../../domain/entities/observation.dart';
 import '../../providers/animals_provider.dart';
 import '../feed/feeding_event_dialog.dart';
+import 'reproduction_forms.dart' show confirmLactationChange;
 
 const _observationTypes = [
   'reduced_appetite',
@@ -78,6 +79,7 @@ class _ObserveDialogState extends State<_ObserveDialog> {
               child: Text(context.t('workerObservationNotice'), style: FarmTypography.textTheme.bodySmall),
             ),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _type,
               decoration: InputDecoration(labelText: context.t('observationType')),
               items: [for (final t in _observationTypes) DropdownMenuItem(value: t, child: Text(observationLabel(context, t)))],
@@ -85,6 +87,7 @@ class _ObserveDialogState extends State<_ObserveDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _severity,
               decoration: InputDecoration(labelText: context.t('severity')),
               items: [
@@ -144,8 +147,30 @@ class _ObserveDialogState extends State<_ObserveDialog> {
 
 /// Milk-recording dialog. Enforces tech spec §14: "Liters >= 0; destination
 /// sale blocked or hard-warned if withdrawal active."
-Future<void> showMilkDialog(BuildContext context, Animal animal) {
-  return showDialog(context: context, builder: (context) => _MilkDialog(animal: animal));
+///
+/// Milk belongs to an animal that is being milked (the round, days in milk
+/// and the dry-off plan all read it from her record, and the server refuses
+/// milk otherwise) — so for one not yet marked as in milk this first asks
+/// to start her milking, with the calving date, and then opens the record.
+///
+/// [justStarted]: the caller has this moment recorded the start of her
+/// milking (the animal form), so it is not asked again.
+Future<void> showMilkDialog(BuildContext context, Animal animal, {bool justStarted = false}) async {
+  var target = animal;
+  if (!animal.lactating && !justStarted) {
+    final started = await confirmLactationChange(
+      context,
+      animal,
+      start: true,
+      intro: context.t('milkNotInMilk').replaceAll('{name}', animal.name),
+    );
+    if (!started || !context.mounted) return;
+    final animals = context.read<AnimalsProvider>();
+    await animals.load();
+    if (!context.mounted) return;
+    target = animals.find(animal.id) ?? animal;
+  }
+  return showDialog(context: context, builder: (context) => _MilkDialog(animal: target));
 }
 
 class _MilkDialog extends StatefulWidget {
@@ -194,6 +219,7 @@ class _MilkDialogState extends State<_MilkDialog> {
                 ),
               ),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _session,
               decoration: InputDecoration(labelText: context.t('session')),
               items: [
@@ -215,6 +241,7 @@ class _MilkDialogState extends State<_MilkDialog> {
                 child: Text(context.t('qrWithheldMilk'), style: const TextStyle(color: FarmColors.dangerInk)),
               )
             else DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _destination,
               decoration: InputDecoration(labelText: context.t('destination')),
               items: [

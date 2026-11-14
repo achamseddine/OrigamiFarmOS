@@ -30,6 +30,7 @@ from app.domain import feed_models as fm
 from app.domain import livestock_models as lm
 from app.domain import models
 from app.feeding import catalog, uom
+from app.core.record_time import not_in_future
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services import feed_inventory_service as inv
 from app.services import feed_policy_service as policy
@@ -691,7 +692,7 @@ def record_feeding(
     restricted = {a.feed_product_id for a in active_assignments(db, subject_type, subject.id) if a.assignment_type == "restriction"}
     if subject_type == "animal" and group is not None:
         restricted |= {a.feed_product_id for a in active_assignments(db, "group", group.id) if a.assignment_type == "restriction"}
-    when = occurred_at or now()
+    when = not_in_future(occurred_at, "A feeding") or now()
     event = fm.FeedingEvent(
         id=new_id(), farm_id=farm_id, subject_type=subject_type, subject_id=subject.id,
         program_version_id=program_version_id or (assignment.program_version_id if assignment else None),
@@ -716,6 +717,11 @@ def record_feeding(
         lot = inv.get_lot(db, line["lot_id"], farm_id) if line.get("lot_id") else None
         policy.check_or_raise(db, product, state.policy_target(), lot=lot, through_formula=product.is_feedable and not product.is_ingredient or bool(line.get("batch_id")),
                               context="feeding", user_id=user_id)
+        if not product.is_feedable:
+            # A raw material with no usage policy of its own (a grain) still
+            # reaches animals only through the mix it goes into; the policy
+            # check above gives the more specific reason when there is one.
+            raise FeedError(f"{product.name} is an ingredient, not a feed given to animals. Record the mix it goes into, then feed that.")
         consumed = line.get("quantity_consumed")
         if moves_stock:
             draws = inv.consume(

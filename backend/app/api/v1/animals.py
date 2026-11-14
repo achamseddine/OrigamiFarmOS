@@ -55,6 +55,7 @@ def _has_operational_history(db: Session, animal_id: str) -> bool:
     """Anything recorded *about* the animal since it was registered. While
     this is true its species cannot change (§12) — the history would no
     longer mean what it meant."""
+    from app.domain import feed_models as fm
     from app.domain import reproduction_models as rm
 
     checks = (
@@ -63,6 +64,8 @@ def _has_operational_history(db: Session, animal_id: str) -> bool:
         select(models.Treatment.id).where(models.Treatment.entity_type == "animal", models.Treatment.entity_id == animal_id),
         select(rm.BreedingEvent.id).where(rm.BreedingEvent.female_animal_id == animal_id),
         select(rm.BirthEvent.id).where(rm.BirthEvent.dam_animal_id == animal_id),
+        # What she was fed was checked against her species (feed-usage policy).
+        select(fm.FeedingEvent.id).where(fm.FeedingEvent.subject_type == "animal", fm.FeedingEvent.subject_id == animal_id),
     )
     return any(db.scalar(q.limit(1)) for q in checks)
 
@@ -220,6 +223,9 @@ def update_animal(
         if changes["lactation_cycle"] is not None and changes["lactation_cycle"] < 0:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "The lactation number cannot be negative.")
 
+    if "birth_date" in changes or "acquisition_date" in changes:
+        animal_service.check_dates(changes.get("birth_date", animal.birth_date), changes.get("acquisition_date", animal.acquisition_date))
+
     # Species is the one thing history depends on (§12): once anything has
     # been recorded about the animal, it stays what it was registered as.
     new_species = changes.get("species", animal.species)
@@ -228,7 +234,7 @@ def update_animal(
         if _has_operational_history(db, animal.id):
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
-                f"{animal.name} already has milk, treatment, observation or reproduction records as a "
+                f"{animal.name} already has milk, feeding, treatment, observation or reproduction records as a "
                 f"{animal.species.replace('_', ' ')}. Its species cannot be changed; register a new animal instead.",
             )
 

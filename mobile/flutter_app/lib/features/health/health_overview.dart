@@ -185,7 +185,11 @@ class _WithdrawalRow extends StatelessWidget {
               Text(animal.withdrawalReason ?? context.t('hlWithdrawalReview'), style: FarmTypography.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
             ]),
           ),
-          StatusPill(label: '${context.t('twWithdrawalUntil')} ${feedDate(animal.underWithdrawalUntil!)}', level: FarmStatusLevel.watch, dense: true),
+          const SizedBox(width: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 190),
+            child: StatusPill(label: '${context.t('twWithdrawalUntil')} ${feedDate(animal.underWithdrawalUntil!)}', level: FarmStatusLevel.watch, dense: true),
+          ),
         ]),
       ),
     );

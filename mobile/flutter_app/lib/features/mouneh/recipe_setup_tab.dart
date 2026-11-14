@@ -76,6 +76,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: _productId,
                   decoration: InputDecoration(labelText: context.t('mnChooseProduct')),
                   items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
@@ -177,6 +178,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
           Expanded(
             flex: 3,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: draft.materialId,
               decoration: InputDecoration(labelText: context.t('mnMaterial')),
               items: [for (final m in provider.rawMaterials) DropdownMenuItem(value: m.id, child: Text(m.name))],
@@ -221,6 +223,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: draft.costType,
               decoration: InputDecoration(labelText: context.t('mnCostType')),
               items: [for (final t in kMounehCostTypes) DropdownMenuItem(value: t, child: Text(context.t('mnCt_$t')))],
@@ -236,6 +239,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: draft.calculationMethod,
               decoration: InputDecoration(labelText: context.t('mnMethod')),
               items: [for (final m in kMounehCalculationMethods) DropdownMenuItem(value: m, child: Text(context.t('mnCm_$m')))],
@@ -323,6 +327,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                 TextField(controller: name, decoration: InputDecoration(labelText: context.t('mnName'))),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: category,
                   decoration: InputDecoration(labelText: context.t('mnCategory')),
                   items: [DropdownMenuItem(value: 'raw_material', child: Text(context.t('mnRawMaterial'))), DropdownMenuItem(value: 'packaging', child: Text(context.t('mnPackaging')))],
@@ -330,6 +335,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: sourceType,
                   decoration: InputDecoration(labelText: context.t('mnSource')),
                   items: [DropdownMenuItem(value: 'purchased', child: Text(context.t('mnPurchased'))), DropdownMenuItem(value: 'farm_produced', child: Text(context.t('mnFarmProduced')))],

@@ -16056,6 +16056,7 @@ components:
         unit_cost:
           anyOf:
           - type: number
+            minimum: 0.0
           - type: 'null'
           title: Unit Cost
         supplier_id:
@@ -16082,6 +16083,7 @@ components:
         ordered_quantity:
           anyOf:
           - type: number
+            minimum: 0.0
           - type: 'null'
           title: Ordered Quantity
         rejected_quantity:
@@ -19656,6 +19658,10 @@ components:
             maxLength: 200
           - type: 'null'
           title: Reason
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - event_type
@@ -21178,6 +21184,10 @@ components:
           - type: string
           - type: 'null'
           title: Source Id
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - farm_id

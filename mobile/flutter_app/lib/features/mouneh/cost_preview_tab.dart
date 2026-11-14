@@ -54,6 +54,7 @@ class _CostPreviewTabState extends State<CostPreviewTab> {
                 Expanded(
                   flex: 2,
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: _productId,
                     decoration: InputDecoration(labelText: context.t('mnColProduct')),
                     items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],

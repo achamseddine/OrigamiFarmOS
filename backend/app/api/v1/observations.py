@@ -55,9 +55,16 @@ def create_observation(
     ensure_own_farm(current_user, payload.farm_id)
     model, label, modules = _SUBJECTS[payload.entity_type]
     ensure_any_permission(db, current_user, modules, perms.CREATE)
-    owned_or_404(db, model, payload.entity_id, current_user, label)
+    subject = owned_or_404(db, model, payload.entity_id, current_user, label)
     ensure_farm_user(db, current_user, payload.observer_id, "observer")
     from app.core import duplicates
+    from app.core.record_time import not_in_future
+    from app.services.livestock_state_service import ensure_on_farm
+
+    not_in_future(payload.observed_at, "An observation")
+    if payload.entity_type == "animal":
+        # An animal that left the farm is not observed afterwards (§14).
+        ensure_on_farm(subject, "an observation")
 
     lo, hi = duplicates.near(payload.observed_at)
     earlier = db.scalar(select(models.Observation).where(

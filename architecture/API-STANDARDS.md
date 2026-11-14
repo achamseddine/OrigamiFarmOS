@@ -30,6 +30,8 @@ Two kinds of duplicate, two defences (`backend/app/core/duplicates.py`):
 | Health case | an open case for the same subject and problem |
 | Animal | an active animal of the species with the same name |
 | Mouneh sale | same product, quantity, price and customer within 5 min |
+| Flock head-count change | same group, kind and quantity within 30 min |
+| Task | an open task with the same title for the same person |
 
 Where a repeat can never be right the refusal is a plain 409 with no override: a feed product, group, field or Mouneh raw material with the same name; a lot code already used.
 
@@ -40,6 +42,17 @@ Where a repeat can never be right the refusal is a plain 409 with no override: a
 - A delivery graded `poor` is received **quarantined**; releasing it is a Feed approval.
 - A death is an Animals *edit*; a sale, cull, slaughter or transfer needs Animals *approve*. Correcting a lactation start needs *edit* (Animals or Milk production).
 - The farm calendar (`PATCH /farms/me`) needs Settings *configure*.
+
+## Record consistency
+What a record may not state, enforced on the server whatever the client's form allows (`backend/tests/test_record_consistency.py`):
+
+- **Nothing is dated in the future.** Every record endpoint that takes its own date passes it through `app/core/record_time.not_in_future` (5 minutes of clock tolerance): births and acquisitions, milk, eggs, harvests, feedings, deliveries, mixes, observations, weights, doses, health cases, breeding events, exits, head-count changes. Backdating stays allowed. An acquisition is not before the birth.
+- **Milk belongs to an animal in milk.** `POST /production/milk` needs an open lactation (409 otherwise, saying to start her milking first), a session of `morning` / `midday` / `evening`, at most 100 L, and a date not before the lactation started. The tablet asks to start her milking (with the calving date) and then opens the milk record.
+- **An animal that left the farm takes no new records** — milk, feeding, breeding, group moves, observations, treatments, doses, health cases, and weights dated after it left (a sale weight from before the exit can still be entered).
+- **Feed lineage holds.** A raw ingredient (`is_feedable: false`) is not fed directly; a delivery has no negative cost; a mix cannot draw a lot received after the mix's date.
+- A harvest's waste is not more than its quantity; a task has a title.
+
+Field-by-field validation refusals (422 with a list) are shown by the tablet as sentences, not as the raw structure.
 
 ## Errors
 Use consistent machine-readable errors:

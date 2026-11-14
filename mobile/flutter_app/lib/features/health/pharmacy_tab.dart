@@ -543,6 +543,7 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: selected,
               decoration: InputDecoration(labelText: context.t('phMedicine')),
               items: [for (final m in medicines) DropdownMenuItem(value: m.inventoryItemId, child: Text(m.name, overflow: TextOverflow.ellipsis))],
@@ -716,6 +717,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: selectedId,
               decoration: InputDecoration(labelText: context.t('phMedicine')),
               items: [
@@ -736,6 +738,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
             ],
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               initialValue: subject,
               decoration: InputDecoration(labelText: context.t('animalOrGroup')),
               items: [for (final e in subjects.entries) DropdownMenuItem(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
@@ -747,6 +750,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
             if (subjectType == 'animal') ...[
               const SizedBox(height: 12),
               DropdownButtonFormField<String?>(
+                isExpanded: true,
                 initialValue: treatments.any((t) => t.id == _treatmentId) ? _treatmentId : null,
                 decoration: InputDecoration(labelText: context.t('phTreatment')),
                 items: [
@@ -765,6 +769,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
+                  isExpanded: true,
                   initialValue: route,
                   decoration: InputDecoration(labelText: context.t('phRoute'), hintText: context.t('qrSelectRoute')),
                   items: [for (final r in routes) DropdownMenuItem(value: r, child: Text(r))],
@@ -779,6 +784,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
             ],
             const SizedBox(height: 12),
             DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: _lots.any((l) => l.id == _lotId) ? _lotId : null,
               decoration: InputDecoration(labelText: context.t('phLot')),
               items: [

@@ -110,6 +110,7 @@ class _AddIdentifierDialogState extends State<_AddIdentifierDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: types.contains(_type) ? _type : types.first,
               decoration: InputDecoration(labelText: context.t('identifierType')),
               items: [for (final t in types) DropdownMenuItem(value: t, child: Text(context.t('id_$t')))],

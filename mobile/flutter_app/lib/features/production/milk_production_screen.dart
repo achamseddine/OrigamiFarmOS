@@ -178,7 +178,9 @@ class MilkProductionScreen extends StatelessWidget {
                         Row(children: [
                           const Icon(Icons.warning_amber_rounded, color: FarmColors.danger, size: 20),
                           const SizedBox(width: 8),
-                          Text(context.t('underWithdrawalWarning'), style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.danger)),
+                          Expanded(
+                            child: Text(context.t('underWithdrawalWarning'), style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.danger)),
+                          ),
                         ]),
                         const SizedBox(height: 6),
                         Text(context.t('cannotBeSoldToday'), style: FarmTypography.textTheme.bodySmall),
@@ -292,7 +294,11 @@ class _SessionTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [AppIcon(icon, size: 16), const SizedBox(width: 6), Text(label, style: FarmTypography.textTheme.bodySmall)]),
+          Row(children: [
+            AppIcon(icon, size: 16),
+            const SizedBox(width: 6),
+            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: FarmTypography.textTheme.bodySmall)),
+          ]),
           const SizedBox(height: 6),
           Text('${value.toStringAsFixed(0)} ${context.t('liters')}', style: FarmTypography.textTheme.headlineMedium),
           Text(sub, style: const TextStyle(fontSize: 11, color: FarmColors.muted)),

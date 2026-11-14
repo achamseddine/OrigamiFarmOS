@@ -9,7 +9,7 @@ it, so history always resolves to the exact recipe used.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.domain import feed_models as fm
 from app.domain import livestock_models, models
 from app.feeding import catalog, uom
+from app.core.record_time import not_in_future
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services import feed_inventory_service as inv
 from app.services import feed_policy_service as policy
@@ -353,7 +354,7 @@ def complete_batch(
         names = ", ".join(db.get(fm.FeedProduct, p).name for p in missing)
         raise FeedError(f"Actual quantities are missing for: {names}. Record zero explicitly if none was used.")
 
-    when = produced_at or now()
+    when = not_in_future(produced_at, "A mix") or now()
     new_components: list[fm.FeedBatchComponent] = []
     total_cost = 0.0
     cost_known = False
@@ -376,6 +377,14 @@ def complete_batch(
                             lot_id=a.get("lot_id"), allow_negative=allow_negative, user_id=user_id, occurred_at=when)
         first = True
         for d in draws:
+            # Lineage (ingredient lot → batch): a mix cannot contain feed
+            # that had not arrived when it was made. A day's grace covers
+            # the farm's time zone and a delivery entered the same day.
+            if d.lot is not None and d.lot.received_at is not None and ensure_utc(d.lot.received_at) > when + timedelta(days=1):
+                raise FeedError(
+                    f"{product.name} (lot {d.lot.lot_code}) was received on {ensure_utc(d.lot.received_at).date().isoformat()}, after this mix's "
+                    f"date ({when.date().isoformat()}). A mix cannot use feed that had not arrived yet — check the two dates."
+                )
             new_components.append(fm.FeedBatchComponent(
                 id=new_id(), feed_product_id=product.id, lot_id=d.lot.id if d.lot else None,
                 target_quantity=(uom.convert(target.target_quantity, target.unit, product.unit) if (target and first) else None),
@@ -777,7 +786,7 @@ def quick_mix(
     total_in = sum(uom.convert(float(c["actual_quantity"]), uom.normalise(c.get("unit") or inv.get_product(db, c["feed_product_id"], farm_id).unit), unit)
                    for c in lines)
     output = float(output_quantity) if output_quantity else total_in
-    when = ensure_utc(produced_at) if produced_at else now()
+    when = not_in_future(produced_at, "A mix") or now()
 
     wanted: dict[str, float] = {}
     for c in lines:

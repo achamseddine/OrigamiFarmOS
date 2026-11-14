@@ -122,6 +122,7 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
         TextFormField(controller: _category, decoration: InputDecoration(labelText: context.t('mnCategory'), hintText: context.t('mnCategoryHint'))),
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
+          isExpanded: true,
           initialValue: _outputUnit,
           decoration: InputDecoration(labelText: context.t('mnOutputUnit')),
           items: [for (final u in kMounehOutputUnits) DropdownMenuItem(value: u, child: Text(context.t('mnU_$u')))],

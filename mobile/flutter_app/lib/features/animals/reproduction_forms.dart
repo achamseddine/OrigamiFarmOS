@@ -370,6 +370,7 @@ class _NewbornFields extends StatelessWidget {
           const SizedBox(width: FarmSpacing.sm),
           Expanded(
             child: DropdownButtonFormField<String?>(
+              isExpanded: true,
               initialValue: draft.sex,
               decoration: InputDecoration(labelText: context.t('sex')),
               items: [
@@ -432,12 +433,15 @@ Future<bool> showRegisterNewbornForm(BuildContext context, {required Animal dam,
 }
 
 // ---------------------------------------------------------------- lactation
-Future<bool> confirmLactationChange(BuildContext context, Animal animal, {required bool start}) {
+Future<bool> confirmLactationChange(BuildContext context, Animal animal, {required bool start, String? intro}) {
   var day = DateTime.now();
   return _recordDialog(
     context,
     title: '${context.t(start ? 'reproActStartMilking' : 'reproActDryOff')} — ${animal.name}',
     fields: (context, setState) => [
+      // Why this is asked, when it was reached from somewhere else (the
+      // milk record of an animal not yet marked as being milked).
+      if (intro != null) ...[Text(intro, style: const TextStyle(fontWeight: FontWeight.w600)), _gap()],
       Text(context.t(start ? 'reproStartMilkingConfirm' : 'reproDryOffConfirm')),
       _gap(),
       RecordDateButton(

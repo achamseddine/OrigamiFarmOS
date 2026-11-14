@@ -45,20 +45,25 @@ class SectionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (title != null) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            // Title at the start, link at the far edge; on a card too
+            // narrow for both on one line the link drops under the title
+            // rather than running past the edge.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.start,
+              spacing: 8,
+              runSpacing: 2,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title!, style: FarmTypography.textTheme.titleLarge),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 2),
-                        Text(subtitle!, style: FarmTypography.textTheme.bodySmall),
-                      ],
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title!, style: FarmTypography.textTheme.titleLarge),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle!, style: FarmTypography.textTheme.bodySmall),
                     ],
-                  ),
+                  ],
                 ),
                 if (trailing != null)
                   InkWell(
@@ -69,10 +74,14 @@ class SectionCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            trailing!,
-                            style: FarmTypography.textTheme.labelMedium
-                                ?.copyWith(color: FarmColors.cedar2),
+                          Flexible(
+                            child: Text(
+                              trailing!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: FarmTypography.textTheme.labelMedium
+                                  ?.copyWith(color: FarmColors.cedar2),
+                            ),
                           ),
                           const SizedBox(width: 2),
                           const ForwardChevron(size: 16, color: FarmColors.cedar2),

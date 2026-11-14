@@ -8,6 +8,7 @@ import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
+import '../../domain/entities/livestock.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
@@ -272,7 +273,15 @@ class _RecordTile extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 Future<void> _recordMilk(BuildContext context) async {
-  final animal = await _pickAnimal(context);
+  // Only animals that can be milked (a bull or a hen is not offered), those
+  // already in milk first.
+  final livestock = context.read<LivestockProvider>();
+  final animal = await _pickAnimal(
+    context,
+    where: (a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction),
+    first: (a) => a.lactating,
+    emptyText: context.t('noMilkAnimals'),
+  );
   if (animal == null || !context.mounted) return;
   await showMilkDialog(context, animal);
 }
@@ -289,15 +298,24 @@ Future<void> _recordTreatment(BuildContext context) async {
   await showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id);
 }
 
-Future<Animal?> _pickAnimal(BuildContext context) {
+Future<Animal?> _pickAnimal(BuildContext context, {bool Function(Animal)? where, bool Function(Animal)? first, String? emptyText}) {
   return showDialog<Animal>(
     context: context,
-    builder: (context) => const _AnimalPickerDialog(),
+    builder: (context) => _AnimalPickerDialog(where: where, first: first, emptyText: emptyText),
   );
 }
 
 class _AnimalPickerDialog extends StatefulWidget {
-  const _AnimalPickerDialog();
+  const _AnimalPickerDialog({this.where, this.first, this.emptyText});
+
+  /// Which animals this record applies to; null offers every animal.
+  final bool Function(Animal)? where;
+
+  /// Animals listed before the others (those the record is most likely for).
+  final bool Function(Animal)? first;
+
+  /// Said when no animal on the farm qualifies.
+  final String? emptyText;
 
   @override
   State<_AnimalPickerDialog> createState() => _AnimalPickerDialogState();
@@ -314,7 +332,21 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final all = context.watch<AnimalsProvider>().animals;
+    final where = widget.where;
+    final first = widget.first;
+    final all = [
+      for (final a in context.watch<AnimalsProvider>().animals)
+        if (a.onFarm && (where == null || where(a))) a,
+    ];
+    if (first != null) {
+      // A stable partition: the likely ones first, the order otherwise kept.
+      final likely = [for (final a in all) if (first(a)) a];
+      final rest = [for (final a in all) if (!first(a)) a];
+      all
+        ..clear()
+        ..addAll(likely)
+        ..addAll(rest);
+    }
     final needle = _query.text.trim().toLowerCase();
     final matches = needle.isEmpty
         ? all
@@ -341,7 +373,7 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
               child: matches.isEmpty
                   ? Center(
                       child: Text(
-                        all.isEmpty ? context.t('noAnimalsYet') : context.t('noMatches'),
+                        all.isEmpty ? (widget.emptyText ?? context.t('noAnimalsYet')) : context.t('noMatches'),
                         style: FarmTypography.textTheme.bodySmall,
                       ),
                     )
@@ -580,6 +612,7 @@ class _TaskDialogState extends State<_TaskDialog> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _priority,
               decoration: InputDecoration(labelText: context.t('priority')),
               items: [

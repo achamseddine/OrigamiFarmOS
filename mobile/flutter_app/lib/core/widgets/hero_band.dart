@@ -72,9 +72,11 @@ class HeroBand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // The eyebrow takes a line of its own above the title.
-    final height = this.height ?? (scenery ? 170 : 128) + (eyebrow != null ? 20 : 0);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final wide = screenWidth >= kTabletBreakpoint;
+    // On a narrow tablet the buttons sit under the title on a row of their
+    // own, so the band is that much taller — never clipped.
+    final height = (this.height ?? (scenery ? 170 : 128) + (eyebrow != null ? 20 : 0)) + (!wide && actions.isNotEmpty ? 56 : 0);
     final gutter = wide ? FarmSpacing.lg : FarmSpacing.md;
 
     final heading = Column(
@@ -150,7 +152,17 @@ class HeroBand extends StatelessWidget {
                           Expanded(child: heading),
                           if (actions.isNotEmpty) ...[
                             const SizedBox(width: FarmSpacing.md),
-                            Wrap(spacing: FarmSpacing.sm, runSpacing: FarmSpacing.sm, children: actions),
+                            // Several buttons fold onto a second line
+                            // rather than running off the edge.
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxWidth: screenWidth * 0.55),
+                              child: Wrap(
+                                alignment: WrapAlignment.end,
+                                spacing: FarmSpacing.sm,
+                                runSpacing: FarmSpacing.sm,
+                                children: actions,
+                              ),
+                            ),
                           ],
                           if (trailing != null) ...[
                             const SizedBox(width: FarmSpacing.lg),
@@ -165,7 +177,17 @@ class HeroBand extends StatelessWidget {
                           heading,
                           if (actions.isNotEmpty) ...[
                             const SizedBox(height: FarmSpacing.md),
-                            Wrap(spacing: FarmSpacing.sm, runSpacing: FarmSpacing.sm, children: actions),
+                            // One row that scrolls sideways: the band keeps
+                            // its height however many buttons a screen has.
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(children: [
+                                for (var i = 0; i < actions.length; i++) ...[
+                                  if (i > 0) const SizedBox(width: FarmSpacing.sm),
+                                  actions[i],
+                                ],
+                              ]),
+                            ),
                           ],
                         ],
                       ),

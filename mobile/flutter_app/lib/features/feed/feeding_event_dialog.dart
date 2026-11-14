@@ -225,6 +225,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
               Row(children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     value: _eventType,
                     decoration: InputDecoration(labelText: context.t('eventType')),
                     items: [for (final t in _types) DropdownMenuItem(value: t, child: Text(context.t('event_$t')))],

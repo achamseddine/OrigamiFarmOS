@@ -123,6 +123,7 @@ class _StaffRosterCostsTabState extends State<StaffRosterCostsTab> {
           SectionCard(
             title: 'Session',
             child: DropdownButtonFormField<String>(
+              isExpanded: true,
               value: _sessionId,
               decoration: const InputDecoration(labelText: 'Session'),
               items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime}'))],
@@ -185,6 +186,7 @@ class _StaffRosterCostsTabState extends State<StaffRosterCostsTab> {
                 Row(children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _category,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: [for (final c in kVisitCostCategories) DropdownMenuItem(value: c, child: Text(c))],
@@ -198,6 +200,7 @@ class _StaffRosterCostsTabState extends State<StaffRosterCostsTab> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: DropdownButtonFormField<String>(
+                      isExpanded: true,
                       value: _allocationMethod,
                       decoration: const InputDecoration(labelText: 'Allocation'),
                       items: [for (final m in kVisitCostAllocationMethods) DropdownMenuItem(value: m, child: Text(m))],
