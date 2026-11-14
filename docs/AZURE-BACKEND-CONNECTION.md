@@ -5,11 +5,24 @@
 The user-supplied URL **`https://leb-container-test-staging.azurewebsites.net`** is an
 **Azure App Service HTTPS address**, **not** a PostgreSQL database connection string.
 
-**Status (2026-11-14): candidate address only.** The repository review and
-HTTP checks did **not** verify that this host is running Origami FarmOS FastAPI,
-or that it is reachable from the farm tablets. Do not silently direct worker
-credentials or production records to it until it has been verified as
-an authorized Origami instance.
+**Status (2026-11-14): publicly reachable multi-tenant staging service.**
+A read-only GitHub Actions network probe verified that the hostname resolves
+and responds over HTTPS, with:
+- `GET /` → HTTP 200, a Next.js web front end (HTML, not a FastAPI JSON root).
+- `GET /health` → HTTP 200, JSON status `ok`, server version `1e4634b`
+  built `2026-10-23T13:30:37Z`.
+- `GET /openapi.json` → HTTP 200, `Origami Server API` with 251 routes.
+- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`,
+  `GET /api/v1/me/access` and `GET /api/v1/modules/catalog`
+  are described in OpenAPI. The published login schema accepts email and
+  password and returns an access token and user object.
+
+This establishes the **API route contract and network reachability from the
+GitHub runner**, **not** ownership, acceptance of any individual user's
+credentials, the correct farm tenant, database migrations, or identical
+responses for all the tablet's modules. Review the [read-only API probe](https://github.com/achamseddine/OrigamiFarmOS/actions/runs/43573038332).
+Do not send live farm credentials until the Azure subscription owner confirms
+this staging host is authorized for them.
 
 | Purpose | Setting | Example | Where it belongs |
 | --- | --- | --- | --- |
@@ -26,11 +39,13 @@ rejects HTTP/HTTPS URLs with a clear error rather than attempting a connection.
 1. In Azure Portal, identify the authorized **Origami FarmOS** backend App Service
    and confirm its **Default domain** matches the proposed hostname and that
    the staging site is intended to receive test farm accounts.
-2. Check **`https://leb-container-test-staging.azurewebsites.net/health`** in a browser.
-   The response must be the Origami FastAPI health payload, not a generic website,
-   login page, 404, or unrelated application. Also verify **`/openapi.json`**
-   identifies the Origami API and includes **`/api/v1/auth/login`**.
-   An HTTP 200 alone is **not sufficient** proof of identity.
+2. Check **`https://leb-container-test-staging.azurewebsites.net/health`** and
+   **`/openapi.json`**. The Azure deployment has a legitimate Next.js
+   website at `/` and a separate API documented as **Origami Server API**;
+   a non-JSON home page does not mean the `/api/v1` endpoints are absent.
+   Inspect the full login response and permission/module endpoints. The
+   tablet's **Check API (no password sent)** diagnostic checks health and
+   the OpenAPI route contract; an HTTP 200 alone is not enough.
 3. Check Azure App Service application settings, deployment logs, database
    connectivity, and the specific Alembic revisions required by the installed
    APK. Confirm `FARMOS_SECRET_KEY` and production/demo settings are appropriate.
@@ -50,15 +65,16 @@ flutter build apk --release \
   --dart-define=FARMOS_API_BASE_URL=https://YOUR-VERIFIED-FARMOS-HOST/api/v1
 ```
 
-The existing emulator URL remains the fallback for development. A server URL
-saved on the login screen is intentionally preserved and takes precedence over
-the build-time default, so upgrading an app does not silently redirect an
-existing farm user to a different server.
+For the 2026-11-14 recovery builds, Azure staging is the compiled-in
+default `FARMOS_API_BASE_URL`; Android still allows a verified host override
+with `--dart-define` or manual entry on the login screen. The tablet does
+**not** reuse the previous session or previously entered host automatically,
+to keep the credential form visible on every launch. Locally cached farm
+records and offline outbox entries are deliberately not deleted.
 
-**This commit does not set the Azure hostname as the compiled-in default,
-deploy a backend, create/change a GitHub Actions secret, migrate a database,
-or prove connectivity.** Those actions require a verified authorized backend
-and a real private PostgreSQL connection string.
+A build or public API probe does **not** deploy the backend, confirm tenant
+credentials, apply a database migration or configure a PostgreSQL secret.
+Those actions require Azure administrative access and an actual database DSN.
 
 ## If `PROD_DATABASE_URL` is still missing
 

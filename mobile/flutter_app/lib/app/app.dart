@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -138,7 +140,21 @@ class _DataLoader extends StatefulWidget {
 }
 
 class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
-  late final Future<void> _boot = _startup();
+  // A successful password must never lead to an endless blank/loading
+  // page. Fail visibly if the backend data does not load in finite time.
+  late Future<void> _boot = _startup()
+      .timeout(const Duration(seconds: 40), onTimeout: () {
+        throw TimeoutException('Loading farm permissions or module data exceeded 40 seconds. '
+            'The backend may not match this APK or the network may be unreachable.');
+      });
+
+  void _retryStartup() {
+    setState(() {
+      _boot = _startup().timeout(const Duration(seconds: 40), onTimeout: () {
+        throw TimeoutException('Loading farm permissions or module data exceeded 40 seconds.');
+      });
+    });
+  }
 
   @override
   void initState() {
@@ -174,7 +190,12 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
     sync.onSynced = (modules) => _refreshAll(only: modules);
     await _refreshAll();
     if (!mounted) return;
-    await sync.start();
+    // Sync may contain many previously queued offline writes. Replaying
+    // them is independent of opening the farm UI, so do not hold the user
+    // behind a full-screen spinner until that replay finishes.
+    unawaited(sync.start().catchError((Object error, StackTrace trace) {
+      debugPrint('Origami: background sync startup error: $error');
+    }));
   }
 
   /// Everything at sign-in; after a sync, only the modules whose writes
@@ -185,9 +206,12 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
     if (only == null) {
       try {
         await access.load();
-      } catch (_) {
-        // Offline with nothing cached yet: the shell renders its empty
-        // state rather than a crash, and the sync pill explains why.
+      } catch (e) {
+        // Access permissions determine the whole navigation menu. Silently
+        // swallowing an HTTP 404/401 here displays an apparently empty app
+        // after credentials were accepted, hiding the real deployment bug.
+        throw StateError('Farm permissions could not be loaded from '
+            '${context.read<SessionController>().baseUrl}/me/access or /modules/catalog: $e');
       }
     }
     if (!mounted) return;
@@ -263,7 +287,65 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       future: _boot,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    const Text('Signed in. Loading farm permissions and data…'),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: context.read<SessionController>().returnToLoginPreservingData,
+                      child: const Text('Back to login (keep offline records)'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          final server = context.read<SessionController>().baseUrl;
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline, size: 40),
+                      const SizedBox(height: 12),
+                      const Text('Sign-in succeeded, but the farm could not open.',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      SelectableText('Server: $server'),
+                      const SizedBox(height: 8),
+                      SelectableText('FARM STARTUP ERROR: ${snapshot.error}'),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          OutlinedButton(
+                            onPressed: _retryStartup,
+                            child: const Text('Retry loading'),
+                          ),
+                          TextButton(
+                            onPressed: context.read<SessionController>().returnToLoginPreservingData,
+                            child: const Text('Back to login (keep offline records)'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
         }
         final access = context.watch<AccessProvider>();
         final plan = buildNavForAccess(access);

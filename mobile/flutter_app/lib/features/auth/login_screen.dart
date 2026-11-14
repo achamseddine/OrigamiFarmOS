@@ -49,6 +49,36 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _showServerField = false;
   bool _obscure = true;
   bool _demoPressed = false;
+  bool _checkingBackend = false;
+  bool _backendVerified = false;
+  String? _backendDiagnostic;
+
+  Future<void> _checkBackend() async {
+    if (_checkingBackend) return;
+    setState(() {
+      _checkingBackend = true;
+      _backendDiagnostic = null;
+    });
+    try {
+      // Never sends credentials, tokens or locally saved farm records.
+      final result = await context.read<SessionController>().checkBackend(
+        serverUrl: _showServerField ? _serverUrl.text : null,
+      );
+      if (!mounted) return;
+      setState(() {
+        _backendDiagnostic = result.message;
+        _backendVerified = result.verified;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _backendDiagnostic = 'API diagnostic failed (${e.runtimeType}): $e';
+        _backendVerified = false;
+      });
+    } finally {
+      if (mounted) setState(() => _checkingBackend = false);
+    }
+  }
 
   @override
   void initState() {
@@ -135,6 +165,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 demoPressed: _demoPressed,
                 needsNetwork: session.needsFirstOnlineLogin,
                 error: session.error,
+          apiUrl: _showServerField ? _serverUrl.text : session.baseUrl,
+          checkingBackend: _checkingBackend,
+          backendDiagnostic: _backendDiagnostic,
+          backendVerified: _backendVerified,
+          onCheckBackend: _checkBackend,
                 onToggleObscure: () => setState(() => _obscure = !_obscure),
                 onToggleServerField: () => setState(() => _showServerField = !_showServerField),
                 onForgotPassword: _forgotPassword,
@@ -161,6 +196,11 @@ class _SignInCard extends StatelessWidget {
     required this.demoPressed,
     required this.needsNetwork,
     required this.error,
+    required this.apiUrl,
+    required this.checkingBackend,
+    required this.backendDiagnostic,
+    required this.backendVerified,
+    required this.onCheckBackend,
     required this.onToggleObscure,
     required this.onToggleServerField,
     required this.onForgotPassword,
@@ -188,6 +228,11 @@ class _SignInCard extends StatelessWidget {
   /// or copy it. It stays put now, and it is selectable so the text can
   /// be sent to whoever can act on it.
   final String? error;
+  final String apiUrl;
+  final bool checkingBackend;
+  final String? backendDiagnostic;
+  final bool backendVerified;
+  final Future<void> Function() onCheckBackend;
 
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleServerField;
@@ -367,6 +412,43 @@ class _SignInCard extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: FarmSpacing.sm),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: SelectableText(
+              'Current API: $apiUrl',
+              style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.ink),
+            ),
+          ),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: TextButton.icon(
+              onPressed: checkingBackend ? null : () { onCheckBackend(); },
+              icon: checkingBackend
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.wifi_find, size: 18),
+              label: Text(checkingBackend
+                  ? 'Checking server identity and health…'
+                  : 'Check API (no password sent)'),
+            ),
+          ),
+          if (backendDiagnostic != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(FarmSpacing.md),
+              decoration: BoxDecoration(
+                color: backendVerified
+                    ? FarmColors.tint(FarmColors.cedar, 0.10)
+                    : Theme.of(context).colorScheme.errorContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                backendDiagnostic!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: backendVerified ? FarmColors.ink : Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+            ),
           if (showServerField)
             TextField(
               controller: serverUrl,

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart' show protected;
 import 'package:http/http.dart' as http;
 
@@ -35,6 +37,15 @@ class ApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Result of an anonymous, read-only backend identity check. No login
+/// credentials, tokens or farm records are sent when this is requested.
+class BackendCheck {
+  const BackendCheck(this.message, {required this.verified, this.statusCode});
+  final String message;
+  final bool verified;
+  final int? statusCode;
 }
 
 /// How the server starts a refusal that a person may override by saying
@@ -96,15 +107,16 @@ class ApiClient {
   /// (core/widgets/duplicate_confirmation.dart) — every form gets it.
   static Future<bool> Function(String detail)? confirmPossibleDuplicate;
 
-  ApiClient({required String baseUrl, this.token, LocalStore? store})
+  ApiClient({required String baseUrl, this.token, LocalStore? store, http.Client? httpClient})
       : baseUrl = _trimTrailingSlash(baseUrl),
-        _store = store {
+        _store = store,
+        _http = httpClient ?? http.Client() {
     monitor = ConnectionMonitor(probe: ping);
   }
 
   String baseUrl;
   String? token;
-  final http.Client _http = http.Client();
+  final http.Client _http;
   // Never leave the login screen behind a network request that can hang
   // indefinitely when the farm server is asleep, offline or misconfigured.
   // A timed-out write keeps its idempotency key for safe retry/sync.
@@ -152,6 +164,87 @@ class ApiClient {
         if (token != null) 'Authorization': 'Bearer $token',
         if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
       };
+
+  /// Check health and published API contract without sending a password,
+  /// bearer token or farm data. Azure staging hosts a Next.js home page,
+  /// with the actual Origami Server API under /api/v1 and /openapi.json;
+  /// a Next.js home page must NOT be misdiagnosed as the wrong API.
+  Future<BackendCheck> checkBackend({String? serverUrl}) async {
+    final selected = (serverUrl ?? baseUrl).trim();
+    final Uri api;
+    try {
+      api = Uri.parse(selected);
+      if (!api.hasAuthority || (api.scheme != 'https' && api.scheme != 'http')) {
+        return const BackendCheck('Invalid server URL. Enter an HTTP(S) address ending in /api/v1.', verified: false);
+      }
+    } catch (_) {
+      return const BackendCheck('Invalid server URL. Please check for spaces or typing errors.', verified: false);
+    }
+    final root = api.replace(path: '/', query: null, fragment: null);
+    final health = root.replace(path: '/health');
+    final openapi = root.replace(path: '/openapi.json');
+    try {
+      final healthResponse = await _http.get(health, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
+      if (healthResponse.statusCode != 200) {
+        return BackendCheck('Health endpoint at $health returned HTTP ${healthResponse.statusCode}.', verified: false, statusCode: healthResponse.statusCode);
+      }
+      Object? healthJson;
+      try {
+        healthJson = jsonDecode(utf8.decode(healthResponse.bodyBytes));
+      } catch (_) {
+        return const BackendCheck('Health endpoint returned HTTP 200 but not JSON.', verified: false, statusCode: 200);
+      }
+      if (healthJson is! Map || healthJson['status'] != 'ok') {
+        return const BackendCheck('Health endpoint responded but did not report status ok.', verified: false, statusCode: 200);
+      }
+
+      final specResponse = await _http.get(openapi, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
+      if (specResponse.statusCode != 200) {
+        return BackendCheck('Health passed, but OpenAPI at $openapi returned HTTP ${specResponse.statusCode}. API contract could not be verified.', verified: false, statusCode: specResponse.statusCode);
+      }
+      Object? spec;
+      try {
+        spec = jsonDecode(utf8.decode(specResponse.bodyBytes));
+      } catch (_) {
+        return const BackendCheck('Health passed, but OpenAPI did not return valid JSON.', verified: false, statusCode: 200);
+      }
+      if (spec is! Map || spec['paths'] is! Map) {
+        return const BackendCheck('Health passed, but the OpenAPI structure is not valid.', verified: false, statusCode: 200);
+      }
+      final title = spec['info'] is Map ? (spec['info'] as Map)['title']?.toString() ?? 'Unknown API' : 'Unknown API';
+      final paths = spec['paths'] as Map;
+      const requiredPaths = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/me',
+        '/api/v1/me/access',
+        '/api/v1/modules/catalog',
+      ];
+      final missing = requiredPaths.where((path) => !paths.containsKey(path)).toList();
+      final login = paths['/api/v1/auth/login'];
+      final loginIsPost = login is Map && login.containsKey('post');
+      if (missing.isNotEmpty || !loginIsPost) {
+        return BackendCheck(
+          'Health passed, but API "$title" is missing required farm routes: ${missing.isEmpty ? 'POST /api/v1/auth/login' : missing.join(', ')}. This app cannot sign in reliably.',
+          verified: false,
+          statusCode: 200,
+        );
+      }
+      if (title != 'Origami FarmOS API' && title != 'Origami Server API') {
+        return BackendCheck('Health passed and some farm routes exist, but OpenAPI identifies another service: "$title".', verified: false, statusCode: 200);
+      }
+      return BackendCheck(
+        'API ENDPOINTS VERIFIED: $title at $selected. /health: HTTP 200; /openapi.json: HTTP 200; login, user and access routes present. '
+        'This does NOT prove the entered account is active in this staging database or that farm data is compatible.',
+        verified: true, statusCode: 200,
+      );
+    } on TimeoutException {
+      return BackendCheck('Connection timed out after ${networkTimeout.inSeconds}s while checking the API at $root.', verified: false);
+    } on SocketException catch (e) {
+      return BackendCheck('Network/DNS error contacting $root: ${e.message}.', verified: false);
+    } catch (e) {
+      return BackendCheck('Could not verify API at $root (${e.runtimeType}): $e', verified: false);
+    }
+  }
 
   /// Cheap reachability check against the API's unauthenticated health
   /// endpoint. Uses the origin, not the `/api/v1` prefix, because the
@@ -394,7 +487,13 @@ class ApiClient {
     } catch (e) {
       if (e is ApiException) rethrow;
       monitor.reportFailure();
-      throw ApiException(0, "Couldn't reach the server at $baseUrl — check the server URL and your connection.");
+      if (e is TimeoutException) {
+        throw ApiException(0, 'Request timed out after ${networkTimeout.inSeconds} seconds at $uri.');
+      }
+      if (e is SocketException) {
+        throw ApiException(0, 'Network/DNS failure at $uri: ${e.message}.');
+      }
+      throw ApiException(0, 'Cannot connect to $uri (${e.runtimeType}): $e');
     }
 
     // The server answered, whatever it said — so the tablet is online.

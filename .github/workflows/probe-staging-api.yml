@@ -1,0 +1,75 @@
+name: Probe Origami staging API (no credentials)
+
+# Safe, read-only HTTP diagnostics. No database URL or user credentials are
+# ever included. This check does not claim a 200 response is a working API.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/login-server-diagnostics-20261114
+    paths:
+      - ".github/workflows/probe-staging-api.yml"
+
+jobs:
+  probe-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check DNS and public, unauthenticated API responses
+        shell: bash
+        run: |
+          set -uo pipefail
+          host=leb-container-test-staging.azurewebsites.net
+          echo "Checking DNS for $host"
+          getent ahosts "$host" | head -n 4 || echo "DNS resolution failed"
+          for path in / /health /openapi.json; do
+            echo ""
+            echo "Checking https://$host$path (GET, no credentials)"
+            if result=$(curl --location --silent --show-error \
+               --connect-timeout 8 --max-time 18 \
+               --output response.txt --write-out 'HTTP=%{http_code} CONTENT_TYPE=%{content_type} REMOTE_IP=%{remote_ip}' \
+               "https://$host$path" 2>&1); then
+              echo "$result"
+              head -c 350 response.txt || true
+              echo ""
+            else
+              echo "Request failed: $result"
+            fi
+          done
+          echo ""
+          echo "Inspecting published OpenAPI paths (no passwords or tokens used)"
+          python3 - <<'PY'
+          import json
+          import urllib.request
+          url = "https://leb-container-test-staging.azurewebsites.net/openapi.json"
+          with urllib.request.urlopen(url, timeout=20) as response:
+              spec = json.load(response)
+          print("API identity:", spec.get("info", {}).get("title"))
+          paths = spec.get("paths", {})
+          print("Total paths:", len(paths))
+          matches = [p for p in paths if any(key in p.lower() for key in ("/auth", "/login", "/token", "/health"))]
+          print("Relevant authentication/health paths:")
+          for p in sorted(matches)[:45]:
+              print(" ", p, sorted(paths[p].keys()))
+              for method, op in paths[p].items():
+                  if method.lower() != 'post' or '/login' not in p.lower(): continue
+                  content = op.get("requestBody", {}).get("content", {})
+                  print("   request content types:", sorted(content.keys()))
+                  print("   request schema:", content.get("application/json", {}).get("schema"))
+                  resp = op.get("responses", {}).get("200", {})
+                  print("   success response schema:", resp.get("content", {}).get("application/json", {}).get("schema"))
+          print("Is /api/v1/auth/login present?", "/api/v1/auth/login" in paths)
+          print("Does API expose tablet data-access endpoints?")
+          for p in ['/api/v1/me/access', '/api/v1/modules/catalog', '/api/v1/animals', '/api/v1/feed/items']:
+              print(" ", p, p in paths, sorted(paths.get(p, {}).keys()))
+          schemas = spec.get("components", {}).get("schemas", {})
+          for p in ['/api/v1/auth/login', '/platform/v1/auth/login']:
+              op = paths.get(p, {}).get('post', {})
+              for label, source in [
+                  ('request', op.get('requestBody', {}).get('content', {}).get('application/json', {})),
+                  ('response', op.get('responses', {}).get('200', {}).get('content', {}).get('application/json', {})),
+              ]:
+                  ref = source.get('schema', {}).get('$ref', '')
+                  schema = schemas.get(ref.split('/')[-1], {})
+                  print(" ", p, label, 'required=', schema.get('required'), 'properties=', sorted(schema.get('properties', {}).keys()))
+          PY
