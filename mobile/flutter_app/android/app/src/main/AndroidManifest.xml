@@ -16,6 +16,11 @@
     <!-- Lets the app tell "no signal" apart from "server is down" rather
          than treating every failure as the latter. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <!-- The QR scanner (ADR-003): the camera is asked for only when a worker
+         opens it. Not required, so a tablet without a usable camera still
+         installs and keeps the typed / keyboard-wedge path. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application
         android:label="Origami FarmOS"

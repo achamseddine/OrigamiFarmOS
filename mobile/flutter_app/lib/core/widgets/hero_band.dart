@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_icon.dart';
 import 'bekaa_backdrop.dart';
+import 'ux_blocks.dart' show Eyebrow;
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import '../theme/typography.dart';
@@ -22,6 +23,7 @@ class HeroBand extends StatelessWidget {
   const HeroBand({
     super.key,
     required this.title,
+    this.eyebrow,
     this.subtitle,
     this.icon,
     this.actions = const [],
@@ -43,6 +45,10 @@ class HeroBand extends StatelessWidget {
   final bool scenery;
 
   final String title;
+
+  /// The small uppercase line naming the area the screen belongs to
+  /// ("LIVESTOCK", "FEED & NUTRITION") — the V3 prototype's page anatomy.
+  final String? eyebrow;
   final String? subtitle;
 
   /// Drawn beside the title, at the size a screen title deserves.
@@ -65,7 +71,8 @@ class HeroBand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = this.height ?? (scenery ? 170 : 128);
+    // The eyebrow takes a line of its own above the title.
+    final height = this.height ?? (scenery ? 170 : 128) + (eyebrow != null ? 20 : 0);
     final screenWidth = MediaQuery.sizeOf(context).width;
     final wide = screenWidth >= kTabletBreakpoint;
     final gutter = wide ? FarmSpacing.lg : FarmSpacing.md;
@@ -74,6 +81,7 @@ class HeroBand extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (eyebrow != null) ...[Eyebrow(eyebrow!), const SizedBox(height: 4)],
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

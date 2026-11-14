@@ -1,5 +1,91 @@
 # Releases
 
+## v0.7.3 — No duplicate entries, approval levels respected
+
+Before more testing: every record workflow checked against the documentation for duplicate entries and approval levels (`architecture/API-STANDARDS.md`, *Duplicate entries and approvals*).
+
+**Delivered:**
+- **The same fact is not recorded twice.** Milk (same animal and session that day), eggs, harvest, feeding rounds, feed deliveries, mixes, inseminations, pregnancy checks, births, treatments and medicine doses, observations, weights, health cases, animals with the same name and Mouneh sales are checked on the server against what is already on record. The tablet asks *Already recorded?* with what is there: *No* records nothing; *Yes, record it again* records it as a confirmed repeat (in the event log). Offline entries refused this way can be *Recorded anyway* from the sync panel. A feed, group, field or raw material with the same name, or a lot code used before, is refused outright.
+- **Approval levels.** Recording more feed than the stock on record needs Feed or Inventory approval (the tick is shown only to approvers; also the older stock endpoint and Mouneh batch inputs). A worker's formula or program is a draft until a manager activates it; a new farm feed's first mix (which approves its recipe) needs Feed approval and the mix form says so. A poor-grade delivery is held in quarantine until released. A death needs Animals edit; a sale, cull, slaughter or transfer needs Animals approval (the choices are greyed out otherwise). The farm calendar needs Settings configure. Correcting a calving date needs edit.
+- Flow: a purchase retried after a refusal reuses the feed it already created; quick entry's *second milking* tick is sent as the confirmation, so it is not asked twice; every tablet write carries an idempotency key.
+- Fixed: the demo farm seeded before 07:00 UTC held "today 07:00" feedings in the future, which skewed feed reconciliation and history.
+- No migration.
+- Tests: backend +13 (each duplicate check, its confirmation and audit; the hard refusals; each approval level), 8 updated; Flutter 260 (+8).
+
+## v0.7.2 — Feed room, breeding calendar, groups, responsibilities, speed
+
+From the second round of on-farm testing (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Second round*).
+
+**Delivered:**
+- **Feed room in the farm's order:** *Record purchase* (date, supplier, invoice, quality grade, moisture, what was seen; a new grain named in the form), *Record a mix* in one step (date, ingredients as weighed, output — a numbered mix; formula v1 from the first mix), *Record feeding*; a *Get the feed room going* card until purchase → silage & straw → mix → feeding have all happened. The standard Concentrate is farm-made so the farm's mixes make it.
+- **Calving date and the breeding calendar:** calving / start of milking on the animal form (correctable, audited); farm settings for the milk peak window, the waiting period before insemination and the heat cycle (with the dry-off days); the twin shows days in milk, peak window, *inseminate from*, *watch for heat*; the herd overview lists who is ready to inseminate, who to watch for heat, who is at her peak.
+- **Reproduction forms dated:** insemination, pregnancy check, loss, birth, start of milking, dry-off and exit all take their date (before, every insemination was saved as "now"). A "method not allowed" from an older server is explained in plain words.
+- **Groups for cows:** *New group* on the Animals screen (the tablet had no way to create one); cattle can also be kept as counted groups; groups that follow the records (pregnant, not pregnant, in milk, dry) and a one-tap pregnant / not-pregnant pair; the demo farm has "Pregnant cows" and "Open cows".
+- **Status on the farm** on the edit form: active, sold, died, culled, slaughtered, transferred — recorded as the exit with its date and reason.
+- **Work responsibilities:** an employee looks after a group, an animal, a species or a field, with duties (milking, feeding, observations, health care, eggs, crop care, harvest); assigning grants the access the duties need; *My animals & duties* on My Day with today's progress.
+- **Speed:** per-request read cache for the farm-wide feeding reads (today's plan 322 → 66 queries, days of cover 410 → 154, notifications 479 → 212), the reproduction overview in a handful of queries, the program list eager-loaded; the tablet loads only what recording needs at sign-in, the feed workspace figures when opened, and after a sync refreshes only the modules whose writes landed.
+- Fixed: newborns can be registered with a name only (the farm number follows).
+- Migration `c3e5a7b9d1f4` (calendar settings, rule groups, lot quality, responsibilities, cattle/horse group tracking) — run it with `a8d0c2e4f6b1`.
+- Tests: backend +7 (purchase → mix → feed, mix refusals, calendar, calving correction, rule groups, responsibilities and their permission); Flutter 252 (+5 new, 3 updated).
+
+## v0.7.1 — Corrections from on-farm testing
+
+From testing the v0.7.0 build on the farm (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Corrections after on-farm testing*).
+
+**Delivered:**
+- **Add an animal with nothing to scan.** The ear tag (cattle) and microchip (horse) no longer block registration; the server gives every new animal the farm's next farm number (one sequence for all species, never reused) and the form shows its QR label to print right after saving. The Digital Twin lists an expected identifier as "Not recorded yet" until it is added. This resolves the conflict between `docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md` and `database/LIVESTOCK-SCHEMA.md` §19 in favour of "ear tag is not universally mandatory" (§4a).
+- **Pregnancy and milk on the animal form**, new and existing animals: *Not pregnant / Inseminated — not confirmed / Pregnant* with the insemination date and method, the expected birth and the dry-off date; *Producing milk / Not milked — dried off*. Answers become records (breeding event, pregnancy check, lactation start, dry-off), never flags; saying she is milked opens the milk record. An answer the stage or profile does not allow adjusts them and says so (a goat with no profile → dairy). Senior females keep the adult reproduction and milk capabilities.
+- **Farm setting: dry-off before birth** (days, default 60) in Settings; the twin and the reproduction overview show *dry off from* for every pregnant animal in milk and flag it when due.
+- **Animal feed record fixed.** The production farm had no feed products, so the form had nothing to choose; the feeding form now opens with three optional rows — Concentrate, Corn silage, Wheat straw — each already pointing at the farm's feed (`GET /feed-products/standard-slots`), plus *Add another feed*. The farm gets the three standard feeds with an empty ledger (migration, production seed, or the form's *Set up* button). Feeding more than the stock entered is no longer a dead end: the form says so and records it only when the worker ticks *Stock not entered yet — record anyway*. The quick-entry screen uses the same rows and override.
+- Fixed: the Add Animal form's dropdowns overflowed ("Female · Cow") on narrower tablets.
+- Migration `a8d0c2e4f6b1` (farm setting, senior rules, standard feeds) — **run it on the server before using this build.**
+- Tests: backend +13 (registration, farm numbers, pregnancy from an insemination, dry-off setting and permission, standard feeds, the stock override), four updated for the new identifier rule; Flutter 247 (+7). PostgreSQL migration parity, downgrade and re-upgrade verified, including the data step on a farm that already has a silage.
+
+**Next:** the health requests from the same testing.
+
+## v0.7.0 — Scan-first worker rounds (QR)
+
+Merges PR #11's QR quick entry (withheld milk enforced server-side, medicine only through the pharmacy, no guessed routes, Arabic/Persian digits) and builds its follow-ups, from a workflow analysis of the 06:00 round (`docs/QR-ANIMAL-QUICK-ENTRY.md`).
+
+**Delivered:**
+- Camera QR scanning on the tablet, offline (ADR-003: `mobile_scanner`, `pdf`, `printing`, `barcode`); the camera permission is optional in the manifest.
+- QR labels for animals and pens printed or shared as an A4 PDF from the tablet; Arabic names print correctly.
+- Pen/group labels (`origami://group/{id}`) open the group's feeding round and members, never one animal.
+- The worker screen shows what is already recorded today; a second milking in the same session needs a tick.
+- Feed rows from the animal's own program with planned amounts as hints and *Fill planned amounts*; the worker confirms every figure.
+- Rounds from My Day (morning/evening milking, individual feeding) with who is done and who is left; *Scan next automatically*.
+- Entry points: *Scan an animal* on My Day and in the Record sheet opens the camera; *Print QR labels* on the Animals screen; *Quick entry* and *QR label* in the Digital Twin's Record sheet.
+- Tests: Flutter 240 (+18 including PR #11's); backend unchanged and passing.
+
+**Next:**
+- Photo attachments with private storage; body-condition scoring; cross-device duplicate reconciliation; barn-light device testing of labels.
+
+## v0.6.1 — Health and Mouneh in the V3 layout
+
+**Delivered:**
+- Health: the prototype's command centre (open cases and follow-up, withdrawal review with its caveat, the clinical record), header actions for opening a case, recording an observation and emergency triage, and real tabs in place of three "coming soon" placeholders. Health cases reach the tablet for the first time — list, detail with the veterinarian's diagnoses and plans, open / monitoring / close, offline through cache rules — and on each animal's Health tab. Fixed: the recommendations view crashed its layout on a wide tablet (`IntrinsicHeight` around a `LayoutBuilder`).
+- Mouneh: every screen translated to Arabic (196 strings), the module header with *Start a batch* / *Record a sale* / *New product*, figures, underlined tabs, empty states and caveats; the add-material dialog no longer hides a refusal.
+- Shared: a header band with an eyebrow over a two-line subtitle no longer overflows on the plain (no-artwork) header.
+- Demo data: Bella's two earlier mastitis treatments now sit in closed health cases with the veterinarian's diagnosis and plan; the snapshot carries the cases and the farm's observations.
+- Tests: Flutter 222 (+9); backend suite unchanged and passing.
+
+## v0.6.0 — The V3 prototype's layout on the tablet
+
+Brings the farm-wide V3 prototype's UX (`prototypes/origami-farmos-v3.html`) into the Flutter tablet on the real backend, as the prototype's own README asks, starting with animals, My Day and feed.
+
+**Delivered:**
+- Shared page anatomy: eyebrow headers on every top-level screen, section headings, dashed empty states, caution notices, record tiles, fact lists and underlined tabs (`core/widgets/ux_blocks.dart`).
+- Animal Digital Twin rebuilt as header card + four figures + capability-gated tabs (Overview, Milk, Feed, Weight, Reproduction, Health & medicines, Timeline) with a grouped *Record* sheet; dated weights recorded from the tablet (offline too); a ration-readiness card that calculates nothing; a merged timeline; a missing or not-yet-loaded animal no longer crashes the screen.
+- Animal registry with search by any identifier and status filters including animals that left the farm.
+- My Day: today's milking, feeding and egg-collection routine, ticked off only from today's records.
+- Feed & nutrition: *Make feed mix* / *Record feeding*, ledger-derived figures, the prototype's tab order, rounds recorded today per plan line. Fixed: five feed tabs hid their tap ripple behind a coloured box (a debug-mode assertion).
+- Health: the AI caveat and an honest empty state.
+- Demo snapshot now carries each animal's weights. 197 strings added in English and Arabic (observation types and event names among them, which were English-only).
+- Tests: Flutter 213 (+17, including screens drawn over the bundled snapshot through a new test harness); analyzer unchanged at 0 errors.
+
+**Next:**
+- The prototype's Overview and Intelligence pages, Inventory / Crops / Operations / Finance restyles, and body-condition scoring (a capability with no record yet).
+
 ## v0.5.0 — The livestock record: history, groups and reproduction
 
 Completes the generic animal model's remaining steps (docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md §13: reproduction, groups, incubation) from LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA and PRODUCTION-SCHEMA §8.

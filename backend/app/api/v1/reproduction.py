@@ -9,15 +9,19 @@ can redraw from one call.
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import owned_or_404, require_any_permission, require_permission
+from app.core import duplicates
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.domain import reproduction_models as rm
+from app.repositories.base import ensure_utc
 from app.schemas.reproduction import (
     BirthIn,
     BreedingIn,
@@ -26,6 +30,7 @@ from app.schemas.reproduction import (
     HatchIn,
     IncubationCancelIn,
     IncubationIn,
+    LactationCorrectIn,
     LactationStartIn,
     OffspringRegisterIn,
     PregnancyCheckIn,
@@ -72,9 +77,18 @@ def reproduction_overview(db: Session = Depends(get_db), user: models.User = Dep
 @router.post("/animals/{animal_id}/breedings", status_code=status.HTTP_201_CREATED)
 def record_breeding(animal_id: str, payload: BreedingIn, db: Session = Depends(get_db), user: models.User = Depends(_RECORD)) -> dict:
     animal = _animal(db, animal_id, user)
+    day_start, day_end = duplicates.farm_day(db, animal.farm_id, payload.occurred_at)
+    earlier = db.scalar(select(rm.BreedingEvent).where(
+        rm.BreedingEvent.female_animal_id == animal.id, rm.BreedingEvent.event_type == payload.event_type, rm.BreedingEvent.status == "recorded",
+        rm.BreedingEvent.occurred_at >= day_start, rm.BreedingEvent.occurred_at < day_end,
+    ))
+    match = duplicates.guard(earlier, f"{animal.name} already has a {payload.event_type.replace('_', ' ').lower()} recorded on this day.",
+                             confirm=payload.confirm_duplicate)
     row = repro.record_breeding(db, animal, event_type=payload.event_type, at=payload.occurred_at, male_animal_id=payload.male_animal_id,
                                 sire_reference=payload.sire_reference, semen_batch_reference=payload.semen_batch_reference,
                                 technician_user_id=payload.technician_user_id, notes=payload.notes, user=user)
+    duplicates.log_confirmed(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, match_id=match.id if match else None,
+                             what=f"breeding:{row.id}", user_id=user.id)
     db.commit()
     return {"breeding": repro.breeding_dict(db, row), "summary": _summary(db, animal)}
 
@@ -94,6 +108,13 @@ def void_breeding(animal_id: str, breeding_id: str, payload: BreedingVoidIn, db:
 @router.post("/animals/{animal_id}/pregnancy-checks", status_code=status.HTTP_201_CREATED)
 def record_pregnancy_check(animal_id: str, payload: PregnancyCheckIn, db: Session = Depends(get_db), user: models.User = Depends(_RECORD)) -> dict:
     animal = _animal(db, animal_id, user)
+    day_start, day_end = duplicates.farm_day(db, animal.farm_id, payload.assessed_at)
+    earlier = db.scalar(select(rm.PregnancyAssessment).where(
+        rm.PregnancyAssessment.animal_id == animal.id, rm.PregnancyAssessment.result_code == payload.result_code,
+        rm.PregnancyAssessment.assessed_at >= day_start, rm.PregnancyAssessment.assessed_at < day_end,
+    ))
+    duplicates.guard(earlier, f"A {payload.result_code.lower()} pregnancy check of {animal.name} is already recorded on this day.",
+                     confirm=payload.confirm_duplicate)
     assessment, episode = repro.record_assessment(
         db, animal, assessment_type=payload.assessment_type, result_code=payload.result_code, at=payload.assessed_at,
         estimated_gestation_days=payload.estimated_gestation_days, expected_due_date=payload.expected_due_date,
@@ -119,6 +140,10 @@ def record_birth(animal_id: str, payload: BirthIn, db: Session = Depends(get_db)
     `register_now` become animals in the same transaction — with the
     identifiers their species requires — and any refusal refuses the birth."""
     dam = _animal(db, animal_id, user)
+    lo, hi = duplicates.near(payload.occurred_at, timedelta(days=30))
+    earlier = db.scalar(select(rm.BirthEvent).where(rm.BirthEvent.dam_animal_id == dam.id, rm.BirthEvent.occurred_at >= lo, rm.BirthEvent.occurred_at <= hi))
+    duplicates.guard(earlier, f"A birth of {dam.name} is already recorded on {ensure_utc(earlier.occurred_at).date().isoformat() if earlier else ''}; "
+                              "twins are one birth with two newborns.", confirm=payload.confirm_duplicate)
     birth, extra = repro.record_birth(
         db, dam, offspring=[o.model_dump() for o in payload.offspring], at=payload.occurred_at, assistance_code=payload.assistance_code,
         sire_animal_id=payload.sire_animal_id, sire_reference=payload.sire_reference, start_lactation=payload.start_lactation,
@@ -145,6 +170,18 @@ def start_lactation(animal_id: str, payload: LactationStartIn, db: Session = Dep
     recorded birth the dam's lactation starts by itself."""
     animal = _animal(db, animal_id, user)
     row = repro.start_lactation(db, animal, at=payload.started_at, lactation_number=payload.lactation_number, user=user)
+    db.commit()
+    return {"lactation": repro.lactation_dict(row), "summary": _summary(db, animal)}
+
+
+@router.patch("/animals/{animal_id}/lactation")
+def correct_lactation(animal_id: str, payload: LactationCorrectIn, db: Session = Depends(get_db),
+                      user: models.User = Depends(require_any_permission(perms.ANIMALS, perms.MILK_PRODUCTION, action=perms.EDIT))) -> dict:
+    """Corrects the calving / start-of-milking date of the current lactation
+    (audited, with the old value). A lactation a recorded birth started is
+    corrected through that birth."""
+    animal = _animal(db, animal_id, user)
+    row = repro.correct_lactation_start(db, animal, started_at=payload.started_at, reason=payload.reason, user=user)
     db.commit()
     return {"lactation": repro.lactation_dict(row), "summary": _summary(db, animal)}
 

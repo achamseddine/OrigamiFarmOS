@@ -8,6 +8,7 @@ The MVP includes:
 * Farm profile
 * Barns and locations
 * Animal registry
+* Animal-first QR quick entry (initial reader/typed-tag workflow; native camera/label printing pending)
 * Cow, sheep, goat, horse records
 * Flock records for chickens, ducks, and turkeys
 * Feed inventory
@@ -40,7 +41,7 @@ These may be included if they are easy to implement:
 * Basic asset register
 * Simple weather note
 * Product processing such as cheese, labneh, yogurt, preserves
-* QR code generation
+* QR code generation and printable labels (not yet implemented)
 * Basic export to Excel or PDF
 
 ## Excluded from MVP

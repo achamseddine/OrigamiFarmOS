@@ -104,6 +104,7 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
         ("/users", None),
         ("/employees", {"include_inactive": False}),
         ("/employees", {"include_inactive": True}),
+        ("/me/responsibilities", None),
         ("/notifications", None),
         ("/priorities", None),
         ("/morning-briefing", farm),
@@ -156,18 +157,23 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [("/reproduction/overview", None), ("/incubations", None), ("/animal-group-types", None)]
     paths += [(f"/animals/{animal_id}/reproduction", None) for animal_id in animal_ids]
     paths += [(f"/animals/{animal_id}/history", None) for animal_id in animal_ids]
+    # Every animal's dated weights — the Digital Twin's Weight tab.
+    paths += [(f"/animals/{animal_id}/weights", None) for animal_id in animal_ids]
     paths += [(f"/animal-groups/{group_id}/members", None) for group_id in group_ids]
     paths += [(f"/animal-groups/{group_id}/quantity-events", None) for group_id in group_ids]
     paths += [(f"/mouneh/products/{product_id}", None) for product_id in product_ids]
     # Generic feed architecture: the whole feed workspace, the plan and the
     # feeding section of every animal and group profile.
+    # Every employee's animals & duties (Settings > Employees).
+    paths += [(f"/employees/{u.id}/responsibilities", None) for u in db.query(models.User).filter_by(farm_id=FARM_ID).all()]
     feed_product_ids = [p.id for p in db.query(feed_models.FeedProduct).filter_by(farm_id=FARM_ID).all()]
     formula_ids = [f.id for f in db.query(feed_models.FeedFormula).filter_by(farm_id=FARM_ID).all()]
     batch_ids = [b.id for b in db.query(feed_models.FeedBatch).filter_by(farm_id=FARM_ID).all()]
     lot_ids = [l.id for l in db.query(feed_models.FeedLot).filter_by(farm_id=FARM_ID).all()]
     paths += [
         ("/feed/transactions", {**farm, "days": 30}),
-        ("/feed-products", None), ("/feed-lots", None), ("/feed-formulas", None), ("/feed-batches", None), ("/feed-nutrients", None),
+        ("/feed-products", None), ("/feed-products/standard-slots", None), ("/feed-lots", None), ("/feed-formulas", None),
+        ("/feed-batches", None), ("/feed-nutrients", None),
         ("/feeding-programs", None), ("/feeding-plan/today", None), ("/feeding-events", {"days": 7}),
         ("/feed-inventory/availability", None), ("/feed-inventory/days-of-cover", None), ("/feed-inventory/reorder-recommendations", None),
         ("/feed-allocations", None), ("/feed-reorder-policies", None), ("/feed-reconciliations", None), ("/feed-costs", {"days": 30}),
@@ -214,6 +220,13 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += [(f"/emergency/assessments/{aid}", None) for aid in assessment_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-plan", None) for sid in animal_ids + group_ids]
     paths += [(f"/livestock-subjects/{sid}/feeding-history", None) for sid in animal_ids + group_ids]
+    # Health cases and the farm's observations (HEALTH-VETERINARY-SCHEMA):
+    # the Health screen's cases, follow-up and clinical record.
+    from app.domain import health_models  # local, as above
+
+    case_ids = [c.id for c in db.query(health_models.HealthCase).filter_by(farm_id=FARM_ID).all()]
+    paths += [("/health/cases", None), ("/health/cases", {"status": "all"}), ("/observations", {"farm_id": FARM_ID})]
+    paths += [(f"/health/cases/{cid}", None) for cid in case_ids]
     return paths
 
 

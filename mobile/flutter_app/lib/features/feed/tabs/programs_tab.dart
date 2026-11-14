@@ -54,8 +54,12 @@ class _ProgramCard extends StatelessWidget {
     final p = program;
     final v = p.active;
     final livestock = context.watch<LivestockProvider>();
-    return Container(
-      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
+    // A Material, not a coloured box: the tile paints its ripple on the
+    // nearest Material, and a DecoratedBox in between hid it.
+    return Material(
+      color: FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.md),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
@@ -339,7 +343,10 @@ class _ProgramDialogState extends State<_ProgramDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(_isVersion ? 'versionCreated' : 'programCreated'))));
+      final draft = !context.read<AccessProvider>().canApproveFeed;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.t(draft ? 'programSavedDraft' : (_isVersion ? 'versionCreated' : 'programCreated'))),
+      ));
       return;
     }
     setState(() {

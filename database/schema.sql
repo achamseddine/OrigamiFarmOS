@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 135 tables, 39 secondary indexes.
+-- 136 tables, 40 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -53,6 +53,11 @@ CREATE TABLE farms (
     region VARCHAR(100) NOT NULL,
     timezone VARCHAR(50) NOT NULL,
     default_currency VARCHAR(10) NOT NULL,
+    dry_off_days_before_birth INTEGER DEFAULT '60' NOT NULL,
+    milk_peak_start_days INTEGER DEFAULT '40' NOT NULL,
+    milk_peak_end_days INTEGER DEFAULT '70' NOT NULL,
+    breeding_wait_days INTEGER DEFAULT '50' NOT NULL,
+    heat_cycle_days INTEGER DEFAULT '21' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (id)
 );
@@ -795,6 +800,7 @@ CREATE TABLE flocks (
     location_id VARCHAR(36),
     location_label VARCHAR(200),
     tracking_mode VARCHAR(30) NOT NULL,
+    membership_rule VARCHAR(30),
     created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
@@ -1047,6 +1053,25 @@ CREATE TABLE visit_staff_roster (
     FOREIGN KEY(session_id) REFERENCES visit_sessions (id),
     FOREIGN KEY(worker_id) REFERENCES users (id)
 );
+
+CREATE TABLE work_responsibilities (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    user_id VARCHAR(36) NOT NULL,
+    scope_type VARCHAR(20) NOT NULL,
+    scope_id VARCHAR(36) NOT NULL,
+    duties JSON NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    valid_from TIMESTAMP WITH TIME ZONE NOT NULL,
+    valid_to TIMESTAMP WITH TIME ZONE,
+    notes TEXT,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(user_id) REFERENCES users (id)
+);
+CREATE INDEX ix_work_responsibilities_user ON work_responsibilities (user_id);
 
 CREATE TABLE animal_group_memberships (
     id VARCHAR(36) NOT NULL,
@@ -2417,6 +2442,9 @@ CREATE TABLE feed_lots (
     unit_cost FLOAT,
     status VARCHAR(20) NOT NULL,
     reference VARCHAR(120),
+    quality_grade VARCHAR(20),
+    moisture_pct FLOAT,
+    quality_notes TEXT,
     notes TEXT,
     created_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,

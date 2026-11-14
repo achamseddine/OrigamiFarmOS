@@ -6,7 +6,9 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/section_card.dart';
+import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/reproduction.dart';
@@ -71,6 +73,7 @@ class AnimalReproductionSection extends StatelessWidget {
                 _line(context, '${context.t('reproLastBirth')} (${summary.birthTerm(arabic)})',
                     '${_date(summary.lastBirthAt)}${summary.lastBirthLive != null ? ' · ${summary.lastBirthLive} ${context.t('nb_LIVE')}' : ''}'),
               if (summary.applies.lactation) _lactationLine(context, summary),
+              ..._calendarLines(context, summary),
               if (summary.lastBreeding == null && summary.lastCheck == null && summary.lastBirthAt == null && summary.lactation == null && !summary.pregnant)
                 Text(context.t('reproNone'), style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.muted)),
               if (canRecord || canMilking) ...[
@@ -105,15 +108,42 @@ class AnimalReproductionSection extends StatelessWidget {
       );
     }
     if (s.awaitingCheck) return StatusPill(label: context.t('reproAwaitingCheck'), level: FarmStatusLevel.watch);
+    if (s.inseminatedUnconfirmed) return StatusPill(label: context.t('stPreg_inseminated'), level: FarmStatusLevel.info);
     if (s.applies.pregnancy) return StatusPill(label: context.t('reproOpen'), level: FarmStatusLevel.neutral);
     return const SizedBox.shrink();
   }
 
+  /// The calendar after the last calving, from the farm's settings: when
+  /// to watch her milk peak, from when to inseminate, when to watch for a
+  /// return to heat after a service.
+  List<Widget> _calendarLines(BuildContext context, ReproSummary s) => [
+        if (s.calvingAt != null)
+          _line(context, context.t('calvingDate'),
+              '${feedDate(s.calvingAt!)}${s.daysInMilk != null ? ' · ${context.t('reproDaysInMilk')} ${s.daysInMilk}' : ''}'),
+        if (s.milkPeakFrom != null && s.lactation != null)
+          _line(context, context.t('stMilkPeak'),
+              '${feedDate(s.milkPeakFrom!)} – ${feedDate(s.milkPeakTo!)}${s.inMilkPeak ? ' · ${context.t('stNow')}' : ''}'),
+        if (s.breedingFrom != null && !s.pregnant)
+          _line(context, context.t('stInseminateFrom'),
+              '${feedDate(s.breedingFrom!)}${s.readyForBreeding ? ' · ${context.t('stReadyToInseminate')}' : ''}'),
+        if (s.heatWatchFrom != null)
+          _line(context, context.t('stHeatWatch'),
+              '${feedDate(s.heatWatchFrom!)} – ${feedDate(s.heatWatchTo!)}${s.heatWatchNow ? ' · ${context.t('stNow')}' : ''}'),
+      ];
+
   Widget _lactationLine(BuildContext context, ReproSummary s) {
     final l = s.lactation;
     if (l == null) return _line(context, context.t('reproLactations'), context.t('reproDry'));
-    return _line(context, context.t('reproLactations'),
+    final line = _line(context, context.t('reproLactations'),
         '${context.t('reproInMilk')} ${l.number ?? s.lactationNumber ?? '–'}${l.daysInMilk != null ? ' · ${l.daysInMilk} ${context.t('reproDaysInMilk')}' : ''}');
+    final dryFrom = s.dryOffFrom;
+    if (dryFrom == null) return line;
+    // Pregnant and in milk: when milking stops, from the farm's setting.
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      line,
+      _line(context, context.t('stDryOffDueOn'),
+          '${feedDate(dryFrom)} (${s.dryOffDays} ${context.t('stDaysBefore')})${s.dryOffDue ? ' · ${context.t('stDryOffDue')}' : ''}'),
+    ]);
   }
 }
 
@@ -135,18 +165,21 @@ Future<void> showReproTimelineSheet(BuildContext context, Animal animal) => show
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (_) => FractionallySizedBox(heightFactor: 0.85, child: _ReproTimelineSheet(animal: animal)),
+      builder: (_) => FractionallySizedBox(heightFactor: 0.85, child: ReproTimelineView(animal: animal)),
     );
 
-class _ReproTimelineSheet extends StatefulWidget {
-  const _ReproTimelineSheet({required this.animal});
+/// The reproductive record as a list: in its own sheet, or [embedded] in
+/// the Reproduction tab of the animal's profile, where the page scrolls.
+class ReproTimelineView extends StatefulWidget {
+  const ReproTimelineView({super.key, required this.animal, this.embedded = false});
   final Animal animal;
+  final bool embedded;
 
   @override
-  State<_ReproTimelineSheet> createState() => _ReproTimelineSheetState();
+  State<ReproTimelineView> createState() => _ReproTimelineViewState();
 }
 
-class _ReproTimelineSheetState extends State<_ReproTimelineSheet> {
+class _ReproTimelineViewState extends State<ReproTimelineView> {
   late Future<ReproTimeline> _future = context.read<HerdRecordsProvider>().timeline(widget.animal.id);
 
   void _reload() => setState(() => _future = context.read<HerdRecordsProvider>().timeline(widget.animal.id));
@@ -158,14 +191,18 @@ class _ReproTimelineSheetState extends State<_ReproTimelineSheet> {
     return FutureBuilder<ReproTimeline>(
       future: _future,
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError || snap.data == null) return Center(child: Text(context.t('couldNotSave')));
+        if (snap.connectionState != ConnectionState.done) {
+          return const Padding(padding: EdgeInsets.all(FarmSpacing.md), child: Center(child: CircularProgressIndicator()));
+        }
+        if (snap.hasError || snap.data == null) return Center(child: Text(context.t('twinLoadFailed')));
         final t = snap.data!;
         final arabic = Localizations.localeOf(context).languageCode == 'ar';
-        return ListView(padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 0, FarmSpacing.lg, FarmSpacing.lg), children: [
-          Text('${context.t('reproTimelineTitle')} — ${widget.animal.name}', style: FarmTypography.textTheme.titleMedium),
-          const SizedBox(height: FarmSpacing.sm),
-          if (t.isEmpty) Text(context.t('reproNone')),
+        final children = <Widget>[
+          if (!widget.embedded) ...[
+            Text('${context.t('reproTimelineTitle')} — ${widget.animal.name}', style: FarmTypography.textTheme.titleMedium),
+            const SizedBox(height: FarmSpacing.sm),
+          ],
+          if (t.isEmpty) EmptyState(message: context.t('reproNone'), icon: FarmIcon.pregnancy, compact: true),
           if (t.births.isNotEmpty) ...[
             _heading('${context.t('reproBirths')} (${t.summary.birthTerm(arabic)})'),
             for (final b in t.births)
@@ -219,7 +256,9 @@ class _ReproTimelineSheetState extends State<_ReproTimelineSheet> {
             for (final l in t.lactations)
               _entry('#${l.number ?? '–'} · ${_date(l.startedAt)} → ${l.active ? '…' : _date(l.endedAt)} · ${l.daysInMilk ?? '–'} ${context.t('reproDaysInMilk')}'),
           ],
-        ]);
+        ];
+        if (widget.embedded) return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+        return ListView(padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 0, FarmSpacing.lg, FarmSpacing.lg), children: children);
       },
     );
   }
@@ -254,6 +293,10 @@ class ReproOverviewCard extends StatelessWidget {
     final o = context.watch<HerdRecordsProvider>().overview;
     if (o.isEmpty) return const SizedBox.shrink();
     final dueSoon = [for (final p in o.pregnant) if (p['due_soon'] == true) p];
+    final dryOff = [for (final p in o.pregnant) if (p['dry_off_due'] == true) p];
+    // The breeding and milk calendar: who to inseminate, who to watch for
+    // heat, who is at her peak.
+    String name(Map<String, dynamic> r) => r['name'] as String? ?? '';
     String stat(int n, String key) => '$n ${context.t(key)}';
     return SectionCard(
       title: context.t('reproOverviewTitle'),
@@ -265,6 +308,30 @@ class ReproOverviewCard extends StatelessWidget {
         if (o.incubations.isNotEmpty) stat(o.incubations.length, 'reproIncubating'),
       ].join(' · '),
       child: Wrap(spacing: 6, runSpacing: 6, children: [
+        for (final r in o.readyForBreeding)
+          ActionChip(
+            avatar: const Icon(Icons.favorite_border, size: 16, color: FarmColors.cedar),
+            label: Text('${name(r)} · ${context.t('stReadyToInseminate')}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
+        for (final r in o.heatWatch)
+          ActionChip(
+            avatar: const Icon(Icons.visibility_outlined, size: 16, color: FarmColors.warningInk),
+            label: Text('${name(r)} · ${context.t('stHeatWatch')}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
+        for (final r in o.inMilkPeak)
+          ActionChip(
+            avatar: const Icon(Icons.trending_up, size: 16, color: FarmColors.milkBlue),
+            label: Text('${name(r)} · ${context.t('stMilkPeak')} · ${context.t('reproDaysInMilk')} ${r['days_in_milk'] ?? '–'}'),
+            onPressed: () => onOpenAnimal(r['animal_id'] as String),
+          ),
+        for (final p in dryOff)
+          ActionChip(
+            avatar: const Icon(Icons.do_not_disturb_on_outlined, size: 16, color: FarmColors.warningInk),
+            label: Text('${p['name']} · ${context.t('stDryOffDue')}'),
+            onPressed: () => onOpenAnimal(p['animal_id'] as String),
+          ),
         for (final p in dueSoon)
           ActionChip(
             avatar: const Icon(Icons.child_friendly_outlined, size: 16),

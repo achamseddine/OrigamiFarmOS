@@ -75,6 +75,9 @@ class BreedingIn(BaseModel):
     semen_batch_reference: str | None = Field(None, max_length=120)
     technician_user_id: str | None = None
     notes: str | None = None
+    # The same service of the same female on the same day is refused as a
+    # possible duplicate unless confirmed (a second insemination in one heat).
+    confirm_duplicate: bool = False
 
     @field_validator("event_type")
     @classmethod
@@ -94,6 +97,7 @@ class PregnancyCheckIn(BaseModel):
     expected_due_date: datetime | None = None
     examiner_user_id: str | None = None
     notes: str | None = None
+    confirm_duplicate: bool = False
 
     @field_validator("assessment_type", "result_code")
     @classmethod
@@ -143,6 +147,9 @@ class BirthIn(BaseModel):
     start_lactation: bool = True
     notes: str | None = None
     offspring: list[NewbornIn]
+    # A second birth of the same dam within 30 days is refused unless
+    # confirmed — twins are one birth with two newborns.
+    confirm_duplicate: bool = False
 
     @field_validator("assistance_code")
     @classmethod
@@ -167,6 +174,13 @@ class LactationStartIn(BaseModel):
 
 class DryOffIn(BaseModel):
     ended_at: datetime | None = None
+
+
+class LactationCorrectIn(BaseModel):
+    """The current lactation's calving / start-of-milking date, corrected."""
+
+    started_at: datetime
+    reason: str | None = Field(None, max_length=300)
 
 
 class IncubationIn(BaseModel):

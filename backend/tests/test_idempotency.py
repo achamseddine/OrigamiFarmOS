@@ -23,7 +23,7 @@ def test_replayed_write_returns_the_original_response_and_records_once(client, d
     session, _ = db_session
     headers = auth_headers(client)
     animal = _first_cow(session)
-    body = {"animal_id": animal.id, "session": "morning", "liters": 12.5, "destination": "stored"}
+    body = {"animal_id": animal.id, "session": "morning", "liters": 12.5, "destination": "stored", "confirm_duplicate": True}
     key = {HEADER: "outbox-milk-0001"}
 
     first = client.post("/api/v1/production/milk", json=body, headers={**headers, **key})
@@ -43,11 +43,13 @@ def test_replayed_write_returns_the_original_response_and_records_once(client, d
 
 def test_a_different_key_records_a_second_entry(client, db_session):
     """Two genuine milkings must still both land — the guard keys on the
-    tablet's key, not on the payload looking familiar."""
+    tablet's key, not on the payload looking familiar. (The same session
+    twice in a day is a *possible duplicate* the person confirms; that check
+    is tested in test_duplicates.py — here both are confirmed.)"""
     session, _ = db_session
     headers = auth_headers(client)
     animal = _first_cow(session)
-    body = {"animal_id": animal.id, "session": "evening", "liters": 9.25, "destination": "stored"}
+    body = {"animal_id": animal.id, "session": "evening", "liters": 9.25, "destination": "stored", "confirm_duplicate": True}
 
     client.post("/api/v1/production/milk", json=body, headers={**headers, HEADER: "outbox-a"})
     client.post("/api/v1/production/milk", json=body, headers={**headers, HEADER: "outbox-b"})
@@ -63,7 +65,7 @@ def test_writes_without_a_key_are_untouched(client, db_session):
     session, _ = db_session
     headers = auth_headers(client)
     animal = _first_cow(session)
-    body = {"animal_id": animal.id, "session": "morning", "liters": 3.5, "destination": "consumed"}
+    body = {"animal_id": animal.id, "session": "morning", "liters": 3.5, "destination": "consumed", "confirm_duplicate": True}
 
     client.post("/api/v1/production/milk", json=body, headers=headers)
     client.post("/api/v1/production/milk", json=body, headers=headers)
@@ -106,7 +108,7 @@ def test_a_key_is_scoped_to_the_user_who_sent_it(client, db_session):
 
     first = client.post(
         "/api/v1/production/milk",
-        json={"animal_id": animal.id, "session": "morning", "liters": 7.0, "destination": "stored"},
+        json={"animal_id": animal.id, "session": "morning", "liters": 7.0, "destination": "stored", "confirm_duplicate": True},
         headers={**manager, **key},
     )
     assert first.status_code in (200, 201), first.text
@@ -114,7 +116,7 @@ def test_a_key_is_scoped_to_the_user_who_sent_it(client, db_session):
     other = auth_headers(client, email="karim.worker@origami.farm", password="farmos123")
     second = client.post(
         "/api/v1/production/milk",
-        json={"animal_id": animal.id, "session": "evening", "liters": 8.0, "destination": "stored"},
+        json={"animal_id": animal.id, "session": "evening", "liters": 8.0, "destination": "stored", "confirm_duplicate": True},
         headers={**other, **key},
     )
     assert second.headers.get(REPLAYED_HEADER) is None

@@ -33,6 +33,7 @@ from app.repositories.base import new_id
 from app.livestock.reference import ensure_reference_data
 from app.domain import feed_models  # noqa: F401 - registers the feed architecture's tables
 from app.feeding.catalog import ensure_feed_reference_data
+from app.services.feed_inventory_service import ensure_standard_feeds
 
 FARM_ID = "farm-origami"
 
@@ -83,6 +84,10 @@ def seed_production_data(db: Session) -> None:
     ensure_reference_data(db)
     ensure_feed_reference_data(db)
     if db.get(models.Farm, FARM_ID) is not None:
+        # The standard feeds of the animal feeding form (idempotent; the
+        # migration creates them too, this covers a farm seeded after it).
+        ensure_standard_feeds(db, FARM_ID)
+        db.commit()
         print(f"Farm '{FARM_ID}' already exists — skipping (no passwords were changed).")
         return
 
@@ -114,6 +119,9 @@ def seed_production_data(db: Session) -> None:
         _grant_department_modules(db, user)
         print(f"{email:<32} {role:<20} {department or '—':<10} {password}")
 
+    # Concentrate, corn silage and wheat straw — the default rows of the
+    # animal feeding form — as feed products with an empty ledger.
+    ensure_standard_feeds(db, FARM_ID)
     db.commit()
     print("\nDone. Every account above can now log in against POST /api/v1/auth/login.")
 

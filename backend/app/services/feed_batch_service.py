@@ -712,3 +712,115 @@ def formula_nutrients(db: Session, version: fm.FeedFormulaVersion, *, basis: str
     ]
     return {"formula_version_id": version.id, "basis": basis, "source_type": "calculated", "coverage_pct": round(covered / total * 100, 1) if total else 0,
             "missing_profiles": missing, "values": values}
+
+
+# ------------------------------------------------------------------ one-step mix
+def quick_mix(
+    db: Session,
+    farm_id: str,
+    *,
+    feed_product_id: str | None,
+    new_product_name: str | None,
+    components: list[dict],
+    output_quantity: float | None,
+    unit: str = "kg",
+    produced_at: datetime | None = None,
+    intended_species_code: str | None = None,
+    notes: str | None = None,
+    allow_negative: bool = False,
+    can_approve: bool = False,
+    confirm_duplicate: bool = False,
+    user_id: str,
+) -> fm.FeedBatch:
+    """Records a mix the way it happens in the shed — "today I mixed 300 kg
+    barley, 150 kg bran, 10 kg minerals into concentrate" — as one numbered
+    mix (§20), without asking the farmer to set up a formula first.
+
+    The mix is still a formula version → batch → output lot: the output
+    feed's active formula is used (its targets are the comparison, the
+    weighed quantities the actuals); a farm-made feed with no formula yet
+    gets one, version 1, from this first mix. A new output feed can be named
+    here (farm-produced, feedable). Ingredients are drawn from their lots
+    FIFO (or the lot named) exactly as a batch completion draws them; the
+    output becomes a lot of the feed, ready to feed.
+
+    Approval (behavioural model §5: draft → approval → activate → mixing):
+    a mix is made from an approved — active — recipe. When the feed has
+    none, only someone with Feed approval ([can_approve]) records the first
+    mix, and that act approves version 1; anyone else is told to ask.
+    The same mix saved twice is refused as a possible duplicate unless
+    [confirm_duplicate]."""
+    from app.core import duplicates
+
+    lines = [c for c in components if float(c.get("actual_quantity") or 0) > 0]
+    if not lines:
+        raise FeedError("A mix needs at least one ingredient with a quantity.")
+    if len({c["feed_product_id"] for c in lines}) != len(lines):
+        raise FeedError("Each ingredient once: add the quantities of the same ingredient together.")
+    unit = uom.normalise(unit or "kg")
+    if feed_product_id:
+        product = inv.get_product(db, feed_product_id, farm_id)
+        if product.source_type != "farm_produced":
+            raise FeedError(f"{product.name} is a bought-in feed; a mix makes a farm-produced feed. Choose or name the feed this mix makes.")
+    elif new_product_name and new_product_name.strip():
+        existing = db.scalar(select(fm.FeedProduct).where(fm.FeedProduct.farm_id == farm_id, fm.FeedProduct.status == "active",
+                                                          func.lower(fm.FeedProduct.name) == new_product_name.strip().lower()))
+        if existing is not None and existing.source_type != "farm_produced":
+            raise FeedError(f"{existing.name} is a bought-in feed; give the mix another name.", 409)
+        product = existing or inv.create_product(db, farm_id, code=None, name=new_product_name.strip(), unit=unit, source_type="farm_produced",
+                                                 is_ingredient=False, is_feedable=True, category="concentrate", created_by=user_id)
+    else:
+        raise FeedError("Choose the feed this mix makes, or name a new one.")
+    for c in lines:
+        if c["feed_product_id"] == product.id:
+            raise FeedError(f"{product.name} cannot be an ingredient of itself.")
+    total_in = sum(uom.convert(float(c["actual_quantity"]), uom.normalise(c.get("unit") or inv.get_product(db, c["feed_product_id"], farm_id).unit), unit)
+                   for c in lines)
+    output = float(output_quantity) if output_quantity else total_in
+    when = ensure_utc(produced_at) if produced_at else now()
+
+    wanted: dict[str, float] = {}
+    for c in lines:
+        p = inv.get_product(db, c["feed_product_id"], farm_id)
+        wanted[p.id] = round(uom.convert(float(c["actual_quantity"]), uom.normalise(c.get("unit") or p.unit), p.unit), 2)
+    lo, hi = duplicates.near(when)
+    earlier = None
+    for b in db.scalars(select(fm.FeedBatch).where(fm.FeedBatch.farm_id == farm_id, fm.FeedBatch.feed_product_id == product.id,
+                                                    fm.FeedBatch.status == "completed", fm.FeedBatch.produced_at >= lo, fm.FeedBatch.produced_at <= hi)):
+        got: dict[str, float] = {}
+        for comp in b.components:
+            if comp.actual_quantity:
+                got[comp.feed_product_id] = round(got.get(comp.feed_product_id, 0.0) + comp.actual_quantity, 2)
+        if got == wanted:
+            earlier = b
+            break
+    match = duplicates.guard(earlier, f"The same mix of {product.name} ({earlier.mix_code if earlier else ''}) was already recorded within half an hour.",
+                             confirm=confirm_duplicate)
+
+    formula = db.scalar(select(fm.FeedFormula).where(fm.FeedFormula.farm_id == farm_id, fm.FeedFormula.feed_product_id == product.id,
+                                                     fm.FeedFormula.status == "active").order_by(fm.FeedFormula.created_at))
+    version = next((v for v in formula.versions if v.status == "active"), None) if formula is not None else None
+    if version is None and not can_approve:
+        raise FeedError(f"{product.name} has no approved recipe yet. Someone with Feed approval records its first mix (which approves the recipe), "
+                        "or approves a recipe under Feed → Formulas.", 403)
+    if version is None:
+        targets = [{"feed_product_id": c["feed_product_id"], "target_quantity": float(c["actual_quantity"]), "unit": c.get("unit")} for c in lines]
+        if formula is None:
+            formula = create_formula(db, farm_id, code=None, name=f"{product.name} — farm recipe", feed_product_id=product.id, species_code=intended_species_code,
+                                     description="Created from the first recorded mix.", batch_size=total_in, unit=unit, components=targets,
+                                     notes="Version 1 is the first mix as weighed.", activate=True, user_id=user_id)
+        else:
+            add_version(db, formula, batch_size=total_in, unit=unit, components=targets, notes="From a recorded mix.", activate=True, user_id=user_id)
+        version = next(v for v in formula.versions if v.status == "active")
+    batch = start_batch(db, farm_id, formula_version_id=version.id, formula_id=None, batch_code=None, target_quantity=output, unit=unit,
+                        notes=notes, intended_species_code=intended_species_code, production_date=when, user_id=user_id)
+    # A component of the recipe the farmer left out of this mix was not used:
+    # say so explicitly (zero), as a batch completion requires.
+    given = {c["feed_product_id"] for c in lines}
+    actuals = [{"feed_product_id": c["feed_product_id"], "actual_quantity": float(c["actual_quantity"]), "unit": c.get("unit"), "lot_id": c.get("lot_id")}
+               for c in lines]
+    actuals += [{"feed_product_id": comp.feed_product_id, "actual_quantity": 0} for comp in batch.components if comp.feed_product_id not in given]
+    complete_batch(db, batch, actuals=actuals, actual_quantity=output, produced_at=when, notes=None, allow_negative=allow_negative, user_id=user_id)
+    duplicates.log_confirmed(db, farm_id=farm_id, entity_type="feed_batch", entity_id=batch.id, match_id=match.id if match else None,
+                             what=f"mix:{batch.mix_code}", user_id=user_id)
+    return batch

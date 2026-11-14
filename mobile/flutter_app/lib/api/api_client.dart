@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show protected;
 import 'package:http/http.dart' as http;
 
 import '../data/local/cache_effects.dart';
@@ -23,19 +24,46 @@ class ApiException implements Exception {
   /// writes go to the outbox; the session is *not* signed out.
   bool get isOffline => statusCode == 0;
 
+  /// The server found a record that already says this (the same milking,
+  /// the same delivery note, …) and asks whether this is a second one —
+  /// backend app/core/duplicates.py. Resent with `confirm_duplicate: true`
+  /// it is recorded.
+  bool get isPossibleDuplicate => statusCode == 409 && message.startsWith(kPossibleDuplicate);
+
+  /// The server's sentence without its "Possible duplicate:" lead-in.
+  String get duplicateDetail => message.replaceFirst(kPossibleDuplicate, '').trim();
+
   @override
   String toString() => message;
 }
+
+/// How the server starts a refusal that a person may override by saying
+/// "this is a second one" (backend app/core/duplicates.py PREFIX).
+const kPossibleDuplicate = 'Possible duplicate:';
 
 /// Same success/error shape every write screen in this app already
 /// expects (`result.success`, `result.error`), plus [queued] for a write
 /// that is safely on the tablet but has not reached the server yet.
 class WriteResult {
-  const WriteResult.ok() : error = null, queued = false;
-  const WriteResult.queued() : error = null, queued = true;
-  const WriteResult.fail(this.error) : queued = false;
+  const WriteResult.ok([this.data]) : error = null, queued = false, statusCode = null;
+  const WriteResult.queued([this.data]) : error = null, queued = true, statusCode = null;
+  const WriteResult.fail(this.error, {this.statusCode}) : queued = false, data = null;
 
   final String? error;
+
+  /// The HTTP status of a refusal, when there was one.
+  final int? statusCode;
+
+  /// Refused as already on record, and the person chose not to record it
+  /// again (see [ApiClient.confirmPossibleDuplicate]).
+  bool get isPossibleDuplicate => statusCode == 409 && (error ?? '').startsWith(kPossibleDuplicate);
+
+  /// What the server answered (the created record), or the outbox's local
+  /// placeholder when [queued] — whose `id` the server does not know yet.
+  final Object? data;
+
+  /// The id the server gave a created record; null while it is queued.
+  String? get serverId => !queued && data is Map ? (data as Map)['id'] as String? : null;
 
   /// True when the write went to the outbox instead of the server. It is
   /// saved — on this tablet — and will be sent on the next sync.
@@ -61,6 +89,13 @@ class WriteResult {
 /// this general: any endpoint the app calls works offline without a
 /// matching branch on the server.
 class ApiClient {
+  /// Asked when the server answers a write with "Possible duplicate: …"
+  /// (the same fact already on record). True resends that one request with
+  /// `confirm_duplicate: true`; false leaves it unrecorded and the form
+  /// shows the server's sentence. Installed once by the app shell
+  /// (core/widgets/duplicate_confirmation.dart) — every form gets it.
+  static Future<bool> Function(String detail)? confirmPossibleDuplicate;
+
   ApiClient({required String baseUrl, this.token, LocalStore? store})
       : baseUrl = _trimTrailingSlash(baseUrl),
         _store = store {
@@ -133,7 +168,7 @@ class ApiClient {
 
   Future<dynamic> get(String path, {Map<String, dynamic>? query}) async {
     final store = _store;
-    if (store == null || !store.available) return _send('GET', path, query: query);
+    if (store == null || !store.available) return send('GET', path, query: query);
 
     final key = LocalStore.cacheKey(path, query);
 
@@ -146,7 +181,7 @@ class ApiClient {
     }
 
     try {
-      final body = await _send('GET', path, query: query);
+      final body = await send('GET', path, query: query);
       await store.writeCache(key, body);
       return body;
     } on ApiException catch (e) {
@@ -227,11 +262,13 @@ class ApiClient {
   /// Signing in is the one write that is never queued: without a token
   /// from the server there is no session to work offline *with*. This is
   /// the "internet required the first time" rule.
-  Future<dynamic> authenticate(String path, {Object? body}) => _send('POST', path, body: body);
+  Future<dynamic> authenticate(String path, {Object? body}) => send('POST', path, body: body);
 
   Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query}) async {
     final store = _store;
-    if (store == null || !store.available) return _send(method, path, body: body, query: query);
+    if (store == null || !store.available) {
+      return _sendAsking(method, path, body: body, query: query, idempotencyKey: newIdempotencyKey());
+    }
 
     if (standalone) return _writeLocal(store, method, path, body);
 
@@ -241,7 +278,7 @@ class ApiClient {
 
     if (monitor.online) {
       try {
-        return await _send(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
+        return await _sendAsking(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
       } on ApiException catch (e) {
         if (!e.isOffline) rethrow;
         // Fall through: the tablet lost the server mid-write.
@@ -290,11 +327,28 @@ class ApiClient {
     return created;
   }
 
+  /// Sends a write; on "Possible duplicate:" asks the person and, if they
+  /// say it is a second one, sends the same request again confirmed. The
+  /// refusal was not stored by the server's idempotency guard (4xx never
+  /// is), so the same key still names this one logical write.
+  Future<dynamic> _sendAsking(String method, String path,
+      {Object? body, Map<String, dynamic>? query, required String idempotencyKey}) async {
+    try {
+      return await send(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
+    } on ApiException catch (e) {
+      final ask = confirmPossibleDuplicate;
+      if (!e.isPossibleDuplicate || ask == null || body is! Map || body['confirm_duplicate'] == true) rethrow;
+      if (!await ask(e.duplicateDetail)) rethrow;
+      final confirmed = <String, dynamic>{...body.cast<String, dynamic>(), 'confirm_duplicate': true};
+      return send(method, path, body: confirmed, query: query, idempotencyKey: idempotencyKey);
+    }
+  }
+
   /// Replays one queued write. Used by the sync controller; the
   /// idempotency key is the stored one, so a replay of something the
   /// server already committed comes back as that original response
   /// instead of writing it twice.
-  Future<dynamic> replay(OutboxItem item) => _send(
+  Future<dynamic> replay(OutboxItem item) => send(
         item.method,
         item.path,
         body: item.body,
@@ -304,7 +358,10 @@ class ApiClient {
 
   // ------------------------------------------------------------------
 
-  Future<dynamic> _send(
+  /// The one network call. Protected so a test double can stand in for
+  /// the server while every write still goes through [_write].
+  @protected
+  Future<dynamic> send(
     String method,
     String path, {
     Object? body,
@@ -354,6 +411,14 @@ class ApiClient {
     } catch (_) {
       // Non-JSON error body (e.g. a proxy's HTML error page) — keep the generic message.
     }
+    // A route the server does not have at all ("Method Not Allowed", a bare
+    // "Not Found"): the server is older than this tablet build, or the
+    // server address points at something that is not the farm API. Say
+    // that, instead of the framework's two words.
+    if (response.statusCode == 405 || (response.statusCode == 404 && message == 'Not Found')) {
+      message = 'The farm server at $baseUrl does not have this function (HTTP ${response.statusCode}). '
+          'It is probably running an older version than this app — update the server, then try again.';
+    }
     throw ApiException(response.statusCode, message);
   }
 
@@ -368,9 +433,9 @@ class ApiClient {
     try {
       final result = await action();
       final queued = result is Map && result[kPendingFlag] == true;
-      return queued ? const WriteResult.queued() : const WriteResult.ok();
+      return queued ? WriteResult.queued(result) : WriteResult.ok(result);
     } on ApiException catch (e) {
-      return WriteResult.fail(e.message);
+      return WriteResult.fail(e.message, statusCode: e.statusCode);
     }
   }
 }

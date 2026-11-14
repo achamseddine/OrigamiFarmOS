@@ -36,7 +36,8 @@ class TestResolver:
         assert not cs.has(Cap.EGG_PRODUCTION)
         assert Cap.EAR_TAG in cs.required_codes()
         assert cs.required_identifier_types() == {"EAR_TAG"}
-        assert cs.subject_kind == "individual"
+        # Registered one by one, and a herd can also be a counted group.
+        assert cs.subject_kind == "either"
 
     def test_bull_never_pregnant_or_milked(self, db_session):
         session, _ = db_session
@@ -180,7 +181,8 @@ class TestAnimalRegistration:
         assert r.status_code == 201, r.text
         body = r.json()
         assert body["tag"] == "985141000123456"   # the primary identifier's value
-        assert {i["identifier_type"] for i in body["identifiers"]} == {"MICROCHIP", "PASSPORT"}
+        # Plus the farm number every animal is given.
+        assert {i["identifier_type"] for i in body["identifiers"]} == {"MICROCHIP", "PASSPORT", "FARM_NUMBER"}
         assert [i for i in body["identifiers"] if i["is_primary"]][0]["identifier_type"] == "MICROCHIP"
 
     def test_ear_tag_is_refused_on_a_horse(self, client):
@@ -189,16 +191,23 @@ class TestAnimalRegistration:
         assert r.status_code == 422
         assert "ear tag" in r.json()["detail"].lower()
 
-    def test_a_horse_must_have_a_microchip(self, client):
+    def test_a_horse_registers_before_its_microchip_and_it_stays_expected(self, client):
+        # docs/GENERIC-ANIMAL-CAPABILITY-MODEL.md §4a: an expected identifier
+        # does not block registration; the animal gets a farm number.
         r = self._create(client, name="Storm", species="horse", sex="M",
                          identifiers=[{"identifier_type": "NAME", "identifier_value": "Storm"}])
-        assert r.status_code == 422
-        assert "microchip" in r.json()["detail"].lower()
+        assert r.status_code == 201, r.text
+        assert {i["identifier_type"] for i in r.json()["identifiers"]} == {"NAME", "FARM_NUMBER"}
+        caps = client.get(f"{BASE}/animals/{r.json()['id']}/capabilities", headers=auth_headers(client)).json()
+        assert caps["required_identifier_types"] == ["MICROCHIP"]
 
-    def test_a_cow_needs_an_ear_tag(self, client):
+    def test_a_cow_registers_without_an_ear_tag(self, client):
         r = self._create(client, name="Nameless", species="cow", sex="F")
-        assert r.status_code == 422
-        assert "ear tag" in r.json()["detail"].lower()
+        assert r.status_code == 201, r.text
+        ids = r.json()["identifiers"]
+        assert [i["identifier_type"] for i in ids] == ["FARM_NUMBER"] and ids[0]["is_primary"] is True
+        caps = client.get(f"{BASE}/animals/{r.json()['id']}/capabilities", headers=auth_headers(client)).json()
+        assert caps["required_identifier_types"] == ["EAR_TAG"]
 
     def test_legacy_tag_becomes_a_typed_identifier(self, client):
         cow = self._create(client, tag="901", name="Nour", species="cow", sex="F")
@@ -329,7 +338,7 @@ class TestProductionGating:
 
     def test_a_dairy_cow_does(self, client):
         r = client.post(f"{BASE}/production/milk",
-                        json={"animal_id": BELLA, "session": "morning", "liters": 11.0, "destination": "stored"},
+                        json={"animal_id": BELLA, "session": "morning", "liters": 11.0, "destination": "stored", "confirm_duplicate": True},
                         headers=auth_headers(client))
         assert r.status_code == 201, r.text
 

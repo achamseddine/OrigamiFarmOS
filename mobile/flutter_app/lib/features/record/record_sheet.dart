@@ -15,6 +15,8 @@ import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
+import '../animals/animal_quick_entry_screen.dart';
+import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../feed/feed_movement_dialog.dart';
 import '../produce/agriculture_forms.dart';
 import '../../core/widgets/directional_icon.dart';
@@ -58,6 +60,15 @@ class RecordAction {
 }
 
 final List<RecordAction> _actions = [
+  RecordAction(
+    icon: FarmIcon.qr,
+    labelKey: 'qrScanAnimal',
+    accent: FarmColors.cedar,
+    modules: [FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals],
+    open: (context) async => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
+    ),
+  ),
   RecordAction(
     icon: FarmIcon.milkBottle,
     labelKey: 'milk',
@@ -275,7 +286,7 @@ Future<void> _recordObservation(BuildContext context) async {
 Future<void> _recordTreatment(BuildContext context) async {
   final animal = await _pickAnimal(context);
   if (animal == null || !context.mounted) return;
-  await showTreatDialog(context, animal);
+  await showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id);
 }
 
 Future<Animal?> _pickAnimal(BuildContext context) {

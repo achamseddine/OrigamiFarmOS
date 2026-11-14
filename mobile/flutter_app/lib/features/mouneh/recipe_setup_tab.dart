@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/widgets/app_icon.dart';
+import '../../core/widgets/ux_blocks.dart';
+import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -65,34 +68,36 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          SectionHeading(eyebrow: context.t('mnTabRecipes'), title: context.t('mnRecipesTitle'), subtitle: context.t('mnRecipesSub')),
+          const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Product',
+            title: context.t('mnColProduct'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 DropdownButtonFormField<String>(
-                  value: _productId,
-                  decoration: const InputDecoration(labelText: 'Choose a product'),
+                  initialValue: _productId,
+                  decoration: InputDecoration(labelText: context.t('mnChooseProduct')),
                   items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
                   onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
                 ),
-                if (provider.products.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text('Create a product first on the Product Builder tab.', style: FarmTypography.textTheme.bodySmall)),
+                if (provider.products.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(context.t('mnNeedProduct'), style: FarmTypography.textTheme.bodySmall)),
                 if (existingRecipe != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: StatusPill(label: 'Recipe v${existingRecipe.version} active — saving below creates v${existingRecipe.version + 1}', level: FarmStatusLevel.info, dense: true),
+                    child: StatusPill(label: '${context.t('mnRecipe')} v${existingRecipe.version} ${context.t('mnRecipeActive')} v${existingRecipe.version + 1}', level: FarmStatusLevel.info, dense: true),
                   ),
               ],
             ),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Raw Materials Library',
-            subtitle: 'Ingredients and packaging, reusable across every product',
-            trailing: 'Add material',
+            title: context.t('mnMaterialsTitle'),
+            subtitle: context.t('mnMaterialsSub'),
+            trailing: context.t('mnAddMaterial'),
             onTrailingTap: () => _showAddMaterialDialog(context),
             child: provider.rawMaterials.isEmpty
-                ? Text('No raw materials yet.', style: FarmTypography.textTheme.bodySmall)
+                ? EmptyState(message: context.t('mnNoMaterials'), icon: FarmIcon.inventory, compact: true)
                 : Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -101,21 +106,21 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(color: FarmColors.mist, borderRadius: BorderRadius.circular(FarmRadii.sm)),
-                          child: Text('${m.name} · \$${m.defaultUnitCost.toStringAsFixed(2)}/${m.unit} · ${m.currentStock.toStringAsFixed(0)} in stock', style: FarmTypography.textTheme.bodySmall),
+                          child: Text('${m.name} · \$${m.defaultUnitCost.toStringAsFixed(2)}/${m.unit} · ${m.currentStock.toStringAsFixed(0)} ${context.t('mnInStock')}', style: FarmTypography.textTheme.bodySmall),
                         ),
                     ],
                   ),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Recipe (Bill of Materials)',
+            title: context.t('mnBom'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  Expanded(child: TextField(controller: _basisQuantity, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'This recipe makes (qty)'))),
+                  Expanded(child: TextField(controller: _basisQuantity, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnRecipeMakes')))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _basisUnit, decoration: const InputDecoration(labelText: 'Basis unit'))),
+                  Expanded(child: TextField(controller: _basisUnit, decoration: InputDecoration(labelText: context.t('mnBasisUnit')))),
                 ]),
                 const SizedBox(height: 12),
                 for (var i = 0; i < _items.length; i++) _itemRow(context, i, provider),
@@ -123,15 +128,15 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                 OutlinedButton.icon(
                   onPressed: provider.rawMaterials.isEmpty ? null : () => setState(() => _items.add(_RecipeItemDraft(materialId: provider.rawMaterials.first.id))),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add ingredient / packaging line'),
+                  label: Text(context.t('mnAddLine')),
                 ),
               ],
             ),
           ),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            title: 'Labor & Optional Costs',
-            subtitle: 'Transport, gas/electricity, cooling, market fees, other overhead',
+            title: context.t('mnCostsTitle'),
+            subtitle: context.t('mnCostsSub'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -140,18 +145,18 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                 OutlinedButton.icon(
                   onPressed: () => setState(() => _components.add(_CostComponentDraft())),
                   icon: const Icon(Icons.add, size: 16),
-                  label: const Text('Add cost line'),
+                  label: Text(context.t('mnAddCostLine')),
                 ),
               ],
             ),
           ),
           const SizedBox(height: FarmSpacing.md),
-          TextField(controller: _notes, maxLines: 2, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+          TextField(controller: _notes, maxLines: 2, decoration: InputDecoration(labelText: context.t('notes'))),
           const SizedBox(height: FarmSpacing.md),
           Row(children: [
             FilledButton(
               onPressed: (_saving || product == null || _items.isEmpty) ? null : _submit,
-              child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Save Recipe'),
+              child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnSaveRecipe')),
             ),
             const SizedBox(width: 12),
             if (_error != null) Expanded(child: Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
@@ -172,8 +177,8 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
           Expanded(
             flex: 3,
             child: DropdownButtonFormField<String>(
-              value: draft.materialId,
-              decoration: const InputDecoration(labelText: 'Material'),
+              initialValue: draft.materialId,
+              decoration: InputDecoration(labelText: context.t('mnMaterial')),
               items: [for (final m in provider.rawMaterials) DropdownMenuItem(value: m.id, child: Text(m.name))],
               onChanged: (v) => setState(() => draft.materialId = v ?? draft.materialId),
             ),
@@ -184,7 +189,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
             child: TextFormField(
               initialValue: draft.quantity.toString(),
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Qty'),
+              decoration: InputDecoration(labelText: context.t('mnQty')),
               onChanged: (v) => draft.quantity = double.tryParse(v) ?? draft.quantity,
             ),
           ),
@@ -194,7 +199,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
             child: TextFormField(
               initialValue: draft.lossPercent.toString(),
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Loss %'),
+              decoration: InputDecoration(labelText: context.t('mnLossPct')),
               onChanged: (v) => draft.lossPercent = double.tryParse(v) ?? draft.lossPercent,
             ),
           ),
@@ -216,32 +221,32 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<String>(
-              value: draft.costType,
-              decoration: const InputDecoration(labelText: 'Type'),
-              items: [for (final t in kMounehCostTypes) DropdownMenuItem(value: t, child: Text(t.replaceAll('_', ' ')))],
+              initialValue: draft.costType,
+              decoration: InputDecoration(labelText: context.t('mnCostType')),
+              items: [for (final t in kMounehCostTypes) DropdownMenuItem(value: t, child: Text(context.t('mnCt_$t')))],
               onChanged: (v) => setState(() => draft.costType = v ?? draft.costType),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
-            child: TextFormField(initialValue: draft.label, decoration: const InputDecoration(labelText: 'Label'), onChanged: (v) => draft.label = v),
+            child: TextFormField(initialValue: draft.label, decoration: InputDecoration(labelText: context.t('mnLabel')), onChanged: (v) => draft.label = v),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<String>(
-              value: draft.calculationMethod,
-              decoration: const InputDecoration(labelText: 'Method'),
-              items: [for (final m in kMounehCalculationMethods) DropdownMenuItem(value: m, child: Text(m.replaceAll('_', ' ')))],
+              initialValue: draft.calculationMethod,
+              decoration: InputDecoration(labelText: context.t('mnMethod')),
+              items: [for (final m in kMounehCalculationMethods) DropdownMenuItem(value: m, child: Text(context.t('mnCm_$m')))],
               onChanged: (v) => setState(() => draft.calculationMethod = v ?? draft.calculationMethod),
             ),
           ),
           const SizedBox(width: 8),
           if (needsQtyRate) ...[
-            Expanded(child: TextFormField(decoration: const InputDecoration(labelText: 'Qty'), keyboardType: TextInputType.number, onChanged: (v) => draft.quantity = double.tryParse(v))),
+            Expanded(child: TextFormField(decoration: InputDecoration(labelText: context.t('mnQty')), keyboardType: TextInputType.number, onChanged: (v) => draft.quantity = double.tryParse(v))),
             const SizedBox(width: 8),
-            Expanded(child: TextFormField(decoration: const InputDecoration(labelText: 'Rate'), keyboardType: TextInputType.number, onChanged: (v) => draft.unitCost = double.tryParse(v))),
+            Expanded(child: TextFormField(decoration: InputDecoration(labelText: context.t('mnRate')), keyboardType: TextInputType.number, onChanged: (v) => draft.unitCost = double.tryParse(v))),
           ] else if (needsAmount)
             Expanded(
               child: TextFormField(
@@ -288,7 +293,7 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
     setState(() {
       _saving = false;
       if (result.success) {
-        _savedMessage = 'Recipe saved. Head to Cost Preview to see the price it calculates.';
+        _savedMessage = context.t('mnRecipeSaved');
         _items.clear();
         _components.clear();
       } else {
@@ -304,48 +309,56 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
     final stock = TextEditingController(text: '0');
     String category = 'raw_material';
     String sourceType = 'purchased';
+    String? error;
     return showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(builder: (dialogContext, setDialogState) {
         return AlertDialog(
-          title: const Text('Add Raw Material'),
+          title: Text(context.t('mnAddMaterial')),
           content: SizedBox(
             width: 380,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+                TextField(controller: name, decoration: InputDecoration(labelText: context.t('mnName'))),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                  items: const [DropdownMenuItem(value: 'raw_material', child: Text('Raw material')), DropdownMenuItem(value: 'packaging', child: Text('Packaging'))],
+                  initialValue: category,
+                  decoration: InputDecoration(labelText: context.t('mnCategory')),
+                  items: [DropdownMenuItem(value: 'raw_material', child: Text(context.t('mnRawMaterial'))), DropdownMenuItem(value: 'packaging', child: Text(context.t('mnPackaging')))],
                   onChanged: (v) => setDialogState(() => category = v ?? category),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: sourceType,
-                  decoration: const InputDecoration(labelText: 'Source'),
-                  items: const [DropdownMenuItem(value: 'purchased', child: Text('Purchased')), DropdownMenuItem(value: 'farm_produced', child: Text('Farm produced'))],
+                  initialValue: sourceType,
+                  decoration: InputDecoration(labelText: context.t('mnSource')),
+                  items: [DropdownMenuItem(value: 'purchased', child: Text(context.t('mnPurchased'))), DropdownMenuItem(value: 'farm_produced', child: Text(context.t('mnFarmProduced')))],
                   onChanged: (v) => setDialogState(() => sourceType = v ?? sourceType),
                 ),
                 const SizedBox(height: 12),
                 Row(children: [
-                  Expanded(child: TextField(controller: unit, decoration: const InputDecoration(labelText: 'Unit'))),
+                  Expanded(child: TextField(controller: unit, decoration: InputDecoration(labelText: context.t('mnUnit')))),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: cost, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Unit cost (\$)'))),
+                  Expanded(child: TextField(controller: cost, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnColUnitCost')} (\$)'))),
                 ]),
                 const SizedBox(height: 12),
-                TextField(controller: stock, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Current stock')),
+                TextField(controller: stock, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnCurrentStock'))),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
+                ],
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text(context.t('cancel'))),
             FilledButton(
               onPressed: () async {
-                if (name.text.trim().isEmpty) return;
-                await context.read<MounehProvider>().createRawMaterial(
+                if (name.text.trim().isEmpty) {
+                  setDialogState(() => error = context.t('mnRequired'));
+                  return;
+                }
+                final result = await context.read<MounehProvider>().createRawMaterial(
                       name: name.text.trim(),
                       category: category,
                       sourceType: sourceType,
@@ -353,9 +366,14 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
                       defaultUnitCost: double.tryParse(cost.text) ?? 0,
                       currentStock: double.tryParse(stock.text) ?? 0,
                     );
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
+                if (!dialogContext.mounted) return;
+                if (result.success) {
+                  Navigator.pop(dialogContext);
+                } else {
+                  setDialogState(() => error = result.error ?? context.t('couldNotSave'));
+                }
               },
-              child: const Text('Add'),
+              child: Text(context.t('mnAdd')),
             ),
           ],
         );

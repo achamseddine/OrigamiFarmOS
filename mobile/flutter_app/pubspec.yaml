@@ -23,6 +23,16 @@ dependencies:
   sqflite: ^2.3.3
   path: ^1.9.0
 
+  # The QR worker workflow (architecture/ADR-003-QR-SCANNING-AND-LABELS.md):
+  # the camera reads animal and pen labels on the device, offline (ML Kit's
+  # bundled model on Android); labels are drawn and printed from the
+  # tablet. `barcode` is the encoder `pdf` already uses, also rendered on
+  # screen through flutter_svg.
+  mobile_scanner: ^7.4.2
+  barcode: ^2.2.9
+  pdf: ^3.13.1
+  printing: ^5.15.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

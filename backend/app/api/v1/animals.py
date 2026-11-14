@@ -151,9 +151,19 @@ def create_animal(
     episode that says so; `group_name` must name an existing group of its
     species, which it then joins.
     """
+    from app.core import duplicates
+
+    same_name = db.scalar(select(models.Animal).where(
+        models.Animal.farm_id == current_user.farm_id, models.Animal.species == payload.species, models.Animal.active.is_(True),
+        func.lower(models.Animal.name) == payload.name.strip().lower(),
+    ))
+    match = duplicates.guard(same_name, f"{same_name.name} (#{same_name.tag or same_name.id[:8]}) is already registered on this farm." if same_name else "",
+                             confirm=payload.confirm_duplicate)
     animal = animal_service.create_animal(
-        db, current_user, payload.model_dump(exclude={"identifiers", "tag"}), identifiers_in=payload.identifiers, tag=payload.tag,
+        db, current_user, payload.model_dump(exclude={"identifiers", "tag", "confirm_duplicate"}), identifiers_in=payload.identifiers, tag=payload.tag,
     )
+    duplicates.log_confirmed(db, farm_id=current_user.farm_id, entity_type="animal", entity_id=animal.id, match_id=match.id if match else None,
+                             what=f"animal:{animal.id}", user_id=current_user.id)
     db.commit()
     db.refresh(animal)
     return animal
@@ -268,6 +278,9 @@ def update_animal(
         # confounders, so the reading is taken again.
         if {"life_stage", "management_profile", "status"} & changed:
             feed_performance_service.on_context_changed(db, "animal", animal, trigger="lifecycle_changed", user_id=current_user.id)
+        if {"sex", "life_stage"} & changed:
+            # A heifer that became an adult now belongs in "Open cows".
+            group_service.sync_rule_groups(db, animal, user_id=current_user.id)
     if new_tag is not None and new_tag.strip() and new_tag.strip() != (animal.tag or ""):
         identifier_service.replace_primary_value(
             db, animal, new_tag.strip(), cap_set or capability_service.resolve_for_animal(db, animal)

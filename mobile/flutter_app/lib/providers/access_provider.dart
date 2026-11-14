@@ -51,6 +51,23 @@ class AccessProvider extends ChangeNotifier {
   bool canAssign(String moduleCode) => _access.canAssign(moduleCode);
   bool get isFullAccess => _access.fullAccess;
 
+  /// Feed approval: activating a recipe or program, a farm feed's first mix
+  /// (which approves its recipe), releasing a held lot.
+  bool get canApproveFeed => can(FarmModule.feedNutrition, PermissionAction.approve);
+
+  /// Recording more feed than the stock on record is an approved exception
+  /// — Feed or Inventory approval (backend api/deps.ensure_stock_override).
+  bool get canOverrideFeedStock => canApproveFeed || can(FarmModule.inventory, PermissionAction.approve);
+
+  /// A death is recorded with Animals *edit*; a sale, cull, slaughter or
+  /// transfer is a business decision and needs Animals *approve* (backend
+  /// livestock exit).
+  bool canRecordExit(String exitType) =>
+      exitType == 'dead' ? canEdit(FarmModule.animals) : can(FarmModule.animals, PermissionAction.approve);
+
+  /// Changing the farm calendar (dry-off, milk peak, breeding wait).
+  bool get canConfigureSettings => can(FarmModule.settings, PermissionAction.configure);
+
   Future<void> load() async {
     loading = true;
     notifyListeners();

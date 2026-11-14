@@ -83,8 +83,12 @@ class _FormulaCardState extends State<_FormulaCard> {
     final f = widget.formula;
     final active = f.active;
     final livestock = context.watch<LivestockProvider>();
-    return Container(
-      decoration: BoxDecoration(color: FarmColors.stone, borderRadius: BorderRadius.circular(FarmRadii.md)),
+    // A Material, not a coloured box: the tile paints its ripple on the
+    // nearest Material, and a DecoratedBox in between hid it.
+    return Material(
+      color: FarmColors.stone,
+      borderRadius: BorderRadius.circular(FarmRadii.md),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
         tilePadding: const EdgeInsets.symmetric(horizontal: 14),
         childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
@@ -241,7 +245,11 @@ class _FormulaDialogState extends State<_FormulaDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(_isVersion ? 'versionCreated' : 'formulaCreated'))));
+      // Without Feed approval the server keeps it a draft for a manager.
+      final draft = !context.read<AccessProvider>().canApproveFeed;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.t(draft ? 'formulaSavedDraft' : (_isVersion ? 'versionCreated' : 'formulaCreated'))),
+      ));
       return;
     }
     setState(() {

@@ -158,6 +158,52 @@ def ensure_product_for_item(
     return product
 
 
+# ------------------------------------------------------------ standard feeds
+def _slot_match_rank(product: fm.FeedProduct, slot_row) -> int | None:
+    """0: coded for the slot; 1: its name says it; 2: (concentrate only) a
+    concentrate by category. None: not this slot's feed."""
+    slot, code, _en, _ar, category, _unit, keywords = slot_row
+    if (product.code or "").upper() == code:
+        return 0
+    names = f"{product.name or ''} {product.name_ar or ''}".lower()
+    if any(k.lower() in names for k in keywords):
+        return 1
+    if slot == "concentrate" and (product.category or "").lower() == category:
+        return 2
+    return None
+
+
+def standard_feed_slots(db: Session, farm_id: str) -> dict[str, fm.FeedProduct | None]:
+    """Which of the farm's feeds fills each default row of the feeding form
+    (concentrate, corn silage, wheat straw). A product coded for the slot
+    wins, then one whose name says it, then — for concentrate — any
+    concentrate. The rule lives here, once; the tablet only shows it."""
+    products = list(db.scalars(
+        select(fm.FeedProduct).where(fm.FeedProduct.farm_id == farm_id, fm.FeedProduct.status == "active", fm.FeedProduct.is_feedable.is_(True))
+        .order_by(fm.FeedProduct.created_at, fm.FeedProduct.name)
+    ))
+    out: dict[str, fm.FeedProduct | None] = {}
+    for row in catalog.STANDARD_FEEDS:
+        ranked = sorted(((rank, i, p) for i, p in enumerate(products) if (rank := _slot_match_rank(p, row)) is not None), key=lambda t: t[:2])
+        out[row[0]] = ranked[0][2] if ranked else None
+    return out
+
+
+def ensure_standard_feeds(db: Session, farm_id: str, *, created_by: str | None = None) -> dict[str, fm.FeedProduct]:
+    """Creates whichever of the three standard feeds the farm does not have
+    yet — an ordinary feedable product with an empty ledger (no invented
+    stock); the concentrate is farm-produced so the farm's mixes make it.
+    Idempotent."""
+    slots = standard_feed_slots(db, farm_id)
+    for slot, code, name_en, name_ar, category, unit, _keywords in catalog.STANDARD_FEEDS:
+        if slots.get(slot) is None:
+            slots[slot] = create_product(
+                db, farm_id, code=code, name=name_en, name_ar=name_ar, unit=unit, source_type=catalog.STANDARD_FEED_SOURCE.get(slot, "purchased"),
+                is_ingredient=True, is_feedable=True, category=category, notes="Standard feed of the animal feeding form.", created_by=created_by,
+            )
+    return slots  # type: ignore[return-value]
+
+
 def reconcile_opening_balance(db: Session, product: fm.FeedProduct, item: models.InventoryItem, *, created_by: str | None) -> None:
     """Stock an item held before lots existed becomes its opening lot. Runs
     only for a product with no lots at all — once lots exist, the services
@@ -315,10 +361,18 @@ def receive(
     received_at: datetime | None = None,
     feed_batch_id: str | None = None,
     user_id: str | None = None,
+    quality_grade: str | None = None,
+    moisture_pct: float | None = None,
+    quality_notes: str | None = None,
 ) -> fm.FeedLot:
     """Goods receipt (§26): what arrived, what was accepted, what was
-    rejected — three separately auditable numbers. On-hand starts at the
-    accepted quantity."""
+    rejected — three separately auditable numbers — and the quality seen at
+    receipt (grade, moisture, notes). On-hand starts at the accepted
+    quantity."""
+    if quality_grade is not None and quality_grade not in catalog.LOT_QUALITY_GRADES:
+        raise FeedError(f"quality_grade must be one of {list(catalog.LOT_QUALITY_GRADES)}")
+    if moisture_pct is not None and not 0 <= moisture_pct <= 100:
+        raise FeedError("Moisture is a percentage between 0 and 100.")
     if quantity <= 0:
         raise FeedError("Received quantity must be greater than zero.")
     if rejected_quantity < 0 or rejected_quantity > quantity:
@@ -348,6 +402,9 @@ def receive(
         unit_cost=unit_cost if unit_cost is not None else (item.unit_cost if item else product.default_unit_cost),
         status="active" if accepted > 0 else "depleted",
         reference=reference,
+        quality_grade=quality_grade,
+        moisture_pct=moisture_pct,
+        quality_notes=(quality_notes or "").strip() or None,
         notes=notes,
         created_by=user_id,
         created_at=now(),

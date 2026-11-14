@@ -115,6 +115,7 @@ class ProduceHarvestScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebCrops'),
             title: context.t('produceHarvestTitle'),
             subtitle: context.t('produceHarvestSubtitle'),
             icon: FarmIcon.leaf,

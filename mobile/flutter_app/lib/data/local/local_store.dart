@@ -298,6 +298,29 @@ class LocalStore {
     );
   }
 
+  /// A queued entry the server refused as a possible duplicate, sent again
+  /// with `confirm_duplicate: true` because the farmer says it is a second
+  /// one (the sync panel's "Record anyway").
+  Future<void> confirmOutboxDuplicate(int id) async {
+    final db = _db;
+    if (db == null) return;
+    final rows = await db.query('outbox', columns: ['body'], where: 'id = ?', whereArgs: [id], limit: 1);
+    if (rows.isEmpty) return;
+    final raw = rows.first['body'] as String?;
+    final body = raw == null ? null : jsonDecode(raw);
+    if (body is! Map) return;
+    await db.update(
+      'outbox',
+      {
+        'body': jsonEncode({...body, 'confirm_duplicate': true}),
+        'status': OutboxStatus.pending.name,
+        'last_error': null,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> discardOutboxItem(int id) => removeFromOutbox(id);
 
   // ------------------------------------------------------------------

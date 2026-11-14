@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
-import '../../core/theme/colors.dart';
 import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
+import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/access.dart';
+import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
 import 'feed_inventory_screen.dart';
-import 'feed_movement_dialog.dart';
+import 'purchase_and_mix_dialogs.dart';
 import 'tabs/costs_tab.dart';
 import 'tabs/daily_feeding_tab.dart';
 import 'tabs/feeds_and_lots_tab.dart';
@@ -34,60 +36,88 @@ class FeedWorkspaceScreen extends StatefulWidget {
   State<FeedWorkspaceScreen> createState() => _FeedWorkspaceScreenState();
 }
 
-class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
-  int _tab = 0;
+/// The workspace's tabs, in the V3 prototype's order: making feed first,
+/// then what it is made from and where it is kept, then what the animals
+/// are given and what that costs and achieves.
+enum FeedWorkspaceTab { mixing, materials, stock, formulas, intake, programs, nutrition, costs, trace, performance }
 
-  static const _tabs = [
-    'feedTabInventory', 'feedTabFeeds', 'feedTabFormulas', 'feedTabMixing', 'feedTabPrograms',
-    'feedTabDaily', 'feedTabNutrition', 'feedTabCosts', 'feedTabTrace', 'feedTabPerformance',
-  ];
+class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
+  FeedWorkspaceTab _tab = FeedWorkspaceTab.mixing;
+
+  @override
+  void initState() {
+    super.initState();
+    // Sign-in loads only what recording needs; the workspace figures load here.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FeedingProvider>().ensureWorkspace();
+    });
+  }
+
+  static const _labels = {
+    FeedWorkspaceTab.mixing: 'fwTabMixing',
+    FeedWorkspaceTab.materials: 'fwTabMaterials',
+    FeedWorkspaceTab.stock: 'fwTabStock',
+    FeedWorkspaceTab.formulas: 'feedTabFormulas',
+    FeedWorkspaceTab.intake: 'fwTabIntake',
+    FeedWorkspaceTab.programs: 'feedTabPrograms',
+    FeedWorkspaceTab.nutrition: 'feedTabNutrition',
+    FeedWorkspaceTab.costs: 'feedTabCosts',
+    FeedWorkspaceTab.trace: 'feedTabTrace',
+    FeedWorkspaceTab.performance: 'feedTabPerformance',
+  };
 
   @override
   Widget build(BuildContext context) {
     final access = context.watch<AccessProvider>();
     final feeding = context.watch<FeedingProvider>();
-    final canRecord = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
+    final canStock = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
+    final canFeed = access.canCreate(FarmModule.feedNutrition);
     final atRisk = feeding.reorder.where((r) => r.coveredByTaskId == null).length;
+    final tabs = FeedWorkspaceTab.values;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         HeroBand(
+          eyebrow: context.t('fwEyebrow'),
           title: context.t('feedInventoryTitle'),
           subtitle: context.t('feedWorkspaceSubtitle'),
           icon: FarmIcon.feedBag,
           trailing: atRisk == 0
               ? null
               : StatusPill(label: '$atRisk ${context.t('stockoutRisk')}', level: FarmStatusLevel.alert),
+          // The feed room's day in its own order: what arrived, what was
+          // mixed, what was fed (purchase_and_mix_dialogs.dart).
           actions: [
-            if (canRecord)
-              HeroAction(
-                primary: true,
-                icon: FarmIconMap.add,
-                label: context.t('addFeed'),
-                onPressed: () => showFeedMovementDialog(context, direction: FeedMovementDirection.inbound),
-              ),
-            if (canRecord)
-              HeroAction(
-                icon: FarmIcon.feedBag,
-                label: context.t('feedTabDaily'),
-                onPressed: () => setState(() => _tab = 5),
-              ),
+            if (canStock)
+              HeroAction(primary: true, icon: FarmIcon.inventory, label: context.t('fpRecordPurchase'), onPressed: () => showRecordPurchaseDialog(context)),
+            if (canFeed)
+              HeroAction(icon: FarmIconMap.add, label: context.t('fwMakeMix'), onPressed: () => showRecordMixDialog(context)),
+            if (canFeed)
+              HeroAction(icon: FarmIcon.feedBag, label: context.t('fwRecordFeeding'), onPressed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
           ],
         ),
         const SizedBox(height: FarmSpacing.md),
-        _TabStrip(labels: [for (final k in _tabs) context.t(k)], selected: _tab, onSelect: (i) => setState(() => _tab = i)),
+        FeedGettingStartedCard(onFeed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
+        const SizedBox(height: FarmSpacing.sm),
+        FeedKpiRow(feeding: feeding),
+        const SizedBox(height: FarmSpacing.sm),
+        UnderlineTabs(
+          labels: [for (final t in tabs) context.t(_labels[t]!)],
+          selected: tabs.indexOf(_tab),
+          onSelect: (i) => setState(() => _tab = tabs[i]),
+        ),
         const SizedBox(height: FarmSpacing.md),
         Expanded(
           child: IndexedStack(
-            index: _tab,
+            index: tabs.indexOf(_tab),
             children: const [
-              FeedInventoryScreen(embedded: true),
-              FeedsAndLotsTab(),
-              FormulasTab(),
               MixingTab(),
-              ProgramsTab(),
+              FeedsAndLotsTab(),
+              FeedInventoryScreen(embedded: true),
+              FormulasTab(),
               DailyFeedingTab(),
+              ProgramsTab(),
               NutritionTab(),
               CostsTab(),
               TraceabilityTab(),
@@ -100,41 +130,59 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
   }
 }
 
-class _TabStrip extends StatelessWidget {
-  const _TabStrip({required this.labels, required this.selected, required this.onSelect});
-  final List<String> labels;
-  final int selected;
-  final ValueChanged<int> onSelect;
+/// The four figures the prototype opens the feed page on, each from the
+/// server's own records: numbered mixes, finished mix on hand (the stock
+/// ledger's balance of mix output lots, never a typed-in number), the
+/// feedings recorded this week and what feeding cost this month.
+class FeedKpiRow extends StatelessWidget {
+  const FeedKpiRow({super.key, required this.feeding});
+  final FeedingProvider feeding;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < labels.length; i++)
-            Padding(
-              padding: const EdgeInsetsDirectional.only(end: 8),
-              child: Material(
-                color: i == selected ? FarmColors.cedar : FarmColors.sand,
-                borderRadius: BorderRadius.circular(FarmRadii.pill),
-                child: InkWell(
-                  onTap: () => onSelect(i),
-                  borderRadius: BorderRadius.circular(FarmRadii.pill),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Text(
-                      labels[i],
-                      style: FarmTypography.textTheme.labelMedium?.copyWith(color: i == selected ? FarmColors.white : FarmColors.ink),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
+    final numbered = [for (final b in feeding.batches) if (!b.numberPending) b]..sort((a, b) => b.mixNumber.compareTo(a.mixNumber));
+    final mixLots = [for (final l in feeding.lots) if (l.feedBatchId != null && l.quantityOnHand > 0) l];
+    final onHand = finishedMixOnHand(feeding.lots);
+    final fed = [for (final e in feeding.recentEvents) if (e.status == 'recorded') e];
+    final subjects = {for (final e in fed) e.subjectId}.length;
+    return EqualGrid(
+      minTileWidth: 200,
+      children: [
+        KpiCard(
+          icon: FarmIcon.feedBag,
+          label: context.t('fwKpiMixes'),
+          value: '${numbered.length}',
+          caption: numbered.isEmpty ? context.t('fwKpiMixesNone') : '${context.t('fwLatest')} ${numbered.first.label}',
+        ),
+        KpiCard(
+          icon: FarmIcon.inventory,
+          label: context.t('fwKpiFinished'),
+          value: onHand.isEmpty ? '0' : onHand.entries.map((e) => feedNumber(e.value)).join(' + '),
+          unit: onHand.isEmpty ? null : onHand.keys.join(' + '),
+          caption: '${mixLots.length} ${context.t('fwKpiFinishedCap')}',
+        ),
+        KpiCard(icon: FarmIcon.check, label: context.t('fwKpiFeedings'), value: '${fed.length}', caption: '$subjects ${context.t('fwKpiFeedingsCap')}'),
+        KpiCard(
+          icon: FarmIcon.money,
+          label: context.t('fwKpiCost'),
+          value: feedMoney(feeding.costs.totalFeedingCost),
+          caption: context.t('fwKpiCostCap'),
+        ),
+      ],
     );
   }
+}
+
+/// Finished mix on hand, per unit: the balance of every active output lot
+/// a numbered mix produced. Units are never added across — 40 kg and 3
+/// bags stay two figures.
+Map<String, double> finishedMixOnHand(List<FeedLot> lots) {
+  final out = <String, double>{};
+  for (final l in lots) {
+    if (l.feedBatchId == null || l.quantityOnHand <= 0 || l.status != 'active') continue;
+    out[l.unit] = (out[l.unit] ?? 0) + l.quantityOnHand;
+  }
+  return out;
 }
 
 /// Small shared pieces for the tabs.
@@ -164,8 +212,8 @@ class FeedEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Text(context.t(textKey), style: FarmTypography.textTheme.bodySmall),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: EmptyState(message: context.t(textKey), icon: FarmIcon.feedBag, compact: true),
       );
 }
 

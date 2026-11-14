@@ -16,6 +16,8 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/inventory.dart';
 import '../../domain/entities/task.dart';
 import '../../providers/feed_provider.dart';
+import '../../providers/access_provider.dart';
+import '../animals/animal_quick_entry_screen.dart';
 import '../../providers/notifications_provider.dart';
 import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
@@ -23,6 +25,8 @@ import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
 import '../priorities/priority_card.dart';
 import '../../core/widgets/hero_band.dart';
+import 'my_duties_card.dart';
+import 'today_routine_card.dart';
 
 /// Screen 2 — Morning Briefing Dashboard. The default route after login
 /// (tech spec §2 "Morning first: default route after login is Morning
@@ -114,16 +118,36 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('myDayEyebrow'),
             title: managerName.isEmpty
                 ? context.t('goodMorning')
                 : '${context.t('goodMorning')}، $managerName',
             subtitle: context.t('morningSubline'),
             icon: FarmIcon.sun,
             trailing: const _Motto(),
+            actions: [
+              if ([FarmModule.milkProduction, FarmModule.feedNutrition, FarmModule.animalHealth, FarmModule.animals]
+                  .any(context.watch<AccessProvider>().canCreate))
+                // The worker's first move at the barn door: point the
+                // tablet at a label.
+                HeroAction(
+                  icon: FarmIcon.qr,
+                  label: context.t('qrScanAnimal'),
+                  primary: true,
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: FarmSpacing.lg),
           _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
+          // The animals and duties this person is responsible for.
+          const MyDutiesCard(),
+          // The day's husbandry routine, ticked off from today's records.
+          const TodayRoutineCard(),
+          const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, constraints) {
             final wide = constraints.maxWidth > kTabletBreakpoint;
             final columns = <Widget>[

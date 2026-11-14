@@ -92,7 +92,49 @@ available = on_hand − unusable lots (quarantined | blocked | recalled | expire
   `availability` computes the formula above per product and per purpose.
 - `allow_negative` is a legacy override (`POST /feed/transactions` on a
   non-lot item) recorded against no lot; nothing in the new endpoints uses
-  it silently.
+  it silently. The animal feeding form and the quick-entry screen send it
+  on `POST /feeding-events` only when the worker ticks *"Stock not entered
+  yet — record anyway"*, which they show when an amount exceeds the stock
+  the tablet last saw or the server refuses for lack of stock; the
+  shortfall is then an `out` movement against no lot, visible in the ledger
+  until a delivery is entered.
+
+### 3b. Purchases with their quality
+
+A purchase is recorded as a lot in one form (`purchase_and_mix_dialogs.dart`,
+*Record purchase* on the Feed screen): what arrived (an existing feed, or a
+new one named there — grain / raw material, forage, ready-made feed,
+minerals), the date received, quantity received and rejected, unit cost,
+supplier, invoice, and the **quality at receipt** — a grade (`good` /
+`fair` / `poor`), moisture %, and what was seen (mould, dust, foreign
+matter) on `feed_lots.quality_grade`, `moisture_pct`, `quality_notes`
+(migration `c3e5a7b9d1f4`). A rejected share stays rejected quantity; the
+grade describes what was accepted.
+
+A delivery graded **poor** is received into **quarantine** — on the farm,
+not usable — until someone with Feed approval releases it after inspection
+("physical possession does not imply permission to use"). The same delivery
+note entered twice (same supplier and invoice, or the same supplier and
+quantity within half an hour) is asked as a *possible duplicate*; a lot code
+already used is refused outright (architecture/API-STANDARDS.md,
+*Duplicate entries and approvals*).
+
+### 3a. Standard feeds of the animal feeding form
+
+The feeding form opens with three rows — **Concentrate, Corn silage, Wheat
+straw** — every row optional, plus *Add another feed*
+(`features/feed/feeding_event_dialog.dart`). Each row points at the farm's
+own feed for it, matched server-side once
+(`feed_inventory_service.standard_feed_slots`,
+`GET /feed-products/standard-slots`): a product coded `CONCENTRATE` /
+`CORN-SILAGE` / `WHEAT-STRAW` first, then one whose English or Arabic name
+says it, then — for concentrate — any concentrate by category. A farm with
+no such feed gets it as an ordinary purchased, feedable product with an
+**empty ledger** (no invented stock): migration `a8d0c2e4f6b1` for existing
+farms, `seed_production` for new ones, and `POST /feed-products/standard`
+(Feed create permission; idempotent) from the form's *Set up* button. A
+plan's amounts fill the row of the same feed; other planned feeds become
+extra rows. The worker can change the product in any row.
 - `reconcile_opening_balance` pins an item's figure into an opening lot
   only when the product has no lots yet, so a backfilled farm starts clean.
 
@@ -118,6 +160,37 @@ lot of the produced product with `source_type = farm_produced`
 (`feed_batch_completed`). Variance per component and against the planned
 cost is kept on the batch. A batch can be quarantined, which quarantines
 its output lot.
+
+### 5a. A mix in one step
+
+`POST /feed-mixes` (`feed_batch_service.quick_mix`, *Record a mix* on the
+Feed screen) records a mix the way it happens in the shed — the date, the
+ingredients as weighed, the output — without a formula having to be set up
+first. It is still formula version → numbered batch → output lot: the
+output feed's active formula is used (its targets are the comparison, the
+weighed quantities the actuals, a left-out ingredient recorded as zero); a
+farm-made feed with no formula gets version 1 from this first mix. A new
+output feed can be named in the form (farm-produced, feedable). Ingredients
+are drawn from their lots FIFO, the output is received as a lot, the mix
+gets the farm's next mix number (§20). A mix cannot make a bought-in feed or
+contain itself. The standard **Concentrate** is farm-produced for this
+reason (bought concentrate is still received into it as purchased lots).
+
+Approval (handbook/03-Behavioral-Model.md §5, draft → approval → mixing):
+the first mix of a feed with no approved recipe *creates and approves* that
+recipe, so it needs Feed **approve**; a worker is told before filling the
+form in and the server refuses with 403. Once the recipe is approved anyone
+with Feed create records its mixes. A formula or program saved without Feed
+approve stays a **draft** until a manager activates it. Issuing more than
+the stock on record (`allow_negative`) needs Feed or Inventory approve — the
+*Stock not entered yet — record anyway* tick is shown only to them. Typing
+an existing feed's name as a new output reuses that feed; the same mix saved
+twice within half an hour is asked as a possible duplicate.
+
+The Feed screen opens with the farm's order of work — *Record purchase*,
+*Make feed mix*, *Record feeding* — and, until all four have happened, a
+*Get the feed room going* card (buy grain → buy corn silage and wheat straw →
+mix the concentrate → feed the animals) ticked from the records.
 
 ## 6. Feeding programs
 

@@ -36,7 +36,10 @@ def _now() -> datetime:
 
 
 def _days_ago(n: int, hour: int = 6) -> datetime:
-    return _now().replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=n)
+    """Never in the future: seeded before 07:00 UTC, today's 07:00 feeding
+    is placed a few minutes ago instead (forecasts and history read "now")."""
+    at = _now().replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=n)
+    return min(at, _now() - timedelta(minutes=5))
 
 
 def _product_from_item(db: Session, farm_id: str, product_id: str, item_id: str, *, code: str, source_type: str, is_ingredient: bool, is_feedable: bool, category: str) -> fm.FeedProduct:
@@ -118,7 +121,14 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     broiler = _new_product(db, farm_id, "fp-broiler-grower", "feed-broiler-grower", code="BROILER-GROWER", name="Broiler Grower",
                            name_ar="علف تسمين", category="complete_feed", source_type="purchased", is_ingredient=False, is_feedable=True,
                            unit_cost=0.47, supplier="Al Mashreq", reorder_level=300)
-    targets.update({"feed-barley": 1200, "feed-dairy-concentrate": 2000, "feed-dairy-premix": 500, "feed-broiler-grower": 800})
+    # The third default row of the animal feeding form (concentrate and corn
+    # silage are already above): the long straw the cows get at noon.
+    straw = _new_product(db, farm_id, "fp-wheat-straw", "feed-wheat-straw", code="WHEAT-STRAW", name="Wheat straw", name_ar="تبن القمح",
+                         category="forage", source_type="purchased", is_ingredient=True, is_feedable=True, unit_cost=0.12,
+                         supplier="Bekaa Hay Co.", reorder_level=500)
+    targets.update({"feed-barley": 1200, "feed-dairy-concentrate": 2000, "feed-dairy-premix": 500, "feed-broiler-grower": 800,
+                    "feed-wheat-straw": 1800})
+    inv.receive(db, straw, quantity=1800, unit_cost=0.12, supplier_label="Bekaa Hay Co.", lot_code="WST-2609-04", received_at=_days_ago(14), user_id=u)
     inv.receive(db, barley, quantity=1200, unit_cost=0.36, supplier_label="Bekaa Hay Co.", lot_code="BAR-2609-01", received_at=_days_ago(12), user_id=u)
     inv.receive(db, concentrate, quantity=2000, unit_cost=0.52, supplier_label="Al Mashreq", lot_code="DC18-2609-07", received_at=_days_ago(9),
                 expiry_date=_now() + timedelta(days=120), reference="INV-4471", user_id=u)

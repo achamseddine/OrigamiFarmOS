@@ -57,6 +57,17 @@ def create_observation(
     ensure_any_permission(db, current_user, modules, perms.CREATE)
     owned_or_404(db, model, payload.entity_id, current_user, label)
     ensure_farm_user(db, current_user, payload.observer_id, "observer")
+    from app.core import duplicates
+
+    lo, hi = duplicates.near(payload.observed_at)
+    earlier = db.scalar(select(models.Observation).where(
+        models.Observation.entity_type == payload.entity_type, models.Observation.entity_id == payload.entity_id,
+        models.Observation.observation_type == payload.observation_type, models.Observation.observed_at >= lo, models.Observation.observed_at <= hi,
+        models.Observation.value_numeric.is_(None) if payload.value_numeric is None else models.Observation.value_numeric == payload.value_numeric,
+        models.Observation.value_text.is_(None) if payload.value_text is None else models.Observation.value_text == payload.value_text,
+    ))
+    match = duplicates.guard(earlier, f"The same {payload.observation_type.replace('_', ' ')} observation was already recorded within half an hour.",
+                             confirm=payload.confirm_duplicate)
     observation = models.Observation(
         id=new_id(),
         farm_id=payload.farm_id,
@@ -81,6 +92,8 @@ def create_observation(
         if case is not None:
             observation.health_case_id = case.id
     db.add(observation)
+    duplicates.log_confirmed(db, farm_id=payload.farm_id, entity_type=payload.entity_type, entity_id=payload.entity_id,
+                             match_id=match.id if match else None, what=f"observation:{observation.id}", user_id=current_user.id)
     write_event(
         db,
         farm_id=payload.farm_id,

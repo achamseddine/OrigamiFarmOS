@@ -61,3 +61,17 @@ long as no non-covering `fontFamily` is force-set on Arabic runs.
   (Treatment) do.
 - Every `RecommendationCard` shows evidence, confidence and a suggested action before any
   "Create Task" action is enabled.
+
+## From the V3 prototype (`core/widgets/ux_blocks.dart`)
+
+| Component | Use |
+|---|---|
+| `Eyebrow` / `HeroBand.eyebrow` | Uppercase green line naming the area above a heading. |
+| `SectionHeading` | Eyebrow, heading, one line, actions at the far edge (below on narrow screens). |
+| `EmptyState` | Dashed box with an icon tile — "nothing recorded yet" as the place records will go; optional action. |
+| `NoticeBanner` | Caution (amber), info (cedar) or danger box qualifying a figure that could be over-read. Never a substitute for a server refusal. |
+| `RecordTile` | Big icon + label tile for recording at an animal. |
+| `EqualGrid` | Equal-width wrapping grid for KPI rows and tile sets. |
+| `FactRow` | Label / value row with a hairline, for identity tables. |
+| `UnderlineTabs` | Scrollable underlined tabs for a record with more sections than a screen. |
+| `TagChip` | Descriptive pill (Female, Dairy Herd, Lactating) — `StatusPill` stays for judgements. |

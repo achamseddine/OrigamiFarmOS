@@ -15,6 +15,7 @@ import '../../providers/herd_records_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../feed/feed_workspace_screen.dart' show feedDate;
 import '../navigation/entity_router.dart';
+import 'group_form.dart';
 import 'reproduction_forms.dart';
 
 /// Herd & family on the animal's profile (LIVESTOCK-SCHEMA §5, §7, §10):
@@ -287,15 +288,41 @@ Future<void> showAllGroupsSheet(BuildContext context, {String? species}) => show
           for (final g in context.watch<LivestockProvider>().groups)
             if (species == null || g.species == species) g,
         ];
+        final canCreate = context.watch<AccessProvider>().canCreate(FarmModule.animals);
+        final ruleSpecies = species ?? 'cow';
+        final hasPregnancyGroups = groups.any((g) => g.species == ruleSpecies && g.membershipRule == 'PREGNANT');
         return ListView(padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 0, FarmSpacing.lg, FarmSpacing.lg), children: [
-          Text(context.t('herdGroups'), style: FarmTypography.textTheme.titleMedium),
+          Row(children: [
+            Expanded(child: Text(context.t('herdGroups'), style: FarmTypography.textTheme.titleMedium)),
+            if (canCreate)
+              FilledButton.icon(
+                onPressed: () => showNewGroupForm(context, species: species),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(context.t('grpNew')),
+              ),
+          ]),
+          if (canCreate && !hasPregnancyGroups)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final error = await createPregnancyGroups(context, ruleSpecies);
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error ?? context.t('grpCreated'))));
+                },
+                icon: const Icon(Icons.call_split, size: 16),
+                label: Text(context.t('grpPregnancyPair').replaceAll('{species}', context.read<LivestockProvider>().speciesName(ruleSpecies, Localizations.localeOf(context).languageCode))),
+              ),
+            ),
           if (groups.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(context.t('herdNoGroupsForSpecies'))),
           for (final g in groups)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.groups_outlined),
+              leading: Icon(g.membershipRule != null ? Icons.auto_mode : Icons.groups_outlined),
               title: Text(g.name),
-              subtitle: Text(g.countsMembers ? context.t('groupCountsMembers') : context.t('groupLedger')),
+              subtitle: Text(g.membershipRule != null
+                  ? '${context.t('grpRule_${g.membershipRule}')} · ${context.t('grpFollowsRecords')}'
+                  : (g.countsMembers ? context.t('groupCountsMembers') : context.t('groupLedger'))),
               trailing: Text('${g.count}', style: FarmTypography.textTheme.titleMedium),
               onTap: () => showGroupSheet(context, g),
             ),

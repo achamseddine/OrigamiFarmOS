@@ -116,6 +116,8 @@ class _PlanLineCard extends StatelessWidget {
               ),
             ]),
           ),
+          _RoundsToday(line: line),
+          const SizedBox(width: 6),
           if (program != null && program.isInherited) StatusPill(label: context.t('inherited'), level: FarmStatusLevel.info, dense: true),
           if (line.reviewRequired) ...[const SizedBox(width: 6), StatusPill(label: context.t('reviewRequired'), level: FarmStatusLevel.watch, dense: true)],
         ]),
@@ -147,5 +149,20 @@ class _PlanLineCard extends StatelessWidget {
         ],
       ]),
     );
+  }
+}
+
+/// "1 of 2 rounds today" — the feedings recorded for this line today,
+/// the same count the Morning routine ticks off.
+class _RoundsToday extends StatelessWidget {
+  const _RoundsToday({required this.line});
+  final DailyPlanLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final rounds = (line.program?.feedingsPerDay ?? 1) < 1 ? 1 : (line.program?.feedingsPerDay ?? 1);
+    final done = context.watch<FeedingProvider>().fedToday(line.subjectId).length;
+    final level = done >= rounds ? FarmStatusLevel.good : (done > 0 ? FarmStatusLevel.watch : FarmStatusLevel.neutral);
+    return StatusPill(label: '${done > rounds ? rounds : done}/$rounds ${context.t('fwRoundsToday')}', level: level, dense: true);
   }
 }

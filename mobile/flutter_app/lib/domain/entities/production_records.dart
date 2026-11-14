@@ -90,3 +90,30 @@ class TreatmentRecord {
         startAt: DateTime.parse(json['start_at'] as String),
       );
 }
+
+/// One dated body weight (`GET /animals/{id}/weights`): how it was taken
+/// matters as much as the figure — a tape estimate is not a scale reading.
+class WeightRecord {
+  const WeightRecord({required this.id, required this.weightKg, required this.measuredAt, required this.method, this.recordedByName, this.notes, this.pending = false});
+  final String id;
+  final double weightKg;
+  final DateTime measuredAt;
+
+  /// scale | tape | visual_estimate | point_of_care | legacy
+  final String method;
+  final String? recordedByName;
+  final String? notes;
+
+  /// Saved on this tablet and not yet accepted by the farm server.
+  final bool pending;
+
+  factory WeightRecord.fromJson(Map<String, dynamic> json) => WeightRecord(
+        id: json['id'] as String? ?? '',
+        weightKg: (json['weight_kg'] as num?)?.toDouble() ?? 0,
+        measuredAt: DateTime.tryParse(json['measured_at'] as String? ?? '') ?? DateTime.now(),
+        method: json['method'] as String? ?? 'scale',
+        recordedByName: json['recorded_by_name'] as String?,
+        notes: json['notes'] as String?,
+        pending: json['_pending'] == true,
+      );
+}

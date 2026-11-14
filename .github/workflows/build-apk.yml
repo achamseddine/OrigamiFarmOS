@@ -22,6 +22,8 @@ on:
   push:
     branches:
       - claude/origami-farmos-tablet-mvp-u88i3e
+      - feat/qr-animal-quick-entry
+      - claude/gifted-davinci-mu9fjj
     paths:
       - ".github/workflows/build-apk.yml"
       - "mobile/flutter_app/**"
@@ -42,8 +44,12 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Pin to the last verified APK toolchain: Flutter 3.50 requires Gradle
+      # 9.3.1, while this app currently uses Gradle 8.14 / AGP 8.x.
+      # Upgrade the Android toolchain together in a separate reviewed PR.
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.7'
           channel: stable
           cache: true
 
@@ -51,8 +57,7 @@ jobs:
 
       - run: flutter pub get
 
-      - run: flutter analyze --no-fatal-infos
-        continue-on-error: true
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       # The offline cache/outbox logic is pure Dart and unit-tested; this
       # also catches a compile error anywhere in lib/ before the slower
@@ -71,11 +76,15 @@ jobs:
       # build as an upgrade of the last one; with versionCode pinned at 1
       # every APK looked like the same app version and a tablet could
       # keep an old build while appearing to have been updated.
+      # The build name carries the product release (product/RELEASES.md)
+      # and the run number: 0.7.N is release v0.7.0's Nth build. The run
+      # number alone stays the versionCode, so every build still installs
+      # over the one before it.
       - run: |
           flutter build apk --${{ inputs.build-mode || 'release' }} \
             --build-number=${{ github.run_number }} \
-            --build-name=0.1.${{ github.run_number }} \
-            --dart-define=APP_BUILD="0.1.${{ github.run_number }}" \
+            --build-name=0.7.${{ github.run_number }} \
+            --dart-define=APP_BUILD="0.7.${{ github.run_number }}" \
             --dart-define=APP_VERSION="$(git rev-parse --short HEAD)"
 
       - uses: actions/upload-artifact@v4
@@ -89,15 +98,28 @@ jobs:
       # developed under) block. A GitHub Release asset is served from
       # api.github.com / objects.githubusercontent.com instead, which is
       # reachable in more environments, so publish the APK there too.
-      - name: Publish APK to a rolling GitHub Release
+      - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-apk-latest
-          name: "Tablet APK (latest automated build)"
+          tag_name: tablet-v0.7.3-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: "Origami FarmOS v0.7.3 — tablet APK 0.7.${{ github.run_number }}"
           body: |
-            **Build 0.1.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            **Build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
-            The sign-in screen of this build shows `App 0.1.${{ github.run_number }} · <commit>` under
+            **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **No duplicates, approval levels (v0.7.3):** the same milking, feeding, delivery, mix, insemination, dose, observation or sale entered twice is caught by the server and the tablet asks *Already recorded?* (record it again only if it really is a second one); stock overrides, new recipes, sales/culls and the farm calendar need the matching approval. No migration.
+            - **Second round (v0.7.2):** *Record purchase* with supplier, date and quality, *Record a mix* in one step, a getting-started guide for the feed room; calving date with the milk-peak and insemination calendar (farm settings) and herd chips for who to inseminate, watch for heat or is at her peak; every reproduction form dated; groups for cows including pregnant / not-pregnant groups that follow the records; status on the farm (sold, died…) on the profile; work responsibilities with *My animals & duties*; faster server reads and lighter sign-in. **The server needs migrations `a8d0c2e4f6b1` and `c3e5a7b9d1f4`.**
+            - **On-farm corrections (v0.7.1):** add an animal with nothing to scan — the app gives it a farm number and shows its QR label to print; *Is she pregnant?* (with the insemination date) and *Is she being milked?* on new and existing animals, saved as breeding / pregnancy-check / lactation / dry-off records, the milk record opening right after; **Settings → Dry-off before birth** (days) with the dry-off date on every pregnant animal in milk; the feeding form opens with **Concentrate, Corn silage, Wheat straw** rows (each optional) plus *Add another feed*, and asks before recording feed whose stock was never entered. **The server needs migration `a8d0c2e4f6b1`** (Actions → *Migrate & seed DB* → `migrate_only`).
+            - **Scan-first worker rounds:** the tablet camera reads animal and pen QR labels offline; labels print from the tablet as an A4 PDF; pen labels open the group's feeding round; already-recorded-today and a second-milking check; feed rows from the animal's own program; morning/evening milking rounds from My Day.
+            - **Layout from the V3 prototype:** Digital Twin with header, figures and tabs (milk, feed, weight, reproduction, health, timeline); animal registry with search; My Day routine; Feed & nutrition; Health command centre with health cases; Mouneh translated to Arabic.
+            - **Livestock record:** state history, groups and memberships, breeding, pregnancy, births, lactation, incubation, exits.
+            - **Safety:** milk under withdrawal is recorded as withheld; medicine only through the pharmacy with an approved route; farm isolation and module permissions enforced on the server.
+
+            Not yet: photo attachments, body-condition scoring, cross-device duplicate reconciliation. Do not use as a production veterinary decision system.
+
+            The sign-in screen of this build shows `App 0.7.${{ github.run_number }} · <commit>` under
             the button. If a tablet shows a different number after installing, the
             install did not take.
 
@@ -108,6 +130,6 @@ jobs:
             installed". Every build after that updates without uninstalling.
 
             Fine for sideloading onto a test tablet, not for Play Store distribution.
-            This release is overwritten by every run of the "Build tablet APK" workflow.
+            This prerelease has its own versioned tag and does not overwrite any earlier release.
           prerelease: true
           files: mobile/flutter_app/build/app/outputs/flutter-apk/*.apk

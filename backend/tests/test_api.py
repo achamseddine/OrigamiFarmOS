@@ -35,10 +35,10 @@ class TestBootstrapAndAnimals:
         assert body["farm"]["id"] == "farm-origami"
         assert len(body["animals"]) == 12
         # 7 original items + the feed architecture's barley, concentrate,
-        # premix and broiler grower (app/feeding/seed.py).
-        # 11 feed and supply items plus the six medicines the farm pharmacy
+        # premix, broiler grower and wheat straw (app/feeding/seed.py).
+        # 12 feed and supply items plus the six medicines the farm pharmacy
         # stocks (MEDICINE-PHARMACY-SCHEMA.md): one inventory, one ledger.
-        assert len(body["inventory_items"]) == 17
+        assert len(body["inventory_items"]) == 18
 
     def test_list_animals_filters_by_species(self, client):
         headers = auth_headers(client)
@@ -59,8 +59,9 @@ class TestBootstrapAndAnimals:
         # the events on Bella are her feeding supplement, the feeding that
         # delivered it (app/feeding/seed.py) and the emergency triage her
         # fever opened (app/emergency/seed.py).
+        # Joining the "Open cows" rule group is an event too (app/seed.py).
         assert {e["event_type"] for e in body["recent_events"]} <= {
-            "feeding_event_recorded", "feeding_program_assigned",
+            "feeding_event_recorded", "feeding_program_assigned", "animal_added_to_group",
             "emergency_assessment_started", "emergency_pattern_detected", "emergency_protocol_matched",
         }
 
@@ -125,7 +126,9 @@ class TestObservations:
 class TestMilkValidation:
     def test_normal_milk_entry_succeeds(self, client):
         headers = auth_headers(client)
-        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "cow-214", "session": "morning", "liters": 18.5, "destination": "stored"})
+        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "cow-214", "session": "morning", "liters": 18.5, "destination": "stored",
+                                                                       # the demo farm already holds today's morning milking
+                                                                       "confirm_duplicate": True})
         assert r.status_code == 201
         assert r.json()["under_withdrawal_warning"] is False
 
@@ -140,9 +143,19 @@ class TestMilkValidation:
         assert r.status_code == 422
         assert "withdrawal" in r.json()["detail"].lower()
 
-    def test_storing_milk_from_withdrawn_animal_is_allowed(self, client):
+    def test_withdrawal_milk_is_recorded_only_as_withheld(self, client):
         headers = auth_headers(client)
-        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "goat-willow", "session": "morning", "liters": 5, "destination": "stored"})
+        for destination in ("stored", "sold", "processed", "consumed"):
+            r = client.post("/api/v1/production/milk", headers=headers, json={
+                "animal_id": "goat-willow", "session": "morning",
+                "liters": 5, "destination": destination,
+            })
+            assert r.status_code == 422
+            assert "withdrawal" in r.json()["detail"].lower()
+        r = client.post("/api/v1/production/milk", headers=headers, json={
+            "animal_id": "goat-willow", "session": "morning",
+            "liters": 5, "destination": "withheld",
+        })
         assert r.status_code == 201
         assert r.json()["under_withdrawal_warning"] is True
 

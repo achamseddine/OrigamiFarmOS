@@ -94,13 +94,24 @@ class HerdRecordsProvider extends ChangeNotifier {
             'name': name,
             'sex': ?sex,
             'identifiers': [
-              {'identifier_type': identifierType, 'identifier_value': identifierValue, 'is_primary': true},
+              // Optional: without a tag the server gives the newborn the farm's next number.
+              if (identifierValue.trim().isNotEmpty) {'identifier_type': identifierType, 'identifier_value': identifierValue.trim(), 'is_primary': true},
             ],
           }));
 
-  Future<WriteResult> startLactation(String animalId) => _write(() => _api.post('/animals/$animalId/lactations', body: const <String, dynamic>{}));
+  /// [at] is the calving / start of milking; null means now.
+  Future<WriteResult> startLactation(String animalId, {DateTime? at}) =>
+      _write(() => _api.post('/animals/$animalId/lactations', body: {if (at != null) 'started_at': at.toUtc().toIso8601String()}));
 
-  Future<WriteResult> dryOff(String animalId) => _write(() => _api.post('/animals/$animalId/dry-off', body: const <String, dynamic>{}));
+  /// Corrects the calving / start-of-milking date of the current lactation.
+  Future<WriteResult> correctLactationStart(String animalId, DateTime startedAt, {String? reason}) =>
+      _write(() => _api.patch('/animals/$animalId/lactation', body: {
+            'started_at': startedAt.toUtc().toIso8601String(),
+            if (_blank(reason) != null) 'reason': _blank(reason),
+          }));
+
+  Future<WriteResult> dryOff(String animalId, {DateTime? at}) =>
+      _write(() => _api.post('/animals/$animalId/dry-off', body: {if (at != null) 'ended_at': at.toUtc().toIso8601String()}));
 
   // ------------------------------------------------------------ lifecycle
   Future<WriteResult> exitAnimal(String animalId, {required String exitType, DateTime? occurredAt, String? reason}) =>

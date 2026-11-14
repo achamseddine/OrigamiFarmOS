@@ -8,6 +8,7 @@ manager-only except `/me/access`, which is how any signed-in user asks
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -318,3 +319,84 @@ def set_employee_permissions(
     db.commit()
     db.refresh(employee)
     return _detail(db, employee)
+
+
+
+# ------------------------------------------------------------ responsibilities
+class ResponsibilityIn(BaseModel):
+    """What the employee looks after (an animal, a group, a species, a field)
+    and the duties it means."""
+
+    scope_type: str
+    scope_id: str
+    duties: list[str] = Field(min_length=1)
+    notes: str | None = Field(None, max_length=500)
+
+
+class ResponsibilityEndIn(BaseModel):
+    reason: str | None = Field(None, max_length=300)
+
+
+def _responsibility_out(db: Session, row, *, with_animals: bool = False) -> dict:
+    from app.services import responsibility_service
+
+    return responsibility_service.to_dict(db, row, with_animals=with_animals)
+
+
+@router.get("/employees/{employee_id}/responsibilities")
+def list_responsibilities(
+    employee_id: str,
+    include_ended: bool = False,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_permission(perms.EMPLOYEES, perms.VIEW)),
+) -> list[dict]:
+    from app.services import responsibility_service
+
+    employee = _employee_or_404(db, employee_id, current_user.farm_id)
+    return [_responsibility_out(db, r) for r in responsibility_service.of_user(db, employee.id, active_only=not include_ended)]
+
+
+@router.post("/employees/{employee_id}/responsibilities", status_code=status.HTTP_201_CREATED)
+def add_responsibility(
+    employee_id: str,
+    payload: ResponsibilityIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_permission(perms.EMPLOYEES, perms.ASSIGN)),
+) -> dict:
+    """Makes the employee responsible for an animal / group / species / field
+    with these duties, and gives them the module access the duties need."""
+    from app.services import responsibility_service
+
+    employee = _employee_or_404(db, employee_id, current_user.farm_id)
+    row, granted = responsibility_service.assign(db, employee=employee, scope_type=payload.scope_type, scope_id=payload.scope_id,
+                                                 duties=payload.duties, notes=payload.notes, by=current_user)
+    db.commit()
+    return {**_responsibility_out(db, row), "modules_granted": granted}
+
+
+@router.post("/employees/{employee_id}/responsibilities/{responsibility_id}/end")
+def end_responsibility(
+    employee_id: str,
+    responsibility_id: str,
+    payload: ResponsibilityEndIn,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_permission(perms.EMPLOYEES, perms.ASSIGN)),
+) -> dict:
+    from app.services import responsibility_service
+
+    employee = _employee_or_404(db, employee_id, current_user.farm_id)
+    row = db.get(models.WorkResponsibility, responsibility_id)
+    if row is None or row.user_id != employee.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Responsibility not found")
+    responsibility_service.end(db, row, by=current_user, reason=payload.reason)
+    db.commit()
+    return _responsibility_out(db, row)
+
+
+@router.get("/me/responsibilities")
+def my_responsibilities(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)) -> list[dict]:
+    """The signed-in employee's own animals, groups and fields and their
+    duties — what their day is built from."""
+    from app.services import responsibility_service
+
+    return [_responsibility_out(db, r, with_animals=True) for r in responsibility_service.of_user(db, current_user.id)]

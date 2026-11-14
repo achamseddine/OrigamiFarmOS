@@ -48,8 +48,10 @@ def _now() -> datetime:
 
 
 def _days_ago(n: int, hour: int = 8) -> datetime:
+    """[n] days ago at [hour] UTC — never later than a few minutes ago: a
+    demo farm seeded at 04:30 holds no "today 08:00" record from the future."""
     base = _now().replace(hour=hour, minute=0, second=0, microsecond=0)
-    return base - timedelta(days=n)
+    return min(base - timedelta(days=n), _now() - timedelta(minutes=5))
 
 
 def _in_hours(h: float) -> datetime:
@@ -226,11 +228,31 @@ def seed_demo_data(db: Session) -> None:
                                observation_type="fever", quality="human_observed", severity="severe",
                                observed_at=_days_ago(0, hour=6), observer_id="user-worker-1",
                                notes="Cow reluctant to be milked, udder appears swollen."))
+    # Bella's two earlier mastitis episodes, each a closed health case with
+    # the veterinarian's diagnosis and plan and the treatment given under
+    # it — the case history the Health screen's Cases tab shows. Closed, so
+    # nothing that reads open cases (the emergency engine, feed
+    # performance confounders) sees them.
     for i in range(2):
+        opened = _days_ago(30 + i * 30, hour=7)
+        case = health_models.HealthCase(
+            id=new_id(), farm_id=FARM_ID, animal_id="cow-744", case_code=f"HC-{i + 1:06d}", opened_at=opened, closed_at=_days_ago(27 + i * 30, hour=16),
+            status="resolved", severity_code="moderate", primary_problem_code="mastitis", responsible_user_id="user-vet-1", source_type="observation",
+            outcome="Milk clean on CMT; back in the tank after the withdrawal.", notes="Hot, swollen front-left quarter; clots in the foremilk.",
+            created_by="user-worker-1", created_at=opened)
+        db.add(case)
+        db.flush()
+        db.add(health_models.Diagnosis(id=new_id(), health_case_id=case.id, diagnosis_code="clinical_mastitis", diagnosis_text="Clinical mastitis, front-left quarter",
+                                       certainty_code="confirmed", diagnosed_at=opened + timedelta(hours=2), diagnosed_by="user-vet-1", status="resolved"))
+        plan = health_models.TreatmentPlan(id=new_id(), health_case_id=case.id, status="completed", prescribed_at=opened + timedelta(hours=2), prescribed_by="user-vet-1",
+                                           instructions="Intramammary tube once daily for 3 days; strip the quarter; observe the milk withdrawal on the label.",
+                                           completed_at=_days_ago(27 + i * 30, hour=16), created_at=opened)
+        db.add(plan)
+        db.flush()
         db.add(models.Treatment(id=new_id(), entity_type="animal", entity_id="cow-744", diagnosis="Mastitis",
                                  medication="Intramammary antibiotic", dose="1 tube", route="Intramammary",
                                  start_at=_days_ago(30 + i * 30), end_at=_days_ago(27 + i * 30), status="resolved",
-                                 responsible_user_id="user-vet-1"))
+                                 responsible_user_id="user-vet-1", health_case_id=case.id, treatment_plan_id=plan.id))
 
     # Steady/healthy milk history for Luna and Clover so they do NOT trigger the rule.
     for animal_id, base in [("cow-214", 32.0), ("cow-clover", 23.5)]:
@@ -399,6 +421,7 @@ def seed_demo_data(db: Session) -> None:
     seed_mouneh_demo_data(db, FARM_ID)
     db.flush()
     seed_visits_demo_data(db, FARM_ID)
+    _seed_rule_groups_and_responsibilities(db)
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")
@@ -408,3 +431,27 @@ if __name__ == "__main__":
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:
         seed_demo_data(session)
+
+
+
+def _seed_rule_groups_and_responsibilities(db: Session) -> None:
+    """The herd split by the records (pregnant cows / open cows) and the
+    animal-care worker made responsible for the dairy herd's milking,
+    feeding and observations."""
+    from app.repositories.base import now as _now
+    from app.services import group_service, responsibility_service
+
+    for gid, name, rule in (("grp-cows-pregnant", "Pregnant cows", "PREGNANT"), ("grp-cows-open", "Open cows", "NOT_PREGNANT")):
+        if db.get(models.Flock, gid) is not None:
+            continue
+        group = models.Flock(id=gid, farm_id=FARM_ID, name=name, species="cow", group_type="cohort", count=0,
+                             tracking_mode=group_service.MEMBERSHIP_DERIVED, membership_rule=rule, status="healthy", created_at=_now())
+        db.add(group)
+        db.flush()
+        group_service.fill_rule_group(db, group, user_id="user-rami")
+    karim = db.get(models.User, "user-worker-1")
+    manager = db.get(models.User, "user-rami")
+    if karim is not None and manager is not None and not responsibility_service.of_user(db, karim.id):
+        responsibility_service.assign(db, employee=karim, scope_type="group", scope_id="grp-dairy-herd",
+                                      duties=["milking", "feeding", "observation"], notes="Morning and evening rounds.", by=manager)
+    db.flush()

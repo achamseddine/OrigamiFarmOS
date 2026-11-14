@@ -212,6 +212,7 @@ class Animal {
     AnimalHealthStatus? status,
     String? location,
     double? milkTodayL,
+    double? weightKg,
     DateTime? underWithdrawalUntil,
     String? withdrawalReason,
   }) =>
@@ -240,7 +241,7 @@ class Animal {
         withdrawalReason: withdrawalReason ?? this.withdrawalReason,
         milkTodayL: milkTodayL ?? this.milkTodayL,
         eggsToday: eggsToday,
-        weightKg: weightKg,
+        weightKg: weightKg ?? this.weightKg,
         groupName: groupName,
         acquisitionDate: acquisitionDate,
         acquisitionSource: acquisitionSource,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../core/util/record_dates.dart';
 
 import '../../api/api_client.dart';
 import '../../core/i18n/strings.dart';
@@ -8,6 +9,7 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
 import '../../domain/entities/reproduction.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/herd_records_provider.dart';
 import '../../providers/livestock_provider.dart';
@@ -134,7 +136,8 @@ String _identifierTypeFor(BuildContext context, Animal dam, String? sex) {
 
 // ---------------------------------------------------------------- breeding
 Future<bool> showBreedingForm(BuildContext context, Animal female) async {
-  var type = 'NATURAL_MATING';
+  var type = 'ARTIFICIAL_INSEMINATION';
+  var day = DateTime.now();
   String? maleId;
   final sire = TextEditingController();
   final semen = TextEditingController();
@@ -146,6 +149,8 @@ Future<bool> showBreedingForm(BuildContext context, Animal female) async {
     fields: (context, setState) => [
       _dropdown(context, label: context.t('reproType'), value: type, options: ReproCodes.breedingTypes, display: (c) => context.t('breed_$c'),
           onChanged: (v) => setState(() => type = v)),
+      _gap(),
+      RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
       if (type != 'HEAT_OBSERVED') ...[
         if (males.isNotEmpty) ...[
           _gap(),
@@ -172,6 +177,7 @@ Future<bool> showBreedingForm(BuildContext context, Animal female) async {
     submit: (context) => context.read<HerdRecordsProvider>().recordBreeding(
           female.id,
           eventType: type,
+          occurredAt: recordedInstant(day),
           maleAnimalId: type == 'HEAT_OBSERVED' ? null : maleId,
           sireReference: type == 'HEAT_OBSERVED' || maleId != null ? null : sire.text,
           semenBatch: semen.text,
@@ -188,6 +194,7 @@ Future<bool> showBreedingForm(BuildContext context, Animal female) async {
 Future<bool> showPregnancyCheckForm(BuildContext context, Animal animal) async {
   var method = 'ULTRASOUND';
   var result = 'POSITIVE';
+  var day = DateTime.now();
   final days = TextEditingController();
   final notes = TextEditingController();
   final ok = await _recordDialog(
@@ -196,6 +203,8 @@ Future<bool> showPregnancyCheckForm(BuildContext context, Animal animal) async {
     fields: (context, setState) => [
       _dropdown(context, label: context.t('reproMethod'), value: method, options: ReproCodes.assessmentTypes, display: (c) => context.t('check_$c'),
           onChanged: (v) => setState(() => method = v)),
+      _gap(),
+      RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
       _gap(),
       SegmentedButton<String>(
         segments: [for (final r in ReproCodes.results) ButtonSegment(value: r, label: Text(context.t('result_$r')))],
@@ -215,7 +224,7 @@ Future<bool> showPregnancyCheckForm(BuildContext context, Animal animal) async {
         return Future.value(WriteResult.fail(context.t('valueMustBePositive')));
       }
       return context.read<HerdRecordsProvider>().recordPregnancyCheck(animal.id,
-          assessmentType: method, resultCode: result, gestationDays: result == 'POSITIVE' ? gestation : null, notes: notes.text);
+          assessmentType: method, resultCode: result, assessedAt: recordedInstant(day), gestationDays: result == 'POSITIVE' ? gestation : null, notes: notes.text);
     },
   );
   days.dispose();
@@ -225,6 +234,7 @@ Future<bool> showPregnancyCheckForm(BuildContext context, Animal animal) async {
 
 Future<bool> showPregnancyLossForm(BuildContext context, Animal animal) async {
   var outcome = 'LOSS';
+  var day = DateTime.now();
   final notes = TextEditingController();
   final ok = await _recordDialog(
     context,
@@ -234,9 +244,11 @@ Future<bool> showPregnancyLossForm(BuildContext context, Animal animal) async {
       _dropdown(context, label: context.t('reproType'), value: outcome, options: ReproCodes.lossOutcomes, display: (c) => context.t('loss_$c'),
           onChanged: (v) => setState(() => outcome = v)),
       _gap(),
+      RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
+      _gap(),
       TextField(controller: notes, decoration: InputDecoration(labelText: context.t('notes'))),
     ],
-    submit: (context) => context.read<HerdRecordsProvider>().recordPregnancyLoss(animal.id, outcomeCode: outcome, notes: notes.text),
+    submit: (context) => context.read<HerdRecordsProvider>().recordPregnancyLoss(animal.id, outcomeCode: outcome, occurredAt: recordedInstant(day), notes: notes.text),
   );
   notes.dispose();
   return ok;
@@ -261,6 +273,7 @@ class _NewbornDraft {
 Future<bool> showBirthForm(BuildContext context, Animal dam, ReproSummary summary) async {
   final term = summary.birthTerm(_arabic(context));
   var assistance = 'NONE';
+  var day = DateTime.now();
   var startLactation = summary.applies.lactation;
   final newborns = [_NewbornDraft()];
   final notes = TextEditingController();
@@ -268,6 +281,8 @@ Future<bool> showBirthForm(BuildContext context, Animal dam, ReproSummary summar
     context,
     title: '$term — ${dam.name}',
     fields: (context, setState) => [
+      RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
+      _gap(),
       _dropdown(context, label: context.t('reproAssistance'), value: assistance, options: ReproCodes.assistance, display: (c) => context.t('assist_$c'),
           onChanged: (v) => setState(() => assistance = v)),
       _gap(),
@@ -293,7 +308,9 @@ Future<bool> showBirthForm(BuildContext context, Animal dam, ReproSummary summar
         final weight = n.weight.text.trim().isEmpty ? null : double.tryParse(n.weight.text.trim());
         if (n.weight.text.trim().isNotEmpty && (weight == null || weight < 0)) return Future.value(WriteResult.fail(context.t('valueMustBePositive')));
         final register = n.register && n.outcome == 'LIVE';
-        if (register && (n.name.text.trim().isEmpty || n.tag.text.trim().isEmpty)) {
+        // A name is enough to register a newborn: the server gives it the
+        // farm's next number; a tag typed now becomes its primary identifier.
+        if (register && n.name.text.trim().isEmpty) {
           return Future.value(WriteResult.fail(context.t('reproNewbornNeedsTag')));
         }
         rows.add({
@@ -304,12 +321,14 @@ Future<bool> showBirthForm(BuildContext context, Animal dam, ReproSummary summar
             'register_now': true,
             'name': n.name.text.trim(),
             'identifiers': [
-              {'identifier_type': _identifierTypeFor(context, dam, n.sex), 'identifier_value': n.tag.text.trim(), 'is_primary': true},
+              if (n.tag.text.trim().isNotEmpty)
+                {'identifier_type': _identifierTypeFor(context, dam, n.sex), 'identifier_value': n.tag.text.trim(), 'is_primary': true},
             ],
           },
         });
       }
-      return context.read<HerdRecordsProvider>().recordBirth(dam.id, offspring: rows, assistanceCode: assistance, startLactation: startLactation, notes: notes.text);
+      return context.read<HerdRecordsProvider>().recordBirth(dam.id,
+          offspring: rows, assistanceCode: assistance, occurredAt: recordedInstant(day), startLactation: startLactation, notes: notes.text);
     },
   );
   for (final n in newborns) {
@@ -401,7 +420,7 @@ Future<bool> showRegisterNewbornForm(BuildContext context, {required Animal dam,
       TextField(controller: tag, decoration: InputDecoration(labelText: context.t('reproNewbornTag'))),
     ],
     submit: (context) {
-      if (name.text.trim().isEmpty || tag.text.trim().isEmpty) return Future.value(WriteResult.fail(context.t('reproNewbornNeedsTag')));
+      if (name.text.trim().isEmpty) return Future.value(WriteResult.fail(context.t('reproNewbornNeedsTag')));
       return context.read<HerdRecordsProvider>().registerOffspring(birthId, newborn.sequenceNo,
           name: name.text.trim(), identifierType: _identifierTypeFor(context, dam, newborn.sex), identifierValue: tag.text.trim(), sex: newborn.sex);
     },
@@ -413,36 +432,104 @@ Future<bool> showRegisterNewbornForm(BuildContext context, {required Animal dam,
 }
 
 // ---------------------------------------------------------------- lactation
-Future<bool> confirmLactationChange(BuildContext context, Animal animal, {required bool start}) => _recordDialog(
-      context,
-      title: '${context.t(start ? 'reproActStartMilking' : 'reproActDryOff')} — ${animal.name}',
-      fields: (context, _) => [Text(context.t(start ? 'reproStartMilkingConfirm' : 'reproDryOffConfirm'))],
-      submit: (context) {
-        final herd = context.read<HerdRecordsProvider>();
-        return start ? herd.startLactation(animal.id) : herd.dryOff(animal.id);
-      },
-    );
+Future<bool> confirmLactationChange(BuildContext context, Animal animal, {required bool start}) {
+  var day = DateTime.now();
+  return _recordDialog(
+    context,
+    title: '${context.t(start ? 'reproActStartMilking' : 'reproActDryOff')} — ${animal.name}',
+    fields: (context, setState) => [
+      Text(context.t(start ? 'reproStartMilkingConfirm' : 'reproDryOffConfirm')),
+      _gap(),
+      RecordDateButton(
+        label: context.t(start ? 'calvingDate' : 'reproDate'),
+        value: day,
+        onPicked: (d) => setState(() => day = d),
+      ),
+    ],
+    submit: (context) {
+      final herd = context.read<HerdRecordsProvider>();
+      return start ? herd.startLactation(animal.id, at: recordedInstant(day)) : herd.dryOff(animal.id, at: recordedInstant(day));
+    },
+  );
+}
 
 // ---------------------------------------------------------------- exit
 Future<bool> showExitForm(BuildContext context, Animal animal) async {
-  var type = 'dead';
+  // Only the exits this person may record: a death needs Animals edit, a
+  // sale / cull / slaughter / transfer needs Animals approve.
+  final access = context.read<AccessProvider>();
+  final allowed = [for (final t in ReproCodes.exitTypes) if (access.canRecordExit(t)) t];
+  if (allowed.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('exitNeedsEdit'))));
+    return false;
+  }
+  var type = allowed.first;
+  var day = DateTime.now();
   final reason = TextEditingController();
   final ok = await _recordDialog(
     context,
     title: '${context.t('exitTitle')} — ${animal.name}',
     destructive: true,
     fields: (context, setState) => [
-      _dropdown(context, label: context.t('exitType'), value: type, options: ReproCodes.exitTypes, display: (c) => context.t('exit_$c'),
+      _dropdown(context, label: context.t('exitType'), value: type, options: allowed, display: (c) => context.t('exit_$c'),
           onChanged: (v) => setState(() => type = v)),
+      if (allowed.length < ReproCodes.exitTypes.length) ...[
+        const SizedBox(height: 4),
+        Text(context.t('exitNeedsApproval'), style: const TextStyle(fontSize: 12, color: FarmColors.muted)),
+      ],
+      _gap(),
+      RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
       _gap(),
       TextField(controller: reason, decoration: InputDecoration(labelText: context.t('reason'))),
       _gap(),
       Text(context.t('exitWarning'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
     ],
-    submit: (context) => context.read<HerdRecordsProvider>().exitAnimal(animal.id, exitType: type, reason: reason.text),
+    submit: (context) => context.read<HerdRecordsProvider>().exitAnimal(animal.id, exitType: type, occurredAt: recordedInstant(day), reason: reason.text),
   );
   reason.dispose();
   if (ok && context.mounted) await context.read<AnimalsProvider>().load();
+  return ok;
+}
+
+// ---------------------------------------------------------------- weight
+/// The methods a person can choose; `point_of_care` and `legacy` are set
+/// by the system (a weight taken during an emergency protocol, a figure
+/// carried over from the old profile field), never picked here.
+const weightMethods = ['scale', 'tape', 'visual_estimate'];
+
+Future<bool> showWeightForm(BuildContext context, Animal animal) async {
+  var method = 'scale';
+  final kg = TextEditingController();
+  final notes = TextEditingController();
+  final ok = await _recordDialog(
+    context,
+    title: '${context.t('twRecordWeight')} — ${animal.name}',
+    fields: (context, setState) => [
+      TextField(
+        controller: kg,
+        autofocus: true,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(labelText: context.t('weightKg'), suffixText: 'kg'),
+      ),
+      _gap(),
+      _dropdown(context, label: context.t('weightMethod'), value: method, options: weightMethods, display: (m) => context.t('wm_$m'),
+          onChanged: (v) => setState(() => method = v)),
+      _gap(),
+      TextField(controller: notes, decoration: InputDecoration(labelText: context.t('notes'))),
+    ],
+    submit: (context) {
+      final value = double.tryParse(kg.text.trim().replaceAll(',', '.'));
+      if (value == null || value <= 0) return Future.value(WriteResult.fail(context.t('weightInvalid')));
+      return context.read<AnimalsProvider>().recordWeight(
+            animalId: animal.id,
+            weightKg: value,
+            method: method,
+            notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+          );
+    },
+  );
+  kg.dispose();
+  notes.dispose();
   return ok;
 }
 

@@ -22,6 +22,10 @@ class SpeciesOut(ORMModel):
     profiles_json: list[str] = []
     active: bool
     sort_order: int
+    # Configuration for the dates the tablet shows before the server is
+    # asked (expected birth from an insemination, expected hatch).
+    gestation_days: int | None = None
+    incubation_days: int | None = None
 
 
 class BreedOut(ORMModel):
@@ -175,6 +179,9 @@ class AnimalGroupCreate(BaseModel):
     life_stage: str | None = None
     management_profile: str | None = None
     location_label: str | None = None
+    # PREGNANT | NOT_PREGNANT | IN_MILK | DRY: members follow the herd
+    # records. Such a group is a cohort — an animal stays in its herd/pen.
+    membership_rule: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -182,6 +189,16 @@ class AnimalGroupCreate(BaseModel):
         if not v.strip():
             raise ValueError("name cannot be empty")
         return v.strip()
+
+    @field_validator("membership_rule")
+    @classmethod
+    def known_rule(cls, v: str | None) -> str | None:
+        if v is None or not v.strip():
+            return None
+        code = v.strip().upper()
+        if code not in ("PREGNANT", "NOT_PREGNANT", "IN_MILK", "DRY"):
+            raise ValueError("membership_rule must be PREGNANT, NOT_PREGNANT, IN_MILK or DRY")
+        return code
 
 
 class AnimalGroupUpdate(BaseModel):
@@ -208,4 +225,5 @@ class AnimalGroupOut(ORMModel):
     status: str
     location_label: str | None = None
     tracking_mode: str = "QUANTITY_MANAGED"
+    membership_rule: str | None = None
     created_at: datetime | None = None

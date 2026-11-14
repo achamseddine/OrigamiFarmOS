@@ -35,6 +35,9 @@ class TreatmentCreate(BaseModel):
     vet_id: str | None = None
     cost: float | None = None
     notes: str | None = None
+    # The same medication prescribed for the same subject within 12 hours
+    # is refused as a possible duplicate unless confirmed.
+    confirm_duplicate: bool = False
 
     @field_validator("medication", "dose", "route")
     @classmethod

@@ -29,7 +29,7 @@ from app.services.capability_service import CapabilitySet
 FINANCIAL_FIELDS = ("purchase_cost", "current_value")
 # Reproduction and lactation are not columns a registration sets: they
 # become episodes (reproduction_service.open_registration_state).
-_OPENING_STATE_FIELDS = ("pregnant", "pregnancy_days", "lactating", "lactation_cycle")
+_OPENING_STATE_FIELDS = ("pregnant", "pregnancy_days", "lactating", "lactation_cycle", "service_date", "service_type", "lactation_started_at")
 
 
 def species_or_422(db: Session, code: str) -> None:
@@ -64,6 +64,10 @@ def create_animal(db: Session, user: models.User, data: dict, *, identifiers_in:
     lactating = bool(data.get("lactating"))
     check_state_against(cap_set, name=data["name"], pregnant=pregnant, lactating=lactating)
     identifiers = identifier_service.collect(identifiers_in or [], tag, cap_set)
+    # Every animal gets the farm's next number — the human-readable ID on
+    # its QR label — whatever else it carries; no tag has to be scanned or
+    # typed to register it.
+    identifiers = identifier_service.with_farm_number(db, user.farm_id, identifiers)
     identifier_service.ensure_unique(db, user.farm_id, identifiers)
 
     opening = {k: data.pop(k, None) for k in _OPENING_STATE_FIELDS}
@@ -80,12 +84,19 @@ def create_animal(db: Session, user: models.User, data: dict, *, identifiers_in:
     identifier_service.attach(db, animal, identifiers)
     if animal.weight_kg:
         health_case_service.record_weight(db, animal.farm_id, animal, weight_kg=animal.weight_kg, method="scale", source_type="animal_update", user_id=user.id)
+    breeding = None
+    if opening["service_date"] is not None:
+        breeding = reproduction_service.record_breeding(
+            db, animal, event_type=opening["service_type"] or "ARTIFICIAL_INSEMINATION", at=opening["service_date"], user=user,
+        )
     reproduction_service.open_registration_state(
         db, animal, pregnant=pregnant, pregnancy_days=opening["pregnancy_days"], lactating=lactating,
-        lactation_cycle=opening["lactation_cycle"], user_id=user.id,
+        lactation_cycle=opening["lactation_cycle"], user_id=user.id, breeding=breeding if pregnant else None,
+        lactation_started_at=opening["lactation_started_at"],
     )
     if group_name and group_name.strip():
         group_service.move_by_name(db, animal, group_name, user_id=user.id, review=False)
+    group_service.sync_rule_groups(db, animal, user_id=user.id)
     write_event(
         db, farm_id=user.farm_id, entity_type="animal", entity_id=animal.id, event_type="animal_created",
         payload={"tag": animal.tag, "name": animal.name, "species": animal.species, "source": source}, created_by=user.id,

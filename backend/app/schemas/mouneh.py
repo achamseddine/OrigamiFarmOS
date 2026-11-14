@@ -476,6 +476,9 @@ class MounehSaleCreate(BaseModel):
     discount: float = 0
     customer_id: str | None = None
     channel: str = "retail"
+    # The same sale entered twice in a few minutes is refused (409 "Possible
+    # duplicate:") unless the person confirms it is a second sale.
+    confirm_duplicate: bool = False
 
     @field_validator("quantity", "unit_price")
     @classmethod

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
+import '../../core/util/number_input.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -675,7 +676,7 @@ class _AdministerDialogState extends State<_AdministerDialog> {
     setState(() {
       _lots = [for (final l in detail.lots) if (l.eligible) l];
       if (_doseUnit.text.isEmpty) _doseUnit.text = detail.unit;
-      if (_route == null && detail.routes.isNotEmpty) _route = detail.routes.first;
+      // Route selection is explicit; never guess an administration route.
     });
   }
 
@@ -705,8 +706,8 @@ class _AdministerDialogState extends State<_AdministerDialog> {
       for (final t in animals.treatments)
         if (subjectId != null && t.entityId == subjectId) t,
     ];
-    final routes = medicine.routes.isEmpty ? const ['IM', 'IV', 'SC', 'PO', 'topical', 'intramammary', 'pour_on', 'intranasal', 'ocular', 'other'] : medicine.routes;
-    final route = routes.contains(_route) ? _route : routes.first;
+    final routes = medicine.routes;
+    final String? route = routes.contains(_route) ? _route : null;
 
     return AlertDialog(
       title: Text(context.t('phAdminister')),
@@ -765,12 +766,13 @@ class _AdministerDialogState extends State<_AdministerDialog> {
                 flex: 2,
                 child: DropdownButtonFormField<String>(
                   initialValue: route,
-                  decoration: InputDecoration(labelText: context.t('phRoute')),
+                  decoration: InputDecoration(labelText: context.t('phRoute'), hintText: context.t('qrSelectRoute')),
                   items: [for (final r in routes) DropdownMenuItem(value: r, child: Text(r))],
                   onChanged: (v) => setState(() => _route = v),
                 ),
               ),
             ]),
+            if (routes.isEmpty) Text(context.t('qrNoRoutes'), style: const TextStyle(color: FarmColors.dangerInk)),
             if (subjectType == 'group') ...[
               const SizedBox(height: 12),
               TextField(controller: _heads, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('headCount'))),
@@ -794,13 +796,13 @@ class _AdministerDialogState extends State<_AdministerDialog> {
       ),
       actions: [
         TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: Text(context.t('cancel'))),
-        FilledButton(onPressed: _saving || subject == null ? null : () => _save(medicine, subjectType!, subjectId!, route!), child: Text(context.t('save'))),
+        FilledButton(onPressed: _saving || subject == null || route == null ? null : () => _save(medicine, subjectType!, subjectId!, route), child: Text(context.t('save'))),
       ],
     );
   }
 
   Future<void> _save(Medicine medicine, String subjectType, String subjectId, String route) async {
-    final dose = double.tryParse(_dose.text.trim());
+    final dose = parseLocalizedDouble(_dose.text);
     if (dose == null || dose <= 0) {
       setState(() => _error = context.t('enterQuantity'));
       return;

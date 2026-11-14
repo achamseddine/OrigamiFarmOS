@@ -307,7 +307,9 @@ class TestAdministration:
         assert r.status_code == 201 and r.json()["lot_code"] == "OXY-2605"
         # The route must be one the product is authorised for.
         r = client.post(f"{API}/pharmacy/administrations", json={"subject_type": "animal", "subject_id": BELLA, "inventory_item_id": OXYTET, "dose_quantity": 1,
-                                                                "dose_unit": "ml", "route_code": "PO", "treatment_id": tid}, headers=_h(client))
+                                                                "dose_unit": "ml", "route_code": "PO", "treatment_id": tid,
+                                                                # a second dose within 12 h is asked first; this one is meant
+                                                                "confirm_duplicate": True}, headers=_h(client))
         assert r.status_code == 422 and "authorised for IM, IV" in r.json()["detail"]
 
     def test_the_seeded_administrations_are_bound_to_their_lots(self, client: TestClient):

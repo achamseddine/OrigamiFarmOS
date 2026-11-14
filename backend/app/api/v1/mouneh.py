@@ -8,13 +8,15 @@ through these same endpoints.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_module_license, require_mouneh_operations_role
+from app.core import duplicates
+from app.core import permissions as perms
+from app.api.deps import ensure_stock_override, get_current_user, require_module_license, require_mouneh_operations_role
 from app.db.base import get_db
 from app.domain import models, mouneh_models
 from app.mouneh import costing
@@ -42,6 +44,9 @@ from app.schemas.mouneh import (
 )
 
 router = APIRouter(prefix="/mouneh", tags=["mouneh"], dependencies=[Depends(require_module_license("mouneh"))])
+
+# A repeated sale is looked for over this short window (see record_sale).
+_SALE_WINDOW = timedelta(minutes=5)
 
 MODULE_CODE = "mouneh"
 
@@ -73,6 +78,10 @@ def create_raw_material(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_mouneh_operations_role),
 ) -> mouneh_models.RawMaterial:
+    clash = db.scalar(select(mouneh_models.RawMaterial).where(mouneh_models.RawMaterial.farm_id == current_user.farm_id,
+                                                              func.lower(mouneh_models.RawMaterial.name) == payload.name.strip().lower()))
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A raw material named {clash.name} already exists.")
     material = mouneh_models.RawMaterial(id=new_id(), farm_id=current_user.farm_id, **payload.model_dump())
     db.add(material)
     _write_event(
@@ -452,6 +461,7 @@ def consume_batch_inputs(
     batch = _batch_or_404(db, batch_id, current_user.farm_id)
     if batch.status != "in_progress":
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Batch is '{batch.status}' — only an in-progress batch can consume materials")
+    ensure_stock_override(db, current_user, payload.allow_negative, perms.MOUNEH_INVENTORY, perms.MOUNEH_PRODUCTION)
 
     by_material = {c.material_id: c for c in batch.consumptions}
     for line in payload.lines:
@@ -625,6 +635,24 @@ def record_sale(
             f"Only {stock.quantity_available} units available, cannot sell {payload.quantity}",
         )
 
+    # The same sale typed in twice (a second tablet, a repeated tap after the
+    # first one went through). Two customers buying the same jar minutes
+    # apart is real — so it is asked, not refused outright.
+    lo, hi = duplicates.near(None, _SALE_WINDOW)
+    customer = mouneh_models.MounehSaleLine.customer_id
+    twin = db.scalars(
+        select(mouneh_models.MounehSaleLine).where(
+            mouneh_models.MounehSaleLine.farm_id == current_user.farm_id,
+            mouneh_models.MounehSaleLine.product_id == product.id,
+            mouneh_models.MounehSaleLine.quantity == payload.quantity,
+            mouneh_models.MounehSaleLine.unit_price == payload.unit_price,
+            customer.is_(None) if payload.customer_id is None else customer == payload.customer_id,
+            mouneh_models.MounehSaleLine.sold_at.between(lo, hi),
+        )
+    ).first()
+    duplicates.guard(twin, f"{payload.quantity:g} × {product.name} at {payload.unit_price:g} was sold a few minutes ago.",
+                     confirm=payload.confirm_duplicate)
+
     margin = costing.compute_sale_margin(
         quantity=payload.quantity, unit_price=payload.unit_price, discount=payload.discount, unit_cost=stock.unit_cost
     )
@@ -660,6 +688,9 @@ def record_sale(
         payload={"product_id": product.id, "quantity": payload.quantity, "revenue": margin.revenue},
         user_id=current_user.id,
     )
+    if twin is not None:
+        _write_event(db, farm_id=current_user.farm_id, entity_type="mouneh_sale_line", entity_id=sale.id,
+                     event_type="duplicate_confirmed", payload={"record": "sale", "resembles": twin.id}, user_id=current_user.id)
     db.commit()
     db.refresh(sale)
     return sale

@@ -54,6 +54,8 @@ CHECK_DUE_AFTER_DAYS = 30
 DUE_SOON_DAYS = 21
 # Fallback for a pregnancy window when a species has no gestation length.
 _DEFAULT_WINDOW_DAYS = 400
+# The farm setting `farms.dry_off_days_before_birth` when a farm has none.
+DEFAULT_DRY_OFF_DAYS = 60
 
 
 # ----------------------------------------------------------------- helpers
@@ -146,11 +148,114 @@ def days_pregnant(episode: rm.PregnancyEpisode | None, at: datetime | None = Non
 
 
 def _hooks(db: Session, animal: models.Animal, changed: set[str], *, trigger: str, user_id: str) -> None:
-    from app.services import feed_performance_service, feeding_program_service
+    from app.services import feed_performance_service, feeding_program_service, group_service
 
     if changed:
         feeding_program_service.review_animal_if_relevant(db, animal, changed, user_id=user_id)
+        # Pregnant / open / in-milk / dry groups follow the records.
+        group_service.sync_rule_groups(db, animal, user_id=user_id)
     feed_performance_service.on_context_changed(db, "animal", animal, trigger=trigger, user_id=user_id)
+
+
+# ----------------------------------------------------------------- dry-off
+def dry_off_days(db: Session, farm_id: str) -> int:
+    """The farm's setting: how many days before an expected birth a
+    lactating animal stops being milked."""
+    farm = db.get(models.Farm, farm_id)
+    days = getattr(farm, "dry_off_days_before_birth", None) if farm is not None else None
+    return DEFAULT_DRY_OFF_DAYS if days is None else int(days)
+
+
+def dry_off_plan(expected_due_date: datetime | None, lactating: bool, days_before: int, at: datetime | None = None) -> dict:
+    """When milking should stop ahead of the expected birth. A plan, never
+    a record: the dry-off itself is recorded when it happens."""
+    if expected_due_date is None:
+        return {"dry_off_from": None, "days_to_dry_off": None, "dry_off_due": False}
+    start = ensure_utc(expected_due_date) - timedelta(days=days_before)
+    days = days_between(at or now(), start)
+    return {"dry_off_from": start, "days_to_dry_off": days, "dry_off_due": bool(lactating) and days <= 0}
+
+
+# ----------------------------------------------------------------- calendar
+# Defaults of the farm's calendar settings (farms.milk_peak_start_days …).
+DEFAULT_CALENDAR = {"milk_peak_start_days": 40, "milk_peak_end_days": 70, "breeding_wait_days": 50, "heat_cycle_days": 21}
+# A return to heat is watched for this many days either side of one cycle.
+HEAT_WATCH_MARGIN_DAYS = 3
+
+
+def farm_calendar(db: Session, farm_id: str) -> dict:
+    farm = db.get(models.Farm, farm_id)
+    out = dict(DEFAULT_CALENDAR)
+    if farm is not None:
+        for k in out:
+            v = getattr(farm, k, None)
+            if v is not None:
+                out[k] = int(v)
+    out["dry_off_days_before_birth"] = dry_off_days(db, farm_id)
+    return out
+
+
+def calendar_plan(*, calving_at: datetime | None, lactating: bool, pregnant: bool, can_breed: bool,
+                  last_service_at: datetime | None, last_check_at: datetime | None, calendar: dict, at: datetime | None = None) -> dict:
+    """The working calendar after a birth (Vision: "when should I watch her
+    peak, when should she be inseminated"): days in milk, the milk peak
+    window, the end of the voluntary waiting period, and — after a service
+    not yet confirmed — the days to watch for a return to heat. A plan from
+    the farm's settings and the records; it records nothing."""
+    at = at or now()
+    out = {"calving_at": None, "days_in_milk": None, "milk_peak_from": None, "milk_peak_to": None, "in_milk_peak": False,
+           "breeding_from": None, "ready_for_breeding": False, "heat_watch_from": None, "heat_watch_to": None, "heat_watch_now": False}
+    if calving_at is not None:
+        calved = ensure_utc(calving_at)
+        dim = max(0, days_between(calved, at))
+        out.update(calving_at=calved, days_in_milk=dim if lactating else None,
+                   milk_peak_from=calved + timedelta(days=calendar["milk_peak_start_days"]),
+                   milk_peak_to=calved + timedelta(days=calendar["milk_peak_end_days"]),
+                   in_milk_peak=lactating and calendar["milk_peak_start_days"] <= dim <= calendar["milk_peak_end_days"])
+        if can_breed and not pregnant:
+            breeding_from = calved + timedelta(days=calendar["breeding_wait_days"])
+            served_since = last_service_at is not None and ensure_utc(last_service_at) >= calved
+            out.update(breeding_from=breeding_from, ready_for_breeding=dim >= calendar["breeding_wait_days"] and not served_since)
+    if can_breed and not pregnant and last_service_at is not None:
+        served = ensure_utc(last_service_at)
+        confirmed_after = last_check_at is not None and ensure_utc(last_check_at) >= served
+        if not confirmed_after:
+            cycle = calendar["heat_cycle_days"]
+            start = served + timedelta(days=cycle - HEAT_WATCH_MARGIN_DAYS)
+            end = served + timedelta(days=cycle + HEAT_WATCH_MARGIN_DAYS)
+            out.update(heat_watch_from=start, heat_watch_to=end, heat_watch_now=start.date() <= at.date() <= end.date())
+    return out
+
+
+def correct_lactation_start(db: Session, animal: models.Animal, *, started_at: datetime, reason: str | None, user: models.User) -> rm.LactationEpisode:
+    """The calving / start-of-milking date of the current lactation, corrected
+    (it was entered when milking was recorded, before the date was known).
+    A correction with its reason and the old value, never a silent edit; a
+    lactation that a recorded birth started is dated by that birth."""
+    ensure_on_farm(animal, "a lactation correction")
+    row = active_lactation(db, animal.id)
+    if row is None:
+        raise LivestockError(f"{animal.name} is not in milk.", 404)
+    if row.birth_event_id:
+        raise LivestockError(f"{animal.name}'s lactation started with a recorded birth; correct that birth's date instead.", 409)
+    new_at = _when(started_at, "A calving")
+    previous_end = db.scalar(select(func.max(rm.LactationEpisode.ended_at)).where(
+        rm.LactationEpisode.animal_id == animal.id, rm.LactationEpisode.id != row.id))
+    if previous_end is not None and new_at < ensure_utc(previous_end):
+        raise LivestockError(f"{animal.name} was dried off on {ensure_utc(previous_end).date().isoformat()}; this lactation cannot start before that.")
+    before = _dt(row.started_at)
+    row.started_at = new_at
+    refresh_projection(db, animal)
+    write_event(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, event_type="lactation_corrected",
+                payload={"lactation_id": row.id, "started_at": {"from": before.isoformat() if before else None, "to": new_at.isoformat()},
+                         "reason": reason}, created_by=user.id)
+    from app.repositories.base import write_audit_log
+
+    write_audit_log(db, farm_id=animal.farm_id, user_id=user.id, action="lactation_corrected", entity_type="animal", entity_id=animal.id,
+                    module_code="milk_production", changes={"lactation_started_at": {"from": before.isoformat() if before else None, "to": new_at.isoformat()}},
+                    summary=f"{user.name} corrected {animal.name}'s calving / start of milking to {new_at.date().isoformat()}")
+    _hooks(db, animal, set(), trigger="lifecycle_changed", user_id=user.id)
+    return row
 
 
 # ----------------------------------------------------------------- projection
@@ -176,21 +281,28 @@ def refresh_projection(db: Session, animal: models.Animal) -> set[str]:
 
 
 def open_registration_state(db: Session, animal: models.Animal, *, pregnant: bool, pregnancy_days: int | None, lactating: bool,
-                            lactation_cycle: int | None, user_id: str, at: datetime | None = None) -> None:
+                            lactation_cycle: int | None, user_id: str, at: datetime | None = None,
+                            breeding: rm.BreedingEvent | None = None, lactation_started_at: datetime | None = None) -> None:
     """An animal registered pregnant or in milk — bought in, or already on
     the farm before the app — arrives with the episode that says so, sourced
-    "registration", rather than with a bare flag."""
+    "registration", rather than with a bare flag. With the insemination /
+    mating it came from ([breeding], recorded first), the pregnancy is dated
+    from that service rather than from an estimate."""
     at = ensure_utc(at) if at else now()
     if lactation_cycle is not None and lactation_cycle < 0:
         raise LivestockError("The lactation number cannot be negative.")
     animal.lactation_cycle = lactation_cycle
     if pregnant:
         gestation = _gestation_days(db, animal)
+        if breeding is not None:
+            pregnancy_days = days_between(breeding.occurred_at, at)
         if pregnancy_days is not None and (pregnancy_days < 0 or (gestation and pregnancy_days > gestation + 30)):
             raise LivestockError(f"{pregnancy_days} days is not a {animal.species.replace('_', ' ')} pregnancy"
-                                 + (f" (about {gestation} days)." if gestation else "."))
-        conceived = at - timedelta(days=pregnancy_days) if pregnancy_days is not None else None
+                                 + (f" (about {gestation} days)." if gestation else ".")
+                                 + (" Check the insemination date." if breeding is not None else ""))
+        conceived = ensure_utc(breeding.occurred_at) if breeding is not None else (at - timedelta(days=pregnancy_days) if pregnancy_days is not None else None)
         episode = rm.PregnancyEpisode(id=new_id(), farm_id=animal.farm_id, animal_id=animal.id, status="active", estimated_conception_at=conceived,
+                                      originating_breeding_event_id=breeding.id if breeding is not None else None,
                                       expected_due_date=_due(db, animal, conceived), source="registration", created_by=user_id)
         db.add(episode)
         db.add(rm.PregnancyAssessment(id=new_id(), farm_id=animal.farm_id, pregnancy_episode_id=episode.id, animal_id=animal.id, assessed_at=at,
@@ -200,10 +312,13 @@ def open_registration_state(db: Session, animal: models.Animal, *, pregnant: boo
                     payload={"episode_id": episode.id, "source": "registration", "expected_due_date": episode.expected_due_date.isoformat() if episode.expected_due_date else None},
                     created_by=user_id)
     if lactating:
-        db.add(rm.LactationEpisode(id=new_id(), farm_id=animal.farm_id, animal_id=animal.id, started_at=at, status="active",
+        # The calving that started this lactation, when the farmer knows it —
+        # days in milk, the peak and the breeding wait are reckoned from it.
+        started = _when(lactation_started_at, "A calving") if lactation_started_at else at
+        db.add(rm.LactationEpisode(id=new_id(), farm_id=animal.farm_id, animal_id=animal.id, started_at=started, status="active",
                                    lactation_number=lactation_cycle, source="registration", created_by=user_id))
         write_event(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, event_type="lactation_started",
-                    payload={"source": "registration", "lactation_number": lactation_cycle}, created_by=user_id)
+                    payload={"source": "registration", "lactation_number": lactation_cycle, "started_at": started.isoformat()}, created_by=user_id)
     refresh_projection(db, animal)
 
 
@@ -828,7 +943,18 @@ def summary(db: Session, animal: models.Animal) -> dict:
         and days_between(last_breeding.occurred_at, now()) >= CHECK_DUE_AFTER_DAYS
         and (last_check is None or ensure_utc(last_check.assessed_at) < ensure_utc(last_breeding.occurred_at))
     )
+    days_before = dry_off_days(db, animal.farm_id)
+    calendar = farm_calendar(db, animal.farm_id)
+    calving_at = lactation.started_at if lactation else (last_birth.occurred_at if last_birth else None)
+    plan = calendar_plan(
+        calving_at=calving_at, lactating=lactation is not None, pregnant=pregnancy is not None,
+        can_breed=cap_set.has(Cap.BREEDING) and animal.sex == "F",
+        last_service_at=last_breeding.occurred_at if last_breeding and last_breeding.event_type in SERVICE_TYPES else None,
+        last_check_at=last_check.assessed_at if last_check else None, calendar=calendar,
+    )
     return {
+        "calendar": calendar,
+        **plan,
         "applies": {"breeding": cap_set.has(Cap.BREEDING) and animal.sex == "F", "pregnancy": cap_set.has(Cap.PREGNANCY),
                     "live_birth": cap_set.has(Cap.LIVE_BIRTH), "lactation": cap_set.has(Cap.LACTATION)},
         "terminology": _terminology(db, animal.species),
@@ -842,6 +968,8 @@ def summary(db: Session, animal: models.Animal) -> dict:
         "births_count": births,
         "awaiting_pregnancy_check": awaiting,
         "lactation_number": animal.lactation_cycle,
+        "dry_off_days_before_birth": days_before,
+        **dry_off_plan(pregnancy.expected_due_date if pregnancy else None, lactation is not None, days_before),
     }
 
 
@@ -867,7 +995,12 @@ def timeline(db: Session, animal: models.Animal) -> dict:
 def overview(db: Session, farm_id: str) -> dict:
     """The farm's reproduction day (Vision: "Which cows, goats or sheep
     are ready for breeding?"): who is due, who is waiting for a check, who
-    is in milk, what is in the incubator."""
+    is in milk and at their peak, who is past the waiting period and ready
+    to inseminate, who to watch for a return to heat, what is in the
+    incubator.
+
+    Read in a handful of farm-wide queries — the episodes, the latest
+    service, check and birth per animal — never one summary per animal."""
     db.flush()
     at = now()
     animals = {a.id: a for a in db.scalars(select(models.Animal).where(models.Animal.farm_id == farm_id, models.Animal.active.is_(True)))}
@@ -875,28 +1008,74 @@ def overview(db: Session, farm_id: str) -> dict:
     def _brief(a: models.Animal, **extra) -> dict:
         return {"animal_id": a.id, "name": a.name, "tag": a.tag, "species": a.species, **extra}
 
+    calendar = farm_calendar(db, farm_id)
+    days_before = calendar["dry_off_days_before_birth"]
+    pregnancies = {p.animal_id: p for p in db.scalars(select(rm.PregnancyEpisode).where(
+        rm.PregnancyEpisode.farm_id == farm_id, rm.PregnancyEpisode.status == "active").order_by(rm.PregnancyEpisode.created_at))}
+    lactations = {l.animal_id: l for l in db.scalars(select(rm.LactationEpisode).where(
+        rm.LactationEpisode.farm_id == farm_id, rm.LactationEpisode.status == "active").order_by(rm.LactationEpisode.started_at))}
+    last_breeding: dict[str, rm.BreedingEvent] = {}
+    for b in db.scalars(select(rm.BreedingEvent).where(rm.BreedingEvent.farm_id == farm_id, rm.BreedingEvent.status == "recorded")
+                        .order_by(rm.BreedingEvent.occurred_at)):
+        last_breeding[b.female_animal_id] = b
+    last_check: dict[str, rm.PregnancyAssessment] = {}
+    for c in db.scalars(select(rm.PregnancyAssessment).where(rm.PregnancyAssessment.farm_id == farm_id).order_by(rm.PregnancyAssessment.assessed_at)):
+        last_check[c.animal_id] = c
+    last_birth: dict[str, rm.BirthEvent] = {}
+    for b in db.scalars(select(rm.BirthEvent).where(rm.BirthEvent.farm_id == farm_id).order_by(rm.BirthEvent.occurred_at)):
+        last_birth[b.dam_animal_id] = b
+
+    # Breeding capability per resolver input, not per animal.
+    can_breed_cache: dict[tuple, bool] = {}
+
+    def can_breed(a: models.Animal) -> bool:
+        key = (a.species, a.sex, a.life_stage, a.management_profile)
+        if key not in can_breed_cache:
+            can_breed_cache[key] = a.sex == "F" and capability_service.resolve(db, *key).has(Cap.BREEDING)
+        return can_breed_cache[key]
+
     due = []
-    for p in db.scalars(select(rm.PregnancyEpisode).where(rm.PregnancyEpisode.farm_id == farm_id, rm.PregnancyEpisode.status == "active")):
-        a = animals.get(p.animal_id)
+    for animal_id, p in pregnancies.items():
+        a = animals.get(animal_id)
         if a is None:
             continue
         due_date = _dt(p.expected_due_date)
         days = days_between(at, due_date) if due_date else None
         due.append(_brief(a, expected_due_date=due_date, days_to_due=days, days_pregnant=days_pregnant(p),
-                          due_soon=days is not None and days <= DUE_SOON_DAYS, overdue=days is not None and days < 0))
+                          due_soon=days is not None and days <= DUE_SOON_DAYS, overdue=days is not None and days < 0,
+                          lactating=bool(a.lactating), **dry_off_plan(due_date, bool(a.lactating), days_before, at)))
     due.sort(key=lambda r: (r["days_to_due"] is None, r["days_to_due"] if r["days_to_due"] is not None else 0))
-    awaiting = []
+
+    awaiting, peak, ready, heat = [], [], [], []
     for a in animals.values():
-        if a.sex != "F" or a.pregnant:
+        if a.sex != "F":
             continue
-        s = summary(db, a)
-        if s["awaiting_pregnancy_check"]:
-            awaiting.append(_brief(a, last_breeding_at=s["last_breeding"]["occurred_at"],
-                                   days_since_breeding=days_between(s["last_breeding"]["occurred_at"], at)))
+        b = last_breeding.get(a.id)
+        c = last_check.get(a.id)
+        lac = lactations.get(a.id)
+        pregnant = a.id in pregnancies
+        service = b if b is not None and b.event_type in SERVICE_TYPES else None
+        if (not pregnant and service is not None and days_between(service.occurred_at, at) >= CHECK_DUE_AFTER_DAYS
+                and (c is None or ensure_utc(c.assessed_at) < ensure_utc(service.occurred_at))):
+            awaiting.append(_brief(a, last_breeding_at=_dt(service.occurred_at), days_since_breeding=days_between(service.occurred_at, at)))
+        birth = last_birth.get(a.id)
+        calving = lac.started_at if lac else (birth.occurred_at if birth else None)
+        if calving is None and service is None:
+            continue
+        plan = calendar_plan(calving_at=calving, lactating=lac is not None, pregnant=pregnant, can_breed=can_breed(a),
+                             last_service_at=service.occurred_at if service else None, last_check_at=c.assessed_at if c else None,
+                             calendar=calendar, at=at)
+        if plan["in_milk_peak"]:
+            peak.append(_brief(a, days_in_milk=plan["days_in_milk"], milk_peak_to=plan["milk_peak_to"]))
+        if plan["ready_for_breeding"]:
+            ready.append(_brief(a, days_since_calving=days_between(plan["calving_at"], at), breeding_from=plan["breeding_from"]))
+        if plan["heat_watch_now"]:
+            heat.append(_brief(a, last_service_at=_dt(service.occurred_at), heat_watch_to=plan["heat_watch_to"]))
+
     recent = []
     for b in db.scalars(select(rm.BirthEvent).where(rm.BirthEvent.farm_id == farm_id, rm.BirthEvent.occurred_at >= at - timedelta(days=30))
                         .order_by(rm.BirthEvent.occurred_at.desc())):
-        dam = db.get(models.Animal, b.dam_animal_id)
+        dam = animals.get(b.dam_animal_id) or db.get(models.Animal, b.dam_animal_id)
         recent.append({"birth_id": b.id, "dam_animal_id": b.dam_animal_id, "dam_name": dam.name if dam else None, "occurred_at": _dt(b.occurred_at),
                        "live_count": b.live_count, "offspring_count": b.offspring_count})
     in_milk = [a for a in animals.values() if a.lactating]
@@ -911,4 +1090,10 @@ def overview(db: Session, farm_id: str) -> dict:
         "incubations": incubations,
         "check_due_after_days": CHECK_DUE_AFTER_DAYS,
         "due_soon_days": DUE_SOON_DAYS,
+        "dry_off_days_before_birth": days_before,
+        "dry_off_due_count": sum(1 for r in due if r["dry_off_due"]),
+        "calendar": calendar,
+        "in_milk_peak": sorted(peak, key=lambda r: r["days_in_milk"] or 0),
+        "ready_for_breeding": sorted(ready, key=lambda r: -(r["days_since_calving"] or 0)),
+        "heat_watch": heat,
     }

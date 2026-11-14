@@ -11,7 +11,10 @@ import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
+import '../../core/util/number_input.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../providers/access_provider.dart';
+import '../../providers/herd_records_provider.dart';
 import '../../providers/tasks_provider.dart';
 
 /// Farm configuration (tech spec §6 nav table: "Users, roles, languages,
@@ -57,6 +60,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           HeroBand(
+            eyebrow: context.t('ebSettings'),
             title: context.t('navSettings'),
             subtitle: context.t('settingsSubtitle'),
             icon: FarmIcon.settings,
@@ -106,6 +110,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   : Text(_farmError ?? 'Loading…', style: FarmTypography.textTheme.bodySmall),
             ),
             const SizedBox(height: FarmSpacing.md),
+            if (_farm != null) ...[
+              _CalendarCard(farm: _farm!, onSaved: (farm) => setState(() => _farm = farm)),
+              const SizedBox(height: FarmSpacing.md),
+            ],
           ],
           SectionCard(
             title: 'Language',
@@ -240,6 +248,119 @@ class _IncludedModule extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The farm's breeding and milk calendar: when the milk peak is expected
+/// after a calving, the waiting period before the next insemination, the
+/// heat cycle watched after a service, and how many days before an
+/// expected birth a milking animal is dried off. They set the dates shown on
+/// every animal and the herd's to-do chips; they record nothing.
+class _CalendarCard extends StatefulWidget {
+  const _CalendarCard({required this.farm, required this.onSaved});
+  final Map<String, dynamic> farm;
+  final ValueChanged<Map<String, dynamic>> onSaved;
+
+  @override
+  State<_CalendarCard> createState() => _CalendarCardState();
+}
+
+class _CalendarCardState extends State<_CalendarCard> {
+  // key, label, default, min, max
+  static const _fields = [
+    ('dry_off_days_before_birth', 'fsDryOffTitle', 60, 0, 200),
+    ('milk_peak_start_days', 'fsPeakStart', 40, 0, 365),
+    ('milk_peak_end_days', 'fsPeakEnd', 70, 0, 365),
+    ('breeding_wait_days', 'fsBreedingWait', 50, 0, 365),
+    ('heat_cycle_days', 'fsHeatCycle', 21, 10, 60),
+  ];
+  late final Map<String, TextEditingController> _c = {
+    for (final f in _fields) f.$1: TextEditingController(text: '${(widget.farm[f.$1] as num?)?.toInt() ?? f.$3}'),
+  };
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final c in _c.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final body = <String, dynamic>{};
+    for (final (key, _, _, min, max) in _fields) {
+      final v = parseLocalizedInt(_c[key]!.text);
+      if (v == null || v < min || v > max) {
+        setState(() => _error = '${context.t('fsCalendarInvalid')} ($min–$max)');
+        return;
+      }
+      body[key] = v;
+    }
+    if ((body['milk_peak_start_days'] as int) > (body['milk_peak_end_days'] as int)) {
+      setState(() => _error = context.t('fsPeakOrder'));
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final api = context.read<SessionController>().apiClient;
+    final herd = context.read<HerdRecordsProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = context.t('fsSaved');
+    final result = await api.write(() => api.patch('/farms/me', body: body));
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _error = result.error;
+    });
+    if (!result.success) return;
+    if (result.data is Map<String, dynamic> && !result.queued) widget.onSaved(result.data! as Map<String, dynamic>);
+    await herd.loadOverview();
+    messenger.showSnackBar(SnackBar(content: Text(saved)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Configuration every plan is drawn from: Settings *configure*.
+    final canConfigure = context.watch<AccessProvider>().canConfigureSettings;
+    return SectionCard(
+      title: context.t('fsCalendarTitle'),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(context.t('fsCalendarBody'), style: FarmTypography.textTheme.bodySmall),
+        const SizedBox(height: FarmSpacing.sm),
+        Wrap(spacing: 12, runSpacing: 12, children: [
+          for (final (key, label, _, _, _) in _fields)
+            SizedBox(
+              width: 210,
+              child: TextField(
+                key: ValueKey(key == 'dry_off_days_before_birth' ? 'dry-off-days' : 'cal-$key'),
+                controller: _c[key],
+                enabled: canConfigure,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(labelText: context.t(label), suffixText: context.t('fsDays'), isDense: true),
+              ),
+            ),
+        ]),
+        const SizedBox(height: FarmSpacing.sm),
+        if (!canConfigure) ...[
+          Text(context.t('settingsNeedConfigure'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
+          const SizedBox(height: FarmSpacing.sm),
+        ],
+        Row(children: [
+          FilledButton(
+            onPressed: _saving || !canConfigure ? null : _save,
+            child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
+          ),
+          if (_error != null) ...[
+            const SizedBox(width: 12),
+            Expanded(child: Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
+          ],
+        ]),
+      ]),
     );
   }
 }

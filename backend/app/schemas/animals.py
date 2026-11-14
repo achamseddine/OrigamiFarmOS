@@ -139,7 +139,19 @@ class AnimalCreate(BaseModel):
     # Production
     pregnant: bool = False
     pregnancy_days: int | None = None
+    # The insemination / mating she was served at, if known: recorded as a
+    # breeding event, and — when she is registered pregnant — the date the
+    # pregnancy and its expected birth are reckoned from.
+    service_date: datetime | None = None
+    service_type: str = "ARTIFICIAL_INSEMINATION"
     lactating: bool = False
+    # The calving (kidding, lambing…) that started the current lactation,
+    # when known: days in milk, the milk peak and the breeding wait count
+    # from it. Defaults to the registration date.
+    lactation_started_at: datetime | None = None
+    # An animal of the same species with the same name already on the farm
+    # is refused as a possible duplicate unless confirmed.
+    confirm_duplicate: bool = False
     lactation_cycle: int | None = None
     # Financial (only stored when the caller may see Finance — see the router)
     purchase_cost: float | None = None

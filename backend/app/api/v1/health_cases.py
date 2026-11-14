@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_diagnostic_role, require_permission, user_can
+from app.core import duplicates
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import health_models as hm
@@ -59,7 +60,22 @@ def list_cases(case_status: str | None = Query("active", alias="status"), subjec
 
 @router.post("/health/cases", status_code=status.HTTP_201_CREATED)
 def open_case(payload: HealthCaseIn, db: Session = Depends(get_db), user: models.User = Depends(_create)) -> dict:
-    c = cases.open_case(db, user.farm_id, user_id=user.id, source_type="manual", **payload.model_dump())
+    # One open case per problem: a second worker reporting the same lame cow
+    # adds to the case already open rather than starting another.
+    subject = hm.HealthCase.animal_id if payload.subject_type == "animal" else hm.HealthCase.animal_group_id
+    problem = hm.HealthCase.primary_problem_code
+    open_twin = db.scalars(
+        select(hm.HealthCase).where(
+            hm.HealthCase.farm_id == user.farm_id, subject == payload.subject_id, hm.HealthCase.closed_at.is_(None),
+            hm.HealthCase.status.notin_(("closed", "resolved", "cancelled")),
+            problem.is_(None) if payload.primary_problem_code is None else problem == payload.primary_problem_code,
+        )
+    ).first()
+    duplicates.guard(open_twin, f"case {open_twin.case_code if open_twin else ''} is already open for this"
+                     f"{' problem' if payload.primary_problem_code else ''}. Add to that case instead.", confirm=payload.confirm_duplicate)
+    c = cases.open_case(db, user.farm_id, user_id=user.id, source_type="manual", **payload.model_dump(exclude={"confirm_duplicate"}))
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="health_case", entity_id=c.id,
+                             match_id=open_twin.id if open_twin else None, what="health case", user_id=user.id)
     db.commit()
     return cases.case_dict(db, c)
 
@@ -144,6 +160,15 @@ def record_weight(animal_id: str, payload: WeightIn, db: Session = Depends(get_d
     """A dated weight with its method; the animal's `weight_kg` becomes
     the latest of them."""
     animal = _animal(db, animal_id, user.farm_id)
-    w = cases.record_weight(db, user.farm_id, animal, user_id=user.id, source_type="manual", **payload.model_dump())
+    lo, hi = duplicates.farm_day(db, user.farm_id, payload.measured_at)
+    same_day = db.scalars(
+        select(hm.AnimalWeightRecord).where(hm.AnimalWeightRecord.animal_id == animal.id,
+                                            hm.AnimalWeightRecord.measured_at >= lo, hm.AnimalWeightRecord.measured_at < hi)
+    ).first()
+    duplicates.guard(same_day, f"{animal.name} was already weighed that day ({same_day.weight_kg:g} kg)." if same_day else "",
+                     confirm=payload.confirm_duplicate)
+    w = cases.record_weight(db, user.farm_id, animal, user_id=user.id, source_type="manual", **payload.model_dump(exclude={"confirm_duplicate"}))
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="animal", entity_id=animal.id,
+                             match_id=same_day.id if same_day else None, what="weight", user_id=user.id)
     db.commit()
     return cases.weight_dict(db, w)

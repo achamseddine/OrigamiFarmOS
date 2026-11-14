@@ -166,6 +166,38 @@ final List<_Rule> _rules = [
         MergeRecord('/animals/${m.ids[0]}', m.ids[1], const {'status': 'retired'}, listKey: 'identifiers'),
         MergeNested('/animals', m.ids[0], 'identifiers', m.ids[1], const {'status': 'retired'}),
       ]),
+  // A dated weight (health_cases router): it heads the animal's weight
+  // list, and becomes the figure on its herd row and its Digital Twin —
+  // the server makes the newest weight the animal's `weight_kg` too.
+  _Rule('POST', '/animals/$_id/weights', (m) {
+    final record = _newRecord(m, extra: {
+      'animal_id': m.ids[0],
+      'method': m.body['method'] ?? 'scale',
+      'measured_at': m.body['measured_at'] ?? _now(),
+      'source_type': 'manual',
+    });
+    final kg = (m.body['weight_kg'] as num?)?.toDouble();
+    return [
+      AppendRecord('/animals/${m.ids[0]}/weights', record),
+      if (kg != null) MergeRecord('/animals', m.ids[0], {'weight_kg': kg}),
+      PatchDocument('/animals/${m.ids[0]}', {'weight_kg': ?kg, 'latest_weight': record}),
+    ];
+  }),
+  // Health cases (HEALTH-VETERINARY-SCHEMA): opened, set to monitoring or
+  // closed out of range, the case list and the case itself show it at
+  // once; the case number is the server's to give, so it reads "…" until
+  // the queue drains.
+  _Rule('POST', '/health/cases', (m) => [
+        AppendRecord('/health/cases', _newRecord(m, extra: {'status': 'open', 'opened_at': _now(), 'case_code': '…', 'active_diagnoses': <dynamic>[]})),
+      ]),
+  _Rule('PATCH', '/health/cases/$_id', (m) => [
+        MergeRecord('/health/cases', m.ids[0], m.body),
+        PatchDocument('/health/cases/${m.ids[0]}', m.body),
+      ]),
+  _Rule('POST', '/health/cases/$_id/close', (m) {
+    final patch = {'status': m.body['status'] ?? 'resolved', 'outcome': m.body['outcome'], 'closed_at': _now()};
+    return [MergeRecord('/health/cases', m.ids[0], patch), PatchDocument('/health/cases/${m.ids[0]}', patch)];
+  }),
   // Herds, flocks and batches managed as one unit (§7).
   ..._crud('/animal-groups'),
   // The livestock record (LIVESTOCK-SCHEMA, REPRODUCTION-SCHEMA): what a
@@ -252,6 +284,19 @@ final List<_Rule> _rules = [
         }),
       ]),
   _Rule('POST', '/feed-batches/$_id/quarantine', (m) => [MergeRecord('/feed-batches', m.ids[0], const {'status': 'quarantined'})]),
+  // A one-step mix: shown at once as a completed mix whose number the
+  // server gives when it syncs (FEED-SCHEMA §20 — never numbered here).
+  _Rule('POST', '/feed-mixes', (m) => [
+        AppendRecord('/feed-batches', _newRecord(m, extra: {
+          'status': 'completed',
+          'mix_number': null,
+          'mix_code': null,
+          'batch_code': m.localId,
+          'produced_at': m.body['produced_at'] ?? _now(),
+          'actual_quantity': m.body['output_quantity'],
+          'unit': m.body['unit'] ?? 'kg',
+        })),
+      ]),
   _Rule('POST', '/feeding-programs', (m) => [AppendRecord('/feeding-programs', _newRecord(m, extra: {'status': 'active'}))]),
   _Rule('POST', '/livestock-subjects/$_id/feeding-assignments', (m) => [
         AppendRecord('/livestock-subjects/${m.ids[0]}/feeding-assignments', _newRecord(m, extra: {'subject_id': m.ids[0], 'status': 'active', 'valid_from': m.body['valid_from'] ?? _now()})),
@@ -412,6 +457,14 @@ final List<_Rule> _rules = [
     if (granted is! List) return const [];
     return [MergeRecord('/employees', m.ids[0], {'permissions': granted})];
   }),
+  // An employee's animals & duties (work_responsibilities).
+  _Rule('POST', '/employees/$_id/responsibilities', (m) => [
+        AppendRecord('/employees/${m.ids[0]}/responsibilities',
+            _newRecord(m, extra: {'user_id': m.ids[0], 'status': 'active', 'scope_name': m.body['scope_id'], 'valid_from': _now()})),
+      ]),
+  _Rule('POST', '/employees/$_id/responsibilities/$_id/end', (m) => [
+        MergeRecord('/employees/${m.ids[0]}/responsibilities', m.ids[1], {'status': 'ended', 'valid_to': _now()}),
+      ]),
   // Turning a licensed module on or off, keyed by module_code.
   _Rule('POST', '/modules/$_id/$_id', (m) {
     final status = switch (m.ids[1]) { 'activate' => 'active', 'deactivate' => 'inactive', _ => null };

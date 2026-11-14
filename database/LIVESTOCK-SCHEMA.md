@@ -367,6 +367,21 @@ Use exclusion constraints for effective-range overlaps where PostgreSQL supports
 
 ## 19. Acceptance criteria
 
+### Rule groups (migration c3e5a7b9d1f4)
+
+`flocks.membership_rule` ∈ `PREGNANT` | `NOT_PREGNANT` | `IN_MILK` | `DRY`
+makes a group whose members follow the herd records
+(`group_service.sync_rule_groups`): a positive pregnancy check moves a cow
+from "Open cows" into "Pregnant cows" on the day it is recorded, a dry-off
+from "In milk" into "Dry". A rule group is always a non-exclusive cohort
+(the animal stays in its herd and pen), counts its members, and is filled
+with whoever already matches when it is created. Memberships remain
+effective-dated rows opened and closed by the service, reason `rule:<RULE>`;
+"not pregnant" and "dry" mean breeding-age (adult / senior) females.
+Cattle have `GROUP_TRACKING` (same migration), so a herd can also be kept
+as a counted group; groups of registered animals need only individual
+tracking.
+
 Pass 2 is accepted when:
 - cattle, horse, sheep, goat and individual poultry use the same Animal table;
 - flock/herd/batch management works without fake individual animals;

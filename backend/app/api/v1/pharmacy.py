@@ -295,7 +295,19 @@ def record_administration(payload: MedicationAdministrationIn, db: Session = Dep
     """The dose actually given, bound to the exact lot (§11): validates
     the treatment context and the lot, posts the consumption, applies the
     product's authorised withdrawal and re-evaluates the thresholds."""
-    adm = ph.administer(db, user.farm_id, user_id=user.id, **payload.model_dump())
+    from app.core import duplicates
+
+    lo, hi = duplicates.near(payload.administered_at, duplicates.DOSE_WINDOW)
+    earlier = db.scalar(select(pm.MedicationAdministration).where(
+        pm.MedicationAdministration.farm_id == user.farm_id, pm.MedicationAdministration.subject_id == payload.subject_id,
+        pm.MedicationAdministration.inventory_item_id == payload.inventory_item_id, pm.MedicationAdministration.status != "reversed",
+        pm.MedicationAdministration.administered_at >= lo, pm.MedicationAdministration.administered_at <= hi,
+    ))
+    match = duplicates.guard(earlier, "This medicine was already given to this subject within 12 hours — check it is not a double dose.",
+                             confirm=payload.confirm_duplicate)
+    adm = ph.administer(db, user.farm_id, user_id=user.id, **payload.model_dump(exclude={"confirm_duplicate"}))
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=payload.subject_id,
+                             match_id=match.id if match else None, what=f"administration:{adm.id}", user_id=user.id)
     db.commit()
     return ph.administration_dict(db, adm)
 

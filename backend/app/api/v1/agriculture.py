@@ -9,7 +9,7 @@ into real numbers (yield, waste, sellable stock) rather than an estimate.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_permission
@@ -55,6 +55,10 @@ def create_field(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_permission(perms.AGRICULTURE, perms.CREATE)),
 ) -> models.Field:
+    clash = db.scalar(select(models.Field).where(models.Field.farm_id == current_user.farm_id,
+                                                 func.lower(models.Field.name) == payload.name.strip().lower()))
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A field named {clash.name} already exists.")
     field = models.Field(id=new_id(), farm_id=current_user.farm_id, **payload.model_dump())
     db.add(field)
     write_event(
@@ -298,6 +302,15 @@ def record_daily_harvest(
         )
 
     recorded_at = payload.recorded_at or now()
+    from app.core import duplicates
+
+    lo, hi = duplicates.near(recorded_at)
+    earlier = db.scalar(select(models.HarvestRecord).where(
+        models.HarvestRecord.field_id == field.id, models.HarvestRecord.product_name == product_name,
+        models.HarvestRecord.quantity == payload.total_quantity, models.HarvestRecord.recorded_at >= lo, models.HarvestRecord.recorded_at <= hi,
+    ))
+    match = duplicates.guard(earlier, f"{payload.total_quantity:g} {payload.unit} of {product_name} from {field.name} was already recorded within half an hour.",
+                             confirm=payload.confirm_duplicate)
     record = models.HarvestRecord(
         id=new_id(),
         field_id=field.id,
@@ -309,6 +322,8 @@ def record_daily_harvest(
         recorded_at=recorded_at,
     )
     db.add(record)
+    duplicates.log_confirmed(db, farm_id=field.farm_id, entity_type="field", entity_id=field.id, match_id=match.id if match else None,
+                             what=f"harvest:{record.id}", user_id=current_user.id)
 
     # The sellable part becomes stock. One inventory item per produce
     # product, created on first harvest so a farm never has to pre-register
