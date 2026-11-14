@@ -35,10 +35,19 @@ flutter test
 flutter analyze
 ```
 
-The app needs a reachable backend. It defaults to `http://10.0.2.2:8000/api/v1`
-(the Android emulator's route to the host machine); on real hardware, tap
-**"Connecting to a different server?"** on the login screen and enter the
-deployment's URL, which is then remembered.
+The app needs a reachable backend. By default it uses `http://10.0.2.2:8000/api/v1`
+(the Android emulator's route to the host machine). A verified farm server can
+instead be supplied when building the APK using
+`--dart-define=FARMOS_API_BASE_URL=https://VERIFIED-HOST/api/v1`.
+On real hardware, tap **"Connecting to a different server?"** on the login screen
+and enter the authorized deployment's URL, which is remembered and overrides
+the build-time default. **Do not enter a PostgreSQL DATABASE_URL in the tablet.**
+
+The proposed staging host
+`https://leb-container-test-staging.azurewebsites.net` is **not verified**
+as a deployed Origami API. It must not be mistaken for the `PROD_DATABASE_URL`
+GitHub Actions secret. See [Azure connection and migration guidance](../../docs/AZURE-BACKEND-CONNECTION.md)
+before configuring connected farm credentials.
 
 ## Signing in
 
