@@ -9,11 +9,16 @@ import '../domain/entities/user_profile.dart';
 
 enum SessionStatus { checking, loggedOut, loggedIn }
 
-/// Default backend for local development. A real deployment must change
-/// this to a reachable host (tablet hardware can't reach `localhost`) —
-/// use the "Server" field on the login screen, which persists whatever
-/// URL is entered.
-const String kDefaultApiBaseUrl = 'http://10.0.2.2:8000/api/v1';
+/// Default backend for local development. Android emulators can reach the
+/// development host through 10.0.2.2; real tablets cannot. A real deployment
+/// can supply --dart-define=FARMOS_API_BASE_URL=https://<verified-host>/api/v1
+/// at build time, or the user can select "Connecting to a different server?"
+/// on the login screen. Never put DATABASE_URL/credentials in this setting.
+/// A previously saved server URL in SharedPreferences takes precedence.
+const String kDefaultApiBaseUrl = String.fromEnvironment(
+  'FARMOS_API_BASE_URL',
+  defaultValue: 'http://10.0.2.2:8000/api/v1',
+);
 
 const _tokenPrefsKey = 'auth_token';
 const _baseUrlPrefsKey = 'api_base_url';
