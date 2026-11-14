@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart' show protected;
 import 'package:http/http.dart' as http;
 
@@ -35,6 +37,15 @@ class ApiException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Result of an anonymous, read-only backend identity check. No login
+/// credentials, tokens or farm records are sent when this is requested.
+class BackendCheck {
+  const BackendCheck(this.message, {required this.verified, this.statusCode});
+  final String message;
+  final bool verified;
+  final int? statusCode;
 }
 
 /// How the server starts a refusal that a person may override by saying
@@ -152,6 +163,58 @@ class ApiClient {
         if (token != null) 'Authorization': 'Bearer $token',
         if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
       };
+
+  /// Diagnose the selected HTTP endpoint without ever sending a password,
+  /// bearer token or farm data. A generic 200 is NOT proof this is Origami.
+  Future<BackendCheck> checkBackend({String? serverUrl}) async {
+    final selected = (serverUrl ?? baseUrl).trim();
+    final Uri api;
+    try {
+      api = Uri.parse(selected);
+      if (!api.hasAuthority || (api.scheme != 'https' && api.scheme != 'http')) {
+        return const BackendCheck('Invalid server URL. Enter an HTTP(S) address ending in /api/v1.', verified: false);
+      }
+    } catch (_) {
+      return const BackendCheck('Invalid server URL. Please check for spaces or typing errors.', verified: false);
+    }
+    final root = api.replace(path: '/', query: null, fragment: null);
+    final health = api.replace(path: '/health', query: null, fragment: null);
+    try {
+      final response = await _http.get(root, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
+      if (response.statusCode != 200) {
+        return BackendCheck('Server responded HTTP ${response.statusCode} at $root. Expected the Origami API identity endpoint.', verified: false, statusCode: response.statusCode);
+      }
+      Object? identity;
+      try {
+        identity = jsonDecode(utf8.decode(response.bodyBytes));
+      } catch (_) {
+        return const BackendCheck('Server returned HTTP 200, but its response is not JSON. This may be an unrelated website or reverse proxy.', verified: false, statusCode: 200);
+      }
+      if (identity is! Map || identity['name'] != 'Origami FarmOS API' || identity['status'] != 'ok') {
+        return const BackendCheck('Server returned HTTP 200, but it is not identifying itself as Origami FarmOS API. Confirm the Azure deployment before entering credentials.', verified: false, statusCode: 200);
+      }
+      final healthResponse = await _http.get(health, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
+      if (healthResponse.statusCode != 200) {
+        return BackendCheck('Origami API identity confirmed, but /health returned HTTP ${healthResponse.statusCode}.', verified: false, statusCode: healthResponse.statusCode);
+      }
+      Object? healthJson;
+      try {
+        healthJson = jsonDecode(utf8.decode(healthResponse.bodyBytes));
+      } catch (_) {
+        return const BackendCheck('Origami API identity confirmed, but /health did not return valid JSON.', verified: false, statusCode: 200);
+      }
+      if (healthJson is! Map || healthJson['status'] != 'ok') {
+        return const BackendCheck('Origami API identity confirmed, but /health did not report status ok.', verified: false, statusCode: 200);
+      }
+      return BackendCheck('Origami FarmOS API verified. Root: HTTP 200; health: HTTP 200. Server: $selected. This does not verify your user account or database.', verified: true, statusCode: 200);
+    } on TimeoutException {
+      return BackendCheck('Connection timed out after ${networkTimeout.inSeconds}s contacting $root. The server may be down or unreachable.', verified: false);
+    } on SocketException catch (e) {
+      return BackendCheck('Network/DNS error contacting $root: ${e.message}. Check the hostname or server availability.', verified: false);
+    } catch (e) {
+      return BackendCheck('Could not reach/verify $root (${e.runtimeType}). Check TLS, network and App Service deployment.', verified: false);
+    }
+  }
 
   /// Cheap reachability check against the API's unauthenticated health
   /// endpoint. Uses the origin, not the `/api/v1` prefix, because the
@@ -394,7 +457,13 @@ class ApiClient {
     } catch (e) {
       if (e is ApiException) rethrow;
       monitor.reportFailure();
-      throw ApiException(0, "Couldn't reach the server at $baseUrl — check the server URL and your connection.");
+      if (e is TimeoutException) {
+        throw ApiException(0, 'Request timed out after ${networkTimeout.inSeconds} seconds at $uri.');
+      }
+      if (e is SocketException) {
+        throw ApiException(0, 'Network/DNS failure at $uri: ${e.message}.');
+      }
+      throw ApiException(0, 'Cannot connect to $uri (${e.runtimeType}): $e');
     }
 
     // The server answered, whatever it said — so the tablet is online.
