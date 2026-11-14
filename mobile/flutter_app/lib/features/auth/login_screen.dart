@@ -152,7 +152,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  SizedBox(height: 230, child: valley),
+                  // The credentials must be visible without scrolling on ordinary
+                  // phones. A 230px illustration pushed both text fields below
+                  // the fold and looked like a broken/empty login screen.
+                  SizedBox(height: constraints.maxHeight < 900 ? 64 : 116, child: valley),
                   Padding(
                     padding: const EdgeInsets.all(FarmSpacing.lg),
                     child: card,
