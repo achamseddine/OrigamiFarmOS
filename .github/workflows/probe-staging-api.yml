@@ -59,4 +59,17 @@ jobs:
                   resp = op.get("responses", {}).get("200", {})
                   print("   success response schema:", resp.get("content", {}).get("application/json", {}).get("schema"))
           print("Is /api/v1/auth/login present?", "/api/v1/auth/login" in paths)
+          print("Does API expose tablet data-access endpoints?")
+          for p in ['/api/v1/me/access', '/api/v1/modules/catalog', '/api/v1/animals', '/api/v1/feed/items']:
+              print(" ", p, p in paths, sorted(paths.get(p, {}).keys()))
+          schemas = spec.get("components", {}).get("schemas", {})
+          for p in ['/api/v1/auth/login', '/platform/v1/auth/login']:
+              op = paths.get(p, {}).get('post', {})
+              for label, source in [
+                  ('request', op.get('requestBody', {}).get('content', {}).get('application/json', {})),
+                  ('response', op.get('responses', {}).get('200', {}).get('content', {}).get('application/json', {})),
+              ]:
+                  ref = source.get('schema', {}).get('$ref', '')
+                  schema = schemas.get(ref.split('/')[-1], {})
+                  print(" ", p, label, 'required=', schema.get('required'), 'properties=', sorted(schema.get('properties', {}).keys()))
           PY
