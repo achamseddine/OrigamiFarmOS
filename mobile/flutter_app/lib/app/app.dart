@@ -188,11 +188,26 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
     // Once the queue drains, throw away the local predictions and take the
     // server's version: real IDs, server-computed totals, fresh signals.
     sync.onSynced = (modules) => _refreshAll(only: modules);
-    await _refreshAll();
+    // Only permissions are required to construct the navigation. Previously
+    // _refreshAll awaited every module (including slow third-party/server
+    // reads) before AppShell could render, making a valid login look stuck.
+    // Demo permissions are served entirely from the on-device snapshot.
+    try {
+      await context.read<AccessProvider>().load();
+    } catch (e) {
+      throw StateError('Farm permissions could not be loaded from '
+          '${context.read<SessionController>().baseUrl}/me/access or /modules/catalog: $e');
+    }
     if (!mounted) return;
-    // Sync may contain many previously queued offline writes. Replaying
-    // them is independent of opening the farm UI, so do not hold the user
-    // behind a full-screen spinner until that replay finishes.
+    // Do not make the home page wait for notifications, feed, livestock,
+    // health, or synchronization. Each provider notifies its own consumers
+    // when its data arrives, and a failure in one module stays isolated.
+    unawaited(Future<void>(() async {
+      if (!mounted) return;
+      await _refreshAll(skipAccess: true);
+    }).catchError((Object error, StackTrace trace) {
+      debugPrint('Origami: non-blocking farm data load failed: $error');
+    }));
     unawaited(sync.start().catchError((Object error, StackTrace trace) {
       debugPrint('Origami: background sync startup error: $error');
     }));
@@ -201,9 +216,9 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
   /// Everything at sign-in; after a sync, only the modules whose writes
   /// landed ([only]: the outbox's module codes) — reloading the whole farm
   /// after every synced milk record was a large part of the app feeling slow.
-  Future<void> _refreshAll({Set<String>? only}) async {
+  Future<void> _refreshAll({Set<String>? only, bool skipAccess = false}) async {
     final access = context.read<AccessProvider>();
-    if (only == null) {
+    if (only == null && !skipAccess) {
       try {
         await access.load();
       } catch (e) {
