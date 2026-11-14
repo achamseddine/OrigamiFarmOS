@@ -168,6 +168,9 @@ class DailyHarvestCreate(BaseModel):
     waste_quantity: float = 0
     unit: str = "kg"
     destination: str | None = None
+    # The same pick entered twice within half an hour is refused as a
+    # possible duplicate unless confirmed (app/core/duplicates.py).
+    confirm_duplicate: bool = False
     recorded_at: datetime | None = None
     notes: str | None = None
 

@@ -1028,7 +1028,14 @@ paths:
 
         bearing facts, so the row is updated in place — and every change is an
 
-        audit entry and a `farm_settings_changed` event with the old value.'
+        audit entry and a `farm_settings_changed` event with the old value.
+
+
+        The calendar every plan is drawn from (dry-off, milk peak, breeding wait)
+
+        is configuration, not day-to-day work: it needs Settings *configure*,
+
+        which the owner and manager hold and an employee only when granted.'
       operationId: update_my_farm_api_v1_farms_me_patch
       requestBody:
         content:
@@ -11129,6 +11136,10 @@ components:
             format: date-time
           - type: 'null'
           title: Lactation Started At
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
         lactation_cycle:
           anyOf:
           - type: integer
@@ -12916,6 +12927,10 @@ components:
             $ref: '#/components/schemas/NewbornIn'
           type: array
           title: Offspring
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - offspring
@@ -13112,6 +13127,10 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - event_type
@@ -13726,6 +13745,10 @@ components:
           - type: string
           - type: 'null'
           title: Destination
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
         recorded_at:
           anyOf:
           - type: string
@@ -13874,6 +13897,10 @@ components:
             format: date-time
           - type: 'null'
           title: Recorded At
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - flock_id
@@ -14900,6 +14927,10 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - subject_type
@@ -15484,6 +15515,10 @@ components:
             format: date-time
           - type: 'null'
           title: Recorded At
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - field_id
@@ -15615,6 +15650,10 @@ components:
             format: date-time
           - type: 'null'
           title: Opened At
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - subject_type
@@ -16083,6 +16122,10 @@ components:
           - type: string
           - type: 'null'
           title: Quality Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - feed_product_id
@@ -16195,6 +16238,10 @@ components:
           - type: string
           - type: 'null'
           title: Location Id
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - subject_type
@@ -16798,6 +16845,10 @@ components:
             format: date-time
           - type: 'null'
           title: Recorded At
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
         recorded_by:
           anyOf:
           - type: string
@@ -17433,6 +17484,10 @@ components:
           type: string
           title: Channel
           default: retail
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - product_id
@@ -17859,6 +17914,10 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - farm_id
@@ -18608,6 +18667,10 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - result_code
@@ -19668,6 +19731,10 @@ components:
         allow_negative:
           type: boolean
           title: Allow Negative
+          default: false
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
           default: false
       type: object
       required:
@@ -21293,6 +21360,10 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - entity_type
@@ -22547,6 +22618,10 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
       type: object
       required:
       - weight_kg

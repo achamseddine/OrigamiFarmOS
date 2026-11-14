@@ -149,6 +149,9 @@ class AnimalCreate(BaseModel):
     # when known: days in milk, the milk peak and the breeding wait count
     # from it. Defaults to the registration date.
     lactation_started_at: datetime | None = None
+    # An animal of the same species with the same name already on the farm
+    # is refused as a possible duplicate unless confirmed.
+    confirm_duplicate: bool = False
     lactation_cycle: int | None = None
     # Financial (only stored when the caller may see Finance — see the router)
     purchase_cost: float | None = None

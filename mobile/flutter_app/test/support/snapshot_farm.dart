@@ -8,6 +8,7 @@ import 'package:farmos/api/api_client.dart';
 import 'package:farmos/app/app_navigator.dart';
 import 'package:farmos/auth/session_controller.dart';
 import 'package:farmos/core/theme/theme.dart';
+import 'package:farmos/core/widgets/duplicate_confirmation.dart';
 import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
@@ -56,26 +57,35 @@ class SnapshotApi extends ApiClient {
 
   dynamic _copy(Object? body) => jsonDecode(jsonEncode(body));
 
-  Future<dynamic> _record(String method, String path, Object? body) async {
+  /// Paths the "server" answers once with "Possible duplicate: …" until the
+  /// write is resent with `confirm_duplicate: true` — the server's
+  /// same-fact check (backend app/core/duplicates.py).
+  final Map<String, String> possibleDuplicates = {};
+
+  /// Every write goes through the real [ApiClient] write path (and its
+  /// duplicate question); only the network call is the snapshot's.
+  @override
+  Future<dynamic> send(String method, String path, {Object? body, Map<String, dynamic>? query, String? idempotencyKey}) async {
+    if (method == 'GET') return get(path, query: query);
+    final refusal = possibleDuplicates[path];
+    if (refusal != null && !(body is Map && body['confirm_duplicate'] == true)) {
+      writes.add(('REFUSED $method', path, body));
+      throw ApiException(409, '$kPossibleDuplicate $refusal');
+    }
     writes.add((method, path, body));
     return <String, dynamic>{'id': 'local-${writes.length}', if (body is Map) ...body.cast<String, dynamic>()};
   }
-
-  @override
-  Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query}) => _record('POST', path, body);
-  @override
-  Future<dynamic> patch(String path, {Object? body}) => _record('PATCH', path, body);
-  @override
-  Future<dynamic> put(String path, {Object? body}) => _record('PUT', path, body);
-  @override
-  Future<dynamic> delete(String path) => _record('DELETE', path, null);
 }
 
 /// The demo farm's manager, signed in.
 class SnapshotFarm {
-  SnapshotFarm._(this.api, this.session);
+  SnapshotFarm._(this.api, this.session) {
+    // The app's "Already recorded?" question, asked over this test's app.
+    installDuplicateConfirmation(navigatorKey);
+  }
   final SnapshotApi api;
   final SessionController session;
+  final navigatorKey = GlobalKey<NavigatorState>();
 
   static Future<SnapshotFarm> open() async {
     final api = SnapshotApi(loadSnapshot());
@@ -115,6 +125,7 @@ class SnapshotFarm {
         ChangeNotifierProvider(lazy: false, create: (_) => VisitsProvider(apiClient: api)),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: FarmTheme.light,
         locale: locale,

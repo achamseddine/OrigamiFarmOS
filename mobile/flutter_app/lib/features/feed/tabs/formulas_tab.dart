@@ -245,7 +245,11 @@ class _FormulaDialogState extends State<_FormulaDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(_isVersion ? 'versionCreated' : 'formulaCreated'))));
+      // Without Feed approval the server keeps it a draft for a manager.
+      final draft = !context.read<AccessProvider>().canApproveFeed;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.t(draft ? 'formulaSavedDraft' : (_isVersion ? 'versionCreated' : 'formulaCreated'))),
+      ));
       return;
     }
     setState(() {

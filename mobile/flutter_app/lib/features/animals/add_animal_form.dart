@@ -861,12 +861,24 @@ class _AnimalFormDialogState extends State<_AnimalFormDialog> {
         style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.danger),
       );
     }
+    final access = context.watch<AccessProvider>();
+    final refused = [for (final t in ReproCodes.exitTypes) if (!access.canRecordExit(t)) t];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Wrap(spacing: 8, runSpacing: 8, children: [
         ChoiceChip(label: Text(context.t('active')), selected: _exitType == null, onSelected: (_) => setState(() => _exitType = null)),
         for (final t in ReproCodes.exitTypes)
-          ChoiceChip(label: Text(context.t('exit_$t')), selected: _exitType == t, onSelected: (_) => setState(() => _exitType = t)),
+          ChoiceChip(
+            label: Text(context.t('exit_$t')),
+            selected: _exitType == t,
+            // Greyed out rather than refused after the form is filled in.
+            onSelected: refused.contains(t) ? null : (_) => setState(() => _exitType = t),
+          ),
       ]),
+      if (refused.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        Text(context.t(refused.contains('dead') ? 'exitNeedsEdit' : 'exitNeedsApproval'),
+            style: const TextStyle(fontSize: 12, color: FarmColors.muted)),
+      ],
       if (_exitType != null) ...[
         const SizedBox(height: 10),
         Wrap(spacing: 12, runSpacing: 10, crossAxisAlignment: WrapCrossAlignment.center, children: [

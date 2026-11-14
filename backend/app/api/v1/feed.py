@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import owned_or_404, require_any_permission, require_farm_access
+from app.api.deps import ensure_stock_override, owned_or_404, require_any_permission, require_farm_access
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import feed_models as fm
@@ -74,6 +74,7 @@ def create_feed_transaction(
     keeps the plain item ledger.
     """
     item = owned_or_404(db, models.InventoryItem, payload.item_id, current_user, "Inventory item")
+    ensure_stock_override(db, current_user, payload.allow_negative, perms.FEED_NUTRITION)
 
     if _is_feed(item):
         product = inv.ensure_product_for_item(db, item, created_by=current_user.id)

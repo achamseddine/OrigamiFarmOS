@@ -126,7 +126,9 @@ class TestObservations:
 class TestMilkValidation:
     def test_normal_milk_entry_succeeds(self, client):
         headers = auth_headers(client)
-        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "cow-214", "session": "morning", "liters": 18.5, "destination": "stored"})
+        r = client.post("/api/v1/production/milk", headers=headers, json={"animal_id": "cow-214", "session": "morning", "liters": 18.5, "destination": "stored",
+                                                                       # the demo farm already holds today's morning milking
+                                                                       "confirm_duplicate": True})
         assert r.status_code == 201
         assert r.json()["under_withdrawal_warning"] is False
 

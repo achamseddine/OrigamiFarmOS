@@ -24,6 +24,9 @@ class MilkRecordCreate(BaseModel):
     destination: str = "stored"
     quality_status: str = "normal"
     recorded_at: datetime | None = None
+    # A second record of the same session the same day is refused as a
+    # possible duplicate unless the person confirms it (app/core/duplicates.py).
+    confirm_duplicate: bool = False
     recorded_by: str | None = None
 
     @field_validator("liters")
@@ -56,6 +59,7 @@ class EggRecordCreate(BaseModel):
     hatched: int = 0
     wasted: int = 0
     recorded_at: datetime | None = None
+    confirm_duplicate: bool = False
 
     @field_validator("total_eggs", "sellable_eggs", "broken_eggs", "consumed", "hatched", "wasted")
     @classmethod
@@ -81,6 +85,7 @@ class HarvestRecordCreate(BaseModel):
     waste_qty: float = 0
     destination: str | None = None
     recorded_at: datetime | None = None
+    confirm_duplicate: bool = False
 
     @field_validator("quantity")
     @classmethod

@@ -5,6 +5,7 @@ import '../auth/session_controller.dart';
 import '../core/i18n/locale_controller.dart';
 import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
+import '../core/widgets/duplicate_confirmation.dart';
 import '../data/local/local_store.dart';
 import '../domain/entities/user_profile.dart';
 import '../features/auth/login_screen.dart';
@@ -47,6 +48,7 @@ class FarmOSApp extends StatelessWidget {
       child: Consumer2<LocaleController, SessionController>(
         builder: (context, locale, session, _) {
           final app = MaterialApp(
+            navigatorKey: rootNavigatorKey,
             title: 'Origami FarmOS',
             debugShowCheckedModeBanner: false,
             theme: FarmTheme.light,

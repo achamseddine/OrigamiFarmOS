@@ -12,11 +12,13 @@ from __future__ import annotations
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_permission, user_can
+from app.api.deps import ensure_stock_override, require_permission, user_can
+from app.core import duplicates
 from app.core import permissions as perms
+from app.feeding import uom
 from app.db.base import get_db
 from app.domain import feed_models as fm
 from app.domain import models
@@ -44,6 +46,19 @@ _view = require_permission(perms.FEED_NUTRITION, perms.VIEW)
 _create = require_permission(perms.FEED_NUTRITION, perms.CREATE)
 _edit = require_permission(perms.FEED_NUTRITION, perms.EDIT)
 _approve = require_permission(perms.FEED_NUTRITION, perms.APPROVE)
+
+
+def _can_approve(db: Session, user: models.User) -> bool:
+    """Feed approval: activating a formula or program version, releasing a
+    held lot, overriding stock (handbook/03-Behavioral-Model.md §5)."""
+    return user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE)
+
+
+def _require_override(db: Session, user: models.User, allow_negative: bool) -> None:
+    """Issuing more than the stock on record is an approved exception
+    (INVENTORY-SCHEMA: "unless explicit approved override policy exists"):
+    Feed or Inventory approval, never a tick any recorder can give."""
+    ensure_stock_override(db, user, allow_negative, perms.FEED_NUTRITION)
 
 
 # ------------------------------------------------------------ serialisers
@@ -251,6 +266,11 @@ def ensure_standard_feeds(db: Session = Depends(get_db), user: models.User = Dep
 
 @router.post("/feed-products", response_model=FeedProductOut, status_code=status.HTTP_201_CREATED)
 def create_feed_product(payload: FeedProductCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+    # One feed, one name: a second "Corn grain" would split its stock.
+    clash = db.scalar(select(fm.FeedProduct).where(fm.FeedProduct.farm_id == user.farm_id, fm.FeedProduct.status == "active",
+                                                   func.lower(fm.FeedProduct.name) == payload.name.strip().lower()))
+    if clash is not None:
+        raise FeedError(f"A feed named {clash.name} already exists; record the delivery against it.", 409)
     product = inv.create_product(db, user.farm_id, **payload.model_dump(), created_by=user.id)
     _commit(db, product)
     return _product_out(db, product)
@@ -329,9 +349,42 @@ def list_lots(feed_product_id: str | None = None, lot_status: str | None = Query
 @router.post("/feed-lots/receive", response_model=FeedLotOut, status_code=status.HTTP_201_CREATED)
 def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
-    lot = inv.receive(db, product, **payload.model_dump(exclude={"feed_product_id"}), user_id=user.id)
+    if payload.lot_code and db.scalar(select(fm.FeedLot.id).where(fm.FeedLot.farm_id == user.farm_id, fm.FeedLot.lot_code == payload.lot_code.strip())):
+        raise FeedError(f"Lot {payload.lot_code.strip()} is already recorded; a delivery is received once.", 409)
+    match = duplicates.guard(_duplicate_receipt(db, product, payload), _receipt_message(product, payload), confirm=payload.confirm_duplicate)
+    lot = inv.receive(db, product, **payload.model_dump(exclude={"feed_product_id", "confirm_duplicate"}), user_id=user.id)
+    if payload.quality_grade == "poor" and lot.status == "active":
+        # Possession is not permission to use (FEED-SCHEMA §2): a poor
+        # delivery waits for someone with Feed approval to release it.
+        inv.set_lot_status(db, lot, "quarantined", reason="Graded poor at receipt; release after inspection.", user_id=user.id)
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="feed_product", entity_id=product.id, match_id=match.id if match else None,
+                             what=f"lot:{lot.id}", user_id=user.id)
     _commit(db, lot)
     return _lot_out(lot)
+
+
+def _duplicate_receipt(db: Session, product: fm.FeedProduct, payload: LotReceive) -> fm.FeedLot | None:
+    """The same delivery note from the same supplier for this feed, or the
+    same quantity from the same supplier within half an hour."""
+    supplier = (payload.supplier_label or "").strip() or None
+    same_supplier = fm.FeedLot.supplier_label.is_(None) if supplier is None else fm.FeedLot.supplier_label == supplier
+    if payload.reference and payload.reference.strip():
+        same_note = db.scalar(select(fm.FeedLot).where(fm.FeedLot.feed_product_id == product.id, fm.FeedLot.reference == payload.reference.strip(), same_supplier))
+        if same_note is not None:
+            return same_note
+    lo, hi = duplicates.near(payload.received_at)
+    qty = uom.convert(payload.quantity, payload.unit or product.unit, product.unit)
+    return db.scalar(select(fm.FeedLot).where(
+        fm.FeedLot.feed_product_id == product.id, fm.FeedLot.received_quantity == qty, fm.FeedLot.source_type == "purchased", same_supplier,
+        fm.FeedLot.received_at >= lo, fm.FeedLot.received_at <= hi,
+    ))
+
+
+def _receipt_message(product: fm.FeedProduct, payload: LotReceive) -> str:
+    who = f" from {payload.supplier_label.strip()}" if payload.supplier_label and payload.supplier_label.strip() else ""
+    if payload.reference and payload.reference.strip():
+        return f"Delivery note {payload.reference.strip()}{who} is already recorded for {product.name}."
+    return f"{payload.quantity:g} {payload.unit or product.unit} of {product.name}{who} was already received within half an hour."
 
 
 @router.patch("/feed-lots/{lot_id}/status", response_model=FeedLotOut)
@@ -368,7 +421,9 @@ def create_formula(payload: FormulaCreate, db: Session = Depends(get_db), user: 
     formula = batches.create_formula(
         db, user.farm_id, code=payload.code, name=payload.name, feed_product_id=payload.feed_product_id, species_code=payload.species_code,
         description=payload.description, batch_size=payload.batch_size, unit=payload.unit, components=[c.model_dump() for c in payload.components],
-        notes=payload.notes, activate=payload.activate, user_id=user.id,
+        # Draft → review/approval → activate (behavioural model §5): without
+        # Feed approval the formula is saved as a draft for a manager.
+        notes=payload.notes, activate=payload.activate and _can_approve(db, user), user_id=user.id,
     )
     _commit(db, formula)
     return _formula_out(db, formula)
@@ -398,7 +453,7 @@ def get_formula(formula_id: str, db: Session = Depends(get_db), user: models.Use
 def add_formula_version(formula_id: str, payload: FormulaVersionCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     formula = _formula_or_404(db, formula_id, user.farm_id)
     version = batches.add_version(db, formula, batch_size=payload.batch_size, unit=payload.unit, components=[c.model_dump() for c in payload.components],
-                                  notes=payload.notes, activate=payload.activate, user_id=user.id)
+                                  notes=payload.notes, activate=payload.activate and _can_approve(db, user), user_id=user.id)
     _commit(db, version)
     return _version_out(db, version)
 
@@ -471,10 +526,12 @@ def record_mix(payload: QuickMixIn, db: Session = Depends(get_db), user: models.
     a numbered mix from the output feed's formula — created from this mix
     when the feed has none — with its ingredient lots drawn and its output
     lot received."""
+    _require_override(db, user, payload.allow_negative)
     batch = batches.quick_mix(db, user.farm_id, feed_product_id=payload.feed_product_id, new_product_name=payload.new_product_name,
                               components=[c.model_dump() for c in payload.components], output_quantity=payload.output_quantity, unit=payload.unit,
                               produced_at=payload.produced_at, intended_species_code=payload.intended_species_code, notes=payload.notes,
-                              allow_negative=payload.allow_negative, user_id=user.id)
+                              allow_negative=payload.allow_negative, can_approve=_can_approve(db, user),
+                              confirm_duplicate=payload.confirm_duplicate, user_id=user.id)
     perf.on_batch_completed(db, batch, user_id=user.id)
     _commit(db, batch)
     return _batch_out(db, batch)
@@ -532,6 +589,7 @@ def batch_usage(batch_id: str, db: Session = Depends(get_db), user: models.User 
 @router.post("/feed-batches/{batch_id}/complete", response_model=BatchOut)
 def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     batch = _batch_or_404(db, batch_id, user.farm_id)
+    _require_override(db, user, payload.allow_negative)
     batches.complete_batch(db, batch, actuals=[a.model_dump() for a in payload.actuals], actual_quantity=payload.actual_quantity, produced_at=payload.produced_at,
                            lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, allow_negative=payload.allow_negative,
                            operator_id=payload.operator_id, mixer_asset_id=payload.mixer_asset_id, user_id=user.id)
@@ -588,7 +646,7 @@ def create_program(payload: ProgramCreate, db: Session = Depends(get_db), user: 
     program = programs.create_program(db, user.farm_id, code=payload.code, name=payload.name, name_ar=payload.name_ar, category=payload.category,
                                       description=payload.description, feedings_per_day=payload.feedings_per_day,
                                       components=[c.model_dump() for c in payload.components], rules=[r.model_dump() for r in payload.rules],
-                                      notes=payload.notes, activate=payload.activate, user_id=user.id)
+                                      notes=payload.notes, activate=payload.activate and _can_approve(db, user), user_id=user.id)
     _commit(db, program)
     return _program_out(db, program)
 
@@ -609,7 +667,8 @@ def get_program(program_id: str, db: Session = Depends(get_db), user: models.Use
 def add_program_version(program_id: str, payload: ProgramVersionCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     program = _program_or_404(db, program_id, user.farm_id)
     version = programs.add_program_version(db, program, feedings_per_day=payload.feedings_per_day, components=[c.model_dump() for c in payload.components],
-                                           rules=[r.model_dump() for r in payload.rules], notes=payload.notes, activate=payload.activate, user_id=user.id)
+                                           rules=[r.model_dump() for r in payload.rules], notes=payload.notes,
+                                           activate=payload.activate and _can_approve(db, user), user_id=user.id)
     _commit(db, version)
     return _program_version_out(db, version)
 
@@ -699,9 +758,16 @@ def feeding_history(subject_id: str, days: int = Query(30, ge=1, le=365), db: Se
 @router.post("/feeding-events", response_model=FeedingEventOut, status_code=status.HTTP_201_CREATED)
 def record_feeding_event(payload: FeedingEventCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     subject = programs.load_subject(db, payload.subject_type, payload.subject_id, user.farm_id)
-    event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=[c.model_dump() for c in payload.components],
+    _require_override(db, user, payload.allow_negative)
+    components = [c.model_dump() for c in payload.components]
+    earlier = programs.find_duplicate_feeding(db, payload.subject_type, subject.id, event_type=payload.event_type, components=components, at=payload.occurred_at)
+    match = duplicates.guard(earlier, f"The same feeding of {getattr(subject, 'name', 'this subject')} was already recorded within half an hour.",
+                             confirm=payload.confirm_duplicate)
+    event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=components,
                                     event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=payload.notes,
                                     allow_negative=payload.allow_negative, user_id=user.id)
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, match_id=match.id if match else None,
+                             what=f"feeding:{event.id}", user_id=user.id)
     _commit(db, event)
     return programs.event_to_dict(event)
 

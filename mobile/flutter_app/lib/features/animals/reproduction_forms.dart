@@ -9,6 +9,7 @@ import '../../core/theme/spacing.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
 import '../../domain/entities/reproduction.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/herd_records_provider.dart';
 import '../../providers/livestock_provider.dart';
@@ -454,7 +455,15 @@ Future<bool> confirmLactationChange(BuildContext context, Animal animal, {requir
 
 // ---------------------------------------------------------------- exit
 Future<bool> showExitForm(BuildContext context, Animal animal) async {
-  var type = 'dead';
+  // Only the exits this person may record: a death needs Animals edit, a
+  // sale / cull / slaughter / transfer needs Animals approve.
+  final access = context.read<AccessProvider>();
+  final allowed = [for (final t in ReproCodes.exitTypes) if (access.canRecordExit(t)) t];
+  if (allowed.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('exitNeedsEdit'))));
+    return false;
+  }
+  var type = allowed.first;
   var day = DateTime.now();
   final reason = TextEditingController();
   final ok = await _recordDialog(
@@ -462,8 +471,12 @@ Future<bool> showExitForm(BuildContext context, Animal animal) async {
     title: '${context.t('exitTitle')} — ${animal.name}',
     destructive: true,
     fields: (context, setState) => [
-      _dropdown(context, label: context.t('exitType'), value: type, options: ReproCodes.exitTypes, display: (c) => context.t('exit_$c'),
+      _dropdown(context, label: context.t('exitType'), value: type, options: allowed, display: (c) => context.t('exit_$c'),
           onChanged: (v) => setState(() => type = v)),
+      if (allowed.length < ReproCodes.exitTypes.length) ...[
+        const SizedBox(height: 4),
+        Text(context.t('exitNeedsApproval'), style: const TextStyle(fontSize: 12, color: FarmColors.muted)),
+      ],
       _gap(),
       RecordDateButton(label: context.t('reproDate'), value: day, onPicked: (d) => setState(() => day = d)),
       _gap(),

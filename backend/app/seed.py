@@ -48,8 +48,10 @@ def _now() -> datetime:
 
 
 def _days_ago(n: int, hour: int = 8) -> datetime:
+    """[n] days ago at [hour] UTC — never later than a few minutes ago: a
+    demo farm seeded at 04:30 holds no "today 08:00" record from the future."""
     base = _now().replace(hour=hour, minute=0, second=0, microsecond=0)
-    return base - timedelta(days=n)
+    return min(base - timedelta(days=n), _now() - timedelta(minutes=5))
 
 
 def _in_hours(h: float) -> datetime:

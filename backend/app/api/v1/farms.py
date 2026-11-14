@@ -64,11 +64,15 @@ class FarmSettingsUpdate(BaseModel):
 def update_my_farm(
     payload: FarmSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(require_permission(perms.SETTINGS, perms.EDIT)),
+    current_user: models.User = Depends(require_permission(perms.SETTINGS, perms.CONFIGURE)),
 ) -> dict:
     """Changes the signed-in user's farm settings. Settings are not history-
     bearing facts, so the row is updated in place — and every change is an
-    audit entry and a `farm_settings_changed` event with the old value."""
+    audit entry and a `farm_settings_changed` event with the old value.
+
+    The calendar every plan is drawn from (dry-off, milk peak, breeding wait)
+    is configuration, not day-to-day work: it needs Settings *configure*,
+    which the owner and manager hold and an employee only when granted."""
     farm = db.get(models.Farm, current_user.farm_id)
     if farm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")

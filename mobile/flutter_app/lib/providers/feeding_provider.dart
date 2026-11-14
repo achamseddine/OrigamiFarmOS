@@ -333,13 +333,25 @@ class FeedingProvider extends ChangeNotifier {
 
   /// A purchase: a new feed (when named) and its delivery lot, in that
   /// order, so the delivery is never left without its feed.
+  /// New feeds this session already created, by lower-case name — so a
+  /// purchase retried after its delivery was refused (or answered "don't
+  /// record it again") reuses the feed rather than creating it twice,
+  /// which the server refuses (one active feed per name).
+  final Map<String, String> _createdFeedIds = {};
+
   Future<WriteResult> recordPurchase({Map<String, dynamic>? newProduct, required Map<String, dynamic> lot}) async {
     var body = lot;
     if (newProduct != null) {
-      final created = await _api.write(() => _api.post('/feed-products', body: newProduct));
-      if (!created.success) return created;
-      final id = (created.data is Map) ? (created.data! as Map)['id'] as String? : null;
-      if (id == null) return const WriteResult.fail('The new feed could not be created.');
+      final name = '${newProduct['name'] ?? ''}'.trim().toLowerCase();
+      var id = _createdFeedIds[name] ??
+          products.where((p) => p.status == 'active' && p.name.trim().toLowerCase() == name).firstOrNull?.id;
+      if (id == null) {
+        final created = await _api.write(() => _api.post('/feed-products', body: newProduct));
+        if (!created.success) return created;
+        id = (created.data is Map) ? (created.data! as Map)['id'] as String? : null;
+        if (id == null) return const WriteResult.fail('The new feed could not be created.');
+        _createdFeedIds[name] = id;
+      }
       body = {...lot, 'feed_product_id': id};
     }
     return _write(() => _api.post('/feed-lots/receive', body: body), then: () async {

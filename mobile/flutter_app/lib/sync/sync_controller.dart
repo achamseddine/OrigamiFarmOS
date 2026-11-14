@@ -214,6 +214,14 @@ class SyncController extends ChangeNotifier {
     await syncNow();
   }
 
+  /// "Record anyway" for a queued entry the server took for one already
+  /// on record: resent confirmed, so it is kept as a confirmed repeat.
+  Future<void> recordAnyway(int id) async {
+    await _store?.confirmOutboxDuplicate(id);
+    await refreshCounts();
+    await syncNow();
+  }
+
   Future<void> discard(int id) async {
     await _store?.discardOutboxItem(id);
     await refreshCounts();

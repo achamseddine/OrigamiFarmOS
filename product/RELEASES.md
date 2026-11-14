@@ -1,5 +1,17 @@
 # Releases
 
+## v0.7.3 — No duplicate entries, approval levels respected
+
+Before more testing: every record workflow checked against the documentation for duplicate entries and approval levels (`architecture/API-STANDARDS.md`, *Duplicate entries and approvals*).
+
+**Delivered:**
+- **The same fact is not recorded twice.** Milk (same animal and session that day), eggs, harvest, feeding rounds, feed deliveries, mixes, inseminations, pregnancy checks, births, treatments and medicine doses, observations, weights, health cases, animals with the same name and Mouneh sales are checked on the server against what is already on record. The tablet asks *Already recorded?* with what is there: *No* records nothing; *Yes, record it again* records it as a confirmed repeat (in the event log). Offline entries refused this way can be *Recorded anyway* from the sync panel. A feed, group, field or raw material with the same name, or a lot code used before, is refused outright.
+- **Approval levels.** Recording more feed than the stock on record needs Feed or Inventory approval (the tick is shown only to approvers; also the older stock endpoint and Mouneh batch inputs). A worker's formula or program is a draft until a manager activates it; a new farm feed's first mix (which approves its recipe) needs Feed approval and the mix form says so. A poor-grade delivery is held in quarantine until released. A death needs Animals edit; a sale, cull, slaughter or transfer needs Animals approval (the choices are greyed out otherwise). The farm calendar needs Settings configure. Correcting a calving date needs edit.
+- Flow: a purchase retried after a refusal reuses the feed it already created; quick entry's *second milking* tick is sent as the confirmation, so it is not asked twice; every tablet write carries an idempotency key.
+- Fixed: the demo farm seeded before 07:00 UTC held "today 07:00" feedings in the future, which skewed feed reconciliation and history.
+- No migration.
+- Tests: backend +13 (each duplicate check, its confirmation and audit; the hard refusals; each approval level), 8 updated; Flutter 260 (+8).
+
 ## v0.7.2 — Feed room, breeding calendar, groups, responsibilities, speed
 
 From the second round of on-farm testing (`docs/QR-ANIMAL-QUICK-ENTRY.md`, *Second round*).

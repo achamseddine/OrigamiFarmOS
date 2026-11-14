@@ -355,7 +355,9 @@ class TestFeedingEvents:
     def test_group_feeding_is_one_event_with_a_head_count_and_a_cost(self, client: TestClient):
         r = client.post(f"{API}/feeding-events", headers=_h(client), json={
             "subject_type": "group", "subject_id": HERD, "event_type": "delivered",
-            "components": [{"feed_product_id": DAIRY_MIX, "quantity_offered": 30}, {"feed_product_id": ALFALFA, "quantity_offered": 9},
+            # 31 kg, not the plan's 30: the seeded morning round may be within the
+            # half hour, and the same round again is a possible duplicate.
+            "components": [{"feed_product_id": DAIRY_MIX, "quantity_offered": 31}, {"feed_product_id": ALFALFA, "quantity_offered": 9},
                            {"feed_product_id": CONCENTRATE, "quantity_offered": 9}],
         })
         assert r.status_code == 201, r.text

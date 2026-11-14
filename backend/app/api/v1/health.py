@@ -45,7 +45,22 @@ def record_treatment(
     prescription may name the stocked medicine product and the health
     case / plan it belongs to (HEALTH-VETERINARY-SCHEMA treatment_action).
     """
-    treatment = cases.record_treatment(db, current_user.farm_id, user=current_user, **payload.model_dump())
+    from sqlalchemy import func, select
+
+    from app.core import duplicates
+
+    lo, hi = duplicates.near(payload.start_at, duplicates.DOSE_WINDOW)
+    # The subject is checked as the caller's own by record_treatment; ids are
+    # farm-unique, so the subject id scopes the lookup to this farm.
+    earlier = db.scalar(select(models.Treatment).where(
+        models.Treatment.entity_type == payload.entity_type, models.Treatment.entity_id == payload.entity_id,
+        func.lower(models.Treatment.medication) == payload.medication.strip().lower(),
+        models.Treatment.start_at >= lo, models.Treatment.start_at <= hi,
+    ))
+    match = duplicates.guard(earlier, f"{payload.medication} was already prescribed for this animal within 12 hours.", confirm=payload.confirm_duplicate)
+    treatment = cases.record_treatment(db, current_user.farm_id, user=current_user, **payload.model_dump(exclude={"confirm_duplicate"}))
+    duplicates.log_confirmed(db, farm_id=current_user.farm_id, entity_type=payload.entity_type, entity_id=payload.entity_id,
+                             match_id=match.id if match else None, what=f"treatment:{treatment.id}", user_id=current_user.id)
     db.commit()
     return {"id": treatment.id, "entity_id": treatment.entity_id, "withdrawal_until": treatment.withdrawal_until, "health_case_id": treatment.health_case_id,
             "medicine_product_id": treatment.medicine_product_id, "treatment_plan_id": treatment.treatment_plan_id}

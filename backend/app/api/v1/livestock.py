@@ -9,7 +9,7 @@ particular animal can do — then draws exactly that.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import ensure_any_permission, get_current_user, owned_or_404, require_any_permission, require_permission
@@ -202,6 +202,12 @@ def create_group(
     current_user: models.User = Depends(require_permission(perms.ANIMALS, perms.CREATE)),
 ):
     species = _species_or_422(db, payload.species)
+    # One name per group of a species: two "Pregnant cows" would split the herd's records.
+    clash = db.scalar(select(models.Flock).where(models.Flock.farm_id == current_user.farm_id, models.Flock.species == payload.species,
+                                                 func.lower(models.Flock.name) == payload.name.strip().lower(),
+                                                 models.Flock.status.notin_(("closed", "archived"))))
+    if clash is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"A group named {clash.name} already exists for this species.")
     data = payload.model_dump()
     if data.get("membership_rule"):
         # A rule group (pregnant, open, in milk, dry) overlaps the herd and

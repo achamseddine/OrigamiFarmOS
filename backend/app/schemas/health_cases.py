@@ -15,6 +15,9 @@ class HealthCaseIn(BaseModel):
     responsible_user_id: str | None = None
     notes: str | None = None
     opened_at: datetime | None = None
+    # An open case for the same subject and problem is refused (409
+    # "Possible duplicate:") unless the person confirms a second case.
+    confirm_duplicate: bool = False
 
 
 class HealthCasePatch(BaseModel):
@@ -61,3 +64,5 @@ class WeightIn(BaseModel):
     measured_at: datetime | None = None
     method: str = "scale"
     notes: str | None = None
+    # A second weight for the animal on the same farm day is asked first.
+    confirm_duplicate: bool = False

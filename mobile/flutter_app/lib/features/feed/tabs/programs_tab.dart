@@ -343,7 +343,10 @@ class _ProgramDialogState extends State<_ProgramDialog> {
     if (!mounted) return;
     if (result.success) {
       Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(_isVersion ? 'versionCreated' : 'programCreated'))));
+      final draft = !context.read<AccessProvider>().canApproveFeed;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(context.t(draft ? 'programSavedDraft' : (_isVersion ? 'versionCreated' : 'programCreated'))),
+      ));
       return;
     }
     setState(() {

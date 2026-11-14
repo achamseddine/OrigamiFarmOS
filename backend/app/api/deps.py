@@ -117,6 +117,21 @@ def user_can(db: Session, user: models.User, module_code: str, action: str) -> b
     return bool(getattr(row, perms.ACTION_COLUMNS[action], False))
 
 
+def ensure_stock_override(db: Session, user: models.User, allow_negative: bool, *modules: str) -> None:
+    """Taking stock below what is on record is an approved exception
+    (architecture INVENTORY-SCHEMA: "Reservations cannot exceed eligible
+    available stock unless explicit approved override policy exists"): the
+    override needs *approve* on one of [modules] (Inventory always counts),
+    never a tick any recorder can give."""
+    if not allow_negative:
+        return
+    if any(user_can(db, user, m, perms.APPROVE) for m in (*modules, perms.INVENTORY)):
+        return
+    names = " or ".join(dict.fromkeys(perms.MODULES_BY_CODE[m].label_en for m in (*modules, perms.INVENTORY)))
+    raise HTTPException(status.HTTP_403_FORBIDDEN,
+                        f"Recording more than the stock on record needs {names} approval. Record the delivery first, or ask a manager to record it.")
+
+
 def require_permission(module_code: str, action: str = perms.VIEW):
     """Endpoint gate: "a permission must be enforced both in the UI and
     backend" — the tablet hides what you cannot do, and this makes sure

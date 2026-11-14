@@ -125,10 +125,15 @@ class LotReceive(BaseModel):
     reference: str | None = None
     notes: str | None = None
     received_at: datetime | None = None
-    # Quality at receipt: good | fair | poor, moisture %, what was seen.
+    # Quality at receipt: good | fair | poor, moisture %, what was seen. A
+    # poor delivery is held in quarantine until someone with Feed approval
+    # releases it.
     quality_grade: str | None = None
     moisture_pct: float | None = Field(None, ge=0, le=100)
     quality_notes: str | None = None
+    # The same delivery note, or the same quantity from the same supplier
+    # within half an hour, is refused as a possible duplicate unless confirmed.
+    confirm_duplicate: bool = False
 
 
 class LotStatusUpdate(BaseModel):
@@ -342,6 +347,7 @@ class QuickMixIn(BaseModel):
     intended_species_code: str | None = None
     notes: str | None = None
     allow_negative: bool = False
+    confirm_duplicate: bool = False
 
 
 class BatchQuarantine(BaseModel):
@@ -598,7 +604,13 @@ class FeedingEventCreate(BaseModel):
     head_count: int | None = Field(None, ge=0)
     notes: str | None = None
     components: list[FeedingComponentIn]
+    # Feeding beyond the stock on record: an override that needs Feed or
+    # Inventory approval (INVENTORY-SCHEMA: "unless explicit approved
+    # override policy exists").
     allow_negative: bool = False
+    # The same feeding of the same subject within half an hour is refused as
+    # a possible duplicate unless confirmed (app/core/duplicates.py).
+    confirm_duplicate: bool = False
 
 
 class FeedingEventReverse(BaseModel):

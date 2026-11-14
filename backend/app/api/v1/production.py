@@ -12,6 +12,7 @@ from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission,
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
+from app.core import duplicates
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
@@ -101,6 +102,20 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
             "Record this milk as withheld; it must not enter stored, sold, processed or consumed stock.",
         )
 
+    # The same cow, the same session, the same farm day: two people (or one
+    # person twice) recording one milking. A second milking is confirmed.
+    at = payload.recorded_at or now()
+    day_start, day_end = duplicates.farm_day(db, animal.farm_id, at)
+    earlier = db.scalar(select(models.MilkRecord).where(
+        models.MilkRecord.animal_id == animal.id, models.MilkRecord.session == payload.session,
+        models.MilkRecord.recorded_at >= day_start, models.MilkRecord.recorded_at < day_end,
+    ).order_by(models.MilkRecord.recorded_at))
+    match = duplicates.guard(
+        earlier,
+        f"{animal.name}'s {payload.session} milk is already recorded for this day ({earlier.liters:g} L)." if earlier else "",
+        confirm=payload.confirm_duplicate,
+    )
+
     record = models.MilkRecord(
         id=new_id(),
         animal_id=payload.animal_id,
@@ -108,11 +123,13 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         liters=payload.liters,
         quality_status=payload.quality_status,
         destination=payload.destination,
-        recorded_at=payload.recorded_at or now(),
+        recorded_at=at,
         recorded_by=payload.recorded_by or current_user.id,
     )
     db.add(record)
     db.flush()
+    duplicates.log_confirmed(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, match_id=match.id if match else None,
+                             what=f"milk:{record.id}", user_id=current_user.id)
     # A yield that crosses a production band asks for a feeding review
     # (feed architecture §11) — a task, never an automatic ration change.
     feeding_program_service.review_after_milk(db, animal, user_id=current_user.id)
@@ -148,6 +165,15 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
             f"Allocation ({payload.allocation_total()}) exceeds total eggs ({payload.total_eggs}).",
         )
 
+    at = payload.recorded_at or now()
+    lo, hi = duplicates.near(at)
+    earlier = db.scalar(select(models.EggRecord).where(
+        models.EggRecord.flock_id == flock.id, models.EggRecord.total_eggs == payload.total_eggs,
+        models.EggRecord.recorded_at >= lo, models.EggRecord.recorded_at <= hi,
+    ))
+    match = duplicates.guard(earlier, f"{payload.total_eggs} eggs from {flock.name} were already recorded within half an hour.",
+                             confirm=payload.confirm_duplicate)
+
     record = models.EggRecord(
         id=new_id(),
         flock_id=payload.flock_id,
@@ -157,9 +183,11 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
         consumed=payload.consumed,
         hatched=payload.hatched,
         wasted=payload.wasted,
-        recorded_at=payload.recorded_at or now(),
+        recorded_at=at,
     )
     db.add(record)
+    duplicates.log_confirmed(db, farm_id=flock.farm_id, entity_type="flock", entity_id=flock.id, match_id=match.id if match else None,
+                             what=f"eggs:{record.id}", user_id=current_user.id)
     write_event(
         db,
         farm_id=flock.farm_id,
@@ -178,6 +206,14 @@ def record_eggs(payload: EggRecordCreate, db: Session = Depends(get_db), current
 @router.post("/harvest", status_code=status.HTTP_201_CREATED)
 def record_harvest(payload: HarvestRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_HARVEST_CREATE)) -> dict:
     field = owned_or_404(db, models.Field, payload.field_id, current_user, "Field")
+    at = payload.recorded_at or now()
+    lo, hi = duplicates.near(at)
+    earlier = db.scalar(select(models.HarvestRecord).where(
+        models.HarvestRecord.field_id == field.id, models.HarvestRecord.product_name == payload.product_name,
+        models.HarvestRecord.quantity == payload.quantity, models.HarvestRecord.recorded_at >= lo, models.HarvestRecord.recorded_at <= hi,
+    ))
+    match = duplicates.guard(earlier, f"{payload.quantity:g} {payload.unit} of {payload.product_name} from {field.name} was already recorded within half an hour.",
+                             confirm=payload.confirm_duplicate)
 
     record = models.HarvestRecord(
         id=new_id(),
@@ -187,9 +223,11 @@ def record_harvest(payload: HarvestRecordCreate, db: Session = Depends(get_db), 
         unit=payload.unit,
         waste_qty=payload.waste_qty,
         destination=payload.destination,
-        recorded_at=payload.recorded_at or now(),
+        recorded_at=at,
     )
     db.add(record)
+    duplicates.log_confirmed(db, farm_id=field.farm_id, entity_type="field", entity_id=field.id, match_id=match.id if match else None,
+                             what=f"harvest:{record.id}", user_id=current_user.id)
     write_event(
         db,
         farm_id=field.farm_id,

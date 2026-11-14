@@ -153,7 +153,8 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
       return;
     }
     if (_shortfalls(feeding).isNotEmpty && !_overrideStock) {
-      setState(() => _error = context.t('feedStockShortConfirm'));
+      final canOverride = context.read<AccessProvider>().canOverrideFeedStock;
+      setState(() => _error = context.t(canOverride ? 'feedStockShortConfirm' : 'feedOverrideNeedsApproval'));
       return;
     }
     setState(() {
@@ -287,17 +288,24 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
                     context.t('feedStockShortBody'),
                   ].join('\n'),
                 ),
-                Material(
-                  type: MaterialType.transparency,
-                  child: CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    value: _overrideStock,
-                    title: Text(context.t('feedRecordAnyway')),
-                    onChanged: (v) => setState(() => _overrideStock = v ?? false),
+                // Only Feed or Inventory approval records past the ledger.
+                if (context.watch<AccessProvider>().canOverrideFeedStock)
+                  Material(
+                    type: MaterialType.transparency,
+                    child: CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      dense: true,
+                      value: _overrideStock,
+                      title: Text(context.t('feedRecordAnyway')),
+                      onChanged: (v) => setState(() => _overrideStock = v ?? false),
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
                   ),
-                ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 10),

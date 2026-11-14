@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_client.dart';
 
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
@@ -260,13 +261,24 @@ class _QueuedRow extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Row(children: [
-              OutlinedButton(
-                onPressed: () async {
-                  await sync.retry(item.id);
-                  onChanged();
-                },
-                child: Text(context.t('retry')),
-              ),
+              // Refused as already on record: the farmer decides whether it
+              // is a second one. Retrying unchanged would only be refused again.
+              if ((item.lastError ?? '').startsWith(kPossibleDuplicate))
+                OutlinedButton(
+                  onPressed: () async {
+                    await sync.recordAnyway(item.id);
+                    onChanged();
+                  },
+                  child: Text(context.t('syncRecordAnyway')),
+                )
+              else
+                OutlinedButton(
+                  onPressed: () async {
+                    await sync.retry(item.id);
+                    onChanged();
+                  },
+                  child: Text(context.t('retry')),
+                ),
               const SizedBox(width: 8),
               TextButton(
                 onPressed: () => _confirmDiscard(context, sync),

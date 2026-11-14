@@ -86,12 +86,16 @@ class AnimalsProvider extends ChangeNotifier {
     required String session,
     required double liters,
     required String destination,
+    // Already answered "a second milking" on the form: the server's
+    // same-session check is not asked again.
+    bool confirmDuplicate = false,
   }) async {
     final result = await _api.write(() => _api.post('/production/milk', body: {
           'animal_id': animalId,
           'session': session,
           'liters': liters,
           'destination': destination,
+          if (confirmDuplicate) 'confirm_duplicate': true,
         }));
     if (result.success) {
       _replace(animalId, (a) => a.copyWith(milkTodayL: (a.milkTodayL ?? 0) + liters));

@@ -13,6 +13,7 @@ import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/util/number_input.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/herd_records_provider.dart';
 import '../../providers/tasks_provider.dart';
 
@@ -324,6 +325,8 @@ class _CalendarCardState extends State<_CalendarCard> {
 
   @override
   Widget build(BuildContext context) {
+    // Configuration every plan is drawn from: Settings *configure*.
+    final canConfigure = context.watch<AccessProvider>().canConfigureSettings;
     return SectionCard(
       title: context.t('fsCalendarTitle'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -336,15 +339,20 @@ class _CalendarCardState extends State<_CalendarCard> {
               child: TextField(
                 key: ValueKey(key == 'dry_off_days_before_birth' ? 'dry-off-days' : 'cal-$key'),
                 controller: _c[key],
+                enabled: canConfigure,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: context.t(label), suffixText: context.t('fsDays'), isDense: true),
               ),
             ),
         ]),
         const SizedBox(height: FarmSpacing.sm),
+        if (!canConfigure) ...[
+          Text(context.t('settingsNeedConfigure'), style: const TextStyle(fontSize: 12.5, color: FarmColors.muted)),
+          const SizedBox(height: FarmSpacing.sm),
+        ],
         Row(children: [
           FilledButton(
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || !canConfigure ? null : _save,
             child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
           ),
           if (_error != null) ...[

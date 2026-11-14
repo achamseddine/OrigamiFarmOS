@@ -36,7 +36,10 @@ def _now() -> datetime:
 
 
 def _days_ago(n: int, hour: int = 6) -> datetime:
-    return _now().replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=n)
+    """Never in the future: seeded before 07:00 UTC, today's 07:00 feeding
+    is placed a few minutes ago instead (forecasts and history read "now")."""
+    at = _now().replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(days=n)
+    return min(at, _now() - timedelta(minutes=5))
 
 
 def _product_from_item(db: Session, farm_id: str, product_id: str, item_id: str, *, code: str, source_type: str, is_ingredient: bool, is_feedable: bool, category: str) -> fm.FeedProduct:

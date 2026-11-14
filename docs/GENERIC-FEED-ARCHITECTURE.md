@@ -111,6 +111,14 @@ matter) on `feed_lots.quality_grade`, `moisture_pct`, `quality_notes`
 (migration `c3e5a7b9d1f4`). A rejected share stays rejected quantity; the
 grade describes what was accepted.
 
+A delivery graded **poor** is received into **quarantine** — on the farm,
+not usable — until someone with Feed approval releases it after inspection
+("physical possession does not imply permission to use"). The same delivery
+note entered twice (same supplier and invoice, or the same supplier and
+quantity within half an hour) is asked as a *possible duplicate*; a lot code
+already used is refused outright (architecture/API-STANDARDS.md,
+*Duplicate entries and approvals*).
+
 ### 3a. Standard feeds of the animal feeding form
 
 The feeding form opens with three rows — **Concentrate, Corn silage, Wheat
@@ -167,6 +175,17 @@ are drawn from their lots FIFO, the output is received as a lot, the mix
 gets the farm's next mix number (§20). A mix cannot make a bought-in feed or
 contain itself. The standard **Concentrate** is farm-produced for this
 reason (bought concentrate is still received into it as purchased lots).
+
+Approval (handbook/03-Behavioral-Model.md §5, draft → approval → mixing):
+the first mix of a feed with no approved recipe *creates and approves* that
+recipe, so it needs Feed **approve**; a worker is told before filling the
+form in and the server refuses with 403. Once the recipe is approved anyone
+with Feed create records its mixes. A formula or program saved without Feed
+approve stays a **draft** until a manager activates it. Issuing more than
+the stock on record (`allow_negative`) needs Feed or Inventory approve — the
+*Stock not entered yet — record anyway* tick is shown only to them. Typing
+an existing feed's name as a new output reuses that feed; the same mix saved
+twice within half an hour is asked as a possible duplicate.
 
 The Feed screen opens with the farm's order of work — *Record purchase*,
 *Make feed mix*, *Record feeding* — and, until all four have happened, a

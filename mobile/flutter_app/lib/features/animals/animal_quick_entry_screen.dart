@@ -319,6 +319,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
               session: _session,
               liters: milk,
               destination: animal.isUnderWithdrawal ? 'withheld' : 'stored',
+              confirmDuplicate: _secondMilking,
             );
         if (!mounted) return;
         if (!result.success) {
@@ -626,17 +627,20 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
             ),
             if (_feedStockShort) ...[
               NoticeBanner(title: context.t('feedStockShortTitle'), text: context.t('feedStockShortBody')),
-              Material(
-                type: MaterialType.transparency,
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  value: _feedStockOverride,
-                  title: Text(context.t('feedRecordAnyway')),
-                  onChanged: _saving ? null : (v) => setState(() => _feedStockOverride = v ?? false),
-                ),
-              ),
+              if (context.watch<AccessProvider>().canOverrideFeedStock)
+                Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    value: _feedStockOverride,
+                    title: Text(context.t('feedRecordAnyway')),
+                    onChanged: _saving ? null : (v) => setState(() => _feedStockOverride = v ?? false),
+                  ),
+                )
+              else
+                Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
             ],
           ]),
         ),

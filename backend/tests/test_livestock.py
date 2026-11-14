@@ -338,7 +338,7 @@ class TestProductionGating:
 
     def test_a_dairy_cow_does(self, client):
         r = client.post(f"{BASE}/production/milk",
-                        json={"animal_id": BELLA, "session": "morning", "liters": 11.0, "destination": "stored"},
+                        json={"animal_id": BELLA, "session": "morning", "liters": 11.0, "destination": "stored", "confirm_duplicate": True},
                         headers=auth_headers(client))
         assert r.status_code == 201, r.text
 

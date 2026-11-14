@@ -629,6 +629,33 @@ def event_to_dict(e: fm.FeedingEvent) -> dict:
     }
 
 
+def find_duplicate_feeding(db: Session, subject_type: str, subject_id: str, *, event_type: str, components: list[dict],
+                           at=None) -> fm.FeedingEvent | None:
+    """A recorded feeding of the same subject, of the same kind, with the
+    same feeds in the same quantities, within half an hour of [at] — the
+    same round entered twice (app/core/duplicates.py)."""
+    from app.core import duplicates
+
+    wanted: dict[str, float] = {}
+    for c in components:
+        product = db.get(fm.FeedProduct, c["feed_product_id"])
+        if product is None:
+            return None
+        qty = uom.convert(float(c.get("quantity_offered") or 0), uom.normalise(c.get("unit") or product.unit), product.unit)
+        wanted[product.id] = round(wanted.get(product.id, 0.0) + qty, 2)
+    lo, hi = duplicates.near(at)
+    for e in db.scalars(select(fm.FeedingEvent).where(
+        fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id == subject_id, fm.FeedingEvent.event_type == event_type,
+        fm.FeedingEvent.status == "recorded", fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= hi,
+    )):
+        got: dict[str, float] = {}
+        for c in e.components:
+            got[c.feed_product_id] = round(got.get(c.feed_product_id, 0.0) + (c.quantity_offered or 0), 2)
+        if got == wanted:
+            return e
+    return None
+
+
 def record_feeding(
     db: Session,
     farm_id: str,

@@ -151,9 +151,19 @@ def create_animal(
     episode that says so; `group_name` must name an existing group of its
     species, which it then joins.
     """
+    from app.core import duplicates
+
+    same_name = db.scalar(select(models.Animal).where(
+        models.Animal.farm_id == current_user.farm_id, models.Animal.species == payload.species, models.Animal.active.is_(True),
+        func.lower(models.Animal.name) == payload.name.strip().lower(),
+    ))
+    match = duplicates.guard(same_name, f"{same_name.name} (#{same_name.tag or same_name.id[:8]}) is already registered on this farm." if same_name else "",
+                             confirm=payload.confirm_duplicate)
     animal = animal_service.create_animal(
-        db, current_user, payload.model_dump(exclude={"identifiers", "tag"}), identifiers_in=payload.identifiers, tag=payload.tag,
+        db, current_user, payload.model_dump(exclude={"identifiers", "tag", "confirm_duplicate"}), identifiers_in=payload.identifiers, tag=payload.tag,
     )
+    duplicates.log_confirmed(db, farm_id=current_user.farm_id, entity_type="animal", entity_id=animal.id, match_id=match.id if match else None,
+                             what=f"animal:{animal.id}", user_id=current_user.id)
     db.commit()
     db.refresh(animal)
     return animal

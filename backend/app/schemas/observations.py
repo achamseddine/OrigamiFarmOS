@@ -27,6 +27,9 @@ class ObservationCreate(BaseModel):
     observed_at: datetime | None = None
     observer_id: str
     notes: str | None = None
+    # The same observation of the same subject within half an hour is
+    # refused as a possible duplicate unless confirmed.
+    confirm_duplicate: bool = False
 
     @field_validator("entity_type")
     @classmethod

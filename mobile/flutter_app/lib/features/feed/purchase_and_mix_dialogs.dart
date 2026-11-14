@@ -211,6 +211,10 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
                 ),
               ),
             ]),
+            if (_grade == 'poor') ...[
+              const SizedBox(height: 8),
+              NoticeBanner(title: context.t('fpGrade_poor'), text: context.t('lotPoorHeld')),
+            ],
             const SizedBox(height: 8),
             TextField(controller: _qualityNotes, decoration: InputDecoration(labelText: context.t('fpQualityNotes'), hintText: context.t('fpQualityNotesHint'))),
             if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
@@ -348,7 +352,8 @@ class _MixDialogState extends State<_MixDialog> {
     }
     final output = parseLocalizedDouble(_outputQty.text);
     if (_shortfalls(feeding).isNotEmpty && !_overrideStock) {
-      setState(() => _error = context.t('feedStockShortConfirm'));
+      final canOverride = context.read<AccessProvider>().canOverrideFeedStock;
+      setState(() => _error = context.t(canOverride ? 'feedStockShortConfirm' : 'feedOverrideNeedsApproval'));
       return;
     }
     setState(() {
@@ -387,6 +392,13 @@ class _MixDialogState extends State<_MixDialog> {
     final ingredients = [for (final p in feeding.products) if (p.status == 'active' && p.isIngredient && p.id != _output) p]
       ..sort((a, b) => a.label(lang).compareTo(b.label(lang)));
     final shortfalls = _shortfalls(feeding);
+    final access = context.watch<AccessProvider>();
+    // Draft → approval → mixing (handbook §5): a feed with no approved
+    // recipe is first mixed by someone with Feed approval, whose mix
+    // becomes the recipe. Anyone else is told so before typing it all in.
+    final needsRecipe = _output == _newMix || !feeding.formulas.any((f) => f.feedProductId == _output && f.active != null);
+    final blocked = needsRecipe && !access.canApproveFeed;
+    final outputName = _output == _newMix ? _newName.text.trim() : (feeding.productById(_output ?? '')?.label(lang) ?? '');
     return AlertDialog(
       title: Text(context.t('fmTitle')),
       content: SizedBox(
@@ -409,6 +421,14 @@ class _MixDialogState extends State<_MixDialog> {
             if (_output == _newMix) ...[
               const SizedBox(height: 8),
               TextField(controller: _newName, decoration: InputDecoration(labelText: context.t('fmNewMixName'))),
+            ],
+            if (blocked) ...[
+              const SizedBox(height: 10),
+              NoticeBanner(
+                key: const ValueKey('mix-needs-approval'),
+                title: context.t('fmTitle'),
+                text: _output == _newMix ? context.t('mixNewNeedsApproval') : context.t('mixNeedsApprovedRecipe').replaceAll('{product}', outputName),
+              ),
             ],
             const SizedBox(height: 12),
             RecordDateButton(label: context.t('fmMixedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
@@ -480,17 +500,23 @@ class _MixDialogState extends State<_MixDialog> {
                   context.t('fmStockShortBody'),
                 ].join('\n'),
               ),
-              Material(
-                type: MaterialType.transparency,
-                child: CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  dense: true,
-                  value: _overrideStock,
-                  title: Text(context.t('feedRecordAnyway')),
-                  onChanged: (v) => setState(() => _overrideStock = v ?? false),
+              if (access.canOverrideFeedStock)
+                Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    dense: true,
+                    value: _overrideStock,
+                    title: Text(context.t('feedRecordAnyway')),
+                    onChanged: (v) => setState(() => _overrideStock = v ?? false),
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
                 ),
-              ),
             ],
             if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
           ]),
@@ -499,7 +525,7 @@ class _MixDialogState extends State<_MixDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(
-          onPressed: _saving ? null : _submit,
+          onPressed: _saving || blocked ? null : _submit,
           child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('fmSave')),
         ),
       ],
