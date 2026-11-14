@@ -107,15 +107,16 @@ class ApiClient {
   /// (core/widgets/duplicate_confirmation.dart) — every form gets it.
   static Future<bool> Function(String detail)? confirmPossibleDuplicate;
 
-  ApiClient({required String baseUrl, this.token, LocalStore? store})
+  ApiClient({required String baseUrl, this.token, LocalStore? store, http.Client? httpClient})
       : baseUrl = _trimTrailingSlash(baseUrl),
-        _store = store {
+        _store = store,
+        _http = httpClient ?? http.Client() {
     monitor = ConnectionMonitor(probe: ping);
   }
 
   String baseUrl;
   String? token;
-  final http.Client _http = http.Client();
+  final http.Client _http;
   // Never leave the login screen behind a network request that can hang
   // indefinitely when the farm server is asleep, offline or misconfigured.
   // A timed-out write keeps its idempotency key for safe retry/sync.
