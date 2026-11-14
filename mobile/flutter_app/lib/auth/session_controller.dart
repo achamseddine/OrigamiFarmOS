@@ -90,14 +90,20 @@ class SessionController extends ChangeNotifier {
     await prefs?.setString(_baseUrlPrefsKey, apiClient.baseUrl);
   }
 
+  /// Read-only server check; no login credentials or farm records are sent.
+  Future<BackendCheck> checkBackend({String? serverUrl}) =>
+      apiClient.checkBackend(serverUrl: serverUrl);
+
   Future<bool> login({required String email, required String password, String? serverUrl}) async {
-    if (serverUrl != null && serverUrl.trim().isNotEmpty) {
-      await setBaseUrl(serverUrl.trim());
-    }
     busy = true;
     error = null;
     notifyListeners();
+    var phase = 'Preparing sign-in';
     try {
+      if (serverUrl != null && serverUrl.trim().isNotEmpty) {
+        phase = 'Selecting server';
+        await setBaseUrl(serverUrl.trim());
+      }
       // The standalone demo account. Checked on the device because there
       // is no server to check it against — it opens the bundled farm, it
       // does not protect anything.
@@ -124,7 +130,9 @@ class SessionController extends ChangeNotifier {
       // paired. All optional, server-side and here: a sign-in must not
       // depend on them, so a device with no readable preferences simply
       // sends nothing and is not listed.
+      phase = 'Reading tablet installation ID';
       final install = await installId();
+      phase = 'Sending credentials to ${apiClient.baseUrl}/auth/login';
       final json = await apiClient.authenticate('/auth/login', body: {
         'email': email.trim(),
         'password': password,
@@ -140,20 +148,22 @@ class SessionController extends ChangeNotifier {
       // a TypeError, which the ApiException handler below does not catch,
       // so the button went dead with a clean 200 in the server log and
       // nothing anywhere to read. That cost about a week.
+      phase = 'Checking response from the login endpoint';
       final token = json['access_token'];
       if (token is! String || token.isEmpty) {
-        error = 'Signed in, but the server sent no token. It may be running an older build.';
+        error = 'LOGIN RESPONSE ERROR at ${apiClient.baseUrl}/auth/login: HTTP 200 but response has no access_token. The Azure host may be an unrelated or outdated backend.';
         return false;
       }
       final profile = json['user'];
       if (profile is! Map<String, dynamic>) {
-        error = 'Signed in, but the server sent no user profile — it is running a build older '
-            'than this app. Check ${apiClient.baseUrl}/health for its version.';
+        error = 'LOGIN RESPONSE ERROR at ${apiClient.baseUrl}/auth/login: HTTP 200 but no compatible user object was returned. Check the backend deployment.';
         return false;
       }
 
+      phase = 'Reading returned user profile';
       apiClient.token = token;
       user = UserProfile.fromJson(profile);
+      phase = 'Saving the signed-in session';
       final prefs = await _prefs();
       await prefs?.setString(_tokenPrefsKey, apiClient.token!);
       await _store?.setActiveUser(user!.id);
@@ -165,18 +175,20 @@ class SessionController extends ChangeNotifier {
       status = SessionStatus.loggedIn;
       return true;
     } on ApiException catch (e) {
+      // Preserve the HTTP code and exact failing endpoint: 401/403 means
+      // rejected credentials; 404/405 means wrong/old API; zero means DNS,
+      // TLS, timeout or device connectivity. Never include the password.
       error = e.isOffline
-          ? "Signing in needs the farm network. Connect once and the tablet will work offline afterwards."
-          : e.message;
+          ? 'NETWORK ERROR (HTTP 0) at ${apiClient.baseUrl}/auth/login: ${e.message} '
+              'Use "Check API" below to diagnose the server without sending a password.'
+          : 'LOGIN ERROR (HTTP ${e.statusCode}) at ${apiClient.baseUrl}/auth/login: ${e.message}';
       needsFirstOnlineLogin = e.isOffline;
       return false;
     } catch (e) {
-      // Anything that is not an ApiException — a malformed response, a
-      // type error, a bug in here. Previously these escaped this method
-      // entirely and the screen simply did nothing, which is the hardest
-      // failure there is to report or diagnose. A sign-in that does not
-      // work must always say something, even if all it can say is this.
-      error = 'Sign-in failed unexpectedly: $e';
+      // Includes malformed JSON, unexpected user profiles and local
+      // storage problems after the server has accepted the credentials.
+      error = 'SIGN-IN ERROR at "$phase": ${e.runtimeType}: $e. '
+          'Server: ${apiClient.baseUrl}. No password is included in this report.';
       return false;
     } finally {
       busy = false;
