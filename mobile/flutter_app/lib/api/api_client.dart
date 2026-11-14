@@ -105,6 +105,10 @@ class ApiClient {
   String baseUrl;
   String? token;
   final http.Client _http = http.Client();
+  // Never leave the login screen behind a network request that can hang
+  // indefinitely when the farm server is asleep, offline or misconfigured.
+  // A timed-out write keeps its idempotency key for safe retry/sync.
+  static const Duration networkTimeout = Duration(seconds: 12);
   final LocalStore? _store;
 
   late final ConnectionMonitor monitor;
@@ -375,15 +379,15 @@ class ApiClient {
     try {
       switch (method) {
         case 'GET':
-          response = await _http.get(uri, headers: headers);
+          response = await _http.get(uri, headers: headers).timeout(networkTimeout);
         case 'POST':
-          response = await _http.post(uri, headers: headers, body: encodedBody);
+          response = await _http.post(uri, headers: headers, body: encodedBody).timeout(networkTimeout);
         case 'PATCH':
-          response = await _http.patch(uri, headers: headers, body: encodedBody);
+          response = await _http.patch(uri, headers: headers, body: encodedBody).timeout(networkTimeout);
         case 'PUT':
-          response = await _http.put(uri, headers: headers, body: encodedBody);
+          response = await _http.put(uri, headers: headers, body: encodedBody).timeout(networkTimeout);
         case 'DELETE':
-          response = await _http.delete(uri, headers: headers);
+          response = await _http.delete(uri, headers: headers).timeout(networkTimeout);
         default:
           throw ArgumentError('Unsupported method: $method');
       }
