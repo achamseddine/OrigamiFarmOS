@@ -144,14 +144,14 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
   // page. Fail visibly if the backend data does not load in finite time.
   late Future<void> _boot = _startup()
       .timeout(const Duration(seconds: 40), onTimeout: () {
-        throw TimeoutException('Loading farm permissions or module data exceeded 40 seconds. '
+        throw TimeoutException('Loading farm permissions exceeded 40 seconds. '
             'The backend may not match this APK or the network may be unreachable.');
       });
 
   void _retryStartup() {
     setState(() {
       _boot = _startup().timeout(const Duration(seconds: 40), onTimeout: () {
-        throw TimeoutException('Loading farm permissions or module data exceeded 40 seconds.');
+        throw TimeoutException('Loading farm permissions exceeded 40 seconds.');
       });
     });
   }
@@ -310,7 +310,7 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
                   children: [
                     const CircularProgressIndicator(),
                     const SizedBox(height: 16),
-                    const Text('Signed in. Loading farm permissions and data…'),
+                    const Text('Signed in. Loading farm permissions…'),
                     const SizedBox(height: 12),
                     TextButton(
                       onPressed: context.read<SessionController>().returnToLoginPreservingData,
