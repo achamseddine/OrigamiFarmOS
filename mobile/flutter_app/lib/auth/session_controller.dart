@@ -9,19 +9,19 @@ import '../domain/entities/user_profile.dart';
 
 enum SessionStatus { checking, loggedOut, loggedIn }
 
-/// Default backend for local development. Android emulators can reach the
-/// development host through 10.0.2.2; real tablets cannot. A real deployment
-/// can supply --dart-define=FARMOS_API_BASE_URL=https://<verified-host>/api/v1
-/// at build time, or the user can select "Connecting to a different server?"
-/// on the login screen. Never put DATABASE_URL/credentials in this setting.
-/// A previously saved server URL in SharedPreferences takes precedence.
+/// Default staging API as explicitly requested for the 2026-11-14
+/// on-farm tablet test. This is a *website API endpoint*, not DATABASE_URL.
+/// The tablet always starts at the credentials form and never restores
+/// a previously cached server address or authorization token on boot.
+/// An operator can still choose a different server on the sign-in screen.
+/// Server ownership/health must be verified before entering live credentials.
 const String kDefaultApiBaseUrl = String.fromEnvironment(
   'FARMOS_API_BASE_URL',
-  defaultValue: 'http://10.0.2.2:8000/api/v1',
+  defaultValue: 'https://leb-container-test-staging.azurewebsites.net/api/v1',
 );
 
 const _tokenPrefsKey = 'auth_token';
-const _baseUrlPrefsKey = 'api_base_url';
+const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits; never loaded on startup.
 
 /// Owns the single login, in either of the two modes this app runs in.
 ///
@@ -46,13 +46,12 @@ class SessionController extends ChangeNotifier {
 
   final ApiClient apiClient;
   final LocalStore? _store;
-  SessionStatus status = SessionStatus.checking;
+  SessionStatus status = SessionStatus.loggedOut;
   UserProfile? user;
   String? error;
   bool busy = false;
 
-  /// True when a session exists but is running on cached credentials
-  /// because the server could not be reached at launch.
+  /// Legacy status flag, always false at launch because sessions are not restored.
   bool restoredOffline = false;
 
   /// Set when the tablet has never been online with this install: there
@@ -68,87 +67,24 @@ class SessionController extends ChangeNotifier {
   /// there is a farm office to sync with.
   bool get standalone => apiClient.standalone;
 
-  // A worker must always be able to reach the credentials form if an old
-  // server is asleep or the saved session is corrupt. This only cancels
-  // automatic restoration; it never deletes the token, offline farm or outbox.
-  bool _restoreCancelled = false;
-
+  // This recovery build intentionally does not restore previous sessions.
+  // The credential form must be visible immediately on *every* launch.
+  // Existing SQLite response caches, demo data and the offline outbox are
+  // retained on disk; only the automatic sign-in behavior is disabled.
+  // Keep this method for callers upgrading from the previous API surface.
   void showLoginInstead() {
-    _restoreCancelled = true;
     status = SessionStatus.loggedOut;
     notifyListeners();
   }
 
   Future<void> restore() async {
-    SharedPreferences? prefs;
-    try {
-      prefs = await _prefs();
-      if (_restoreCancelled) return;
-      final savedBaseUrl = prefs?.getString(_baseUrlPrefsKey);
-      if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
-        apiClient.updateBaseUrl(savedBaseUrl);
-      }
-
-      // A standalone farm's open session takes priority over the server.
-      final store = _store;
-      if (store != null && await DemoMode.hasOpenSession(store)) {
-        if (_restoreCancelled) return;
-        final profile = await DemoMode.storedProfile(store);
-        if (_restoreCancelled) return;
-        if (profile != null) {
-          _enterStandalone(store, profile);
-          notifyListeners();
-          return;
-        }
-      }
-      if (_restoreCancelled) return;
-      final token = prefs?.getString(_tokenPrefsKey);
-      if (token == null || token.isEmpty) {
-        status = SessionStatus.loggedOut;
-        notifyListeners();
-        return;
-      }
-      apiClient.token = token;
-
-      // Served from the network when reachable, or cached when offline.
-      // ApiClient.send has a finite timeout; a failed restore must never
-      // leave the sign-in screen hidden behind the boot spinner forever.
-      final json = await apiClient.get('/auth/me') as Map<String, dynamic>;
-      if (_restoreCancelled) return;
-      final profile = UserProfile.fromJson(json);
-      await _store?.setActiveUser(profile.id);
-      if (_restoreCancelled) return;
-      user = profile;
-      restoredOffline = apiClient.monitor.offline;
-      status = SessionStatus.loggedIn;
-    } on ApiException catch (e) {
-      if (_restoreCancelled) return;
-      if (e.isOffline) {
-        // Keep the token and offline outbox; the worker can retry login
-        // or choose another server, instead of being trapped at boot.
-        needsFirstOnlineLogin = true;
-      } else if (e.statusCode == 401 || e.statusCode == 403) {
-        // Truly rejected credentials should not be automatically retried
-        // on every startup. Keep cached farm records and the outbox, but
-        // require a fresh sign-in; setActiveUser isolates a different farm
-        // user if they log in.
-        apiClient.token = null;
-        await prefs?.remove(_tokenPrefsKey);
-      } else {
-        // A wrong server, 404 or temporary 500 is not an auth rejection:
-        // never erase a cached farm because of a deployment problem.
-        error = e.message;
-      }
-      if (_restoreCancelled) return;
-      status = SessionStatus.loggedOut;
-    } catch (e) {
-      if (_restoreCancelled) return;
-      // Invalid cached JSON, corrupt saved profile or a storage exception
-      // must not strand the user at SessionStatus.checking.
-      error = 'Could not restore the saved session: $e';
-      status = SessionStatus.loggedOut;
-    }
-    if (!_restoreCancelled) notifyListeners();
+    // No preference lookups, saved tokens or network calls on startup.
+    // Crucially, do not clear SQLite or delete any pending offline writes.
+    apiClient.token = null;
+    apiClient.standalone = false;
+    user = null;
+    status = SessionStatus.loggedOut;
+    notifyListeners();
   }
 
   Future<void> setBaseUrl(String url) async {
