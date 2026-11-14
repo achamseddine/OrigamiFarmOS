@@ -68,56 +68,87 @@ class SessionController extends ChangeNotifier {
   /// there is a farm office to sync with.
   bool get standalone => apiClient.standalone;
 
-  Future<void> restore() async {
-    final prefs = await _prefs();
-    final savedBaseUrl = prefs?.getString(_baseUrlPrefsKey);
-    if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
-      apiClient.updateBaseUrl(savedBaseUrl);
-    }
+  // A worker must always be able to reach the credentials form if an old
+  // server is asleep or the saved session is corrupt. This only cancels
+  // automatic restoration; it never deletes the token, offline farm or outbox.
+  bool _restoreCancelled = false;
 
-    // A tablet already in standalone mode never asks a server anything,
-    // so this comes before the token check — there is no token to have.
-    final store = _store;
-    if (store != null && await DemoMode.hasOpenSession(store)) {
-      final profile = await DemoMode.storedProfile(store);
-      if (profile != null) {
-        _enterStandalone(store, profile);
+  void showLoginInstead() {
+    _restoreCancelled = true;
+    status = SessionStatus.loggedOut;
+    notifyListeners();
+  }
+
+  Future<void> restore() async {
+    SharedPreferences? prefs;
+    try {
+      prefs = await _prefs();
+      if (_restoreCancelled) return;
+      final savedBaseUrl = prefs?.getString(_baseUrlPrefsKey);
+      if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
+        apiClient.updateBaseUrl(savedBaseUrl);
+      }
+
+      // A standalone farm's open session takes priority over the server.
+      final store = _store;
+      if (store != null && await DemoMode.hasOpenSession(store)) {
+        if (_restoreCancelled) return;
+        final profile = await DemoMode.storedProfile(store);
+        if (_restoreCancelled) return;
+        if (profile != null) {
+          _enterStandalone(store, profile);
+          notifyListeners();
+          return;
+        }
+      }
+      if (_restoreCancelled) return;
+      final token = prefs?.getString(_tokenPrefsKey);
+      if (token == null || token.isEmpty) {
+        status = SessionStatus.loggedOut;
         notifyListeners();
         return;
       }
-    }
+      apiClient.token = token;
 
-    final token = prefs?.getString(_tokenPrefsKey);
-    if (token == null || token.isEmpty) {
-      status = SessionStatus.loggedOut;
-      notifyListeners();
-      return;
-    }
-    apiClient.token = token;
-    try {
-      // Served from the network when there is one, from the cache written
-      // at the last successful launch when there isn't.
+      // Served from the network when reachable, or cached when offline.
+      // ApiClient.send has a finite timeout; a failed restore must never
+      // leave the sign-in screen hidden behind the boot spinner forever.
       final json = await apiClient.get('/auth/me') as Map<String, dynamic>;
-      user = UserProfile.fromJson(json);
-      await _store?.setActiveUser(user!.id);
+      if (_restoreCancelled) return;
+      final profile = UserProfile.fromJson(json);
+      await _store?.setActiveUser(profile.id);
+      if (_restoreCancelled) return;
+      user = profile;
       restoredOffline = apiClient.monitor.offline;
       status = SessionStatus.loggedIn;
     } on ApiException catch (e) {
+      if (_restoreCancelled) return;
       if (e.isOffline) {
-        // No route to the server *and* nothing cached — this install has
-        // never completed a sign-in. Keep the token (it may still be
-        // valid) and let the login screen explain what is needed.
+        // Keep the token and offline outbox; the worker can retry login
+        // or choose another server, instead of being trapped at boot.
         needsFirstOnlineLogin = true;
-        status = SessionStatus.loggedOut;
-      } else {
-        // The server answered and rejected the token: genuinely signed out.
+      } else if (e.statusCode == 401 || e.statusCode == 403) {
+        // Truly rejected credentials should not be automatically retried
+        // on every startup. Keep cached farm records and the outbox, but
+        // require a fresh sign-in; setActiveUser isolates a different farm
+        // user if they log in.
         apiClient.token = null;
         await prefs?.remove(_tokenPrefsKey);
-        await _store?.clearCachedFarmData();
-        status = SessionStatus.loggedOut;
+      } else {
+        // A wrong server, 404 or temporary 500 is not an auth rejection:
+        // never erase a cached farm because of a deployment problem.
+        error = e.message;
       }
+      if (_restoreCancelled) return;
+      status = SessionStatus.loggedOut;
+    } catch (e) {
+      if (_restoreCancelled) return;
+      // Invalid cached JSON, corrupt saved profile or a storage exception
+      // must not strand the user at SessionStatus.checking.
+      error = 'Could not restore the saved session: $e';
+      status = SessionStatus.loggedOut;
     }
-    notifyListeners();
+    if (!_restoreCancelled) notifyListeners();
   }
 
   Future<void> setBaseUrl(String url) async {

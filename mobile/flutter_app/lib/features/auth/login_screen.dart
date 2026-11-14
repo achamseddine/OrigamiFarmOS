@@ -152,7 +152,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             child: SingleChildScrollView(
               child: Column(
                 children: [
-                  SizedBox(height: 230, child: valley),
+                  // The credentials must be visible without scrolling on ordinary
+                  // phones. A 230px illustration pushed both text fields below
+                  // the fold and looked like a broken/empty login screen.
+                  SizedBox(height: constraints.maxHeight < 900 ? 64 : 116, child: valley),
                   Padding(
                     padding: const EdgeInsets.all(FarmSpacing.lg),
                     child: card,
@@ -226,9 +229,12 @@ class _ValleyPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (wide) const Spacer(flex: 2),
-                Text(
-                  context.t('loginHeadline'),
+                // On portrait the scenery is only a decorative strip.
+                // No title belongs in a 64px header: it causes overflow.
+                if (wide) ...[
+                  const Spacer(flex: 2),
+                  Text(
+                    context.t('loginHeadline'),
                   style: FarmTypography.display(size: wide ? 44 : 26, height: 1.25),
                 ),
                 const SizedBox(height: FarmSpacing.md),
@@ -238,7 +244,6 @@ class _ValleyPanel extends StatelessWidget {
                   context.t('loginSubhead'),
                   style: FarmTypography.textTheme.bodyLarge?.copyWith(color: FarmColors.muted),
                 ),
-                if (wide) ...[
                   const Spacer(flex: 3),
                   const _FeatureRow(),
                   const SizedBox(height: FarmSpacing.lg),
