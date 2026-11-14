@@ -1,0 +1,38 @@
+name: Probe Origami staging API (no credentials)
+
+# Safe, read-only HTTP diagnostics. No database URL or user credentials are
+# ever included. This check does not claim a 200 response is a working API.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/login-server-diagnostics-20261114
+    paths:
+      - ".github/workflows/probe-staging-api.yml"
+
+jobs:
+  probe-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check DNS and public, unauthenticated API responses
+        shell: bash
+        run: |
+          set -uo pipefail
+          host=leb-container-test-staging.azurewebsites.net
+          echo "Checking DNS for $host"
+          getent ahosts "$host" | head -n 4 || echo "DNS resolution failed"
+          for path in / /health /openapi.json; do
+            echo ""
+            echo "Checking https://$host$path (GET, no credentials)"
+            if result=$(curl --location --silent --show-error \
+               --connect-timeout 8 --max-time 18 \
+               --output response.txt --write-out 'HTTP=%{http_code} CONTENT_TYPE=%{content_type} REMOTE_IP=%{remote_ip}' \
+               "https://$host$path" 2>&1); then
+              echo "$result"
+              head -c 350 response.txt || true
+              echo ""
+            else
+              echo "Request failed: $result"
+            fi
+          done
