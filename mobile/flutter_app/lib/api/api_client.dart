@@ -165,8 +165,10 @@ class ApiClient {
         if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
       };
 
-  /// Diagnose the selected HTTP endpoint without ever sending a password,
-  /// bearer token or farm data. A generic 200 is NOT proof this is Origami.
+  /// Check health and published API contract without sending a password,
+  /// bearer token or farm data. Azure staging hosts a Next.js home page,
+  /// with the actual Origami Server API under /api/v1 and /openapi.json;
+  /// a Next.js home page must NOT be misdiagnosed as the wrong API.
   Future<BackendCheck> checkBackend({String? serverUrl}) async {
     final selected = (serverUrl ?? baseUrl).trim();
     final Uri api;
@@ -179,41 +181,68 @@ class ApiClient {
       return const BackendCheck('Invalid server URL. Please check for spaces or typing errors.', verified: false);
     }
     final root = api.replace(path: '/', query: null, fragment: null);
-    final health = api.replace(path: '/health', query: null, fragment: null);
+    final health = root.replace(path: '/health');
+    final openapi = root.replace(path: '/openapi.json');
     try {
-      final response = await _http.get(root, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
-      if (response.statusCode != 200) {
-        return BackendCheck('Server responded HTTP ${response.statusCode} at $root. Expected the Origami API identity endpoint.', verified: false, statusCode: response.statusCode);
-      }
-      Object? identity;
-      try {
-        identity = jsonDecode(utf8.decode(response.bodyBytes));
-      } catch (_) {
-        return const BackendCheck('Server returned HTTP 200, but its response is not JSON. This may be an unrelated website or reverse proxy.', verified: false, statusCode: 200);
-      }
-      if (identity is! Map || identity['name'] != 'Origami FarmOS API' || identity['status'] != 'ok') {
-        return const BackendCheck('Server returned HTTP 200, but it is not identifying itself as Origami FarmOS API. Confirm the Azure deployment before entering credentials.', verified: false, statusCode: 200);
-      }
       final healthResponse = await _http.get(health, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
       if (healthResponse.statusCode != 200) {
-        return BackendCheck('Origami API identity confirmed, but /health returned HTTP ${healthResponse.statusCode}.', verified: false, statusCode: healthResponse.statusCode);
+        return BackendCheck('Health endpoint at $health returned HTTP ${healthResponse.statusCode}.', verified: false, statusCode: healthResponse.statusCode);
       }
       Object? healthJson;
       try {
         healthJson = jsonDecode(utf8.decode(healthResponse.bodyBytes));
       } catch (_) {
-        return const BackendCheck('Origami API identity confirmed, but /health did not return valid JSON.', verified: false, statusCode: 200);
+        return const BackendCheck('Health endpoint returned HTTP 200 but not JSON.', verified: false, statusCode: 200);
       }
       if (healthJson is! Map || healthJson['status'] != 'ok') {
-        return const BackendCheck('Origami API identity confirmed, but /health did not report status ok.', verified: false, statusCode: 200);
+        return const BackendCheck('Health endpoint responded but did not report status ok.', verified: false, statusCode: 200);
       }
-      return BackendCheck('Origami FarmOS API verified. Root: HTTP 200; health: HTTP 200. Server: $selected. This does not verify your user account or database.', verified: true, statusCode: 200);
+
+      final specResponse = await _http.get(openapi, headers: {'Accept': 'application/json'}).timeout(networkTimeout);
+      if (specResponse.statusCode != 200) {
+        return BackendCheck('Health passed, but OpenAPI at $openapi returned HTTP ${specResponse.statusCode}. API contract could not be verified.', verified: false, statusCode: specResponse.statusCode);
+      }
+      Object? spec;
+      try {
+        spec = jsonDecode(utf8.decode(specResponse.bodyBytes));
+      } catch (_) {
+        return const BackendCheck('Health passed, but OpenAPI did not return valid JSON.', verified: false, statusCode: 200);
+      }
+      if (spec is! Map || spec['paths'] is! Map) {
+        return const BackendCheck('Health passed, but the OpenAPI structure is not valid.', verified: false, statusCode: 200);
+      }
+      final title = spec['info'] is Map ? (spec['info'] as Map)['title']?.toString() ?? 'Unknown API' : 'Unknown API';
+      final paths = spec['paths'] as Map;
+      const requiredPaths = [
+        '/api/v1/auth/login',
+        '/api/v1/auth/me',
+        '/api/v1/me/access',
+        '/api/v1/modules/catalog',
+      ];
+      final missing = requiredPaths.where((path) => !paths.containsKey(path)).toList();
+      final login = paths['/api/v1/auth/login'];
+      final loginIsPost = login is Map && login.containsKey('post');
+      if (missing.isNotEmpty || !loginIsPost) {
+        return BackendCheck(
+          'Health passed, but API "$title" is missing required farm routes: ${missing.isEmpty ? 'POST /api/v1/auth/login' : missing.join(', ')}. This app cannot sign in reliably.',
+          verified: false,
+          statusCode: 200,
+        );
+      }
+      if (title != 'Origami FarmOS API' && title != 'Origami Server API') {
+        return BackendCheck('Health passed and some farm routes exist, but OpenAPI identifies another service: "$title".', verified: false, statusCode: 200);
+      }
+      return BackendCheck(
+        'API ENDPOINTS VERIFIED: $title at $selected. /health: HTTP 200; /openapi.json: HTTP 200; login, user and access routes present. '
+        'This does NOT prove the entered account is active in this staging database or that farm data is compatible.',
+        verified: true, statusCode: 200,
+      );
     } on TimeoutException {
-      return BackendCheck('Connection timed out after ${networkTimeout.inSeconds}s contacting $root. The server may be down or unreachable.', verified: false);
+      return BackendCheck('Connection timed out after ${networkTimeout.inSeconds}s while checking the API at $root.', verified: false);
     } on SocketException catch (e) {
-      return BackendCheck('Network/DNS error contacting $root: ${e.message}. Check the hostname or server availability.', verified: false);
+      return BackendCheck('Network/DNS error contacting $root: ${e.message}.', verified: false);
     } catch (e) {
-      return BackendCheck('Could not reach/verify $root (${e.runtimeType}). Check TLS, network and App Service deployment.', verified: false);
+      return BackendCheck('Could not verify API at $root (${e.runtimeType}): $e', verified: false);
     }
   }
 
