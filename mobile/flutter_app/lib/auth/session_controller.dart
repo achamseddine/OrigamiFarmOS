@@ -25,15 +25,12 @@ const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits
 
 /// Owns the single login, in either of the two modes this app runs in.
 ///
-/// **Against a server: online the first time, offline afterwards.**
-/// Signing in needs a reachable server — there is no way to verify a
-/// password or issue a token without one, and a tablet that let anyone
-/// in offline would be a hole, not a feature. Everything after that is
-/// designed to work in a field with no signal: the token is persisted,
-/// the profile and the permission set are cached by [ApiClient], and a
-/// launch with no connection restores the session from that cache
-/// instead of throwing the worker back to a login screen they cannot
-/// get past.
+/// **Against a server: explicit sign-in every time; offline farm data
+/// remains available after sign-in.** This temporary recovery policy
+/// deliberately ignores old saved tokens and base URLs at launch so a
+/// failed server request can never hide the credential form. Successful
+/// sign-in still initializes cached farm data and the offline outbox.
+/// Signing in requires a reachable authorized backend.
 ///
 /// **Standalone: no server at all.** There is no deployment yet, so this
 /// build also ships a farm inside it (see `data/local/demo_mode.dart`).
