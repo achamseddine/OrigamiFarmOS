@@ -46,6 +46,8 @@ class BackendCheck {
   final String message;
   final bool verified;
   final int? statusCode;
+}
+
 /// The server's field-by-field validation refusal (a list of
 /// `{loc: [body, liters], msg: "Value error, …"}`) as sentences a farmer
 /// can act on — "Liters: 185 L is more than one animal gives in one
