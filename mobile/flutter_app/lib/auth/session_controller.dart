@@ -126,12 +126,19 @@ class SessionController extends ChangeNotifier {
         // Keep the token and offline outbox; the worker can retry login
         // or choose another server, instead of being trapped at boot.
         needsFirstOnlineLogin = true;
-      } else {
-        // Preserve local data and queued writes even if the server refused
-        // a stale token; sign-in can replace it without a destructive reset.
+      } else if (e.statusCode == 401 || e.statusCode == 403) {
+        // Truly rejected credentials should not be automatically retried
+        // on every startup. Keep cached farm records and the outbox, but
+        // require a fresh sign-in; setActiveUser isolates a different farm
+        // user if they log in.
         apiClient.token = null;
-        // Do not clear cached farm data here: offline records are valuable.
+        await prefs?.remove(_tokenPrefsKey);
+      } else {
+        // A wrong server, 404 or temporary 500 is not an auth rejection:
+        // never erase a cached farm because of a deployment problem.
+        error = e.message;
       }
+      if (_restoreCancelled) return;
       status = SessionStatus.loggedOut;
     } catch (e) {
       if (_restoreCancelled) return;
