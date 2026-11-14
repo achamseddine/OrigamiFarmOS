@@ -74,6 +74,19 @@ class SessionController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Leave a failed startup without wiping cached farm data, the offline
+  /// outbox or any stored demo edits. This is different from explicit logout,
+  /// whose existing farm-data clearing semantics are deliberately unchanged.
+  void returnToLoginPreservingData() {
+    apiClient.token = null;
+    apiClient.standalone = false;
+    user = null;
+    error = null;
+    busy = false;
+    status = SessionStatus.loggedOut;
+    notifyListeners();
+  }
+
   Future<void> restore() async {
     // No preference lookups, saved tokens or network calls on startup.
     // Crucially, do not clear SQLite or delete any pending offline writes.
