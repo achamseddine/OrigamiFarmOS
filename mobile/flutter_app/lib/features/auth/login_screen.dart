@@ -6,6 +6,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../data/local/demo_mode.dart';
 
