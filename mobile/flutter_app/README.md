@@ -42,10 +42,13 @@ It also retains existing locally cached farm records and the offline outbox;
 do not uninstall or clear app storage during a recovery.
 
 The default server for this staging test is
-`https://leb-container-test-staging.azurewebsites.net/api/v1`. This is a
-**candidate** backend location provided by the farm owner; the release
-pipeline has not verified that it is an authorized, working Origami FarmOS
-server. To test a different approved server on the login screen, tap
+`https://leb-container-test-staging.azurewebsites.net/api/v1`. A read-only GitHub
+probe confirmed its `Origami Server API` OpenAPI specification exposes the
+tablet's login and permissions paths; individual credentials, tenant access
+and full data compatibility remain **unverified**. Use the new **Check API
+(no password sent)** button to inspect health and contract availability;
+a valid server check does not confirm an account is recognized. To test
+a different approved server on the login screen, tap
 **"Connecting to a different server?"** and enter its complete `/api/v1` URL.
 The default can also be overridden at build time by passing
 `--dart-define=FARMOS_API_BASE_URL=https://VERIFIED-HOST/api/v1`.
@@ -68,6 +71,15 @@ existing saved tokens are **not loaded** at startup and never hide the
 credential fields. The API base URL defaults to Azure staging as above.
 The on-device farm cache and outbox remain available for the supported
 offline workflow **after each successful sign-in**.
+
+**Login diagnostics (build 0.7.59+):** a failed sign-in shows the actual
+HTTP status and endpoint, or the network failure/timeout, without logging
+the password. The **Check API** button sends only anonymous GET requests to
+`/health` and `/openapi.json`, and checks the API's farm routes. When a
+login succeeds but the dashboard cannot load permissions or farm data,
+the app shows a readable error with a retry button and a non-destructive
+return to login. Offline synchronization no longer holds the entire app
+behind the loading spinner.
 
 Accounts are created by a farm manager under **Employees &
 Responsibilities**, or seeded for a new deployment by
