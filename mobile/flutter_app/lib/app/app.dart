@@ -60,7 +60,23 @@ class FarmOSApp extends StatelessWidget {
               GlobalCupertinoLocalizations.delegate,
             ],
             home: switch (session.status) {
-              SessionStatus.checking => const Scaffold(body: Center(child: CircularProgressIndicator())),
+              SessionStatus.checking => Scaffold(
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 24),
+                      Text(locale.isArabic ? 'جارٍ استعادة الجلسة السابقة…' : 'Restoring your saved session…'),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: session.showLoginInstead,
+                        child: Text(locale.isArabic ? 'إظهار صفحة تسجيل الدخول' : 'Show sign-in instead'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               SessionStatus.loggedOut => const LoginScreen(),
               SessionStatus.loggedIn => _DataLoader(user: session.user!),
             },
