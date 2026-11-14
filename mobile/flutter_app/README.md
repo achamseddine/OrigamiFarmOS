@@ -35,19 +35,24 @@ flutter test
 flutter analyze
 ```
 
-The app needs a reachable backend. By default it uses `http://10.0.2.2:8000/api/v1`
-(the Android emulator's route to the host machine). A verified farm server can
-instead be supplied when building the APK using
-`--dart-define=FARMOS_API_BASE_URL=https://VERIFIED-HOST/api/v1`.
-On real hardware, tap **"Connecting to a different server?"** on the login screen
-and enter the authorized deployment's URL, which is remembered and overrides
-the build-time default. **Do not enter a PostgreSQL DATABASE_URL in the tablet.**
+**Build 0.7.58+ login recovery:** the app always opens to the **email and password
+form on every launch**. It does not restore the previous user's session,
+read the saved server URL, or perform an API call before showing the form.
+It also retains existing locally cached farm records and the offline outbox;
+do not uninstall or clear app storage during a recovery.
 
-The proposed staging host
-`https://leb-container-test-staging.azurewebsites.net` is **not verified**
-as a deployed Origami API. It must not be mistaken for the `PROD_DATABASE_URL`
-GitHub Actions secret. See [Azure connection and migration guidance](../../docs/AZURE-BACKEND-CONNECTION.md)
-before configuring connected farm credentials.
+The default server for this staging test is
+`https://leb-container-test-staging.azurewebsites.net/api/v1`. This is a
+**candidate** backend location provided by the farm owner; the release
+pipeline has not verified that it is an authorized, working Origami FarmOS
+server. To test a different approved server on the login screen, tap
+**"Connecting to a different server?"** and enter its complete `/api/v1` URL.
+The default can also be overridden at build time by passing
+`--dart-define=FARMOS_API_BASE_URL=https://VERIFIED-HOST/api/v1`.
+
+**Do not enter a PostgreSQL `DATABASE_URL` in the tablet or confuse the
+Azure web address with the GitHub Actions `PROD_DATABASE_URL` secret.**
+See [Azure connection and migration guidance](../../docs/AZURE-BACKEND-CONNECTION.md).
 
 ## Signing in
 
@@ -56,13 +61,13 @@ The landing page is a single login, with two ways through it.
 **The demo account** — `ali` / `ali123`, offered on the screen itself —
 opens the farm this build carries inside it, with no server involved.
 
-**Any other credentials** authenticate against `POST /auth/login` as
-usual and open that person's own dashboard; the bearer token is stored
-in `shared_preferences` and silently re-validated against `/auth/me` on
-the next launch, so a farm worker sees the login screen once per
-install. On real hardware, tap **"Connecting to a different server?"**
-and enter the deployment's URL first — the built-in default is the
-Android emulator's route to a dev host.
+**Any other credentials** authenticate against `POST /auth/login` on
+the selected staging/approved backend and open the person's dashboard.
+The user is asked to sign in again every time they reopen the app;
+existing saved tokens are **not loaded** at startup and never hide the
+credential fields. The API base URL defaults to Azure staging as above.
+The on-device farm cache and outbox remain available for the supported
+offline workflow **after each successful sign-in**.
 
 Accounts are created by a farm manager under **Employees &
 Responsibilities**, or seeded for a new deployment by
@@ -100,7 +105,7 @@ lib/
     nav_config.dart               Builds (nav entries, screens, module→tab map) from
                                    the signed-in user's permissions
   api/api_client.dart             JSON/HTTP client + WriteResult (success/error) shape
-  auth/session_controller.dart    One-time login, token persistence, silent re-validation
+  auth/session_controller.dart    Explicit sign-in on every launch; no cached-session restoration
   core/
     theme/                        Brand tokens (colors, typography, spacing/radii/shadows)
     i18n/                         AR/EN string table (both complete; Arabic is the default) + LocaleController

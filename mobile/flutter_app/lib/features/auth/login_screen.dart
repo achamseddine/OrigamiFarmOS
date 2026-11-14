@@ -7,7 +7,6 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
-import '../../core/widgets/bekaa_backdrop.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../../data/local/demo_mode.dart';
 
@@ -36,7 +35,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
+class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   final _passwordFocus = FocusNode();
@@ -46,7 +45,6 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   /// so the first access used to be `dispose()` — reading a provider out
   /// of an element that was already torn down.
   late final TextEditingController _serverUrl;
-  late final AnimationController _sky;
 
   bool _showServerField = false;
   bool _obscure = true;
@@ -56,15 +54,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   void initState() {
     super.initState();
     _serverUrl = TextEditingController(text: context.read<SessionController>().baseUrl);
-    // Drives the clouds and the flock. Ninety seconds for one crossing:
-    // slow enough that it reads as weather rather than animation, and
-    // slow enough that nobody filling in a password competes with it.
-    _sky = AnimationController(vsync: this, duration: const Duration(seconds: 90))..repeat();
   }
 
   @override
   void dispose() {
-    _sky.dispose();
     _email.dispose();
     _password.dispose();
     _serverUrl.dispose();
@@ -118,197 +111,40 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
 
+    // Emergency login-first layout: always show the form first, on every
+    // device size and orientation. No decorative landscape, animation,
+    // navigation or cached-session spinner can cover the credentials.
+    // Scrolling is allowed on short phones or when the keyboard is open.
     return Scaffold(
       backgroundColor: FarmColors.stone,
-      body: LayoutBuilder(builder: (context, constraints) {
-        final wide = constraints.maxWidth >= kTabletBreakpoint;
-
-        final card = _SignInCard(
-          email: _email,
-          password: _password,
-          passwordFocus: _passwordFocus,
-          serverUrl: _serverUrl,
-          obscure: _obscure,
-          showServerField: _showServerField,
-          busy: session.busy,
-          demoPressed: _demoPressed,
-          needsNetwork: session.needsFirstOnlineLogin,
-          error: session.error,
-          onToggleObscure: () => setState(() => _obscure = !_obscure),
-          onToggleServerField: () => setState(() => _showServerField = !_showServerField),
-          onForgotPassword: _forgotPassword,
-          onUseDemo: _useDemo,
-          onSubmit: _submit,
-        );
-
-        final valley = _ValleyPanel(sky: _sky, wide: wide);
-
-        if (!wide) {
-          // Portrait: a band of valley across the top, the card under it,
-          // the whole thing scrolling. It has to scroll — the keyboard
-          // takes half a tablet and everything below it would otherwise
-          // be unreachable, which is exactly the bug this screen had.
-          return SafeArea(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  // The credentials must be visible without scrolling on ordinary
-                  // phones. A 230px illustration pushed both text fields below
-                  // the fold and looked like a broken/empty login screen.
-                  SizedBox(height: constraints.maxHeight < 900 ? 64 : 116, child: valley),
-                  Padding(
-                    padding: const EdgeInsets.all(FarmSpacing.lg),
-                    child: card,
-                  ),
-                ],
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: _SignInCard(
+                email: _email,
+                password: _password,
+                passwordFocus: _passwordFocus,
+                serverUrl: _serverUrl,
+                obscure: _obscure,
+                showServerField: _showServerField,
+                busy: session.busy,
+                demoPressed: _demoPressed,
+                needsNetwork: session.needsFirstOnlineLogin,
+                error: session.error,
+                onToggleObscure: () => setState(() => _obscure = !_obscure),
+                onToggleServerField: () => setState(() => _showServerField = !_showServerField),
+                onForgotPassword: _forgotPassword,
+                onUseDemo: _useDemo,
+                onSubmit: _submit,
               ),
             ),
-          );
-        }
-
-        // Landscape: the card sits at the reading edge — right in Arabic,
-        // left in English — because Row lays its children out in logical
-        // order and the card is first.
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: 48,
-              child: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: FarmSpacing.xxl, vertical: FarmSpacing.lg),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: (constraints.maxHeight - FarmSpacing.lg * 2).clamp(0.0, double.infinity),
-                    ),
-                    child: Center(child: card),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(flex: 52, child: valley),
-          ],
-        );
-      }),
-    );
-  }
-}
-
-/// The half of the screen that is a place rather than a form: the valley,
-/// what the farm is for, and where it is.
-class _ValleyPanel extends StatelessWidget {
-  const _ValleyPanel({required this.sky, required this.wide});
-
-  final AnimationController sky;
-  final bool wide;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        RepaintBoundary(
-          child: AnimatedBuilder(
-            animation: sky,
-            builder: (context, _) => BekaaBackdrop(drift: sky.value),
           ),
         ),
-        // Enough paper over the painting for the headline to sit on it.
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [FarmColors.stone.withOpacity(0.72), FarmColors.stone.withOpacity(0.12)],
-            ),
-          ),
-        ),
-        SafeArea(
-          child: Padding(
-            padding: EdgeInsets.all(wide ? FarmSpacing.xl : FarmSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // On portrait the scenery is only a decorative strip.
-                // No title belongs in a 64px header: it causes overflow.
-                if (wide) ...[
-                  const Spacer(flex: 2),
-                  Text(
-                    context.t('loginHeadline'),
-                  style: FarmTypography.display(size: wide ? 44 : 26, height: 1.25),
-                ),
-                const SizedBox(height: FarmSpacing.md),
-                Container(width: 64, height: 3, color: FarmColors.gold),
-                const SizedBox(height: FarmSpacing.md),
-                Text(
-                  context.t('loginSubhead'),
-                  style: FarmTypography.textTheme.bodyLarge?.copyWith(color: FarmColors.muted),
-                ),
-                  const Spacer(flex: 3),
-                  const _FeatureRow(),
-                  const SizedBox(height: FarmSpacing.lg),
-                  Row(
-                    children: [
-                      const Icon(Icons.place_outlined, size: 18, color: FarmColors.ink),
-                      const SizedBox(width: 6),
-                      Text(
-                        context.t('farmLocationLine'),
-                        style: FarmTypography.textTheme.titleSmall,
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// What this is all for, in three words each. Not decoration: it is the
-/// only thing on the screen that says what the company believes, and the
-/// person signing in every morning is the one delivering it.
-class _FeatureRow extends StatelessWidget {
-  const _FeatureRow();
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      (FarmIcon.leaf, 'featureProductive'),
-      (FarmIcon.people, 'featureCommunities'),
-      (FarmIcon.harvestBasket, 'featureSustainable'),
-    ];
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i > 0)
-            Container(
-              width: 1,
-              height: 46,
-              margin: const EdgeInsets.symmetric(horizontal: FarmSpacing.md),
-              color: FarmColors.ink.withOpacity(0.15),
-            ),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppIcon(items[i].$1, size: 24, color: FarmColors.cedar),
-                const SizedBox(height: 8),
-                Text(
-                  context.t(items[i].$2),
-                  style: FarmTypography.textTheme.bodySmall?.copyWith(
-                    color: FarmColors.ink,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
