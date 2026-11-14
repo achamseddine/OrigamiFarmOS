@@ -43,7 +43,9 @@ class FarmOSApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
-        ChangeNotifierProvider(create: (_) => SessionController(store: store)..restore()),
+        // Explicit sign-in on every launch. Do not call restore(): an old
+        // token/cache/server can never block the credential screen.
+        ChangeNotifierProvider(create: (_) => SessionController(store: store)),
       ],
       child: Consumer2<LocaleController, SessionController>(
         builder: (context, locale, session, _) {
