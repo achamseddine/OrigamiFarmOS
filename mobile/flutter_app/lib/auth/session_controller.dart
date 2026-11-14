@@ -80,8 +80,9 @@ class SessionController extends ChangeNotifier {
   }
 
   Future<void> restore() async {
+    SharedPreferences? prefs;
     try {
-      final prefs = await _prefs();
+      prefs = await _prefs();
       if (_restoreCancelled) return;
       final savedBaseUrl = prefs?.getString(_baseUrlPrefsKey);
       if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
