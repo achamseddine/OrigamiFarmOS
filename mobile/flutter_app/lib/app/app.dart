@@ -163,17 +163,23 @@ class _DataLoader extends StatefulWidget {
 class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
   // A successful password must never lead to an endless blank/loading
   // page. Fail visibly if the backend data does not load in finite time.
-  late Future<void> _boot = _startup()
-      .timeout(const Duration(seconds: 40), onTimeout: () {
-        throw TimeoutException('Loading farm permissions exceeded 40 seconds. '
-            'The backend may not match this APK or the network may be unreachable.');
-      });
+  late Future<void> _boot;
+
+  // AccessProvider.load notifies its listeners synchronously before its
+  // first await. Starting _startup from a lazy field read inside build()
+  // caused "markNeedsBuild called during build" on successful login.
+  // Queue it after the synchronous frame instead.
+  Future<void> _startAfterBuild() =>
+      Future<void>.delayed(Duration.zero, _startup).timeout(
+        const Duration(seconds: 40),
+        onTimeout: () => throw TimeoutException(
+          'Loading farm permissions exceeded 40 seconds. '
+          'The backend may not match this APK or the network may be unreachable.'),
+      );
 
   void _retryStartup() {
     setState(() {
-      _boot = _startup().timeout(const Duration(seconds: 40), onTimeout: () {
-        throw TimeoutException('Loading farm permissions exceeded 40 seconds.');
-      });
+      _boot = _startAfterBuild();
     });
   }
 
@@ -181,6 +187,7 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _boot = _startAfterBuild();
   }
 
   @override
