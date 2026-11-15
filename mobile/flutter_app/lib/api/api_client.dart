@@ -295,10 +295,14 @@ class ApiClient {
 
     if (standalone) return _readLocal(store, path, query, key);
 
+    // Offline with a cached answer: serve it, no network. Offline with
+    // nothing cached: one live attempt rather than a certain failure. The
+    // monitor flips offline on a single timeout, and a read that then
+    // refused to even try left a screen empty while the server was already
+    // answering again; a success here turns the tablet back online.
     if (monitor.offline) {
       final cached = await store.readCache(key);
       if (cached != null) return cached.body;
-      throw ApiException(0, _noCacheMessage);
     }
 
     try {

@@ -11,6 +11,7 @@ import '../../core/widgets/charts/line_trend_chart.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
+import '../../data/local/connection_monitor.dart';
 import '../../app/app_navigator.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/inventory.dart';
@@ -77,14 +78,36 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
   Map<String, dynamic>? _briefing;
   String? _error;
 
+  /// Why the briefing could not be loaded, in the server's (or the
+  /// client's) own words — shown under the headline so a blank morning
+  /// screen is never a mystery, and sent back with a bug report as is.
+  String? _errorDetail;
+  bool _loading = false;
+  ConnectionMonitor? _monitor;
+
   @override
   void initState() {
     super.initState();
+    _monitor = context.read<SessionController>().apiClient.monitor..addListener(_onConnectionChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _monitor?.removeListener(_onConnectionChanged);
+    super.dispose();
+  }
+
+  /// The briefing failed while the tablet thought it was offline (one
+  /// timed-out request at sign-in is enough): the moment the farm server
+  /// answers again, ask once more by itself.
+  void _onConnectionChanged() {
+    if (_briefing == null && !_loading && (_monitor?.online ?? false)) _load();
   }
 
   Future<void> _load() async {
     final session = context.read<SessionController>();
+    _loading = true;
     try {
       final farmId = session.user!.farmId;
       final json = await session.apiClient.get('/morning-briefing', query: {'farm_id': farmId}) as Map<String, dynamic>;
@@ -92,10 +115,22 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
       setState(() {
         _briefing = json;
         _error = null;
+        _errorDetail = null;
       });
-    } catch (_) {
+    } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = context.t('briefingLoadFailed'));
+      setState(() {
+        _error = context.t('briefingLoadFailed');
+        _errorDetail = e.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = context.t('briefingLoadFailed');
+        _errorDetail = '$e';
+      });
+    } finally {
+      _loading = false;
     }
   }
 
@@ -103,7 +138,38 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
   Widget build(BuildContext context) {
     final briefing = _briefing;
     if (briefing == null) {
-      return Center(child: Text(_error ?? context.t('loading'), style: FarmTypography.textTheme.bodyMedium));
+      final error = _error;
+      if (error == null) {
+        return Center(child: Text(context.t('loading'), style: FarmTypography.textTheme.bodyMedium));
+      }
+      final detail = _errorDetail;
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(FarmSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(error, style: FarmTypography.textTheme.bodyMedium, textAlign: TextAlign.center),
+              if (detail != null && detail.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: FarmSpacing.sm),
+                  child: SelectableText(
+                    detail,
+                    textAlign: TextAlign.center,
+                    style: FarmTypography.textTheme.bodySmall
+                        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+              const SizedBox(height: FarmSpacing.md),
+              FilledButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh),
+                label: Text(context.t('retry')),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     final kpis = Map<String, dynamic>.from(briefing['kpis'] as Map? ?? {});
