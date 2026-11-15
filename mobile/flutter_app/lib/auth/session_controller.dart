@@ -180,10 +180,24 @@ class SessionController extends ChangeNotifier {
         error = 'LOGIN RESPONSE ERROR at ${apiClient.baseUrl}/auth/login: HTTP 200 but response has no access_token. The Azure host may be an unrelated or outdated backend.';
         return false;
       }
-      final profile = json['user'];
-      if (profile is! Map<String, dynamic>) {
-        error = 'LOGIN RESPONSE ERROR at ${apiClient.baseUrl}/auth/login: HTTP 200 but no compatible user object was returned. Check the backend deployment.';
-        return false;
+      // Older compatible deployments return a token but no embedded user.
+      // Fetch the profile with that verified token directly from the server;
+      // NEVER use a cached /auth/me from a previous farm account.
+      late final Map<String, dynamic> profile;
+      final embeddedProfile = json['user'];
+      if (embeddedProfile is Map<String, dynamic>) {
+        profile = embeddedProfile;
+      } else {
+        phase = 'Fetching authenticated profile from ${apiClient.baseUrl}/auth/me';
+        loginProgress = 'Credentials accepted. Verifying your farm account…';
+        notifyListeners();
+        apiClient.token = token;
+        final fetched = await apiClient.send('GET', '/auth/me');
+        if (fetched is! Map<String, dynamic>) {
+          error = 'LOGIN RESPONSE ERROR: /auth/me returned no compatible user profile after authentication. Check the backend deployment.';
+          return false;
+        }
+        profile = fetched;
       }
 
       phase = 'Opening the farm after authentication';
@@ -194,9 +208,9 @@ class SessionController extends ChangeNotifier {
       // A different farm user must NEVER be allowed to read the last
       // user's cached records. This one short check is intentionally
       // required before showing the dashboard.
-      final store = _store;
-      if (store != null) {
-        await store.setActiveUser(signedInUser.id).timeout(const Duration(seconds: 8));
+      final deviceStore = _store;
+      if (deviceStore != null) {
+        await deviceStore.setActiveUser(signedInUser.id).timeout(const Duration(seconds: 8));
       }
       user = signedInUser;
       needsFirstOnlineLogin = false;
@@ -211,13 +225,14 @@ class SessionController extends ChangeNotifier {
     } on ApiException catch (e) {
       apiClient.token = null;
       user = null;
+      final failingPath = phase.contains('/auth/me') ? '/auth/me' : '/auth/login';
       // Preserve the HTTP code and exact failing endpoint: 401/403 means
       // rejected credentials; 404/405 means wrong/old API; zero means DNS,
       // TLS, timeout or device connectivity. Never include the password.
       error = e.isOffline
-          ? 'NETWORK ERROR (HTTP 0) at ${apiClient.baseUrl}/auth/login: ${e.message} '
+          ? 'NETWORK ERROR (HTTP 0) at ${apiClient.baseUrl}$failingPath: ${e.message} '
               'Use "Check API" below to diagnose the server without sending a password.'
-          : 'LOGIN ERROR (HTTP ${e.statusCode}) at ${apiClient.baseUrl}/auth/login: ${e.message}';
+          : 'LOGIN ERROR (HTTP ${e.statusCode}) at ${apiClient.baseUrl}$failingPath: ${e.message}';
       needsFirstOnlineLogin = e.isOffline;
       return false;
     } catch (e) {

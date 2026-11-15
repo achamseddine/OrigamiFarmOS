@@ -16,6 +16,36 @@ import 'package:farmos/features/auth/login_screen.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('token-only login fetches the verified profile from the server', () async {
+    SharedPreferences.setMockInitialValues({'install_id': 'ins-test'});
+    final requested = <String>[];
+    final httpClient = MockClient((request) async {
+      requested.add(request.url.path);
+      if (request.url.path == '/api/v1/auth/login') {
+        return http.Response(jsonEncode({'access_token': 'verified-token'}), 200);
+      }
+      if (request.url.path == '/api/v1/auth/me') {
+        expect(request.headers['Authorization'], 'Bearer verified-token');
+        return http.Response(jsonEncode({
+          'id': 'u1',
+          'farm_id': 'f1',
+          'name': 'Farm Owner',
+          'role': 'owner',
+        }), 200);
+      }
+      return http.Response('Not found', 404);
+    });
+    final session = SessionController(
+      client: ApiClient(baseUrl: 'https://farm.example.test/api/v1', httpClient: httpClient),
+    );
+    addTearDown(session.dispose);
+
+    expect(await session.login(email: 'owner@example.test', password: 'test'), isTrue);
+    expect(session.status, SessionStatus.loggedIn);
+    expect(session.user?.name, 'Farm Owner');
+    expect(requested, contains('/api/v1/auth/me'));
+  });
+
   testWidgets('credentials accepted -> permissions -> farm home', (tester) async {
     SharedPreferences.setMockInitialValues({'farmos.locale': 'en'});
     tester.view.physicalSize = const Size(1100, 850);
