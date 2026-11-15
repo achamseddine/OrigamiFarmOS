@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1 import (
     agriculture,
@@ -105,7 +105,11 @@ app.add_middleware(IdempotencyMiddleware)
 
 
 @app.get("/", tags=["meta"])
-def root() -> dict:
+def root(request: Request) -> dict:
+    # A person opening the farm server's address in a browser gets the app;
+    # a client asking for JSON (health checks, scripts) gets this summary.
+    if web_client.web_dir() is not None and "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(web_client.WEB_PREFIX + "/", status_code=307)
     out = {"name": settings.app_name, "status": "ok", "docs": "/docs"}
     if web_client.web_dir() is not None:
         # The browser version of the app, served beside the API (ADR-004).

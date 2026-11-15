@@ -33,6 +33,9 @@ def test_the_web_app_is_served_beside_the_api(client, web_app):
     assert client.get("/app/assets/AssetManifest.bin.json").status_code == 200
 
     assert client.get("/").json()["app"] == "/app/"
+    # A browser opening the server's address lands on the app.
+    browser = client.get("/", headers={"Accept": "text/html,application/xhtml+xml"}, follow_redirects=False)
+    assert browser.status_code == 307 and browser.headers["location"] == "/app/"
     # The API is unchanged beside it.
     assert client.get("/health").json() == {"status": "ok"}
 
@@ -47,3 +50,5 @@ def test_without_an_installed_web_app_the_page_says_how_to_add_it(client, tmp_pa
     r = client.get("/app/")
     assert r.status_code == 404 and "origami-farmos-web.zip" in r.text
     assert "app" not in client.get("/").json()
+    # Without the app installed, a browser still gets the API summary.
+    assert client.get("/", headers={"Accept": "text/html"}).json()["status"] == "ok"
