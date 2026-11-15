@@ -34,11 +34,14 @@ import 'app_navigator.dart';
 import 'nav_config.dart';
 
 class FarmOSApp extends StatelessWidget {
-  const FarmOSApp({super.key, this.store});
+  const FarmOSApp({super.key, this.store, this.sessionController});
 
   /// The tablet's offline store. Null in widget tests, where there is no
   /// SQLite platform channel — the app then runs online-only.
   final LocalStore? store;
+
+  /// Inject a controlled session for full login-to-home widget tests.
+  final SessionController? sessionController;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +50,10 @@ class FarmOSApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LocaleController()),
         // Explicit sign-in on every launch. Do not call restore(): an old
         // token/cache/server can never block the credential screen.
-        ChangeNotifierProvider(create: (_) => SessionController(store: store)),
+        if (sessionController != null)
+          ChangeNotifierProvider<SessionController>.value(value: sessionController!)
+        else
+          ChangeNotifierProvider(create: (_) => SessionController(store: store)),
       ],
       child: Consumer2<LocaleController, SessionController>(
         builder: (context, locale, session, _) {

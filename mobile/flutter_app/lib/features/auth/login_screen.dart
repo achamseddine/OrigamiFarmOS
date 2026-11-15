@@ -162,6 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscure: _obscure,
                 showServerField: _showServerField,
                 busy: session.busy,
+                loginProgress: session.loginProgress,
                 demoPressed: _demoPressed,
                 needsNetwork: session.needsFirstOnlineLogin,
                 error: session.error,
@@ -193,6 +194,7 @@ class _SignInCard extends StatelessWidget {
     required this.obscure,
     required this.showServerField,
     required this.busy,
+    required this.loginProgress,
     required this.demoPressed,
     required this.needsNetwork,
     required this.error,
@@ -215,6 +217,7 @@ class _SignInCard extends StatelessWidget {
   final bool obscure;
   final bool showServerField;
   final bool busy;
+  final String? loginProgress;
   final bool demoPressed;
 
   /// The last attempt couldn't reach the server at all. Say that plainly
@@ -368,6 +371,11 @@ class _SignInCard extends StatelessWidget {
                     ),
             ),
           ),
+          if (busy && loginProgress != null) ...[
+            const SizedBox(height: FarmSpacing.sm),
+            Text(loginProgress!, textAlign: TextAlign.center,
+                style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.ink)),
+          ],
           const SizedBox(height: FarmSpacing.lg),
           Row(
             children: [

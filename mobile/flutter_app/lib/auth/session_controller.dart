@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
@@ -37,9 +39,9 @@ const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits
 /// The demo credential is checked here on the device — not a security
 /// boundary, just the way in when there is nothing to ask.
 class SessionController extends ChangeNotifier {
-  SessionController({LocalStore? store})
+  SessionController({LocalStore? store, ApiClient? client})
       : _store = store,
-        apiClient = ApiClient(baseUrl: kDefaultApiBaseUrl, store: store);
+        apiClient = client ?? ApiClient(baseUrl: kDefaultApiBaseUrl, store: store);
 
   final ApiClient apiClient;
   final LocalStore? _store;
@@ -47,6 +49,9 @@ class SessionController extends ChangeNotifier {
   UserProfile? user;
   String? error;
   bool busy = false;
+
+  /// Human-readable progress on the sign-in form while login is pending.
+  String? loginProgress;
 
   /// Legacy status flag, always false at launch because sessions are not restored.
   bool restoredOffline = false;
@@ -108,8 +113,10 @@ class SessionController extends ChangeNotifier {
       apiClient.checkBackend(serverUrl: serverUrl);
 
   Future<bool> login({required String email, required String password, String? serverUrl}) async {
+    if (busy) return false;
     busy = true;
     error = null;
+    loginProgress = 'Checking your sign-in…';
     notifyListeners();
     var phase = 'Preparing sign-in';
     try {
@@ -126,7 +133,11 @@ class SessionController extends ChangeNotifier {
           error = 'This device has no local storage, so the demo farm cannot be loaded.';
           return false;
         }
-        final profile = await DemoMode.activate(store);
+        phase = 'Loading on-device demo farm';
+        loginProgress = 'Preparing the demo farm on this tablet…';
+        notifyListeners();
+        // A damaged or busy SQLite store must not leave the button spinning forever.
+        final profile = await DemoMode.activate(store).timeout(const Duration(seconds: 25));
         if (profile == null) {
           error = 'The demo farm could not be loaded from this build.';
           return false;
@@ -146,6 +157,8 @@ class SessionController extends ChangeNotifier {
       phase = 'Reading tablet installation ID';
       final install = await installId();
       phase = 'Sending credentials to ${apiClient.baseUrl}/auth/login';
+      loginProgress = 'Contacting the farm server…';
+      notifyListeners();
       final json = await apiClient.authenticate('/auth/login', body: {
         'email': email.trim(),
         'password': password,
@@ -173,21 +186,31 @@ class SessionController extends ChangeNotifier {
         return false;
       }
 
-      phase = 'Reading returned user profile';
+      phase = 'Opening the farm after authentication';
+      loginProgress = 'Credentials accepted. Opening your farm…';
+      notifyListeners();
+      final signedInUser = UserProfile.fromJson(profile);
       apiClient.token = token;
-      user = UserProfile.fromJson(profile);
-      phase = 'Saving the signed-in session';
-      final prefs = await _prefs();
-      await prefs?.setString(_tokenPrefsKey, apiClient.token!);
-      await _store?.setActiveUser(user!.id);
-      // Seed the profile cache so the very next launch works offline even
-      // if the tablet never gets another chance to call `/auth/me`.
-      await _store?.writeCache(LocalStore.cacheKey('/auth/me', null), profile);
+      // A different farm user must NEVER be allowed to read the last
+      // user's cached records. This one short check is intentionally
+      // required before showing the dashboard.
+      final store = _store;
+      if (store != null) {
+        await store.setActiveUser(signedInUser.id).timeout(const Duration(seconds: 8));
+      }
+      user = signedInUser;
       needsFirstOnlineLogin = false;
       restoredOffline = false;
       status = SessionStatus.loggedIn;
+      // SharedPreferences and the /auth/me cache are optional. Formerly
+      // both were awaited *before* status became loggedIn: the server could
+      // accept the password but Android storage could keep the person
+      // staring at the credentials page indefinitely.
+      unawaited(_cacheSignedInProfile(profile));
       return true;
     } on ApiException catch (e) {
+      apiClient.token = null;
+      user = null;
       // Preserve the HTTP code and exact failing endpoint: 401/403 means
       // rejected credentials; 404/405 means wrong/old API; zero means DNS,
       // TLS, timeout or device connectivity. Never include the password.
@@ -198,6 +221,8 @@ class SessionController extends ChangeNotifier {
       needsFirstOnlineLogin = e.isOffline;
       return false;
     } catch (e) {
+      apiClient.token = null;
+      user = null;
       // Includes malformed JSON, unexpected user profiles and local
       // storage problems after the server has accepted the credentials.
       error = 'SIGN-IN ERROR at "$phase": ${e.runtimeType}: $e. '
@@ -205,7 +230,17 @@ class SessionController extends ChangeNotifier {
       return false;
     } finally {
       busy = false;
+      loginProgress = null;
       notifyListeners();
+    }
+  }
+
+  Future<void> _cacheSignedInProfile(Map<String, dynamic> profile) async {
+    try {
+      // Never allow optional persistence to delay authenticated navigation.
+      await _store?.writeCache(LocalStore.cacheKey('/auth/me', null), profile);
+    } catch (e) {
+      debugPrint('Origami: signed-in profile cache failed (login remains valid): $e');
     }
   }
 

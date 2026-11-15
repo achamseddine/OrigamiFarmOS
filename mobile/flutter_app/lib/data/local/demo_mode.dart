@@ -83,10 +83,10 @@ class DemoMode {
     }
 
     if (reset) await store.clearCache();
-    for (final entry in snapshot.entries) {
-      if (entry.key == _accountKey) continue;
-      await store.writeCache(entry.key, entry.value);
-    }
+    await store.writeCacheBatch({
+      for (final entry in snapshot.entries)
+        if (entry.key != _accountKey) entry.key: entry.value,
+    });
     await store.setMeta(metaSeeded, 'true');
     await store.setMeta(metaSession, 'true');
     await store.setMetaJson(_profileKey, profile);

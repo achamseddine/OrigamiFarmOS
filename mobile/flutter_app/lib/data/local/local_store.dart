@@ -123,6 +123,24 @@ class LocalStore {
     );
   }
 
+  /// Import a bundled farm snapshot in one SQLite batch rather than
+  /// hundreds of serial platform-channel writes during demo sign-in.
+  /// A partial import is not marked seeded by DemoMode.
+  Future<void> writeCacheBatch(Map<String, dynamic> records) async {
+    final db = _db;
+    if (db == null || records.isEmpty) return;
+    final batch = db.batch();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    for (final entry in records.entries) {
+      batch.insert(
+        'cache',
+        {'key': entry.key, 'body': jsonEncode(entry.value), 'fetched_at': timestamp},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<CachedResponse?> readCache(String key) async {
     final db = _db;
     if (db == null) return null;
