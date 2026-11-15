@@ -69,13 +69,11 @@ class FarmOSApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: switch (session.status) {
-              // Even an unexpected legacy "checking" status must never
-              // cover the credentials with a session-recovery spinner.
-              SessionStatus.checking => const LoginScreen(),
-              SessionStatus.loggedOut => const LoginScreen(),
-              SessionStatus.loggedIn => _DataLoader(user: session.user!),
-            },
+            // The Navigator keeps its original "/" route alive even when
+            // MaterialApp.home changes after login. A permanent session gate
+            // lives *inside* that route and rebuilds its contents on auth
+            // changes, so a successful login cannot leave LoginScreen visible.
+            home: const _SessionGate(),
           );
           if (session.status != SessionStatus.loggedIn) return app;
           // The farm providers wrap the MaterialApp, not its `home`.
@@ -88,6 +86,23 @@ class FarmOSApp extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// A stable home route: MaterialApp may retain its original Navigator
+/// route after the session changes, so switching the home widget directly
+/// between LoginScreen and _DataLoader does not actually navigate.
+/// This gate watches the session *inside* the retained route.
+class _SessionGate extends StatelessWidget {
+  const _SessionGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    if (session.status != SessionStatus.loggedIn || session.user == null) {
+      return const LoginScreen();
+    }
+    return _DataLoader(user: session.user!);
   }
 }
 
