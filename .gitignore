@@ -27,6 +27,8 @@ coverage/
 
 # Python / backend
 backend/.venv/
+# The installed web app (unzipped web release, app/web_client.py)
+backend/web_app/
 backend/**/__pycache__/
 backend/**/*.pyc
 backend/*.db

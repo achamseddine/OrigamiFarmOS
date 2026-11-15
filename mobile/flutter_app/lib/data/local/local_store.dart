@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 /// The tablet's own copy of the farm: a response cache so every screen
 /// still opens in a field with no signal, and an outbox so anything the
@@ -51,9 +52,15 @@ class LocalStore {
     if (_instance != null) return _instance!;
     Database? db;
     try {
-      final dir = await getDatabasesPath();
+      // In a browser the same SQLite runs as WebAssembly in a shared
+      // worker, stored in the browser's IndexedDB (web/sqlite3.wasm and
+      // web/sqflite_sw.js; architecture/ADR-004-WEB-CLIENT.md): the cache,
+      // the outbox and the demo farm work exactly as on the tablet. There
+      // a database path is only a name.
+      if (kIsWeb) databaseFactory = databaseFactoryFfiWeb;
+      final path = kIsWeb ? _dbName : p.join(await getDatabasesPath(), _dbName);
       db = await openDatabase(
-        p.join(dir, _dbName),
+        path,
         version: _schemaVersion,
         onCreate: (database, _) async {
           final batch = database.batch();
@@ -121,6 +128,21 @@ class LocalStore {
       {'key': key, 'body': jsonEncode(body), 'fetched_at': DateTime.now().millisecondsSinceEpoch},
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  /// Many cache entries in one transaction — loading the demo farm. One
+  /// write each was hundreds of separate commits: slow on a tablet and, in
+  /// a browser (where every commit is persisted to IndexedDB), so slow the
+  /// demo never finished loading.
+  Future<void> writeCacheAll(Map<String, Object?> entries) async {
+    final db = _db;
+    if (db == null || entries.isEmpty) return;
+    final at = DateTime.now().millisecondsSinceEpoch;
+    final batch = db.batch();
+    for (final e in entries.entries) {
+      batch.insert('cache', {'key': e.key, 'body': jsonEncode(e.value), 'fetched_at': at}, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<CachedResponse?> readCache(String key) async {

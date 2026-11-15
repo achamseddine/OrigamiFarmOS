@@ -13,7 +13,19 @@ enum SessionStatus { checking, loggedOut, loggedIn }
 /// this to a reachable host (tablet hardware can't reach `localhost`) —
 /// use the "Server" field on the login screen, which persists whatever
 /// URL is entered.
-const String kDefaultApiBaseUrl = 'http://10.0.2.2:8000/api/v1';
+/// Where the app looks for the farm server until someone sets another
+/// address on the sign-in screen:
+/// - a build made with `--dart-define=API_BASE_URL=…` uses that;
+/// - in a browser, the server that served the page (the farm server hosts
+///   the web app at /app/, beside its API — ADR-004);
+/// - on a tablet, the Android emulator's address for the developer's
+///   machine.
+String get kDefaultApiBaseUrl {
+  const configured = String.fromEnvironment('API_BASE_URL');
+  if (configured.isNotEmpty) return configured;
+  if (kIsWeb) return '${Uri.base.origin}/api/v1';
+  return 'http://10.0.2.2:8000/api/v1';
+}
 
 const _tokenPrefsKey = 'auth_token';
 const _baseUrlPrefsKey = 'api_base_url';
@@ -197,7 +209,7 @@ class SessionController extends ChangeNotifier {
       return true;
     } on ApiException catch (e) {
       error = e.isOffline
-          ? "Signing in needs the farm network. Connect once and the tablet will work offline afterwards."
+          ? "Signing in needs the farm network. Connect once and this device will work offline afterwards."
           : e.message;
       needsFirstOnlineLogin = e.isOffline;
       return false;

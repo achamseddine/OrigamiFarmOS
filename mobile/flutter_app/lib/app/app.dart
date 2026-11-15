@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +33,9 @@ import '../sync/sync_controller.dart';
 import 'app_navigator.dart';
 import 'nav_config.dart';
 
+final _signedOutNavigatorKey = GlobalKey<NavigatorState>();
+final _navigatorKeys = <String, GlobalKey<NavigatorState>>{};
+
 class FarmOSApp extends StatelessWidget {
   const FarmOSApp({super.key, this.store});
 
@@ -47,8 +52,15 @@ class FarmOSApp extends StatelessWidget {
       ],
       child: Consumer2<LocaleController, SessionController>(
         builder: (context, locale, session, _) {
+          // A navigator of its own for the sign-in screen and for each
+          // signed-in account. One shared key would carry the navigator —
+          // and the sign-in page on it — into the farm, which then never
+          // appears after a successful sign-in.
+          final navigatorKey = rootNavigatorKey = session.status == SessionStatus.loggedIn
+              ? _navigatorKeys.putIfAbsent(session.user!.id, () => GlobalKey<NavigatorState>())
+              : _signedOutNavigatorKey;
           final app = MaterialApp(
-            navigatorKey: rootNavigatorKey,
+            navigatorKey: navigatorKey,
             title: 'Origami FarmOS',
             debugShowCheckedModeBanner: false,
             theme: FarmTheme.light,
@@ -134,12 +146,20 @@ class _DataLoader extends StatefulWidget {
 }
 
 class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
-  late final Future<void> _boot = _startup();
+  // Started after the first frame, not while it is being built: loading
+  // notifies the providers above, and a notification in the middle of a
+  // build is refused (debug builds stopped on it; release ones ignored it).
+  final _booted = Completer<void>();
+  late final Future<void> _boot = _booted.future;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _startup().then(_booted.complete, onError: _booted.completeError);
+    });
   }
 
   @override

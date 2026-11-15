@@ -33,6 +33,12 @@ dependencies:
   pdf: ^3.13.1
   printing: ^5.15.1
 
+  # The same SQLite store in a browser: WebAssembly in a shared worker,
+  # kept in IndexedDB (architecture/ADR-004-WEB-CLIENT.md). Needs
+  # web/sqlite3.wasm and web/sqflite_sw.js (dart run
+  # sqflite_common_ffi_web:setup); unused on the tablet.
+  sqflite_common_ffi_web: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

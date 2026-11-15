@@ -1,5 +1,16 @@
 # Releases
 
+## v0.7.5 — The web version, and a sign-in fix
+
+**Delivered:**
+- **The app in a browser** — the tablet app compiled for the web (`architecture/ADR-004-WEB-CLIENT.md`): every module, form and rule, the same look, Arabic and English, against the same API and database. The farm server serves it at `/app/`, beside the API (`backend/app/web_client.py`); GitHub Pages can host it for a link. Offline storage, the outbox and the demo farm (`ali` / `ali123`) work in the browser (SQLite in WebAssembly, kept in IndexedDB). Builds come from `.github/workflows/build-web.yml` as `origami-farmos-web.zip` on a `web-v0.7.5-build-N` prerelease.
+- **Fixed — sign-in did not open the farm (tablet builds 0.7.54 and 0.7.61).** v0.7.3's "Already recorded?" question kept one navigator across sign-in, so after a successful sign-in (or the demo) the sign-in screen stayed. Each signed-in account now gets its own navigator; a regression test covers the switch from sign-in to the farm.
+- The farm's data now starts loading after the first frame is drawn (it notified listeners mid-build — debug builds stopped on it).
+- The demo farm loads in one transaction instead of 292 separate writes — it never finished in a browser and starts faster on the tablet.
+- Messages that said "this tablet" say "this device" (EN and AR), since the same app runs in a browser.
+- Verified in Chromium against the live API (sign-in, My Day, Animals, the milk record and its "Already recorded?" question) and with the demo farm at 1920×1080, 1440×900 and 820×1180 portrait, Arabic and English, including reloading the page.
+- No migration. Tests: backend +3 (`test_web_client.py`); Flutter +1 (sign-in replaces the sign-in screen).
+
 ## v0.7.4 — Review: contradictions, complex steps and layout faults
 
 A review of the whole app, driven three ways: real end-to-end scenarios against the server on a fresh farm as the manager and as a worker; every main screen and form drawn at three tablet sizes in English and Arabic; a scan of the translations and of the offline labels.

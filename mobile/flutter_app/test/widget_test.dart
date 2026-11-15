@@ -4,6 +4,10 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:farmos/app/app.dart';
+import 'package:farmos/auth/session_controller.dart';
+import 'package:farmos/domain/entities/user_profile.dart';
+import 'package:farmos/features/auth/login_screen.dart';
+import 'package:provider/provider.dart';
 import 'package:farmos/core/i18n/strings.dart';
 import 'package:farmos/data/local/cache_effects.dart';
 import 'package:farmos/data/local/demo_mode.dart';
@@ -32,6 +36,26 @@ void main() {
     // worker, and it opens in their language without anyone setting it.
     expect(find.text(FarmStrings.arabic('startMyDay')), findsWidgets);
     expect(find.text(FarmStrings.arabic('todaysPriorities')), findsNothing);
+  });
+
+  testWidgets('signing in replaces the sign-in screen with the farm', (WidgetTester tester) async {
+    // The regression this guards: one navigator kept across sign-in kept the
+    // sign-in page on it, so a successful sign-in left the screen unchanged.
+    SharedPreferences.setMockInitialValues({'farmos.locale': 'en'});
+    await tester.pumpWidget(const FarmOSApp());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byType(LoginScreen), findsOneWidget);
+
+    final session = tester.element(find.byType(LoginScreen)).read<SessionController>();
+    session
+      ..user = const UserProfile(id: 'user-rami', farmId: 'farm-origami', name: 'Rami Farah', email: 'rami@origami.farm', role: 'manager', language: 'en', active: true)
+      ..status = SessionStatus.loggedIn;
+    session.notifyListeners();
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.byType(LoginScreen), findsNothing, reason: 'the farm replaced the sign-in screen');
   });
 
   testWidgets('a stored English preference still wins', (WidgetTester tester) async {

@@ -101,14 +101,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.7.4-build-${{ github.run_number }}
+          tag_name: tablet-v0.7.5-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.7.4 — tablet APK 0.7.${{ github.run_number }}"
+          name: "Origami FarmOS v0.7.5 — tablet APK 0.7.${{ github.run_number }}"
           body: |
             **Build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.7.5:** fixes sign-in on builds 0.7.54 and 0.7.61 (the sign-in screen stayed after a successful sign-in); the demo farm starts faster. The same app is now also built for the web.
             - **Review (v0.7.4):** records can no longer be dated in the future or made on an animal that left the farm; milk needs the animal to be in milk (the tablet offers *Start milking* first); a raw grain is not fed directly and a mix cannot predate its ingredients; dropdowns, page headers and cards no longer overflow on portrait and small tablets; server refusals read as sentences. No migration.
             - **No duplicates, approval levels (v0.7.3):** the same milking, feeding, delivery, mix, insemination, dose, observation or sale entered twice is caught by the server and the tablet asks *Already recorded?* (record it again only if it really is a second one); stock overrides, new recipes, sales/culls and the farm calendar need the matching approval. No migration.
             - **Second round (v0.7.2):** *Record purchase* with supplier, date and quality, *Record a mix* in one step, a getting-started guide for the feed room; calving date with the milk-peak and insemination calendar (farm settings) and herd chips for who to inseminate, watch for heat or is at her peak; every reproduction form dated; groups for cows including pregnant / not-pregnant groups that follow the records; status on the farm (sold, died…) on the profile; work responsibilities with *My animals & duties*; faster server reads and lighter sign-in. **The server needs migrations `a8d0c2e4f6b1` and `c3e5a7b9d1f4`.**
