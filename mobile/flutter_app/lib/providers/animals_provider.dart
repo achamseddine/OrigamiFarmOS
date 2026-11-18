@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
+import '../core/util/record_dates.dart';
 import '../domain/entities/animal.dart';
 import '../domain/entities/production_records.dart';
 
@@ -89,15 +90,23 @@ class AnimalsProvider extends ChangeNotifier {
     // Already answered "a second milking" on the form: the server's
     // same-session check is not asked again.
     bool confirmDuplicate = false,
+    // When it was milked: now unless the form says another day (milk noted
+    // on paper and entered later). Always sent, so a record queued offline
+    // carries its own date rather than the moment it reaches the server.
+    DateTime? recordedAt,
   }) async {
+    final at = recordedAt ?? DateTime.now();
     final result = await _api.write(() => _api.post('/production/milk', body: {
           'animal_id': animalId,
           'session': session,
           'liters': liters,
           'destination': destination,
+          'recorded_at': at.toUtc().toIso8601String(),
           if (confirmDuplicate) 'confirm_duplicate': true,
         }));
-    if (result.success) {
+    // Only today's milk is "milk today"; an earlier day's shows in the
+    // history and charts once they reload.
+    if (result.success && isToday(at)) {
       _replace(animalId, (a) => a.copyWith(milkTodayL: (a.milkTodayL ?? 0) + liters));
     }
     return result;

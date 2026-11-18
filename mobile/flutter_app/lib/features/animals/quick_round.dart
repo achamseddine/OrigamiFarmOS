@@ -87,8 +87,12 @@ List<MilkRecord> milkToday(String animalId, List<MilkRecord> milk, {DateTime? no
 
 /// A milking already recorded today in [session] — what a second save in
 /// that session would duplicate.
-MilkRecord? sameSessionToday(String animalId, String session, List<MilkRecord> milk, {DateTime? now}) {
-  for (final r in milkToday(animalId, milk, now: now)) {
+MilkRecord? sameSessionToday(String animalId, String session, List<MilkRecord> milk, {DateTime? now}) =>
+    sameSessionOn(animalId, session, now ?? DateTime.now(), milk);
+
+/// The same for any [day] — milk entered for an earlier day.
+MilkRecord? sameSessionOn(String animalId, String session, DateTime day, List<MilkRecord> milk) {
+  for (final r in milkToday(animalId, milk, now: day)) {
     if (r.session == session) return r;
   }
   return null;

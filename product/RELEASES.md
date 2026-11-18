@@ -1,5 +1,13 @@
 # Releases
 
+## v0.7.6 — Milk entered for an earlier day
+
+On the tablet and the web app (one form):
+- **"Milked on"** on the milk record and in quick entry: today by default; any of the last 60 days for milk noted on paper and entered later. An earlier day is recorded at that session's usual hour (morning 07:00, midday 12:00, evening 18:00), says "Recording for <date>, not today." under the date, and does not count as today's milk. In quick entry the date stays as set from one animal to the next (a paper sheet for one day) and the same-session check looks at the chosen day.
+- The server already took the date: it refuses a day in the future or before the animal's lactation began, and the same session on the same day is still asked as a possible duplicate.
+- Fixed: a milk record made offline was queued without its date, and the app could not read it back until it synced; the date is now always sent.
+- No migration. Tests: backend +1, app +4.
+
 ## v0.7.5 — The web version, and a sign-in fix
 
 **Delivered:**

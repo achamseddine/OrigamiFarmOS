@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/util/number_input.dart';
+import '../../core/util/record_dates.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -184,6 +185,8 @@ class _MilkDialog extends StatefulWidget {
 class _MilkDialogState extends State<_MilkDialog> {
   String _session = 'morning';
   String _destination = 'stored';
+  // Today unless changed: milk noted on paper is entered for its own day.
+  DateTime _day = DateTime.now();
   final _liters = TextEditingController();
   bool _saving = false;
   String? _error;
@@ -228,6 +231,8 @@ class _MilkDialogState extends State<_MilkDialog> {
               ],
               onChanged: (v) => setState(() => _session = v ?? _session),
             ),
+            const SizedBox(height: 12),
+            MilkDayField(day: _day, onPicked: (d) => setState(() => _day = d)),
             const SizedBox(height: 12),
             TextField(
               controller: _liters,
@@ -288,6 +293,7 @@ class _MilkDialogState extends State<_MilkDialog> {
           session: _session,
           liters: liters,
           destination: widget.animal.isUnderWithdrawal ? 'withheld' : _destination,
+          recordedAt: milkingInstant(_day, _session),
         );
     if (!mounted) return;
     if (result.success) {
@@ -357,3 +363,34 @@ class _MoveDialogState extends State<_MoveDialog> {
 /// inventory item and writes a bare movement against it.
 Future<void> showFeedDialog(BuildContext context, Animal animal) =>
     showFeedingEventDialog(context, subjectType: 'animal', subjectId: animal.id, subjectName: animal.name);
+
+/// "Milked on": the day a milking is recorded for — today unless changed,
+/// up to 60 days back (the server also refuses a day before the animal's
+/// lactation began). Another day than today is said plainly under it, so
+/// a date left over from the last entry is not missed.
+class MilkDayField extends StatelessWidget {
+  const MilkDayField({super.key, required this.day, required this.onPicked});
+  final DateTime day;
+  final ValueChanged<DateTime> onPicked;
+
+  @override
+  Widget build(BuildContext context) {
+    final past = !isToday(day);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      RecordDateButton(
+        key: const ValueKey('milk-day'),
+        label: context.t('milkedOn'),
+        value: day,
+        maxDaysBack: 60,
+        onPicked: onPicked,
+      ),
+      if (past) ...[
+        const SizedBox(height: 6),
+        Text(
+          context.t('milkPastDayNote').replaceAll('{date}', dayLabel(day)),
+          style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk, fontWeight: FontWeight.w600),
+        ),
+      ],
+    ]);
+  }
+}

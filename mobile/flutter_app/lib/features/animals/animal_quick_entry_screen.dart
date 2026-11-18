@@ -6,6 +6,7 @@ import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/util/number_input.dart';
+import '../../core/util/record_dates.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
@@ -28,7 +29,7 @@ import '../scan/qr_labels.dart';
 import '../scan/qr_scanner_page.dart';
 import 'animal_digital_twin_screen.dart';
 import 'animal_herd_section.dart' show showGroupSheet;
-import 'animal_quick_actions.dart' show showObserveDialog;
+import 'animal_quick_actions.dart' show MilkDayField, showObserveDialog;
 import 'animal_scan.dart';
 import 'quick_round.dart';
 import 'reproduction_forms.dart' show confirmLactationChange, showWeightForm;
@@ -97,6 +98,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   String? _groupId;
   String _session = milkSessionForHour(DateTime.now().hour);
   bool _secondMilking = false;
+  // The day the milk is recorded for: today unless changed. It stays as set
+  // from one animal to the next — entering a paper sheet for one day — and
+  // the field says so whenever it is not today.
+  DateTime _milkDay = DateTime.now();
   // The server refused a feed for lack of entered stock; the worker may say
   // the stock was simply never entered and record it anyway.
   bool _feedStockShort = false;
@@ -268,8 +273,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       return;
     }
     final production = context.read<ProductionProvider>();
-    if (milk != null && sameSessionToday(animal.id, _session, production.milkRecords) != null && !_secondMilking) {
-      setState(() => _error = context.t('qrConfirmSecondMilking'));
+    if (milk != null && sameSessionOn(animal.id, _session, _milkDay, production.milkRecords) != null && !_secondMilking) {
+      setState(() => _error = isToday(_milkDay)
+          ? context.t('qrConfirmSecondMilking')
+          : context.t('qrConfirmSecondMilkingOn').replaceAll('{date}', dayLabel(_milkDay)));
       return;
     }
     final components = <Map<String, dynamic>>[];
@@ -320,6 +327,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
               liters: milk,
               destination: animal.isUnderWithdrawal ? 'withheld' : 'stored',
               confirmDuplicate: _secondMilking,
+              recordedAt: milkingInstant(_milkDay, _session),
             );
         if (!mounted) return;
         if (!result.success) {
@@ -495,7 +503,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     final canCare = access.canCreate(FarmModule.animalHealth);
     final canWeigh = caps.has(Cap.weightTracking) && (access.canEdit(FarmModule.animals) || canCare);
     final milked = milkToday(animal.id, production.milkRecords);
-    final duplicate = sameSessionToday(animal.id, _session, production.milkRecords);
+    final duplicate = sameSessionOn(animal.id, _session, _milkDay, production.milkRecords);
     final fedCount = feedingsToday(animal.id, feeding.recentEvents);
     final rounds = feeding.cachedPlan(animal.id)?.program?.feedingsPerDay;
     final outsideRound = status != null && !status.contains(animal.id);
@@ -591,6 +599,14 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
               }),
             ),
             const SizedBox(height: FarmSpacing.sm),
+            MilkDayField(
+              day: _milkDay,
+              onPicked: (d) => setState(() {
+                _milkDay = d;
+                _secondMilking = false;
+              }),
+            ),
+            const SizedBox(height: FarmSpacing.sm),
             TextField(
               key: const ValueKey('qr-milk-field'),
               controller: _milk,
@@ -606,7 +622,8 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
             if (duplicate != null) ...[
               const SizedBox(height: FarmSpacing.sm),
               NoticeBanner(
-                text: '${context.t('qrAlreadyMilked')} ${duplicate.liters.toStringAsFixed(1)} L · ${TimeOfDay.fromDateTime(duplicate.recordedAt.toLocal()).format(context)}',
+                text: '${isToday(_milkDay) ? context.t('qrAlreadyMilked') : context.t('qrAlreadyMilkedOn').replaceAll('{date}', dayLabel(_milkDay))} '
+                    '${duplicate.liters.toStringAsFixed(1)} L · ${TimeOfDay.fromDateTime(duplicate.recordedAt.toLocal()).format(context)}',
               ),
               Material(
                 type: MaterialType.transparency,
