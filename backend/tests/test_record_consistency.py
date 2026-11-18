@@ -165,3 +165,26 @@ def test_a_confirmed_resend_reuses_the_key_of_the_refused_write(client):
     assert confirmed.status_code == 201 and confirmed.headers.get("Idempotency-Replayed") is None
     replay = client.post(f"{API}/production/milk", json={**body, "confirm_duplicate": True}, headers=h)
     assert replay.headers.get("Idempotency-Replayed") == "true" and replay.json()["id"] == confirmed.json()["id"]
+
+
+# ------------------------------------------------------------ milk entered later
+def test_milk_entered_later_is_recorded_for_its_own_day(client):
+    """Milk noted on paper and typed in days later (the app's "Milked on"
+    date): it is filed under that day, today's same session is not taken
+    for a repeat of it, and the same session of that day still is."""
+    h = _h(client)
+    cow = _cow(client, "Hiba", lactating=True, lactation_started_at=_at(30))
+    that_day = (datetime.now(timezone.utc) - timedelta(days=3)).replace(hour=9, minute=0, second=0, microsecond=0)
+    body = {"animal_id": cow["id"], "session": "morning", "liters": 10, "recorded_at": that_day.isoformat()}
+    r = client.post(f"{API}/production/milk", json=body, headers=h)
+    assert r.status_code == 201, r.text
+
+    today = client.post(f"{API}/production/milk", json={"animal_id": cow["id"], "session": "morning", "liters": 11}, headers=h)
+    assert today.status_code == 201, today.text
+
+    again = client.post(f"{API}/production/milk", json={**body, "liters": 10.5}, headers=h)
+    assert again.status_code == 409 and again.json()["detail"].startswith("Possible duplicate:"), again.text
+
+    listed = [m for m in client.get(f"{API}/production/milk", params={"farm_id": FARM}, headers=h).json() if m["animal_id"] == cow["id"]]
+    days = sorted(datetime.fromisoformat(m["recorded_at"].replace("Z", "+00:00")).date() for m in listed)
+    assert days == [that_day.date(), datetime.now(timezone.utc).date()]

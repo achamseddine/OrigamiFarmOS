@@ -206,7 +206,11 @@ final List<_Rule> _rules = [
   // server's own answer replaces it.
   ..._livestockRecordRules(),
   _Rule('POST', '/health/treatments', (m) => [AppendRecord('/health/treatments', _newRecord(m))]),
-  _Rule('POST', '/production/milk', (m) => [AppendRecord('/production/milk', _newRecord(m))]),
+  // A queued milk record must carry its date: the milk list cannot read a
+  // record without one (older builds sent none).
+  _Rule('POST', '/production/milk', (m) => [
+        AppendRecord('/production/milk', _newRecord(m, extra: {'recorded_at': m.body['recorded_at'] ?? _now()})),
+      ]),
   _Rule('POST', '/production/eggs', (m) => [AppendRecord('/production/eggs', _newRecord(m))]),
   _Rule('POST', '/production/harvest', (m) => [AppendRecord('/production/harvest', _newRecord(m))]),
 

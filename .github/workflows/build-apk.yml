@@ -101,14 +101,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.7.5-build-${{ github.run_number }}
+          tag_name: tablet-v0.7.6-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.7.5 — tablet APK 0.7.${{ github.run_number }}"
+          name: "Origami FarmOS v0.7.6 — tablet APK 0.7.${{ github.run_number }}"
           body: |
             **Build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.7.6:** *Milked on* — the milk record and quick entry take the day it was milked (today by default, up to 60 days back) for milk noted on paper and entered later; a milk record made offline keeps its date.
             - **v0.7.5:** the same app is now also built for the web, from the same code and at the same time as this APK (see the matching `web-v…` release).
             - **Login and Azure diagnostics (14 Nov 2026):** always-visible **Check API (no password sent)** tests `/health` and the OpenAPI route contract; login failures show HTTP status/route, DNS or timeout. After a successful login, farm-data startup errors are shown with Retry / Back to Login (preserves offline records) instead of an indefinite spinner. Auto-sync replay no longer holds up the first dashboard. The Azure staging service is publicly reachable and reports itself as `Origami Server API`, but **account and tenant access remain unverified**.
             - **Login recovery (14 Nov 2026):** always show email and password on every launch; no cached-session auto-login, saved server URL, or network call before the form. Simplified screen works in portrait and landscape. Default staging API is `https://leb-container-test-staging.azurewebsites.net/api/v1` (host identity/health are **not verified**). Existing local farm cache and pending offline writes are **not deleted**. Enter real credentials only after verifying the Azure host belongs to your farm's Origami deployment.

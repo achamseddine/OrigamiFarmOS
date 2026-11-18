@@ -12,6 +12,24 @@ DateTime recordedInstant(DateTime day) {
 
 String dayLabel(DateTime d) => '${d.day}/${d.month}/${d.year}';
 
+/// True when [d] falls on the device's today.
+bool isToday(DateTime d) {
+  final now = DateTime.now();
+  return d.year == now.year && d.month == now.month && d.day == now.day;
+}
+
+/// When a milking on [day] happened, for the record: now for today; on an
+/// earlier day — milk noted on paper and entered later — that session's
+/// usual hour (morning 07:00, midday 12:00, evening 18:00), so the record
+/// falls in the right day and session and is never in the future.
+DateTime milkingInstant(DateTime day, String session) {
+  final now = DateTime.now();
+  if (isToday(day)) return now;
+  final hour = switch (session) { 'evening' => 18, 'midday' => 12, _ => 7 };
+  final at = DateTime(day.year, day.month, day.day, hour);
+  return at.isAfter(now) ? now : at;
+}
+
 /// A "when did it happen" button for a record form: shows the chosen day
 /// and opens the calendar. Defaults are the caller's (usually today).
 class RecordDateButton extends StatelessWidget {
