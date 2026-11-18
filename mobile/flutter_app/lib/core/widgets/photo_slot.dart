@@ -1,4 +1,6 @@
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app_icon.dart';
 import '../theme/colors.dart';
@@ -34,9 +36,12 @@ class PhotoSlot extends StatelessWidget {
       // from the v1 asset pack. Anything else is a file the tablet's
       // camera wrote. The slot does not care which; a real farm's photos
       // replace the demo ones without touching this widget.
+      // A browser has no file system: an uploaded photo is a URL there.
       final image = path.startsWith('assets/')
           ? Image.asset(path, fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius))
-          : Image.file(File(path), fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius));
+          : (kIsWeb || path.startsWith('http'))
+              ? Image.network(path, fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius))
+              : Image.file(File(path), fit: fit, errorBuilder: (_, __, ___) => _placeholder(radius));
       return ClipRRect(borderRadius: radius, child: image);
     }
     return _placeholder(radius);

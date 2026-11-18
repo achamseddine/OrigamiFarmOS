@@ -25,6 +25,16 @@ Signing in needs the farm network; after that the tablet keeps working
 with no signal, and everything recorded out there is sent automatically
 when it comes back into range. See "Working offline" below.
 
+## In a browser
+
+The same app builds for the web (`architecture/ADR-004-WEB-CLIENT.md`):
+
+```bash
+flutter build web --release --base-href / --no-web-resources-cdn
+```
+
+`build/web` is served by the farm server at `/app/` (`FARMOS_WEB_DIR`, `backend/app/web_client.py`) or by any static host with the base href rewritten. In a browser the offline store is SQLite in WebAssembly (`web/sqlite3.wasm`, `web/sqflite_sw.js`, from `dart run sqflite_common_ffi_web:setup`) kept in IndexedDB, so the cache, the outbox and the demo farm work as on the tablet; the default server is the one that served the page. `flutter run -d chrome --web-port 8080` for development (a fixed port keeps the same browser storage).
+
 ## Run it
 
 ```bash

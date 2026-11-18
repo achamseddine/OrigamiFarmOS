@@ -22,6 +22,13 @@ const String kDefaultApiBaseUrl = String.fromEnvironment(
   defaultValue: 'https://leb-container-test-staging.azurewebsites.net/api/v1',
 );
 
+/// The server the app talks to first. In a browser opened from a farm
+/// server's `/app/` address — the web app served beside its API
+/// (architecture/ADR-004-WEB-CLIENT.md) — that same server; everywhere
+/// else [kDefaultApiBaseUrl]. Either way the sign-in screen can change it.
+String startupApiBaseUrl() =>
+    kIsWeb && Uri.base.path.startsWith('/app') ? '${Uri.base.origin}/api/v1' : kDefaultApiBaseUrl;
+
 const _tokenPrefsKey = 'auth_token';
 const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits; never loaded on startup.
 
@@ -41,7 +48,7 @@ const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits
 class SessionController extends ChangeNotifier {
   SessionController({LocalStore? store, ApiClient? client})
       : _store = store,
-        apiClient = client ?? ApiClient(baseUrl: kDefaultApiBaseUrl, store: store);
+        apiClient = client ?? ApiClient(baseUrl: startupApiBaseUrl(), store: store);
 
   final ApiClient apiClient;
   final LocalStore? _store;

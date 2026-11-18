@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1 import (
     agriculture,
@@ -43,6 +43,7 @@ from app.api.v1 import (
     visits,
 )
 from app.core import scheduler
+from app import web_client
 from app.core.config import get_settings
 from app.core.idempotency import IdempotencyMiddleware
 from app.services.feed_inventory_service import FeedError
@@ -104,8 +105,16 @@ app.add_middleware(IdempotencyMiddleware)
 
 
 @app.get("/", tags=["meta"])
-def root() -> dict:
-    return {"name": settings.app_name, "status": "ok", "docs": "/docs"}
+def root(request: Request) -> dict:
+    # A person opening the farm server's address in a browser gets the app;
+    # a client asking for JSON (health checks, scripts) gets this summary.
+    if web_client.web_dir() is not None and "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse(web_client.WEB_PREFIX + "/", status_code=307)
+    out = {"name": settings.app_name, "status": "ok", "docs": "/docs"}
+    if web_client.web_dir() is not None:
+        # The browser version of the app, served beside the API (ADR-004).
+        out["app"] = web_client.WEB_PREFIX + "/"
+    return out
 
 
 @app.get("/health", tags=["meta"])
@@ -114,6 +123,7 @@ def health_check() -> dict:
 
 
 api_prefix = settings.api_v1_prefix
+app.include_router(web_client.router)
 app.include_router(auth.router, prefix=api_prefix)
 app.include_router(users.router, prefix=api_prefix)
 app.include_router(employees.router, prefix=api_prefix)

@@ -1,0 +1,128 @@
+name: Build web app
+
+# The browser version of the app: the same Flutter app as the tablet APK,
+# compiled for the web (architecture/ADR-004-WEB-CLIENT.md). Each build
+#  - is gated by the analyzer and the full test suite, like the APK;
+#  - is published as `origami-farmos-web.zip` on its own prerelease, to
+#    unzip into the farm server's backend/web_app/ (served at /app/,
+#    beside the API — app/web_client.py);
+#  - is deployed to GitHub Pages when Pages is set to "GitHub Actions"
+#    for this repository (Settings → Pages), so it can be opened from a
+#    link. That step is allowed to fail without failing the build.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/origami-farmos-tablet-mvp-u88i3e
+      - feat/qr-animal-quick-entry
+      - claude/gifted-davinci-mu9fjj
+    paths:
+      - ".github/workflows/build-web.yml"
+      - "mobile/flutter_app/**"
+
+concurrency:
+  group: build-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: mobile/flutter_app
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same toolchain as the APK build.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - run: flutter test
+
+      # One build with base href "/": the farm server rewrites it to /app/
+      # as it serves index.html, and the Pages copy below is rewritten to
+      # /<repository>/. --no-web-resources-cdn keeps the graphics engine on
+      # the same server as the app, so it also loads where Google's CDN is
+      # blocked. The server it signs in to is the tablet's (kDefaultApiBaseUrl,
+      # FARMOS_API_BASE_URL) unless it was opened from a farm server's /app/;
+      # FARM_API_URL, an optional repository variable, overrides it for both.
+      # APP_VERSION is the commit, as on the APK: the sign-in screen of the
+      # tablet and of the web app built from the same commit show the same one.
+      - run: |
+          flutter build web --release --base-href / --no-web-resources-cdn \
+            --dart-define=APP_BUILD="web 0.7.${{ github.run_number }}" \
+            --dart-define=APP_VERSION="$(git rev-parse --short HEAD)" \
+            ${{ vars.FARM_API_URL && format('--dart-define=FARMOS_API_BASE_URL={0}', vars.FARM_API_URL) || '' }}
+
+      - name: Package for the farm server
+        run: |
+          cd build/web
+          zip -qr ../../origami-farmos-web.zip .
+          cd ../..
+          ls -la origami-farmos-web.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: origami-farmos-web
+          path: mobile/flutter_app/origami-farmos-web.zip
+          if-no-files-found: error
+
+      - name: Publish versioned web prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: web-v0.7.5-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: "Origami FarmOS v0.7.5 — web app 0.7.${{ github.run_number }}"
+          prerelease: true
+          files: mobile/flutter_app/origami-farmos-web.zip
+          body: |
+            **Web build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
+
+            The tablet app in the browser — every screen, the same rules, Arabic and English — against the same API and database.
+
+            **Same commit as the tablet APK** built by *Build tablet APK* from ${{ github.sha }}: both sign-in screens show this commit.
+
+            **Open it from a link:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ — published from the main tablet branch once GitHub Pages is set to "GitHub Actions" in the repository settings. Sign in as `ali` / `ali123` for the demo farm, kept in this browser; a farm account signs in to the tablet's default server or the one set on the sign-in screen.
+
+            **On the farm server (same address as the API):** unzip `origami-farmos-web.zip` into `backend/web_app/` (or set `FARMOS_WEB_DIR` to the folder) and open `https://<farm server>/app/`. No server address to type; nothing else to configure.
+
+            The sign-in screen shows `App 0.7.${{ github.run_number }} · <commit>`. Supported browsers: current Chrome, Edge, Firefox and Safari. The camera QR scan needs HTTPS (or localhost) and permission for the camera.
+
+      - name: Prepare the GitHub Pages copy
+        run: |
+          rm -rf ../../_site && cp -r build/web ../../_site
+          sed -i 's|<base href="/">|<base href="/${{ github.event.repository.name }}/">|' ../../_site/index.html
+          touch ../../_site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  pages:
+    needs: build
+    # One site, one source: only the main tablet branch publishes it, so a
+    # feature branch never replaces what the main branch put there. Pages
+    # must be enabled once (Settings → Pages → Source: GitHub Actions);
+    # until then this step fails and the build above still counts.
+    if: github.ref == 'refs/heads/claude/origami-farmos-tablet-mvp-u88i3e'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
