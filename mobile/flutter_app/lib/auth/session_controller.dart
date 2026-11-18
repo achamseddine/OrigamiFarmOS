@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
@@ -9,57 +11,56 @@ import '../domain/entities/user_profile.dart';
 
 enum SessionStatus { checking, loggedOut, loggedIn }
 
-/// Default backend for local development. A real deployment must change
-/// this to a reachable host (tablet hardware can't reach `localhost`) —
-/// use the "Server" field on the login screen, which persists whatever
-/// URL is entered.
-/// Where the app looks for the farm server until someone sets another
-/// address on the sign-in screen:
-/// - a build made with `--dart-define=API_BASE_URL=…` uses that;
-/// - in a browser, the server that served the page (the farm server hosts
-///   the web app at /app/, beside its API — ADR-004);
-/// - on a tablet, the Android emulator's address for the developer's
-///   machine.
-String get kDefaultApiBaseUrl {
-  const configured = String.fromEnvironment('API_BASE_URL');
-  if (configured.isNotEmpty) return configured;
-  if (kIsWeb) return '${Uri.base.origin}/api/v1';
-  return 'http://10.0.2.2:8000/api/v1';
-}
+/// Default staging API as explicitly requested for the 2026-11-14
+/// on-farm tablet test. This is a *website API endpoint*, not DATABASE_URL.
+/// The tablet always starts at the credentials form and never restores
+/// a previously cached server address or authorization token on boot.
+/// An operator can still choose a different server on the sign-in screen.
+/// Server ownership/health must be verified before entering live credentials.
+const String kDefaultApiBaseUrl = String.fromEnvironment(
+  'FARMOS_API_BASE_URL',
+  defaultValue: 'https://leb-container-test-staging.azurewebsites.net/api/v1',
+);
+
+/// The server the app talks to first. In a browser opened from a farm
+/// server's `/app/` address — the web app served beside its API
+/// (architecture/ADR-004-WEB-CLIENT.md) — that same server; everywhere
+/// else [kDefaultApiBaseUrl]. Either way the sign-in screen can change it.
+String startupApiBaseUrl() =>
+    kIsWeb && Uri.base.path.startsWith('/app') ? '${Uri.base.origin}/api/v1' : kDefaultApiBaseUrl;
 
 const _tokenPrefsKey = 'auth_token';
-const _baseUrlPrefsKey = 'api_base_url';
+const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits; never loaded on startup.
 
 /// Owns the single login, in either of the two modes this app runs in.
 ///
-/// **Against a server: online the first time, offline afterwards.**
-/// Signing in needs a reachable server — there is no way to verify a
-/// password or issue a token without one, and a tablet that let anyone
-/// in offline would be a hole, not a feature. Everything after that is
-/// designed to work in a field with no signal: the token is persisted,
-/// the profile and the permission set are cached by [ApiClient], and a
-/// launch with no connection restores the session from that cache
-/// instead of throwing the worker back to a login screen they cannot
-/// get past.
+/// **Against a server: explicit sign-in every time; offline farm data
+/// remains available after sign-in.** This temporary recovery policy
+/// deliberately ignores old saved tokens and base URLs at launch so a
+/// failed server request can never hide the credential form. Successful
+/// sign-in still initializes cached farm data and the offline outbox.
+/// Signing in requires a reachable authorized backend.
 ///
 /// **Standalone: no server at all.** There is no deployment yet, so this
 /// build also ships a farm inside it (see `data/local/demo_mode.dart`).
 /// The demo credential is checked here on the device — not a security
 /// boundary, just the way in when there is nothing to ask.
 class SessionController extends ChangeNotifier {
-  SessionController({LocalStore? store})
+  SessionController({LocalStore? store, ApiClient? client})
       : _store = store,
-        apiClient = ApiClient(baseUrl: kDefaultApiBaseUrl, store: store);
+        apiClient = client ?? ApiClient(baseUrl: startupApiBaseUrl(), store: store);
 
   final ApiClient apiClient;
   final LocalStore? _store;
-  SessionStatus status = SessionStatus.checking;
+  SessionStatus status = SessionStatus.loggedOut;
   UserProfile? user;
   String? error;
   bool busy = false;
 
-  /// True when a session exists but is running on cached credentials
-  /// because the server could not be reached at launch.
+  /// Human-readable progress on the sign-in form while login is pending.
+  String? loginProgress;
+
+  /// Legacy status flag, always false at launch because sessions are not restored.
   bool restoredOffline = false;
 
   /// Set when the tablet has never been online with this install: there
@@ -75,55 +76,36 @@ class SessionController extends ChangeNotifier {
   /// there is a farm office to sync with.
   bool get standalone => apiClient.standalone;
 
+  // This recovery build intentionally does not restore previous sessions.
+  // The credential form must be visible immediately on *every* launch.
+  // Existing SQLite response caches, demo data and the offline outbox are
+  // retained on disk; only the automatic sign-in behavior is disabled.
+  // Keep this method for callers upgrading from the previous API surface.
+  void showLoginInstead() {
+    status = SessionStatus.loggedOut;
+    notifyListeners();
+  }
+
+  /// Leave a failed startup without wiping cached farm data, the offline
+  /// outbox or any stored demo edits. This is different from explicit logout,
+  /// whose existing farm-data clearing semantics are deliberately unchanged.
+  void returnToLoginPreservingData() {
+    apiClient.token = null;
+    apiClient.standalone = false;
+    user = null;
+    error = null;
+    busy = false;
+    status = SessionStatus.loggedOut;
+    notifyListeners();
+  }
+
   Future<void> restore() async {
-    final prefs = await _prefs();
-    final savedBaseUrl = prefs?.getString(_baseUrlPrefsKey);
-    if (savedBaseUrl != null && savedBaseUrl.isNotEmpty) {
-      apiClient.updateBaseUrl(savedBaseUrl);
-    }
-
-    // A tablet already in standalone mode never asks a server anything,
-    // so this comes before the token check — there is no token to have.
-    final store = _store;
-    if (store != null && await DemoMode.hasOpenSession(store)) {
-      final profile = await DemoMode.storedProfile(store);
-      if (profile != null) {
-        _enterStandalone(store, profile);
-        notifyListeners();
-        return;
-      }
-    }
-
-    final token = prefs?.getString(_tokenPrefsKey);
-    if (token == null || token.isEmpty) {
-      status = SessionStatus.loggedOut;
-      notifyListeners();
-      return;
-    }
-    apiClient.token = token;
-    try {
-      // Served from the network when there is one, from the cache written
-      // at the last successful launch when there isn't.
-      final json = await apiClient.get('/auth/me') as Map<String, dynamic>;
-      user = UserProfile.fromJson(json);
-      await _store?.setActiveUser(user!.id);
-      restoredOffline = apiClient.monitor.offline;
-      status = SessionStatus.loggedIn;
-    } on ApiException catch (e) {
-      if (e.isOffline) {
-        // No route to the server *and* nothing cached — this install has
-        // never completed a sign-in. Keep the token (it may still be
-        // valid) and let the login screen explain what is needed.
-        needsFirstOnlineLogin = true;
-        status = SessionStatus.loggedOut;
-      } else {
-        // The server answered and rejected the token: genuinely signed out.
-        apiClient.token = null;
-        await prefs?.remove(_tokenPrefsKey);
-        await _store?.clearCachedFarmData();
-        status = SessionStatus.loggedOut;
-      }
-    }
+    // No preference lookups, saved tokens or network calls on startup.
+    // Crucially, do not clear SQLite or delete any pending offline writes.
+    apiClient.token = null;
+    apiClient.standalone = false;
+    user = null;
+    status = SessionStatus.loggedOut;
     notifyListeners();
   }
 
@@ -133,14 +115,22 @@ class SessionController extends ChangeNotifier {
     await prefs?.setString(_baseUrlPrefsKey, apiClient.baseUrl);
   }
 
+  /// Read-only server check; no login credentials or farm records are sent.
+  Future<BackendCheck> checkBackend({String? serverUrl}) =>
+      apiClient.checkBackend(serverUrl: serverUrl);
+
   Future<bool> login({required String email, required String password, String? serverUrl}) async {
-    if (serverUrl != null && serverUrl.trim().isNotEmpty) {
-      await setBaseUrl(serverUrl.trim());
-    }
+    if (busy) return false;
     busy = true;
     error = null;
+    loginProgress = 'Checking your sign-in…';
     notifyListeners();
+    var phase = 'Preparing sign-in';
     try {
+      if (serverUrl != null && serverUrl.trim().isNotEmpty) {
+        phase = 'Selecting server';
+        await setBaseUrl(serverUrl.trim());
+      }
       // The standalone demo account. Checked on the device because there
       // is no server to check it against — it opens the bundled farm, it
       // does not protect anything.
@@ -150,7 +140,11 @@ class SessionController extends ChangeNotifier {
           error = 'This device has no local storage, so the demo farm cannot be loaded.';
           return false;
         }
-        final profile = await DemoMode.activate(store);
+        phase = 'Loading on-device demo farm';
+        loginProgress = 'Preparing the demo farm on this tablet…';
+        notifyListeners();
+        // A damaged or busy SQLite store must not leave the button spinning forever.
+        final profile = await DemoMode.activate(store).timeout(const Duration(seconds: 25));
         if (profile == null) {
           error = 'The demo farm could not be loaded from this build.';
           return false;
@@ -167,7 +161,11 @@ class SessionController extends ChangeNotifier {
       // paired. All optional, server-side and here: a sign-in must not
       // depend on them, so a device with no readable preferences simply
       // sends nothing and is not listed.
+      phase = 'Reading tablet installation ID';
       final install = await installId();
+      phase = 'Sending credentials to ${apiClient.baseUrl}/auth/login';
+      loginProgress = 'Contacting the farm server…';
+      notifyListeners();
       final json = await apiClient.authenticate('/auth/login', body: {
         'email': email.trim(),
         'password': password,
@@ -183,47 +181,88 @@ class SessionController extends ChangeNotifier {
       // a TypeError, which the ApiException handler below does not catch,
       // so the button went dead with a clean 200 in the server log and
       // nothing anywhere to read. That cost about a week.
+      phase = 'Checking response from the login endpoint';
       final token = json['access_token'];
       if (token is! String || token.isEmpty) {
-        error = 'Signed in, but the server sent no token. It may be running an older build.';
+        error = 'LOGIN RESPONSE ERROR at ${apiClient.baseUrl}/auth/login: HTTP 200 but response has no access_token. The Azure host may be an unrelated or outdated backend.';
         return false;
       }
-      final profile = json['user'];
-      if (profile is! Map<String, dynamic>) {
-        error = 'Signed in, but the server sent no user profile — it is running a build older '
-            'than this app. Check ${apiClient.baseUrl}/health for its version.';
-        return false;
+      // Older compatible deployments return a token but no embedded user.
+      // Fetch the profile with that verified token directly from the server;
+      // NEVER use a cached /auth/me from a previous farm account.
+      late final Map<String, dynamic> profile;
+      final embeddedProfile = json['user'];
+      if (embeddedProfile is Map<String, dynamic>) {
+        profile = embeddedProfile;
+      } else {
+        phase = 'Fetching authenticated profile from ${apiClient.baseUrl}/auth/me';
+        loginProgress = 'Credentials accepted. Verifying your farm account…';
+        notifyListeners();
+        apiClient.token = token;
+        final fetched = await apiClient.send('GET', '/auth/me');
+        if (fetched is! Map<String, dynamic>) {
+          error = 'LOGIN RESPONSE ERROR: /auth/me returned no compatible user profile after authentication. Check the backend deployment.';
+          return false;
+        }
+        profile = fetched;
       }
 
+      phase = 'Opening the farm after authentication';
+      loginProgress = 'Credentials accepted. Opening your farm…';
+      notifyListeners();
+      final signedInUser = UserProfile.fromJson(profile);
       apiClient.token = token;
-      user = UserProfile.fromJson(profile);
-      final prefs = await _prefs();
-      await prefs?.setString(_tokenPrefsKey, apiClient.token!);
-      await _store?.setActiveUser(user!.id);
-      // Seed the profile cache so the very next launch works offline even
-      // if the tablet never gets another chance to call `/auth/me`.
-      await _store?.writeCache(LocalStore.cacheKey('/auth/me', null), profile);
+      // A different farm user must NEVER be allowed to read the last
+      // user's cached records. This one short check is intentionally
+      // required before showing the dashboard.
+      final deviceStore = _store;
+      if (deviceStore != null) {
+        await deviceStore.setActiveUser(signedInUser.id).timeout(const Duration(seconds: 8));
+      }
+      user = signedInUser;
       needsFirstOnlineLogin = false;
       restoredOffline = false;
       status = SessionStatus.loggedIn;
+      // SharedPreferences and the /auth/me cache are optional. Formerly
+      // both were awaited *before* status became loggedIn: the server could
+      // accept the password but Android storage could keep the person
+      // staring at the credentials page indefinitely.
+      unawaited(_cacheSignedInProfile(profile));
       return true;
     } on ApiException catch (e) {
+      apiClient.token = null;
+      user = null;
+      final failingPath = phase.contains('/auth/me') ? '/auth/me' : '/auth/login';
+      // Preserve the HTTP code and exact failing endpoint: 401/403 means
+      // rejected credentials; 404/405 means wrong/old API; zero means DNS,
+      // TLS, timeout or device connectivity. Never include the password.
       error = e.isOffline
-          ? "Signing in needs the farm network. Connect once and this device will work offline afterwards."
-          : e.message;
+          ? 'NETWORK ERROR (HTTP 0) at ${apiClient.baseUrl}$failingPath: ${e.message} '
+              'Use "Check API" below to diagnose the server without sending a password.'
+          : 'LOGIN ERROR (HTTP ${e.statusCode}) at ${apiClient.baseUrl}$failingPath: ${e.message}';
       needsFirstOnlineLogin = e.isOffline;
       return false;
     } catch (e) {
-      // Anything that is not an ApiException — a malformed response, a
-      // type error, a bug in here. Previously these escaped this method
-      // entirely and the screen simply did nothing, which is the hardest
-      // failure there is to report or diagnose. A sign-in that does not
-      // work must always say something, even if all it can say is this.
-      error = 'Sign-in failed unexpectedly: $e';
+      apiClient.token = null;
+      user = null;
+      // Includes malformed JSON, unexpected user profiles and local
+      // storage problems after the server has accepted the credentials.
+      error = 'SIGN-IN ERROR at "$phase": ${e.runtimeType}: $e. '
+          'Server: ${apiClient.baseUrl}. No password is included in this report.';
       return false;
     } finally {
       busy = false;
+      loginProgress = null;
       notifyListeners();
+    }
+  }
+
+  Future<void> _cacheSignedInProfile(Map<String, dynamic> profile) async {
+    try {
+      // Never allow optional persistence to delay authenticated navigation.
+      await _store?.writeCache(LocalStore.cacheKey('/auth/me', null), profile);
+    } catch (e) {
+      debugPrint('Origami: signed-in profile cache failed (login remains valid): $e');
     }
   }
 

@@ -3,12 +3,9 @@ import '../../api/api_client.dart';
 import '../i18n/strings.dart';
 import '../theme/colors.dart';
 
-/// The navigator the duplicate question is asked over — whichever form sent
-/// the write is on it. The app points this at the navigator of the screen
-/// tree it is showing (app/app.dart): a different one signed out and for
-/// each signed-in account, because a navigator kept across sign-in keeps
-/// its old page and the farm never replaces the sign-in screen.
-GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+/// The navigator every farm screen lives under — the duplicate question is
+/// asked over whichever form sent the write.
+final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 /// Installs the one "Already recorded?" question for the whole app.
 ///
@@ -20,9 +17,9 @@ GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 /// server logs it as a confirmed repeat. Offline entries refused this way
 /// get the same choice in the sync panel.
 void installDuplicateConfirmation([GlobalKey<NavigatorState>? key]) {
+  final navigator = key ?? rootNavigatorKey;
   ApiClient.confirmPossibleDuplicate = (detail) async {
-    // Read when asked, not when installed: the key changes at sign-in.
-    final context = (key ?? rootNavigatorKey).currentContext;
+    final context = navigator.currentContext;
     if (context == null || !context.mounted) return false;
     final answer = await showDialog<bool>(
       context: context,

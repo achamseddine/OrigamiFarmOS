@@ -94,3 +94,8 @@ See `architecture/IMPLEMENTATION-ROADMAP.md`.
 - Preserve mix → formula/version → actual ingredient quantities/lots/suppliers → production date/operator → output lot → dated feeding usage/animal or group/quantity → remaining ledger stock → cost/performance lineage.
 - Never store an editable “remaining mix” balance; derive it from inventory transactions. Never renumber or overwrite a historical mix.
 
+
+## Before every commit (tablet + web)
+- The tablet APK and the web app are one Flutter codebase (`architecture/ADR-004-WEB-CLIENT.md`). Every app change ships to both: CI builds the APK (`build-apk.yml`) and the web app (`build-web.yml`) from the same commit. Never make a change that works on one and not the other (no `dart:io`-only code paths without a web alternative, no tablet-only screens).
+- Run `scripts/verify-all.sh` and commit only when it passes: backend tests (and PostgreSQL migrations when `FARMOS_TEST_POSTGRES_URL` is set), the app analyzer and tests, a release web build, and a trial merge against the main tablet branch.
+- Work only on your own branch. Before pushing, merge the latest main tablet branch (`claude/origami-farmos-tablet-mvp-u88i3e`) into it; where both sides fixed the same thing, keep the main branch's version and re-apply only what is new. Never push to someone else's branch.

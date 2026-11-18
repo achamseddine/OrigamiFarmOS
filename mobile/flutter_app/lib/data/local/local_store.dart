@@ -130,17 +130,20 @@ class LocalStore {
     );
   }
 
-  /// Many cache entries in one transaction — loading the demo farm. One
-  /// write each was hundreds of separate commits: slow on a tablet and, in
-  /// a browser (where every commit is persisted to IndexedDB), so slow the
-  /// demo never finished loading.
-  Future<void> writeCacheAll(Map<String, Object?> entries) async {
+  /// Import a bundled farm snapshot in one SQLite batch rather than
+  /// hundreds of serial platform-channel writes during demo sign-in.
+  /// A partial import is not marked seeded by DemoMode.
+  Future<void> writeCacheBatch(Map<String, dynamic> records) async {
     final db = _db;
-    if (db == null || entries.isEmpty) return;
-    final at = DateTime.now().millisecondsSinceEpoch;
+    if (db == null || records.isEmpty) return;
     final batch = db.batch();
-    for (final e in entries.entries) {
-      batch.insert('cache', {'key': e.key, 'body': jsonEncode(e.value), 'fetched_at': at}, conflictAlgorithm: ConflictAlgorithm.replace);
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    for (final entry in records.entries) {
+      batch.insert(
+        'cache',
+        {'key': entry.key, 'body': jsonEncode(entry.value), 'fetched_at': timestamp},
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     }
     await batch.commit(noResult: true);
   }

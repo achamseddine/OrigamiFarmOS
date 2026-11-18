@@ -33,34 +33,32 @@ import '../sync/sync_controller.dart';
 import 'app_navigator.dart';
 import 'nav_config.dart';
 
-final _signedOutNavigatorKey = GlobalKey<NavigatorState>();
-final _navigatorKeys = <String, GlobalKey<NavigatorState>>{};
-
 class FarmOSApp extends StatelessWidget {
-  const FarmOSApp({super.key, this.store});
+  const FarmOSApp({super.key, this.store, this.sessionController});
 
   /// The tablet's offline store. Null in widget tests, where there is no
   /// SQLite platform channel — the app then runs online-only.
   final LocalStore? store;
+
+  /// Inject a controlled session for full login-to-home widget tests.
+  final SessionController? sessionController;
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LocaleController()),
-        ChangeNotifierProvider(create: (_) => SessionController(store: store)..restore()),
+        // Explicit sign-in on every launch. Do not call restore(): an old
+        // token/cache/server can never block the credential screen.
+        if (sessionController != null)
+          ChangeNotifierProvider<SessionController>.value(value: sessionController!)
+        else
+          ChangeNotifierProvider(create: (_) => SessionController(store: store)),
       ],
       child: Consumer2<LocaleController, SessionController>(
         builder: (context, locale, session, _) {
-          // A navigator of its own for the sign-in screen and for each
-          // signed-in account. One shared key would carry the navigator —
-          // and the sign-in page on it — into the farm, which then never
-          // appears after a successful sign-in.
-          final navigatorKey = rootNavigatorKey = session.status == SessionStatus.loggedIn
-              ? _navigatorKeys.putIfAbsent(session.user!.id, () => GlobalKey<NavigatorState>())
-              : _signedOutNavigatorKey;
           final app = MaterialApp(
-            navigatorKey: navigatorKey,
+            navigatorKey: rootNavigatorKey,
             title: 'Origami FarmOS',
             debugShowCheckedModeBanner: false,
             theme: FarmTheme.light,
@@ -71,11 +69,11 @@ class FarmOSApp extends StatelessWidget {
               GlobalWidgetsLocalizations.delegate,
               GlobalCupertinoLocalizations.delegate,
             ],
-            home: switch (session.status) {
-              SessionStatus.checking => const Scaffold(body: Center(child: CircularProgressIndicator())),
-              SessionStatus.loggedOut => const LoginScreen(),
-              SessionStatus.loggedIn => _DataLoader(user: session.user!),
-            },
+            // The Navigator keeps its original "/" route alive even when
+            // MaterialApp.home changes after login. A permanent session gate
+            // lives *inside* that route and rebuilds its contents on auth
+            // changes, so a successful login cannot leave LoginScreen visible.
+            home: const _SessionGate(),
           );
           if (session.status != SessionStatus.loggedIn) return app;
           // The farm providers wrap the MaterialApp, not its `home`.
@@ -88,6 +86,23 @@ class FarmOSApp extends StatelessWidget {
         },
       ),
     );
+  }
+}
+
+/// A stable home route: MaterialApp may retain its original Navigator
+/// route after the session changes, so switching the home widget directly
+/// between LoginScreen and _DataLoader does not actually navigate.
+/// This gate watches the session *inside* the retained route.
+class _SessionGate extends StatelessWidget {
+  const _SessionGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final session = context.watch<SessionController>();
+    if (session.status != SessionStatus.loggedIn || session.user == null) {
+      return const LoginScreen();
+    }
+    return _DataLoader(user: session.user!);
   }
 }
 
@@ -146,20 +161,33 @@ class _DataLoader extends StatefulWidget {
 }
 
 class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
-  // Started after the first frame, not while it is being built: loading
-  // notifies the providers above, and a notification in the middle of a
-  // build is refused (debug builds stopped on it; release ones ignored it).
-  final _booted = Completer<void>();
-  late final Future<void> _boot = _booted.future;
+  // A successful password must never lead to an endless blank/loading
+  // page. Fail visibly if the backend data does not load in finite time.
+  late Future<void> _boot;
+
+  // AccessProvider.load notifies its listeners synchronously before its
+  // first await. Starting _startup from a lazy field read inside build()
+  // caused "markNeedsBuild called during build" on successful login.
+  // Queue it after the synchronous frame instead.
+  Future<void> _startAfterBuild() =>
+      Future<void>.delayed(Duration.zero, _startup).timeout(
+        const Duration(seconds: 40),
+        onTimeout: () => throw TimeoutException(
+          'Loading farm permissions exceeded 40 seconds. '
+          'The backend may not match this APK or the network may be unreachable.'),
+      );
+
+  void _retryStartup() {
+    setState(() {
+      _boot = _startAfterBuild();
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _startup().then(_booted.complete, onError: _booted.completeError);
-    });
+    _boot = _startAfterBuild();
   }
 
   @override
@@ -188,22 +216,45 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
     // Once the queue drains, throw away the local predictions and take the
     // server's version: real IDs, server-computed totals, fresh signals.
     sync.onSynced = (modules) => _refreshAll(only: modules);
-    await _refreshAll();
+    // Only permissions are required to construct the navigation. Previously
+    // _refreshAll awaited every module (including slow third-party/server
+    // reads) before AppShell could render, making a valid login look stuck.
+    // Demo permissions are served entirely from the on-device snapshot.
+    try {
+      await context.read<AccessProvider>().load();
+    } catch (e) {
+      throw StateError('Farm permissions could not be loaded from '
+          '${context.read<SessionController>().baseUrl}/me/access or /modules/catalog: $e');
+    }
     if (!mounted) return;
-    await sync.start();
+    // Do not make the home page wait for notifications, feed, livestock,
+    // health, or synchronization. Each provider notifies its own consumers
+    // when its data arrives, and a failure in one module stays isolated.
+    unawaited(Future<void>(() async {
+      if (!mounted) return;
+      await _refreshAll(skipAccess: true);
+    }).catchError((Object error, StackTrace trace) {
+      debugPrint('Origami: non-blocking farm data load failed: $error');
+    }));
+    unawaited(sync.start().catchError((Object error, StackTrace trace) {
+      debugPrint('Origami: background sync startup error: $error');
+    }));
   }
 
   /// Everything at sign-in; after a sync, only the modules whose writes
   /// landed ([only]: the outbox's module codes) — reloading the whole farm
   /// after every synced milk record was a large part of the app feeling slow.
-  Future<void> _refreshAll({Set<String>? only}) async {
+  Future<void> _refreshAll({Set<String>? only, bool skipAccess = false}) async {
     final access = context.read<AccessProvider>();
-    if (only == null) {
+    if (only == null && !skipAccess) {
       try {
         await access.load();
-      } catch (_) {
-        // Offline with nothing cached yet: the shell renders its empty
-        // state rather than a crash, and the sync pill explains why.
+      } catch (e) {
+        // Access permissions determine the whole navigation menu. Silently
+        // swallowing an HTTP 404/401 here displays an apparently empty app
+        // after credentials were accepted, hiding the real deployment bug.
+        throw StateError('Farm permissions could not be loaded from '
+            '${context.read<SessionController>().baseUrl}/me/access or /modules/catalog: $e');
       }
     }
     if (!mounted) return;
@@ -279,7 +330,65 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       future: _boot,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(height: 16),
+                    const Text('Signed in. Loading farm permissions…'),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: context.read<SessionController>().returnToLoginPreservingData,
+                      child: const Text('Back to login (keep offline records)'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+        if (snapshot.hasError) {
+          final server = context.read<SessionController>().baseUrl;
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline, size: 40),
+                      const SizedBox(height: 12),
+                      const Text('Sign-in succeeded, but the farm could not open.',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 16),
+                      SelectableText('Server: $server'),
+                      const SizedBox(height: 8),
+                      SelectableText('FARM STARTUP ERROR: ${snapshot.error}'),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 12,
+                        children: [
+                          OutlinedButton(
+                            onPressed: _retryStartup,
+                            child: const Text('Retry loading'),
+                          ),
+                          TextButton(
+                            onPressed: context.read<SessionController>().returnToLoginPreservingData,
+                            child: const Text('Back to login (keep offline records)'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
         }
         final access = context.watch<AccessProvider>();
         final plan = buildNavForAccess(access);

@@ -83,7 +83,7 @@ class DemoMode {
     }
 
     if (reset) await store.clearCache();
-    await store.writeCacheAll({
+    await store.writeCacheBatch({
       for (final entry in snapshot.entries)
         if (entry.key != _accountKey) entry.key: entry.value,
     });

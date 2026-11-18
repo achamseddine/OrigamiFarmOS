@@ -52,15 +52,16 @@ jobs:
       # as it serves index.html, and the Pages copy below is rewritten to
       # /<repository>/. --no-web-resources-cdn keeps the graphics engine on
       # the same server as the app, so it also loads where Google's CDN is
-      # blocked. FARM_API_URL (a repository variable, optional) is the
-      # farm server the Pages copy signs in to; without it the app uses
-      # the server it was loaded from, and "Use another server" on the
-      # sign-in screen sets any other.
+      # blocked. The server it signs in to is the tablet's (kDefaultApiBaseUrl,
+      # FARMOS_API_BASE_URL) unless it was opened from a farm server's /app/;
+      # FARM_API_URL, an optional repository variable, overrides it for both.
+      # APP_VERSION is the commit, as on the APK: the sign-in screen of the
+      # tablet and of the web app built from the same commit show the same one.
       - run: |
           flutter build web --release --base-href / --no-web-resources-cdn \
-            --dart-define=APP_BUILD="0.7.${{ github.run_number }}" \
+            --dart-define=APP_BUILD="web 0.7.${{ github.run_number }}" \
             --dart-define=APP_VERSION="$(git rev-parse --short HEAD)" \
-            --dart-define=API_BASE_URL="${{ vars.FARM_API_URL }}"
+            ${{ vars.FARM_API_URL && format('--dart-define=FARMOS_API_BASE_URL={0}', vars.FARM_API_URL) || '' }}
 
       - name: Package for the farm server
         run: |
@@ -89,7 +90,9 @@ jobs:
 
             The tablet app in the browser — every screen, the same rules, Arabic and English — against the same API and database.
 
-            **Open it from a link:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ (once GitHub Pages is set to "GitHub Actions" in the repository settings). Sign in as `ali` / `ali123` for the demo farm, kept in this browser; a farm account signs in to the server set under *Use another server*.
+            **Same commit as the tablet APK** built by *Build tablet APK* from ${{ github.sha }}: both sign-in screens show this commit.
+
+            **Open it from a link:** https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ — published from the main tablet branch once GitHub Pages is set to "GitHub Actions" in the repository settings. Sign in as `ali` / `ali123` for the demo farm, kept in this browser; a farm account signs in to the tablet's default server or the one set on the sign-in screen.
 
             **On the farm server (same address as the API):** unzip `origami-farmos-web.zip` into `backend/web_app/` (or set `FARMOS_WEB_DIR` to the folder) and open `https://<farm server>/app/`. No server address to type; nothing else to configure.
 
@@ -107,10 +110,12 @@ jobs:
 
   pages:
     needs: build
+    # One site, one source: only the main tablet branch publishes it, so a
+    # feature branch never replaces what the main branch put there. Pages
+    # must be enabled once (Settings → Pages → Source: GitHub Actions);
+    # until then this step fails and the build above still counts.
+    if: github.ref == 'refs/heads/claude/origami-farmos-tablet-mvp-u88i3e'
     runs-on: ubuntu-latest
-    # Pages must be enabled once (Settings → Pages → Source: GitHub Actions,
-    # and this branch allowed under Settings → Environments → github-pages).
-    # Until then this step fails and the build above still counts.
     continue-on-error: true
     permissions:
       pages: write

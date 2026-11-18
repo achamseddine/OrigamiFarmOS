@@ -67,8 +67,17 @@ jobs:
                   "PROD_DATABASE_URL is not set. Add it under Settings -> Secrets and "
                   "variables -> Actions -> New repository secret, then re-run."
               )
-          if url.startswith("sqlite"):
-              sys.exit("PROD_DATABASE_URL points at SQLite. This workflow is for the real database.")
+          if url.startswith(("http://", "https://")):
+              sys.exit(
+                  "PROD_DATABASE_URL is an HTTP website URL, not a PostgreSQL database URL. "
+                  "Do not use your Azure App Service address here. Configure the PostgreSQL "
+                  "connection string as a GitHub Actions secret."
+              )
+          if not url.startswith(("postgresql://", "postgres://", "postgresql+psycopg2://")):
+              sys.exit(
+                  "PROD_DATABASE_URL must be a PostgreSQL connection string "
+                  "(postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require)."
+              )
           import sqlalchemy
           from app.core.config import normalize_database_url  # pins the psycopg2 driver the requirements install
           try:

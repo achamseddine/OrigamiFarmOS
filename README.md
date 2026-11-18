@@ -64,7 +64,8 @@ README's "Verification status" section).
 The same app runs in a browser — every screen and rule of the tablet, Arabic and English, against the same API and database (`architecture/ADR-004-WEB-CLIENT.md`). It is not a second application: `mobile/flutter_app` is compiled for the web by `.github/workflows/build-web.yml` on every push.
 
 - **On the farm server:** unzip `origami-farmos-web.zip` from the latest `web-v…` release into `backend/web_app/` (or set `FARMOS_WEB_DIR`) and open `https://<farm server>/app/`. It is served beside the API, so there is no server address to type.
-- **From a link:** GitHub Pages, once enabled for the repository (Settings → Pages → Source: *GitHub Actions*; allow this branch under Settings → Environments → *github-pages*). Sign in as `ali` / `ali123` for the demo farm, which is kept in that browser.
+- **From a link:** GitHub Pages, published from the main tablet branch once enabled for the repository (Settings → Pages → Source: *GitHub Actions*). Sign in as `ali` / `ali123` for the demo farm, which is kept in that browser.
+- **Tablet and web together:** every app change is built as both from the same commit; `scripts/verify-all.sh` is the check before every commit (see `CLAUDE.md`).
 - **Locally:** `cd mobile/flutter_app && flutter build web --base-href / --no-web-resources-cdn`, then start the API with `FARMOS_WEB_DIR=$PWD/build/web` and open `http://localhost:8000/app/`.
 
 ## Running the tablet app with no server
