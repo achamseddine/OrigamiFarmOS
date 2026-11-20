@@ -76,7 +76,12 @@ class SectionHeading extends StatelessWidget {
         children: [
           Expanded(child: text),
           const SizedBox(width: FarmSpacing.md),
-          Wrap(spacing: 8, runSpacing: 8, children: actions),
+          // Several actions take a second line before they push the
+          // heading off the edge.
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: c.maxWidth * 0.6),
+            child: Wrap(alignment: WrapAlignment.end, spacing: 8, runSpacing: 8, children: actions),
+          ),
         ],
       );
     });
@@ -308,6 +313,7 @@ class UnderlineTabs extends StatelessWidget {
           children: [
             for (var i = 0; i < labels.length; i++)
               Semantics(
+                key: ValueKey('underline-tab-$i'),
                 selected: i == selected,
                 button: true,
                 child: InkWell(

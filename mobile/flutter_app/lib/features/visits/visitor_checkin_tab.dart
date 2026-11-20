@@ -22,45 +22,43 @@ class VisitorCheckinTab extends StatelessWidget {
     final awaitingFeedback = provider.bookings.where((b) => b.status == 'completed' && provider.feedbackForBooking(b.id) == null).toList();
     final checkedInToday = provider.bookings.where((b) => b.status == 'checked_in').toList();
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'Ready to Check In',
-            subtitle: 'Confirmed bookings, earliest session first',
-            child: readyToCheckIn.isEmpty
-                ? Text('No confirmed bookings waiting to check in.', style: FarmTypography.textTheme.bodySmall)
-                : Column(children: [for (final b in readyToCheckIn) _CheckinRow(bookingId: b.id)]),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Checked In',
-            child: checkedInToday.isEmpty
-                ? Text('No one checked in yet.', style: FarmTypography.textTheme.bodySmall)
-                : Column(
-                    children: [
-                      for (final b in checkedInToday)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(children: [
-                            Expanded(child: Text('${provider.visitorById(b.visitorId)?.fullName ?? b.visitorId} · ${b.guestCount} guests', style: FarmTypography.textTheme.bodyMedium)),
-                            StatusPill(label: 'checked in', level: FarmStatusLevel.good, dense: true),
-                          ]),
-                        ),
-                    ],
-                  ),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Feedback & Follow-up',
-            subtitle: 'Capture a rating right after a completed visit',
-            child: awaitingFeedback.isEmpty
-                ? Text('No completed visits awaiting feedback.', style: FarmTypography.textTheme.bodySmall)
-                : Column(children: [for (final b in awaitingFeedback) _FeedbackForm(bookingId: b.id)]),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Ready to Check In',
+          subtitle: 'Confirmed bookings, earliest session first',
+          child: readyToCheckIn.isEmpty
+              ? Text('No confirmed bookings waiting to check in.', style: FarmTypography.textTheme.bodySmall)
+              : Column(children: [for (final b in readyToCheckIn) _CheckinRow(bookingId: b.id)]),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Checked In',
+          child: checkedInToday.isEmpty
+              ? Text('No one checked in yet.', style: FarmTypography.textTheme.bodySmall)
+              : Column(
+                  children: [
+                    for (final b in checkedInToday)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        child: Row(children: [
+                          Expanded(child: Text('${provider.visitorById(b.visitorId)?.fullName ?? b.visitorId} · ${b.guestCount} guests', style: FarmTypography.textTheme.bodyMedium)),
+                          StatusPill(label: 'checked in', level: FarmStatusLevel.good, dense: true),
+                        ]),
+                      ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Feedback & Follow-up',
+          subtitle: 'Capture a rating right after a completed visit',
+          child: awaitingFeedback.isEmpty
+              ? Text('No completed visits awaiting feedback.', style: FarmTypography.textTheme.bodySmall)
+              : Column(children: [for (final b in awaitingFeedback) _FeedbackForm(bookingId: b.id)]),
+        ),
+      ],
     );
   }
 }

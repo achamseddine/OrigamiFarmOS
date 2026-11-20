@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/form_dialog.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -161,59 +162,55 @@ class _AnalysisDialogState extends State<_AnalysisDialog> {
   Widget build(BuildContext context) {
     final feeding = context.watch<FeedingProvider>();
     final lang = Localizations.localeOf(context).languageCode;
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('addLabAnalysis')),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              value: _productId,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('feedItem')),
-              items: [for (final p in feeding.products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-              onChanged: (v) => setState(() => _productId = v),
+      width: 480,
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: _productId,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('feedItem')),
+            items: [for (final p in feeding.products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() => _productId = v),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _source,
+                decoration: InputDecoration(labelText: context.t('sourceType')),
+                items: [DropdownMenuItem(value: 'lab', child: Text(context.t('profileSource_lab'))), DropdownMenuItem(value: 'declared', child: Text(context.t('profileSource_declared')))],
+                onChanged: (v) => setState(() => _source = v ?? _source),
+              ),
             ),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _source,
-                  decoration: InputDecoration(labelText: context.t('sourceType')),
-                  items: [DropdownMenuItem(value: 'lab', child: Text(context.t('profileSource_lab'))), DropdownMenuItem(value: 'declared', child: Text(context.t('profileSource_declared')))],
-                  onChanged: (v) => setState(() => _source = v ?? _source),
-                ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _basis,
+                decoration: InputDecoration(labelText: context.t('basis')),
+                items: [DropdownMenuItem(value: 'as_fed', child: Text(context.t('basis_as_fed'))), DropdownMenuItem(value: 'dry_matter', child: Text(context.t('basis_dry_matter')))],
+                onChanged: (v) => setState(() => _basis = v ?? _basis),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _basis,
-                  decoration: InputDecoration(labelText: context.t('basis')),
-                  items: [DropdownMenuItem(value: 'as_fed', child: Text(context.t('basis_as_fed'))), DropdownMenuItem(value: 'dry_matter', child: Text(context.t('basis_dry_matter')))],
-                  onChanged: (v) => setState(() => _basis = v ?? _basis),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('labReference'))),
-            const SizedBox(height: 10),
-            Wrap(spacing: 10, runSpacing: 10, children: [
-              for (final n in feeding.nutrients)
-                SizedBox(
-                  width: 140,
-                  child: TextField(
-                    controller: _field(n.code),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: InputDecoration(labelText: n.label(lang), suffixText: n.unit),
-                  ),
-                ),
-            ]),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+            ),
           ]),
-        ),
-      ),
+          const SizedBox(height: 10),
+          TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('labReference'))),
+          const SizedBox(height: 10),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            for (final n in feeding.nutrients)
+              SizedBox(
+                width: 140,
+                child: TextField(
+                  controller: _field(n.code),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: InputDecoration(labelText: n.label(lang), suffixText: n.unit),
+                ),
+              ),
+          ]),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),

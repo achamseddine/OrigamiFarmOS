@@ -115,6 +115,15 @@ void main() {
           await tester.tap(tab, warnIfMissed: false);
           await settle(tester);
         }
+        // The module pages' own tab bar (UnderlineTabs: Feed, Health,
+        // Mouneh, Visits, the digital twin), every tab at full height.
+        for (var i = 0;; i++) {
+          final tab = find.byKey(ValueKey('underline-tab-$i'));
+          if (tab.evaluate().isEmpty) break;
+          await tester.ensureVisible(tab.first);
+          await tester.tap(tab.first, warnIfMissed: false);
+          await settle(tester);
+        }
       }
     } finally {
       FlutterError.onError = previous;

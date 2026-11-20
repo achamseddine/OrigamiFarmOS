@@ -22,17 +22,15 @@ class OpeningCalendarTab extends StatelessWidget {
     final provider = context.watch<VisitsProvider>();
     final calendar = provider.calendar;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'Weekly Opening Calendar',
-            subtitle: 'Toggle any day open or closed, and set its default visiting hours & capacity.',
-            child: Column(children: [for (final day in calendar) _CalendarDayRow(day: day)]),
-          ),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Weekly Opening Calendar',
+          subtitle: 'Toggle any day open or closed, and set its default visiting hours & capacity.',
+          child: Column(children: [for (final day in calendar) _CalendarDayRow(day: day)]),
+        ),
+      ],
     );
   }
 }

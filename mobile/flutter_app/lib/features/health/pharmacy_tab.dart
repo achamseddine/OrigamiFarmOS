@@ -89,7 +89,8 @@ class PharmacyTab extends StatelessWidget {
                       Text(m.earliestExpiry == null ? '—' : feedDate(m.earliestExpiry!),
                           style: FarmTypography.textTheme.bodySmall?.copyWith(color: m.expiringQuantity > 0 ? FarmColors.warningInk : null)),
                       Row(children: [
-                        StatusPill(label: context.t('phStatus_${m.status}'), level: _statusLevel(m.status), dense: true),
+                        // A narrow column shortens the word, never pushes past the cell.
+                        Flexible(child: StatusPill(label: context.t('phStatus_${m.status}'), level: _statusLevel(m.status), dense: true)),
                         if (m.storageException) ...[const SizedBox(width: 4), const Icon(Icons.ac_unit, size: 14, color: FarmColors.danger)],
                       ]),
                       PopupMenuButton<String>(
@@ -223,7 +224,8 @@ class _AlertCard extends StatelessWidget {
         Text(a.explanation, style: FarmTypography.textTheme.bodySmall),
         if (canAcknowledge || canRequisition || canResolve) ...[
           const SizedBox(height: 6),
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          // On a narrow screen the buttons take a second line rather than run off the card.
+          Wrap(alignment: WrapAlignment.end, spacing: 4, children: [
             if (canAcknowledge) TextButton(onPressed: () => _ack(context), child: Text(context.t('perfAcknowledge'))),
             if (canRequisition) TextButton(onPressed: () => _requisition(context), child: Text(context.t('phRequisition'))),
             if (canResolve) TextButton(onPressed: () => _resolve(context), child: Text(context.t('perfResolve'))),

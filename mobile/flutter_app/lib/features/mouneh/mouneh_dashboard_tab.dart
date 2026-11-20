@@ -27,49 +27,47 @@ class MounehDashboardTab extends StatelessWidget {
     final attention = profitability.where((p) => p.recommendation == 'slow_mover' || p.recommendation == 'review_pricing').toList();
     final active = provider.batches.where((b) => b.isInProgress).toList();
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LayoutBuilder(builder: (context, c) {
-            final best = SectionCard(
-              title: context.t('mnBestSellers'),
-              subtitle: context.t('mnBestSellersSub'),
-              trailing: context.t('mnTabSales'),
-              onTrailingTap: () => onNavigate?.call(6),
-              child: bestSellers.isEmpty
-                  ? EmptyState(message: context.t('mnNoSales'), icon: FarmIcon.money, compact: true)
-                  : Column(children: [for (final p in bestSellers.take(5)) MounehProductRow(p: p)]),
-            );
-            final slow = SectionCard(
-              title: context.t('mnAttention'),
-              subtitle: context.t('mnAttentionSub'),
-              child: attention.isEmpty
-                  ? EmptyState(message: context.t('mnAttentionNone'), icon: FarmIcon.check, compact: true)
-                  : Column(children: [for (final p in attention) MounehProductRow(p: p)]),
-            );
-            if (c.maxWidth < kTabletBreakpoint) return Column(children: [best, const SizedBox(height: FarmSpacing.md), slow]);
-            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Expanded(child: best),
-              const SizedBox(width: FarmSpacing.md),
-              Expanded(child: slow),
-            ]);
-          }),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnActiveBatches'),
-            trailing: context.t('mnTabBatches'),
-            onTrailingTap: () => onNavigate?.call(4),
-            child: active.isEmpty
-                ? EmptyState(message: context.t('mnNoActiveBatch'), icon: FarmIcon.barn, compact: true)
-                : Column(children: [
-                    for (final batch in active) _BatchRow(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
-                  ]),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          NoticeBanner(text: context.t('mnProfitCaveat')),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LayoutBuilder(builder: (context, c) {
+          final best = SectionCard(
+            title: context.t('mnBestSellers'),
+            subtitle: context.t('mnBestSellersSub'),
+            trailing: context.t('mnTabSales'),
+            onTrailingTap: () => onNavigate?.call(6),
+            child: bestSellers.isEmpty
+                ? EmptyState(message: context.t('mnNoSales'), icon: FarmIcon.money, compact: true)
+                : Column(children: [for (final p in bestSellers.take(5)) MounehProductRow(p: p)]),
+          );
+          final slow = SectionCard(
+            title: context.t('mnAttention'),
+            subtitle: context.t('mnAttentionSub'),
+            child: attention.isEmpty
+                ? EmptyState(message: context.t('mnAttentionNone'), icon: FarmIcon.check, compact: true)
+                : Column(children: [for (final p in attention) MounehProductRow(p: p)]),
+          );
+          if (c.maxWidth < kTabletBreakpoint) return Column(children: [best, const SizedBox(height: FarmSpacing.md), slow]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(child: best),
+            const SizedBox(width: FarmSpacing.md),
+            Expanded(child: slow),
+          ]);
+        }),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnActiveBatches'),
+          trailing: context.t('mnTabBatches'),
+          onTrailingTap: () => onNavigate?.call(4),
+          child: active.isEmpty
+              ? EmptyState(message: context.t('mnNoActiveBatch'), icon: FarmIcon.barn, compact: true)
+              : Column(children: [
+                  for (final batch in active) _BatchRow(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
+                ]),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        NoticeBanner(text: context.t('mnProfitCaveat')),
+      ],
     );
   }
 }

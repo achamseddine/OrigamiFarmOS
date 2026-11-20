@@ -57,95 +57,93 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
     final sales = [...provider.sales]..sort((a, b) => b.soldAt.compareTo(a.soldAt));
     final profitability = provider.allProfitability;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabSales'), title: context.t('mnSalesTitle'), subtitle: context.t('mnSalesSub')),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnRecordSale'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: _productId,
-                      decoration: InputDecoration(labelText: context.t('mnColProduct')),
-                      items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
-                      onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
-                    ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabSales'), title: context.t('mnSalesTitle'), subtitle: context.t('mnSalesSub')),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnRecordSale'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _productId,
+                    decoration: InputDecoration(labelText: context.t('mnColProduct')),
+                    items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
+                    onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _quantity, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnQuantity')))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _unitPrice, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnUnitPrice')} (\$)'))),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: _discount, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnDiscount')} (\$)'))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      initialValue: _channel,
-                      decoration: InputDecoration(labelText: context.t('mnChannel')),
-                      items: [for (final c in kMounehSaleChannels) DropdownMenuItem(value: c, child: Text(mounehChannelLabel(context, c)))],
-                      onChanged: (v) => setState(() => _channel = v ?? _channel),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _quantity, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnQuantity')))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _unitPrice, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnUnitPrice')} (\$)'))),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: _discount, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: '${context.t('mnDiscount')} (\$)'))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    initialValue: _channel,
+                    decoration: InputDecoration(labelText: context.t('mnChannel')),
+                    items: [for (final c in kMounehSaleChannels) DropdownMenuItem(value: c, child: Text(mounehChannelLabel(context, c)))],
+                    onChanged: (v) => setState(() => _channel = v ?? _channel),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: (_saving || _productId == null) ? null : _submit,
-                      child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnRecordSale')),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: (_saving || _productId == null) ? null : _submit,
+                    child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnRecordSale')),
                   ),
-                ]),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
+                ),
+              ]),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
               ],
-            ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnProfitability'),
-            child: profitability.isEmpty
-                ? EmptyState(message: context.t('mnNoProducts'), icon: FarmIcon.package, compact: true)
-                : Column(children: [for (final p in profitability) _ProfitabilityRow(p: p)]),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnRecentSales'),
-            child: sales.isEmpty
-                ? EmptyState(message: context.t('mnNoSales'), icon: FarmIcon.money, compact: true)
-                : FarmDataTable(
-                    columns: [
-                      context.t('mnColProduct'), context.t('mnQuantity'), context.t('mnUnitPrice'), context.t('mnChannel'), context.t('mnRevenue'), context.t('mnProfit'),
-                    ],
-                    columnFlex: const [2, 1, 1, 1, 1, 1],
-                    rows: [
-                      for (final s in sales.take(20))
-                        [
-                          Text(provider.productById(s.productId)?.name ?? s.productId, style: FarmTypography.textTheme.titleSmall),
-                          Text(s.quantity.toStringAsFixed(0)),
-                          Text('\$${s.unitPrice.toStringAsFixed(2)}'),
-                          Text(mounehChannelLabel(context, s.channel)),
-                          Text('\$${s.revenue.toStringAsFixed(2)}'),
-                          Text('\$${s.margin.toStringAsFixed(2)}', style: TextStyle(color: s.margin >= 0 ? FarmColors.success : FarmColors.danger, fontWeight: FontWeight.w700)),
-                        ],
-                    ],
-                  ),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          NoticeBanner(text: context.t('mnProfitCaveat')),
-        ],
-      ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnProfitability'),
+          child: profitability.isEmpty
+              ? EmptyState(message: context.t('mnNoProducts'), icon: FarmIcon.package, compact: true)
+              : Column(children: [for (final p in profitability) _ProfitabilityRow(p: p)]),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnRecentSales'),
+          child: sales.isEmpty
+              ? EmptyState(message: context.t('mnNoSales'), icon: FarmIcon.money, compact: true)
+              : FarmDataTable(
+                  columns: [
+                    context.t('mnColProduct'), context.t('mnQuantity'), context.t('mnUnitPrice'), context.t('mnChannel'), context.t('mnRevenue'), context.t('mnProfit'),
+                  ],
+                  columnFlex: const [2, 1, 1, 1, 1, 1],
+                  rows: [
+                    for (final s in sales.take(20))
+                      [
+                        Text(provider.productById(s.productId)?.name ?? s.productId, style: FarmTypography.textTheme.titleSmall),
+                        Text(s.quantity.toStringAsFixed(0)),
+                        Text('\$${s.unitPrice.toStringAsFixed(2)}'),
+                        Text(mounehChannelLabel(context, s.channel)),
+                        Text('\$${s.revenue.toStringAsFixed(2)}'),
+                        Text('\$${s.margin.toStringAsFixed(2)}', style: TextStyle(color: s.margin >= 0 ? FarmColors.success : FarmColors.danger, fontWeight: FontWeight.w700)),
+                      ],
+                  ],
+                ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        NoticeBanner(text: context.t('mnProfitCaveat')),
+      ],
     );
   }
 

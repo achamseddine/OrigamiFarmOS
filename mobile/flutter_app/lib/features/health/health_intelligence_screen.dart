@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
+import '../../core/widgets/module_workspace.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
@@ -90,39 +91,34 @@ class _HealthIntelligenceScreenState extends State<HealthIntelligenceScreen> {
     };
     final tabs = HealthTab.values;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          HeroBand(
-            eyebrow: context.t('hlEyebrow'),
-            title: context.t('healthIntelligenceTitle'),
-            subtitle: context.t('healthIntelligenceSubtitle'),
-            icon: FarmIcon.stethoscope,
-            actions: [
-              if (canCreate) HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('hcOpenCase'), onPressed: () => showOpenCaseForm(context)),
-              HeroAction(icon: FarmIcon.eye, label: context.t('twRecordObservation'), onPressed: () => _observe(context)),
-              if (canCreate) HeroAction(icon: FarmIcon.bell, label: context.t('emAssess'), onPressed: () => showAssessDialog(context)),
-            ],
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          const HealthKpiRow(),
-          const SizedBox(height: FarmSpacing.sm),
-          UnderlineTabs(
-            labels: [for (final t in tabs) labels[t]!],
-            selected: tabs.indexOf(_tab),
-            onSelect: (i) => setState(() => _tab = tabs[i]),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          switch (_tab) {
-            HealthTab.overview => HealthOverviewTab(onAllCases: () => setState(() => _tab = HealthTab.cases)),
-            HealthTab.recommendations => _recommendations(context, alerts),
-            HealthTab.cases => _cases(context, health),
-            HealthTab.pharmacy => const PharmacyTab(),
-            HealthTab.emergency => const EmergencyTab(),
-          },
-        ],
-      ),
+    // One page like the other modules (core/widgets/module_workspace.dart):
+    // the band scrolls away and the tabs stay at the top.
+    return ModuleWorkspace(
+      header: [
+        HeroBand(
+          eyebrow: context.t('hlEyebrow'),
+          title: context.t('healthIntelligenceTitle'),
+          subtitle: context.t('healthIntelligenceSubtitle'),
+          icon: FarmIcon.stethoscope,
+          actions: [
+            if (canCreate) HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('hcOpenCase'), onPressed: () => showOpenCaseForm(context)),
+            HeroAction(icon: FarmIcon.eye, label: context.t('twRecordObservation'), onPressed: () => _observe(context)),
+            if (canCreate) HeroAction(icon: FarmIcon.bell, label: context.t('emAssess'), onPressed: () => showAssessDialog(context)),
+          ],
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        const HealthKpiRow(),
+      ],
+      labels: [for (final t in tabs) labels[t]!],
+      selected: tabs.indexOf(_tab),
+      onSelect: (i) => setState(() => _tab = tabs[i]),
+      tabBuilder: (context, i) => switch (tabs[i]) {
+        HealthTab.overview => HealthOverviewTab(onAllCases: () => setState(() => _tab = HealthTab.cases)),
+        HealthTab.recommendations => _recommendations(context, alerts),
+        HealthTab.cases => _cases(context, health),
+        HealthTab.pharmacy => const PharmacyTab(),
+        HealthTab.emergency => const EmergencyTab(),
+      },
     );
   }
 

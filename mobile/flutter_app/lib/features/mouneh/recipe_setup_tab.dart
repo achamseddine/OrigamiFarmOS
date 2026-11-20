@@ -64,107 +64,105 @@ class _RecipeSetupTabState extends State<RecipeSetupTab> {
     final product = _productId == null ? null : provider.productById(_productId!);
     final existingRecipe = _productId == null ? null : provider.recipeFor(_productId!);
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabRecipes'), title: context.t('mnRecipesTitle'), subtitle: context.t('mnRecipesSub')),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnColProduct'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  initialValue: _productId,
-                  decoration: InputDecoration(labelText: context.t('mnChooseProduct')),
-                  items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
-                  onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabRecipes'), title: context.t('mnRecipesTitle'), subtitle: context.t('mnRecipesSub')),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnColProduct'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: _productId,
+                decoration: InputDecoration(labelText: context.t('mnChooseProduct')),
+                items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
+                onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
+              ),
+              if (provider.products.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(context.t('mnNeedProduct'), style: FarmTypography.textTheme.bodySmall)),
+              if (existingRecipe != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: StatusPill(label: '${context.t('mnRecipe')} v${existingRecipe.version} ${context.t('mnRecipeActive')} v${existingRecipe.version + 1}', level: FarmStatusLevel.info, dense: true),
                 ),
-                if (provider.products.isEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(context.t('mnNeedProduct'), style: FarmTypography.textTheme.bodySmall)),
-                if (existingRecipe != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: StatusPill(label: '${context.t('mnRecipe')} v${existingRecipe.version} ${context.t('mnRecipeActive')} v${existingRecipe.version + 1}', level: FarmStatusLevel.info, dense: true),
-                  ),
-              ],
-            ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnMaterialsTitle'),
-            subtitle: context.t('mnMaterialsSub'),
-            trailing: context.t('mnAddMaterial'),
-            onTrailingTap: () => _showAddMaterialDialog(context),
-            child: provider.rawMaterials.isEmpty
-                ? EmptyState(message: context.t('mnNoMaterials'), icon: FarmIcon.inventory, compact: true)
-                : Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final m in provider.rawMaterials)
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(color: FarmColors.mist, borderRadius: BorderRadius.circular(FarmRadii.sm)),
-                          child: Text('${m.name} · \$${m.defaultUnitCost.toStringAsFixed(2)}/${m.unit} · ${m.currentStock.toStringAsFixed(0)} ${context.t('mnInStock')}', style: FarmTypography.textTheme.bodySmall),
-                        ),
-                    ],
-                  ),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnBom'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(child: TextField(controller: _basisQuantity, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnRecipeMakes')))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _basisUnit, decoration: InputDecoration(labelText: context.t('mnBasisUnit')))),
-                ]),
-                const SizedBox(height: 12),
-                for (var i = 0; i < _items.length; i++) _itemRow(context, i, provider),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: provider.rawMaterials.isEmpty ? null : () => setState(() => _items.add(_RecipeItemDraft(materialId: provider.rawMaterials.first.id))),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(context.t('mnAddLine')),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnMaterialsTitle'),
+          subtitle: context.t('mnMaterialsSub'),
+          trailing: context.t('mnAddMaterial'),
+          onTrailingTap: () => _showAddMaterialDialog(context),
+          child: provider.rawMaterials.isEmpty
+              ? EmptyState(message: context.t('mnNoMaterials'), icon: FarmIcon.inventory, compact: true)
+              : Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final m in provider.rawMaterials)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(color: FarmColors.mist, borderRadius: BorderRadius.circular(FarmRadii.sm)),
+                        child: Text('${m.name} · \$${m.defaultUnitCost.toStringAsFixed(2)}/${m.unit} · ${m.currentStock.toStringAsFixed(0)} ${context.t('mnInStock')}', style: FarmTypography.textTheme.bodySmall),
+                      ),
+                  ],
                 ),
-              ],
-            ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnBom'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: TextField(controller: _basisQuantity, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('mnRecipeMakes')))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _basisUnit, decoration: InputDecoration(labelText: context.t('mnBasisUnit')))),
+              ]),
+              const SizedBox(height: 12),
+              for (var i = 0; i < _items.length; i++) _itemRow(context, i, provider),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: provider.rawMaterials.isEmpty ? null : () => setState(() => _items.add(_RecipeItemDraft(materialId: provider.rawMaterials.first.id))),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(context.t('mnAddLine')),
+              ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: context.t('mnCostsTitle'),
-            subtitle: context.t('mnCostsSub'),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < _components.length; i++) _componentRow(context, i),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => _components.add(_CostComponentDraft())),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(context.t('mnAddCostLine')),
-                ),
-              ],
-            ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: context.t('mnCostsTitle'),
+          subtitle: context.t('mnCostsSub'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < _components.length; i++) _componentRow(context, i),
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _components.add(_CostComponentDraft())),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(context.t('mnAddCostLine')),
+              ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          TextField(controller: _notes, maxLines: 2, decoration: InputDecoration(labelText: context.t('notes'))),
-          const SizedBox(height: FarmSpacing.md),
-          Row(children: [
-            FilledButton(
-              onPressed: (_saving || product == null || _items.isEmpty) ? null : _submit,
-              child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnSaveRecipe')),
-            ),
-            const SizedBox(width: 12),
-            if (_error != null) Expanded(child: Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
-            if (_savedMessage != null) Expanded(child: Text(_savedMessage!, style: const TextStyle(color: FarmColors.success, fontSize: 12.5))),
-          ]),
-        ],
-      ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        TextField(controller: _notes, maxLines: 2, decoration: InputDecoration(labelText: context.t('notes'))),
+        const SizedBox(height: FarmSpacing.md),
+        Row(children: [
+          FilledButton(
+            onPressed: (_saving || product == null || _items.isEmpty) ? null : _submit,
+            child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnSaveRecipe')),
+          ),
+          const SizedBox(width: 12),
+          if (_error != null) Expanded(child: Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
+          if (_savedMessage != null) Expanded(child: Text(_savedMessage!, style: const TextStyle(color: FarmColors.success, fontSize: 12.5))),
+        ]),
+      ],
     );
   }
 

@@ -8,6 +8,7 @@ import '../../core/util/number_input.dart';
 import '../../core/util/record_dates.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/ux_blocks.dart';
+import '../../core/widgets/form_dialog.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
@@ -133,94 +134,90 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
     final products = [for (final p in feeding.products) if (p.status == 'active') p]..sort((a, b) => a.label(lang).compareTo(b.label(lang)));
     final product = products.where((p) => p.id == _productId).firstOrNull;
     final unit = _productId == _newFeed ? _unit : (product?.unit ?? 'kg');
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('fpRecordPurchase')),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            DropdownButtonFormField<String>(
-              initialValue: _productId == _newFeed || products.any((p) => p.id == _productId) ? _productId : null,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('fpWhatArrived')),
-              items: [
-                for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
-                DropdownMenuItem(value: _newFeed, child: Text('+ ${context.t('fpNewFeed')}')),
-              ],
-              onChanged: (v) => setState(() => _productId = v),
-            ),
-            if (_productId == _newFeed) ...[
-              const SizedBox(height: 10),
-              TextField(controller: _name, decoration: InputDecoration(labelText: context.t('fpNewFeedName'), hintText: context.t('fpNewFeedHint'))),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                for (final k in _kinds) ChoiceChip(label: Text(context.t('fpKind_$k')), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
-              ]),
-              const SizedBox(height: 8),
-              Wrap(spacing: 8, children: [
-                for (final u in const ['kg', 't', 'bale']) ChoiceChip(label: Text(u), selected: _unit == u, onSelected: (_) => setState(() => _unit = u)),
-              ]),
+      width: 560,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          DropdownButtonFormField<String>(
+            initialValue: _productId == _newFeed || products.any((p) => p.id == _productId) ? _productId : null,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('fpWhatArrived')),
+            items: [
+              for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: _newFeed, child: Text('+ ${context.t('fpNewFeed')}')),
             ],
-            const SizedBox(height: 12),
-            RecordDateButton(label: context.t('fpReceivedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
+            onChanged: (v) => setState(() => _productId = v),
+          ),
+          if (_productId == _newFeed) ...[
             const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _qty,
-                  autofocus: widget.productId != null,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: context.t('received'), suffixText: unit),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _rejected,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: context.t('rejected'), suffixText: unit, hintText: context.t('optional')),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _cost,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: '${context.t('unitCost')} / $unit', hintText: context.t('optional')),
-                ),
-              ),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('fpInvoice'), hintText: context.t('optional')))),
-            ]),
-            const SizedBox(height: 14),
-            Text(context.t('fpQuality'), style: FarmTypography.textTheme.titleSmall),
-            const SizedBox(height: 6),
-            Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
-              for (final g in const ['good', 'fair', 'poor'])
-                ChoiceChip(label: Text(context.t('fpGrade_$g')), selected: _grade == g, onSelected: (on) => setState(() => _grade = on ? g : null)),
-              SizedBox(
-                width: 150,
-                child: TextField(
-                  controller: _moisture,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(labelText: context.t('fpMoisture'), suffixText: '%', isDense: true),
-                ),
-              ),
-            ]),
-            if (_grade == 'poor') ...[
-              const SizedBox(height: 8),
-              NoticeBanner(title: context.t('fpGrade_poor'), text: context.t('lotPoorHeld')),
-            ],
+            TextField(controller: _name, decoration: InputDecoration(labelText: context.t('fpNewFeedName'), hintText: context.t('fpNewFeedHint'))),
             const SizedBox(height: 8),
-            TextField(controller: _qualityNotes, decoration: InputDecoration(labelText: context.t('fpQualityNotes'), hintText: context.t('fpQualityNotesHint'))),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final k in _kinds) ChoiceChip(label: Text(context.t('fpKind_$k')), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
+            ]),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, children: [
+              for (final u in const ['kg', 't', 'bale']) ChoiceChip(label: Text(u), selected: _unit == u, onSelected: (_) => setState(() => _unit = u)),
+            ]),
+          ],
+          const SizedBox(height: 12),
+          RecordDateButton(label: context.t('fpReceivedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _qty,
+                autofocus: widget.productId != null,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: context.t('received'), suffixText: unit),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _rejected,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: context.t('rejected'), suffixText: unit, hintText: context.t('optional')),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                controller: _cost,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: '${context.t('unitCost')} / $unit', hintText: context.t('optional')),
+              ),
+            ),
           ]),
-        ),
-      ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('fpInvoice'), hintText: context.t('optional')))),
+          ]),
+          const SizedBox(height: 14),
+          Text(context.t('fpQuality'), style: FarmTypography.textTheme.titleSmall),
+          const SizedBox(height: 6),
+          Wrap(spacing: 8, runSpacing: 8, crossAxisAlignment: WrapCrossAlignment.center, children: [
+            for (final g in const ['good', 'fair', 'poor'])
+              ChoiceChip(label: Text(context.t('fpGrade_$g')), selected: _grade == g, onSelected: (on) => setState(() => _grade = on ? g : null)),
+            SizedBox(
+              width: 150,
+              child: TextField(
+                controller: _moisture,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: context.t('fpMoisture'), suffixText: '%', isDense: true),
+              ),
+            ),
+          ]),
+          if (_grade == 'poor') ...[
+            const SizedBox(height: 8),
+            NoticeBanner(title: context.t('fpGrade_poor'), text: context.t('lotPoorHeld')),
+          ],
+          const SizedBox(height: 8),
+          TextField(controller: _qualityNotes, decoration: InputDecoration(labelText: context.t('fpQualityNotes'), hintText: context.t('fpQualityNotesHint'))),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(
@@ -399,129 +396,127 @@ class _MixDialogState extends State<_MixDialog> {
     final needsRecipe = _output == _newMix || !feeding.formulas.any((f) => f.feedProductId == _output && f.active != null);
     final blocked = needsRecipe && !access.canApproveFeed;
     final outputName = _output == _newMix ? _newName.text.trim() : (feeding.productById(_output ?? '')?.label(lang) ?? '');
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('fmTitle')),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            DropdownButtonFormField<String>(
-              initialValue: _output == _newMix || outputs.any((p) => p.id == _output) ? _output : null,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('fmMakes')),
-              items: [
-                for (final p in outputs) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
-                DropdownMenuItem(value: _newMix, child: Text('+ ${context.t('fmNewMixFeed')}')),
-              ],
-              onChanged: (v) => setState(() {
-                _output = v;
-                _prefill(feeding);
-              }),
-            ),
-            if (_output == _newMix) ...[
-              const SizedBox(height: 8),
-              TextField(controller: _newName, decoration: InputDecoration(labelText: context.t('fmNewMixName'))),
+      width: 560,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          DropdownButtonFormField<String>(
+            initialValue: _output == _newMix || outputs.any((p) => p.id == _output) ? _output : null,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('fmMakes')),
+            items: [
+              for (final p in outputs) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: _newMix, child: Text('+ ${context.t('fmNewMixFeed')}')),
             ],
-            if (blocked) ...[
-              const SizedBox(height: 10),
-              NoticeBanner(
-                key: const ValueKey('mix-needs-approval'),
-                title: context.t('fmTitle'),
-                text: _output == _newMix ? context.t('mixNewNeedsApproval') : context.t('mixNeedsApprovedRecipe').replaceAll('{product}', outputName),
-              ),
-            ],
-            const SizedBox(height: 12),
-            RecordDateButton(label: context.t('fmMixedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
-            const SizedBox(height: 12),
-            Text(context.t('fmIngredients'), style: FarmTypography.textTheme.titleSmall),
-            Text(context.t('fmIngredientsHint'), style: FarmTypography.textTheme.bodySmall),
+            onChanged: (v) => setState(() {
+              _output = v;
+              _prefill(feeding);
+            }),
+          ),
+          if (_output == _newMix) ...[
             const SizedBox(height: 8),
-            if (ingredients.isEmpty) Text(context.t('fmNoIngredients'), style: FarmTypography.textTheme.bodySmall),
-            for (var i = 0; i < _lines.length; i++) ...[
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(
-                  flex: 3,
-                  child: DropdownButtonFormField<String>(
-                    key: ObjectKey(_lines[i]),
-                    initialValue: ingredients.any((p) => p.id == _lines[i].productId) ? _lines[i].productId : null,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: context.t('fmIngredient'),
-                      helperText: _lines[i].productId == null
-                          ? null
-                          : '${_fmt(feeding.productById(_lines[i].productId!)?.availability.available ?? 0)} ${feeding.productById(_lines[i].productId!)?.unit ?? 'kg'} ${context.t('feedInStock')}',
-                    ),
-                    items: [for (final p in ingredients) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-                    onChanged: (v) => setState(() => _lines[i].productId = v),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: TextField(
-                    controller: _lines[i].qty,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => setState(_syncOutput),
-                    decoration: InputDecoration(labelText: context.t('quantity'), suffixText: 'kg'),
-                  ),
-                ),
-                IconButton(
-                  onPressed: _lines.length > 1 ? () => setState(() {
-                        _lines.removeAt(i).qty.dispose();
-                        _syncOutput();
-                      }) : null,
-                  tooltip: context.t('remove'),
-                  icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted),
-                ),
-              ]),
-              const SizedBox(height: 8),
-            ],
-            TextButton.icon(
-              onPressed: () => setState(() => _lines.add(_MixLine())),
-              icon: const Icon(Icons.add, size: 16),
-              label: Text(context.t('fmAddIngredient')),
+            TextField(controller: _newName, decoration: InputDecoration(labelText: context.t('fmNewMixName'))),
+          ],
+          if (blocked) ...[
+            const SizedBox(height: 10),
+            NoticeBanner(
+              key: const ValueKey('mix-needs-approval'),
+              title: context.t('fmTitle'),
+              text: _output == _newMix ? context.t('mixNewNeedsApproval') : context.t('mixNeedsApprovedRecipe').replaceAll('{product}', outputName),
             ),
-            const SizedBox(height: 6),
-            SizedBox(
-              width: 240,
-              child: TextField(
-                controller: _outputQty,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (_) => _outputEdited = true,
-                decoration: InputDecoration(labelText: context.t('fmOutput'), suffixText: 'kg', helperText: context.t('fmOutputHint')),
-              ),
-            ),
-            if (shortfalls.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              NoticeBanner(
-                title: context.t('feedStockShortTitle'),
-                text: [
-                  for (final (p, q) in shortfalls) '${p.label(lang)}: ${_fmt(p.availability.available)} ${p.unit} ${context.t('feedInStock')}, ${_fmt(q)} ${p.unit} ${context.t('feedEntered')}',
-                  context.t('fmStockShortBody'),
-                ].join('\n'),
-              ),
-              if (access.canOverrideFeedStock)
-                Material(
-                  type: MaterialType.transparency,
-                  child: CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    dense: true,
-                    value: _overrideStock,
-                    title: Text(context.t('feedRecordAnyway')),
-                    onChanged: (v) => setState(() => _overrideStock = v ?? false),
+          ],
+          const SizedBox(height: 12),
+          RecordDateButton(label: context.t('fmMixedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
+          const SizedBox(height: 12),
+          Text(context.t('fmIngredients'), style: FarmTypography.textTheme.titleSmall),
+          Text(context.t('fmIngredientsHint'), style: FarmTypography.textTheme.bodySmall),
+          const SizedBox(height: 8),
+          if (ingredients.isEmpty) Text(context.t('fmNoIngredients'), style: FarmTypography.textTheme.bodySmall),
+          for (var i = 0; i < _lines.length; i++) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(
+                flex: 3,
+                child: DropdownButtonFormField<String>(
+                  key: ObjectKey(_lines[i]),
+                  initialValue: ingredients.any((p) => p.id == _lines[i].productId) ? _lines[i].productId : null,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: context.t('fmIngredient'),
+                    helperText: _lines[i].productId == null
+                        ? null
+                        : '${_fmt(feeding.productById(_lines[i].productId!)?.availability.available ?? 0)} ${feeding.productById(_lines[i].productId!)?.unit ?? 'kg'} ${context.t('feedInStock')}',
                   ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
+                  items: [for (final p in ingredients) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) => setState(() => _lines[i].productId = v),
                 ),
-            ],
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
-          ]),
-        ),
-      ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _lines[i].qty,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(_syncOutput),
+                  decoration: InputDecoration(labelText: context.t('quantity'), suffixText: 'kg'),
+                ),
+              ),
+              IconButton(
+                onPressed: _lines.length > 1 ? () => setState(() {
+                      _lines.removeAt(i).qty.dispose();
+                      _syncOutput();
+                    }) : null,
+                tooltip: context.t('remove'),
+                icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted),
+              ),
+            ]),
+            // Room for the stock line under one row and the label over
+            // the next: at 8 they ran into each other.
+            const SizedBox(height: 16),
+          ],
+          TextButton.icon(
+            onPressed: () => setState(() => _lines.add(_MixLine())),
+            icon: const Icon(Icons.add, size: 16),
+            label: Text(context.t('fmAddIngredient')),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: 240,
+            child: TextField(
+              controller: _outputQty,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => _outputEdited = true,
+              decoration: InputDecoration(labelText: context.t('fmOutput'), suffixText: 'kg', helperText: context.t('fmOutputHint')),
+            ),
+          ),
+          if (shortfalls.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            NoticeBanner(
+              title: context.t('feedStockShortTitle'),
+              text: [
+                for (final (p, q) in shortfalls) '${p.label(lang)}: ${_fmt(p.availability.available)} ${p.unit} ${context.t('feedInStock')}, ${_fmt(q)} ${p.unit} ${context.t('feedEntered')}',
+                context.t('fmStockShortBody'),
+              ].join('\n'),
+            ),
+            if (access.canOverrideFeedStock)
+              Material(
+                type: MaterialType.transparency,
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  value: _overrideStock,
+                  title: Text(context.t('feedRecordAnyway')),
+                  onChanged: (v) => setState(() => _overrideStock = v ?? false),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
+              ),
+          ],
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(

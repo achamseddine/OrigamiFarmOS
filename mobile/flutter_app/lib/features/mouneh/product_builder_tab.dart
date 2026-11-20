@@ -51,59 +51,57 @@ class _ProductBuilderTabState extends State<ProductBuilderTab> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabProducts'), title: context.t('mnNewProductTitle'), subtitle: context.t('mnNewProductSub')),
-          const SizedBox(height: FarmSpacing.md),
-          _StepIndicator(step: _step),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            child: Form(
-              key: _formKey,
-              child: _step == 0 ? _basicsStep() : (_step == 1 ? _pricingStep() : _reviewStep()),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabProducts'), title: context.t('mnNewProductTitle'), subtitle: context.t('mnNewProductSub')),
+        const SizedBox(height: FarmSpacing.md),
+        _StepIndicator(step: _step),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          child: Form(
+            key: _formKey,
+            child: _step == 0 ? _basicsStep() : (_step == 1 ? _pricingStep() : _reviewStep()),
           ),
-          const SizedBox(height: FarmSpacing.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (_step > 0)
-                OutlinedButton(onPressed: _saving ? null : () => setState(() => _step -= 1), child: Text(context.t('mnBack'))),
-              const SizedBox(width: 10),
-              if (_step < 2)
-                FilledButton(
-                  onPressed: () {
-                    if (_step == 0 && !(_formKey.currentState?.validate() ?? false)) return;
-                    setState(() => _step += 1);
-                  },
-                  child: Text(context.t('mnNext')),
-                )
-              else
-                FilledButton(
-                  onPressed: _saving ? null : _submit,
-                  child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnCreateProduct')),
-                ),
-            ],
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-          ],
-          if (_createdProductName != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: FarmColors.tint(FarmColors.success, 0.12), borderRadius: BorderRadius.circular(FarmRadii.sm)),
-              child: Text(
-                '"$_createdProductName" ${context.t('mnCreatedDraft')}',
-                style: FarmTypography.textTheme.bodySmall,
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (_step > 0)
+              OutlinedButton(onPressed: _saving ? null : () => setState(() => _step -= 1), child: Text(context.t('mnBack'))),
+            const SizedBox(width: 10),
+            if (_step < 2)
+              FilledButton(
+                onPressed: () {
+                  if (_step == 0 && !(_formKey.currentState?.validate() ?? false)) return;
+                  setState(() => _step += 1);
+                },
+                child: Text(context.t('mnNext')),
+              )
+            else
+              FilledButton(
+                onPressed: _saving ? null : _submit,
+                child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnCreateProduct')),
               ),
-            ),
           ],
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
         ],
-      ),
+        if (_createdProductName != null) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: FarmColors.tint(FarmColors.success, 0.12), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+            child: Text(
+              '"$_createdProductName" ${context.t('mnCreatedDraft')}',
+              style: FarmTypography.textTheme.bodySmall,
+            ),
+          ),
+        ],
+      ],
     );
   }
 

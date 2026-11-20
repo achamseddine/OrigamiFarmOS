@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/typography.dart';
+import '../../core/widgets/form_dialog.dart';
 import '../../providers/feed_provider.dart';
 
 /// Which way stock moves: feed that arrived, or feed that was used up.
@@ -73,54 +74,52 @@ class _FeedMovementDialogState extends State<FeedMovementDialog> {
     final selected = items.any((i) => i.id == _itemId) ? _itemId! : items.first.id;
     final selectedItem = items.firstWhere((i) => i.id == selected);
 
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(title),
-      content: SizedBox(
-        width: 380,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      width: 380,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            value: selected,
+            decoration: InputDecoration(labelText: context.t('feedItem')),
+            items: [
+              for (final item in items)
+                DropdownMenuItem(
+                  value: item.id,
+                  child: Text('${item.name} — ${item.currentQty.toStringAsFixed(0)} ${item.unit}'),
+                ),
+            ],
+            onChanged: (v) => setState(() => _itemId = v ?? selected),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _quantity,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: '${context.t('quantity')} (${selectedItem.unit})'),
+          ),
+          if (!_inbound) ...[
+            const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               isExpanded: true,
-              value: selected,
-              decoration: InputDecoration(labelText: context.t('feedItem')),
+              value: _reason,
+              decoration: InputDecoration(labelText: context.t('reason')),
               items: [
-                for (final item in items)
-                  DropdownMenuItem(
-                    value: item.id,
-                    child: Text('${item.name} — ${item.currentQty.toStringAsFixed(0)} ${item.unit}'),
-                  ),
+                DropdownMenuItem(value: 'feeding', child: Text(context.t('reasonFeeding'))),
+                DropdownMenuItem(value: 'waste', child: Text(context.t('reasonWaste'))),
+                DropdownMenuItem(value: 'transfer', child: Text(context.t('reasonTransfer'))),
               ],
-              onChanged: (v) => setState(() => _itemId = v ?? selected),
+              onChanged: (v) => setState(() => _reason = v ?? _reason),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _quantity,
-              autofocus: true,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: '${context.t('quantity')} (${selectedItem.unit})'),
-            ),
-            if (!_inbound) ...[
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: _reason,
-                decoration: InputDecoration(labelText: context.t('reason')),
-                items: [
-                  DropdownMenuItem(value: 'feeding', child: Text(context.t('reasonFeeding'))),
-                  DropdownMenuItem(value: 'waste', child: Text(context.t('reasonWaste'))),
-                  DropdownMenuItem(value: 'transfer', child: Text(context.t('reasonTransfer'))),
-                ],
-                onChanged: (v) => setState(() => _reason = v ?? _reason),
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
-            ],
           ],
-        ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12)),
+          ],
+        ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),

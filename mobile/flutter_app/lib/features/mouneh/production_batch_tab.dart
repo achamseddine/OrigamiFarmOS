@@ -24,22 +24,20 @@ class ProductionBatchTab extends StatelessWidget {
     final batches = [...provider.batches]..sort((a, b) => b.startedAt.compareTo(a.startedAt));
     final start = FilledButton.icon(onPressed: () => showStartMounehBatchDialog(context), icon: const Icon(Icons.add, size: 16), label: Text(context.t('mnStartBatch')));
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabBatches'), title: context.t('mnBatchesTitle'), subtitle: context.t('mnBatchesSub'), actions: [start]),
-          const SizedBox(height: FarmSpacing.md),
-          if (batches.isEmpty)
-            SectionCard(child: EmptyState(message: context.t('mnNoBatches'), icon: FarmIcon.barn, action: start))
-          else
-            for (final batch in batches) ...[
-              _BatchCard(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
-              const SizedBox(height: FarmSpacing.md),
-            ],
-          NoticeBanner(tone: NoticeTone.info, text: context.t('mnBatchNote')),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabBatches'), title: context.t('mnBatchesTitle'), subtitle: context.t('mnBatchesSub'), actions: [start]),
+        const SizedBox(height: FarmSpacing.md),
+        if (batches.isEmpty)
+          SectionCard(child: EmptyState(message: context.t('mnNoBatches'), icon: FarmIcon.barn, action: start))
+        else
+          for (final batch in batches) ...[
+            _BatchCard(batch: batch, productName: provider.productById(batch.productId)?.name ?? batch.productId),
+            const SizedBox(height: FarmSpacing.md),
+          ],
+        NoticeBanner(tone: NoticeTone.info, text: context.t('mnBatchNote')),
+      ],
     );
   }
 }
