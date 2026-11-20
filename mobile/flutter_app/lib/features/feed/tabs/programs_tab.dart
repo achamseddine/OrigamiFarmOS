@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/form_dialog.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -367,68 +368,64 @@ class _ProgramDialogState extends State<_ProgramDialog> {
     final livestock = context.watch<LivestockProvider>();
     final lang = Localizations.localeOf(context).languageCode;
     final feeds = feeding.feedable;
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(_isVersion ? '${context.t('newVersion')} — ${widget.program!.name}' : context.t('newProgram')),
-      content: SizedBox(
-        width: 600,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (!_isVersion) ...[
-              Row(children: [
-                Expanded(child: TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('feedingProgram')))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: _nameAr, decoration: InputDecoration(labelText: '${context.t('feedingProgram')} (AR)'))),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: TextField(controller: _category, decoration: InputDecoration(labelText: context.t('category')))),
-                const SizedBox(width: 10),
-                SizedBox(width: 140, child: TextField(controller: _feedings, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('feedingsPerDay')))),
-              ]),
-            ] else
-              SizedBox(width: 160, child: TextField(controller: _feedings, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('feedingsPerDay')))),
-            const SizedBox(height: 12),
-            Text(context.t('ration'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-            for (var i = 0; i < _ration.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(children: [
-                  Expanded(
-                    flex: 3,
-                    child: DropdownButtonFormField<String>(
-                      value: feeds.any((p) => p.id == _ration[i].productId) ? _ration[i].productId : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(labelText: context.t('feedItem')),
-                      items: [for (final p in feeds) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-                      onChanged: (v) => setState(() => _ration[i].productId = v),
-                    ),
+      width: 600,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (!_isVersion) ...[
+            Row(children: [
+              Expanded(child: TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('feedingProgram')))),
+              const SizedBox(width: 10),
+              Expanded(child: TextField(controller: _nameAr, decoration: InputDecoration(labelText: '${context.t('feedingProgram')} (AR)'))),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: TextField(controller: _category, decoration: InputDecoration(labelText: context.t('category')))),
+              const SizedBox(width: 10),
+              SizedBox(width: 140, child: TextField(controller: _feedings, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('feedingsPerDay')))),
+            ]),
+          ] else
+            SizedBox(width: 160, child: TextField(controller: _feedings, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('feedingsPerDay')))),
+          const SizedBox(height: 12),
+          Text(context.t('ration'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+          for (var i = 0; i < _ration.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(children: [
+                Expanded(
+                  flex: 3,
+                  child: DropdownButtonFormField<String>(
+                    value: feeds.any((p) => p.id == _ration[i].productId) ? _ration[i].productId : null,
+                    isExpanded: true,
+                    decoration: InputDecoration(labelText: context.t('feedItem')),
+                    items: [for (final p in feeds) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+                    onChanged: (v) => setState(() => _ration[i].productId = v),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 2, child: TextField(controller: _ration[i].quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: '${context.t('quantity')} / ${context.t('headCount').toLowerCase()}'))),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _ration[i].frequency,
-                      decoration: const InputDecoration(labelText: ' '),
-                      items: [DropdownMenuItem(value: 'per_day', child: Text(context.t('perHeadPerDay'))), DropdownMenuItem(value: 'per_feeding', child: Text(context.t('perFeeding')))],
-                      onChanged: (v) => setState(() => _ration[i].frequency = v ?? 'per_day'),
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(flex: 2, child: TextField(controller: _ration[i].quantity, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: '${context.t('quantity')} / ${context.t('headCount').toLowerCase()}'))),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _ration[i].frequency,
+                    decoration: const InputDecoration(labelText: ' '),
+                    items: [DropdownMenuItem(value: 'per_day', child: Text(context.t('perHeadPerDay'))), DropdownMenuItem(value: 'per_feeding', child: Text(context.t('perFeeding')))],
+                    onChanged: (v) => setState(() => _ration[i].frequency = v ?? 'per_day'),
                   ),
-                  IconButton(onPressed: _ration.length == 1 ? null : () => setState(() => _ration.removeAt(i).quantity.dispose()), icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted)),
-                ]),
-              ),
-            TextButton.icon(onPressed: () => setState(() => _ration.add(_RationLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addFeedLine'))),
-            const SizedBox(height: 6),
-            Text(context.t('appliesTo'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-            for (var i = 0; i < _rules.length; i++) _ruleRow(context, i, livestock, lang),
-            TextButton.icon(onPressed: () => setState(() => _rules.add(_RuleLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addRule'))),
-            TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
-          ]),
-        ),
-      ),
+                ),
+                IconButton(onPressed: _ration.length == 1 ? null : () => setState(() => _ration.removeAt(i).quantity.dispose()), icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted)),
+              ]),
+            ),
+          TextButton.icon(onPressed: () => setState(() => _ration.add(_RationLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addFeedLine'))),
+          const SizedBox(height: 6),
+          Text(context.t('appliesTo'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+          for (var i = 0; i < _rules.length; i++) _ruleRow(context, i, livestock, lang),
+          TextButton.icon(onPressed: () => setState(() => _rules.add(_RuleLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addRule'))),
+          TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),

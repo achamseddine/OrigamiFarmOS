@@ -7,6 +7,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
+import '../../core/widgets/module_workspace.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../providers/mouneh_provider.dart';
@@ -55,57 +56,48 @@ class _MounehModuleScreenState extends State<MounehModuleScreen> {
     final provider = context.watch<MounehProvider>();
     final tabs = MounehTab.values;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        HeroBand(
-          eyebrow: context.t('ebMouneh'),
-          title: context.t('navMouneh'),
-          subtitle: context.t('mnSubtitle'),
-          icon: FarmIcon.package,
-          scenery: false,
-          trailing: StatusPill(
-            // Included, not bought: this used to say Active/Inactive,
-            // when it was an add-on a farm turned on for itself.
-            label: context.t(provider.isActive ? 'moduleIncluded' : 'moduleUnavailable'),
-            level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
-          ),
-          actions: provider.isActive
-              ? [
-                  HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('mnStartBatch'), onPressed: () => showStartMounehBatchDialog(context)),
-                  HeroAction(icon: FarmIcon.money, label: context.t('mnRecordSale'), onPressed: () => _go(MounehTab.sales)),
-                  HeroAction(icon: FarmIcon.package, label: context.t('mnNewProduct'), onPressed: () => _go(MounehTab.products)),
-                ]
-              : const [],
-        ),
-        const SizedBox(height: FarmSpacing.md),
-        if (!provider.isActive)
-          const Expanded(child: _LockedState())
-        else ...[
-          const MounehKpiRow(),
-          const SizedBox(height: FarmSpacing.sm),
-          UnderlineTabs(
-            labels: [for (final t in tabs) context.t(_tabKeys[t]!)],
-            selected: tabs.indexOf(_tab),
-            onSelect: (i) => _go(tabs[i]),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          Expanded(
-            child: IndexedStack(
-              index: tabs.indexOf(_tab),
-              children: [
-                MounehDashboardTab(onNavigate: (i) => _go(tabs[i])),
-                const ProductBuilderTab(),
-                const RecipeSetupTab(),
-                const CostPreviewTab(),
-                const ProductionBatchTab(),
-                const FinishedGoodsTab(),
-                const SalesProfitabilityTab(),
-              ],
-            ),
-          ),
-        ],
-      ],
+    final hero = HeroBand(
+      eyebrow: context.t('ebMouneh'),
+      title: context.t('navMouneh'),
+      subtitle: context.t('mnSubtitle'),
+      icon: FarmIcon.package,
+      scenery: false,
+      trailing: StatusPill(
+        // Included, not bought: this used to say Active/Inactive,
+        // when it was an add-on a farm turned on for itself.
+        label: context.t(provider.isActive ? 'moduleIncluded' : 'moduleUnavailable'),
+        level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
+      ),
+      actions: provider.isActive
+          ? [
+              HeroAction(primary: true, icon: FarmIconMap.add, label: context.t('mnStartBatch'), onPressed: () => showStartMounehBatchDialog(context)),
+              HeroAction(icon: FarmIcon.money, label: context.t('mnRecordSale'), onPressed: () => _go(MounehTab.sales)),
+              HeroAction(icon: FarmIcon.package, label: context.t('mnNewProduct'), onPressed: () => _go(MounehTab.products)),
+            ]
+          : const [],
+    );
+
+    if (!provider.isActive) {
+      return SingleChildScrollView(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [hero, const SizedBox(height: FarmSpacing.md), const _LockedState()]),
+      );
+    }
+    // One page: the band and figures scroll away, the tabs stay at the
+    // top, and a tab — a report included — is read at its full height.
+    return ModuleWorkspace(
+      header: [hero, const SizedBox(height: FarmSpacing.md), const MounehKpiRow()],
+      labels: [for (final t in tabs) context.t(_tabKeys[t]!)],
+      selected: tabs.indexOf(_tab),
+      onSelect: (i) => _go(tabs[i]),
+      tabBuilder: (context, i) => switch (tabs[i]) {
+        MounehTab.dashboard => MounehDashboardTab(onNavigate: (i) => _go(tabs[i])),
+        MounehTab.products => const ProductBuilderTab(),
+        MounehTab.recipes => const RecipeSetupTab(),
+        MounehTab.costPreview => const CostPreviewTab(),
+        MounehTab.batches => const ProductionBatchTab(),
+        MounehTab.finishedGoods => const FinishedGoodsTab(),
+        MounehTab.sales => const SalesProfitabilityTab(),
+      },
     );
   }
 }

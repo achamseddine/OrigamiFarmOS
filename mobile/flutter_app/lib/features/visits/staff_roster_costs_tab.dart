@@ -116,127 +116,125 @@ class _StaffRosterCostsTabState extends State<StaffRosterCostsTab> {
     final staff = _sessionId == null ? const <VisitStaffRosterEntry>[] : provider.staffForSession(_sessionId!);
     final costs = _sessionId == null ? const <VisitCost>[] : provider.costsForSession(_sessionId!);
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'Session',
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              value: _sessionId,
-              decoration: const InputDecoration(labelText: 'Session'),
-              items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime}'))],
-              onChanged: sessions.isEmpty ? null : (v) => setState(() => _sessionId = v),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Session',
+          child: DropdownButtonFormField<String>(
+            isExpanded: true,
+            value: _sessionId,
+            decoration: const InputDecoration(labelText: 'Session'),
+            items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime}'))],
+            onChanged: sessions.isEmpty ? null : (v) => setState(() => _sessionId = v),
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Assign Staff',
-            subtitle: 'Total cost = hours worked × hourly rate — used directly by the Profitability Report.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(child: TextField(controller: _workerName, decoration: const InputDecoration(labelText: 'Worker name'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _role, decoration: const InputDecoration(labelText: 'Role (e.g. guide, horse_handler)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _startTime, decoration: const InputDecoration(labelText: 'Start (HH:MM)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _endTime, decoration: const InputDecoration(labelText: 'End (HH:MM)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _hourlyRate, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Hourly rate (\$)'))),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _rosterSaving ? null : _addStaff,
-                    child: _rosterSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
-                  ),
-                ]),
-                if (_rosterError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_rosterError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
-                const SizedBox(height: FarmSpacing.md),
-                staff.isEmpty
-                    ? Text('No staff rostered for this session.', style: FarmTypography.textTheme.bodySmall)
-                    : FarmDataTable(
-                        columns: const ['Worker', 'Role', 'Hours', 'Rate', 'Total cost'],
-                        rows: [
-                          for (final r in staff)
-                            [
-                              Text(r.workerName),
-                              Text(r.role),
-                              Text('${r.startTime}–${r.endTime}'),
-                              Text('\$${r.hourlyRate.toStringAsFixed(2)}/hr'),
-                              Text('\$${r.totalCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                            ],
-                        ],
-                      ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Assign Staff',
+          subtitle: 'Total cost = hours worked × hourly rate — used directly by the Profitability Report.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: TextField(controller: _workerName, decoration: const InputDecoration(labelText: 'Worker name'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _role, decoration: const InputDecoration(labelText: 'Role (e.g. guide, horse_handler)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _startTime, decoration: const InputDecoration(labelText: 'Start (HH:MM)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _endTime, decoration: const InputDecoration(labelText: 'End (HH:MM)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _hourlyRate, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Hourly rate (\$)'))),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _rosterSaving ? null : _addStaff,
+                  child: _rosterSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
+                ),
+              ]),
+              if (_rosterError != null) ...[
+                const SizedBox(height: 8),
+                Text(_rosterError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
               ],
-            ),
+              const SizedBox(height: FarmSpacing.md),
+              staff.isEmpty
+                  ? Text('No staff rostered for this session.', style: FarmTypography.textTheme.bodySmall)
+                  : FarmDataTable(
+                      columns: const ['Worker', 'Role', 'Hours', 'Rate', 'Total cost'],
+                      rows: [
+                        for (final r in staff)
+                          [
+                            Text(r.workerName),
+                            Text(r.role),
+                            Text('${r.startTime}–${r.endTime}'),
+                            Text('\$${r.hourlyRate.toStringAsFixed(2)}/hr'),
+                            Text('\$${r.totalCost.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          ],
+                      ],
+                    ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Direct Costs',
-            subtitle: 'Cleaning, utilities, safety, marketing, maintenance or any other visit-day cost.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _category,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: [for (final c in kVisitCostCategories) DropdownMenuItem(value: c, child: Text(c))],
-                      onChanged: (v) => setState(() => _category = v ?? _category),
-                    ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Direct Costs',
+          subtitle: 'Cleaning, utilities, safety, marketing, maintenance or any other visit-day cost.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _category,
+                    decoration: const InputDecoration(labelText: 'Category'),
+                    items: [for (final c in kVisitCostCategories) DropdownMenuItem(value: c, child: Text(c))],
+                    onChanged: (v) => setState(() => _category = v ?? _category),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 2, child: TextField(controller: _costDescription, decoration: const InputDecoration(labelText: 'Description'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _costAmount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount (\$)'))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _allocationMethod,
-                      decoration: const InputDecoration(labelText: 'Allocation'),
-                      items: [for (final m in kVisitCostAllocationMethods) DropdownMenuItem(value: m, child: Text(m))],
-                      onChanged: (v) => setState(() => _allocationMethod = v ?? _allocationMethod),
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: TextField(controller: _costDescription, decoration: const InputDecoration(labelText: 'Description'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _costAmount, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Amount (\$)'))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _allocationMethod,
+                    decoration: const InputDecoration(labelText: 'Allocation'),
+                    items: [for (final m in kVisitCostAllocationMethods) DropdownMenuItem(value: m, child: Text(m))],
+                    onChanged: (v) => setState(() => _allocationMethod = v ?? _allocationMethod),
                   ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _costSaving ? null : _addCost,
-                    child: _costSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
-                  ),
-                ]),
-                if (_costError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_costError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
-                const SizedBox(height: FarmSpacing.md),
-                costs.isEmpty
-                    ? Text('No direct costs recorded for this session.', style: FarmTypography.textTheme.bodySmall)
-                    : FarmDataTable(
-                        columns: const ['Category', 'Description', 'Allocation', 'Amount'],
-                        rows: [
-                          for (final c in costs)
-                            [
-                              Text(c.category),
-                              Text(c.description ?? '—'),
-                              Text(c.allocationMethod),
-                              Text('\$${c.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                            ],
-                        ],
-                      ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _costSaving ? null : _addCost,
+                  child: _costSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add'),
+                ),
+              ]),
+              if (_costError != null) ...[
+                const SizedBox(height: 8),
+                Text(_costError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
               ],
-            ),
+              const SizedBox(height: FarmSpacing.md),
+              costs.isEmpty
+                  ? Text('No direct costs recorded for this session.', style: FarmTypography.textTheme.bodySmall)
+                  : FarmDataTable(
+                      columns: const ['Category', 'Description', 'Allocation', 'Amount'],
+                      rows: [
+                        for (final c in costs)
+                          [
+                            Text(c.category),
+                            Text(c.description ?? '—'),
+                            Text(c.allocationMethod),
+                            Text('\$${c.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                          ],
+                      ],
+                    ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../../core/theme/typography.dart';
 import '../../../core/widgets/data_table_card.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/form_dialog.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -413,53 +414,49 @@ class _ReconcileDialogState extends State<_ReconcileDialog> {
     final feeding = context.watch<FeedingProvider>();
     final lang = Localizations.localeOf(context).languageCode;
     final lots = _productId == null ? const <FeedLot>[] : feeding.lotsFor(_productId!);
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('newReconciliation')),
-      content: SizedBox(
-        width: 440,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              value: _productId,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('feedItem')),
-              items: [for (final p in feeding.products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-              onChanged: (v) => setState(() {
-                _productId = v;
-                _lotId = null;
-              }),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              value: _lotId ?? _wholeProduct,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('lotCode')),
-              items: [
-                DropdownMenuItem(value: _wholeProduct, child: Text(context.t('wholeProduct'))),
-                for (final l in lots) DropdownMenuItem(value: l.id, child: Text('${l.lotCode} · ${feedNumber(l.quantityOnHand)} ${l.unit}', overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) => setState(() => _lotId = v == _wholeProduct ? null : v),
-            ),
-            const SizedBox(height: 10),
-            DropdownButtonFormField<int>(
-              isExpanded: true,
-              value: _days,
-              decoration: InputDecoration(labelText: context.t('period')),
-              items: [for (final d in const [7, 14, 30]) DropdownMenuItem(value: d, child: Text('$d ${context.t('days')}'))],
-              onChanged: (v) => setState(() => _days = v ?? _days),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _counted,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: context.t('countedClosing')),
-            ),
-            const SizedBox(height: 10),
-            TextField(controller: _explanation, decoration: InputDecoration(labelText: context.t('notes'))),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
-          ]),
-        ),
-      ),
+      width: 440,
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: _productId,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('feedItem')),
+            items: [for (final p in feeding.products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() {
+              _productId = v;
+              _lotId = null;
+            }),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _lotId ?? _wholeProduct,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('lotCode')),
+            items: [
+              DropdownMenuItem(value: _wholeProduct, child: Text(context.t('wholeProduct'))),
+              for (final l in lots) DropdownMenuItem(value: l.id, child: Text('${l.lotCode} · ${feedNumber(l.quantityOnHand)} ${l.unit}', overflow: TextOverflow.ellipsis)),
+            ],
+            onChanged: (v) => setState(() => _lotId = v == _wholeProduct ? null : v),
+          ),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(
+            isExpanded: true,
+            value: _days,
+            decoration: InputDecoration(labelText: context.t('period')),
+            items: [for (final d in const [7, 14, 30]) DropdownMenuItem(value: d, child: Text('$d ${context.t('days')}'))],
+            onChanged: (v) => setState(() => _days = v ?? _days),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _counted,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: context.t('countedClosing')),
+          ),
+          const SizedBox(height: 10),
+          TextField(controller: _explanation, decoration: InputDecoration(labelText: context.t('notes'))),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),
@@ -515,25 +512,23 @@ class _CloseDialogState extends State<_CloseDialog> {
   @override
   Widget build(BuildContext context) {
     final v = widget.rec.varianceQuantity ?? 0;
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('closeReconciliation')),
-      content: SizedBox(
-        width: 420,
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('${context.t('variance')}: ${v > 0 ? '+' : ''}${feedNumber(v)} ${widget.rec.unit}', style: FarmTypography.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          if (v.abs() > 0.001)
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _post,
-              onChanged: (b) => setState(() => _post = b),
-              title: Text(context.t('postAdjustment')),
-              subtitle: Text(context.t('postAdjustmentHint'), style: FarmTypography.textTheme.bodySmall),
-            ),
-          TextField(controller: _explanation, maxLines: 2, decoration: InputDecoration(labelText: context.t('explanation'))),
-          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
-        ]),
-      ),
+      width: 420,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('${context.t('variance')}: ${v > 0 ? '+' : ''}${feedNumber(v)} ${widget.rec.unit}', style: FarmTypography.textTheme.titleSmall),
+        const SizedBox(height: 8),
+        if (v.abs() > 0.001)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: _post,
+            onChanged: (b) => setState(() => _post = b),
+            title: Text(context.t('postAdjustment')),
+            subtitle: Text(context.t('postAdjustmentHint'), style: FarmTypography.textTheme.bodySmall),
+          ),
+        TextField(controller: _explanation, maxLines: 2, decoration: InputDecoration(labelText: context.t('explanation'))),
+        if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+      ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('closeReconciliation'))),

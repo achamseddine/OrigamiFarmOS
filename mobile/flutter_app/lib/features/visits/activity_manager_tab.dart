@@ -81,82 +81,80 @@ class _ActivityManagerTabState extends State<ActivityManagerTab> {
   Widget build(BuildContext context) {
     final activities = context.watch<VisitsProvider>().activities;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'New Activity',
-            subtitle: 'A required staff role or a daily-use limit are optional — set them for a ride/animal-interaction activity, leave blank otherwise.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(flex: 2, child: TextField(controller: _name, decoration: const InputDecoration(labelText: 'Activity name'))),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _type,
-                      decoration: const InputDecoration(labelText: 'Type'),
-                      items: [for (final t in kVisitActivityTypes) DropdownMenuItem(value: t, child: Text(t))],
-                      onChanged: (v) => setState(() => _type = v ?? _type),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price per guest (\$)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _capacity, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Capacity per slot'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _duration, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (min)'))),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: _staffRole, decoration: const InputDecoration(labelText: 'Requires staff role (optional)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _animalId, decoration: const InputDecoration(labelText: 'Requires animal ID (optional)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _maxUsesPerDay, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Welfare limit: max uses/day (optional)'))),
-                ]),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton(
-                    onPressed: _saving ? null : _submit,
-                    child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create Activity'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'New Activity',
+          subtitle: 'A required staff role or a daily-use limit are optional — set them for a ride/animal-interaction activity, leave blank otherwise.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(flex: 2, child: TextField(controller: _name, decoration: const InputDecoration(labelText: 'Activity name'))),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _type,
+                    decoration: const InputDecoration(labelText: 'Type'),
+                    items: [for (final t in kVisitActivityTypes) DropdownMenuItem(value: t, child: Text(t))],
+                    onChanged: (v) => setState(() => _type = v ?? _type),
                   ),
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Price per guest (\$)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _capacity, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Capacity per slot'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _duration, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (min)'))),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: _staffRole, decoration: const InputDecoration(labelText: 'Requires staff role (optional)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _animalId, decoration: const InputDecoration(labelText: 'Requires animal ID (optional)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _maxUsesPerDay, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Welfare limit: max uses/day (optional)'))),
+              ]),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton(
+                  onPressed: _saving ? null : _submit,
+                  child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create Activity'),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
               ],
-            ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Activities',
-            child: activities.isEmpty
-                ? Text('No activities yet.', style: FarmTypography.textTheme.bodySmall)
-                : FarmDataTable(
-                    columns: const ['Name', 'Type', 'Price', 'Capacity/slot', 'Requires'],
-                    columnFlex: const [2, 1, 1, 1, 2],
-                    rows: [
-                      for (final a in activities)
-                        [
-                          Text(a.name, style: FarmTypography.textTheme.titleSmall),
-                          Text(a.activityType),
-                          Text('\$${a.price.toStringAsFixed(2)}'),
-                          Text('${a.capacityPerSlot}'),
-                          Text([if (a.requiresStaffRole != null) 'staff: ${a.requiresStaffRole}', if (a.maxUsesPerDay != null) 'max ${a.maxUsesPerDay}/day'].join(' · ').ifEmpty('—')),
-                        ],
-                    ],
-                  ),
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Activities',
+          child: activities.isEmpty
+              ? Text('No activities yet.', style: FarmTypography.textTheme.bodySmall)
+              : FarmDataTable(
+                  columns: const ['Name', 'Type', 'Price', 'Capacity/slot', 'Requires'],
+                  columnFlex: const [2, 1, 1, 1, 2],
+                  rows: [
+                    for (final a in activities)
+                      [
+                        Text(a.name, style: FarmTypography.textTheme.titleSmall),
+                        Text(a.activityType),
+                        Text('\$${a.price.toStringAsFixed(2)}'),
+                        Text('${a.capacityPerSlot}'),
+                        Text([if (a.requiresStaffRole != null) 'staff: ${a.requiresStaffRole}', if (a.maxUsesPerDay != null) 'max ${a.maxUsesPerDay}/day'].join(' · ').ifEmpty('—')),
+                      ],
+                  ],
+                ),
+        ),
+      ],
     );
   }
 }

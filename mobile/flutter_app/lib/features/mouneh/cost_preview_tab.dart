@@ -42,80 +42,78 @@ class _CostPreviewTabState extends State<CostPreviewTab> {
     final suggestion = (_productId != null && qty > 0) ? provider.suggestedPriceFor(_productId!, qty) : null;
     final unit = product?.outputUnit ?? context.t('mnUnits');
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabCost'), title: context.t('mnCostTitle'), subtitle: context.t('mnCostSub')),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabCost'), title: context.t('mnCostTitle'), subtitle: context.t('mnCostSub')),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  initialValue: _productId,
+                  decoration: InputDecoration(labelText: context.t('mnColProduct')),
+                  items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
+                  onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _outputQty,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: '${context.t('mnOutputQty')} ($unit)'),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        if (breakdown == null)
+          SectionCard(
+            child: EmptyState(
+              icon: FarmIcon.money,
+              message: context.t(product == null ? 'mnNeedProduct' : 'mnNeedRecipe'),
+            ),
+          )
+        else ...[
+          EqualGrid(minTileWidth: 200, children: [
+            KpiCard(icon: FarmIcon.money, label: '${context.t('mnCostPer')} $unit', value: '\$${breakdown.unitCost.toStringAsFixed(2)}'),
+            KpiCard(icon: FarmIcon.chartLine, label: context.t('mnBatchCost'), value: '\$${breakdown.totalCost.toStringAsFixed(0)}'),
+            if (suggestion != null)
+              KpiCard(icon: FarmIcon.report, label: context.t('mnSuggestedPrice'), value: '\$${suggestion.suggestedPrice.toStringAsFixed(2)}', tint: FarmColors.success),
+            if (product!.targetPrice != null)
+              KpiCard(
+                icon: FarmIcon.scale,
+                label: context.t('mnMarginAtPrice'),
+                value: '${(((product.targetPrice! - breakdown.unitCost) / product.targetPrice!) * 100).toStringAsFixed(0)}%',
+                tint: product.targetPrice! > breakdown.unitCost ? FarmColors.success : FarmColors.danger,
+              ),
+          ]),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
-            child: Row(
+            title: context.t('mnBreakdown'),
+            child: Column(
               children: [
-                Expanded(
-                  flex: 2,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _productId,
-                    decoration: InputDecoration(labelText: context.t('mnColProduct')),
-                    items: [for (final p in provider.products) DropdownMenuItem(value: p.id, child: Text(p.name))],
-                    onChanged: provider.products.isEmpty ? null : (v) => setState(() => _productId = v),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _outputQty,
-                    keyboardType: TextInputType.number,
-                    decoration: InputDecoration(labelText: '${context.t('mnOutputQty')} ($unit)'),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
+                _costRow(context.t('mnRawMaterials'), breakdown.materialCost),
+                _costRow(context.t('mnPackaging'), breakdown.packagingCost),
+                _costRow(context.t('mnLabor'), breakdown.laborCost),
+                _costRow(context.t('mnOverhead'), breakdown.overheadCost),
+                if (breakdown.byproductCredit > 0) _costRow(context.t('mnByproductCredit'), -breakdown.byproductCredit),
+                const Divider(color: FarmColors.border),
+                _costRow(context.t('mnTotalCost'), breakdown.totalCost, bold: true),
+                _costRow('${context.t('mnCostPer')} $unit', breakdown.unitCost, bold: true),
               ],
             ),
           ),
           const SizedBox(height: FarmSpacing.md),
-          if (breakdown == null)
-            SectionCard(
-              child: EmptyState(
-                icon: FarmIcon.money,
-                message: context.t(product == null ? 'mnNeedProduct' : 'mnNeedRecipe'),
-              ),
-            )
-          else ...[
-            EqualGrid(minTileWidth: 200, children: [
-              KpiCard(icon: FarmIcon.money, label: '${context.t('mnCostPer')} $unit', value: '\$${breakdown.unitCost.toStringAsFixed(2)}'),
-              KpiCard(icon: FarmIcon.chartLine, label: context.t('mnBatchCost'), value: '\$${breakdown.totalCost.toStringAsFixed(0)}'),
-              if (suggestion != null)
-                KpiCard(icon: FarmIcon.report, label: context.t('mnSuggestedPrice'), value: '\$${suggestion.suggestedPrice.toStringAsFixed(2)}', tint: FarmColors.success),
-              if (product!.targetPrice != null)
-                KpiCard(
-                  icon: FarmIcon.scale,
-                  label: context.t('mnMarginAtPrice'),
-                  value: '${(((product.targetPrice! - breakdown.unitCost) / product.targetPrice!) * 100).toStringAsFixed(0)}%',
-                  tint: product.targetPrice! > breakdown.unitCost ? FarmColors.success : FarmColors.danger,
-                ),
-            ]),
-            const SizedBox(height: FarmSpacing.md),
-            SectionCard(
-              title: context.t('mnBreakdown'),
-              child: Column(
-                children: [
-                  _costRow(context.t('mnRawMaterials'), breakdown.materialCost),
-                  _costRow(context.t('mnPackaging'), breakdown.packagingCost),
-                  _costRow(context.t('mnLabor'), breakdown.laborCost),
-                  _costRow(context.t('mnOverhead'), breakdown.overheadCost),
-                  if (breakdown.byproductCredit > 0) _costRow(context.t('mnByproductCredit'), -breakdown.byproductCredit),
-                  const Divider(color: FarmColors.border),
-                  _costRow(context.t('mnTotalCost'), breakdown.totalCost, bold: true),
-                  _costRow('${context.t('mnCostPer')} $unit', breakdown.unitCost, bold: true),
-                ],
-              ),
-            ),
-            const SizedBox(height: FarmSpacing.md),
-            NoticeBanner(text: context.t('mnCostCaveat')),
-          ],
+          NoticeBanner(text: context.t('mnCostCaveat')),
         ],
-      ),
+      ],
     );
   }
 

@@ -7,6 +7,7 @@ import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
+import '../../core/widgets/module_workspace.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/access.dart';
@@ -75,9 +76,8 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
     final atRisk = feeding.reorder.where((r) => r.coveredByTaskId == null).length;
     final tabs = FeedWorkspaceTab.values;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
+    return ModuleWorkspace(
+      header: [
         HeroBand(
           eyebrow: context.t('fwEyebrow'),
           title: context.t('feedInventoryTitle'),
@@ -101,31 +101,22 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
         FeedGettingStartedCard(onFeed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
         const SizedBox(height: FarmSpacing.sm),
         FeedKpiRow(feeding: feeding),
-        const SizedBox(height: FarmSpacing.sm),
-        UnderlineTabs(
-          labels: [for (final t in tabs) context.t(_labels[t]!)],
-          selected: tabs.indexOf(_tab),
-          onSelect: (i) => setState(() => _tab = tabs[i]),
-        ),
-        const SizedBox(height: FarmSpacing.md),
-        Expanded(
-          child: IndexedStack(
-            index: tabs.indexOf(_tab),
-            children: const [
-              MixingTab(),
-              FeedsAndLotsTab(),
-              FeedInventoryScreen(embedded: true),
-              FormulasTab(),
-              DailyFeedingTab(),
-              ProgramsTab(),
-              NutritionTab(),
-              CostsTab(),
-              TraceabilityTab(),
-              PerformanceTab(),
-            ],
-          ),
-        ),
       ],
+      labels: [for (final t in tabs) context.t(_labels[t]!)],
+      selected: tabs.indexOf(_tab),
+      onSelect: (i) => setState(() => _tab = tabs[i]),
+      tabBuilder: (context, i) => switch (tabs[i]) {
+        FeedWorkspaceTab.mixing => const MixingTab(),
+        FeedWorkspaceTab.materials => const FeedsAndLotsTab(),
+        FeedWorkspaceTab.stock => const FeedInventoryScreen(embedded: true),
+        FeedWorkspaceTab.formulas => const FormulasTab(),
+        FeedWorkspaceTab.intake => const DailyFeedingTab(),
+        FeedWorkspaceTab.programs => const ProgramsTab(),
+        FeedWorkspaceTab.nutrition => const NutritionTab(),
+        FeedWorkspaceTab.costs => const CostsTab(),
+        FeedWorkspaceTab.trace => const TraceabilityTab(),
+        FeedWorkspaceTab.performance => const PerformanceTab(),
+      },
     );
   }
 }
@@ -185,23 +176,23 @@ Map<String, double> finishedMixOnHand(List<FeedLot> lots) {
   return out;
 }
 
-/// Small shared pieces for the tabs.
+/// Small shared pieces for the tabs. A tab is a plain column: the
+/// workspace page scrolls ([ModuleWorkspace]), so a tab is read at its
+/// full height and never in a small window of its own.
 class FeedTabScaffold extends StatelessWidget {
   const FeedTabScaffold({super.key, required this.children});
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            children[i],
-            if (i != children.length - 1) const SizedBox(height: FarmSpacing.md),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < children.length; i++) ...[
+          children[i],
+          if (i != children.length - 1) const SizedBox(height: FarmSpacing.md),
         ],
-      ),
+      ],
     );
   }
 }

@@ -75,8 +75,9 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
       return categoryOk && queryOk;
     }).toList();
 
-    return SingleChildScrollView(
-      child: Column(
+    // As a tab of the Feed workspace the page around it scrolls; alone,
+    // the screen scrolls itself.
+    final body = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!widget.embedded) ...[
@@ -201,8 +202,8 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
             ]);
           }),
         ],
-      ),
-    );
+      );
+    return widget.embedded ? body : SingleChildScrollView(child: body);
   }
 }
 

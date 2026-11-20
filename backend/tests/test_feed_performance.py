@@ -31,7 +31,11 @@ def _h(client: TestClient) -> dict:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc).replace(hour=7, minute=0, second=0, microsecond=0)
+    # Today's 07:00 UTC — but never later than now: before 07:00 UTC (early
+    # morning in Lebanon) that hour is still ahead, and the server refuses a
+    # feeding or a milking dated in the future.
+    now = datetime.now(timezone.utc)
+    return min(now.replace(hour=7, minute=0, second=0, microsecond=0), now - timedelta(minutes=1))
 
 
 def _evaluate(client: TestClient, **params) -> dict:

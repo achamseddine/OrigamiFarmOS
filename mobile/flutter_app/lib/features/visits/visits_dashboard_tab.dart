@@ -22,60 +22,58 @@ class VisitsDashboardTab extends StatelessWidget {
     final upcoming = provider.upcomingSessions;
     final report = provider.profitabilityFor();
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          LayoutBuilder(builder: (context, c) {
-            final perRow = c.maxWidth > 900 ? 4 : 2;
-            final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
-            final cards = [
-              KpiCard(icon: FarmIcon.calendar, label: 'Upcoming Sessions', value: '${upcoming.length}', onTap: () => onNavigate?.call(5)),
-              KpiCard(icon: FarmIcon.task, label: 'Draft Bookings', value: '${provider.draftBookingCount}', onTap: () => onNavigate?.call(4)),
-              KpiCard(icon: FarmIcon.check, label: 'Confirmed', value: '${provider.confirmedBookingCount}', tint: FarmColors.success),
-              KpiCard(icon: FarmIcon.eye, label: 'Checked In', value: '${provider.checkedInBookingCount}', onTap: () => onNavigate?.call(6)),
-              KpiCard(icon: FarmIcon.money, label: 'Visitor Revenue', value: '\$${report.summary.visitorRevenue.toStringAsFixed(0)}', tint: FarmColors.success, onTap: () => onNavigate?.call(9)),
-              KpiCard(icon: FarmIcon.report, label: 'Gross Margin', value: '\$${report.summary.grossMargin.toStringAsFixed(0)}', tint: report.summary.grossMargin >= 0 ? FarmColors.success : FarmColors.danger),
-            ];
-            return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
-          }),
-          const SizedBox(height: FarmSpacing.md),
-          LayoutBuilder(builder: (context, c) {
-            final wide = c.maxWidth > kTabletBreakpoint;
-            final sessionsCard = SectionCard(
-              title: 'Upcoming Sessions',
-              subtitle: 'Configured opening days only — see Opening Calendar',
-              child: upcoming.isEmpty
-                  ? Text('No open sessions scheduled yet.', style: FarmTypography.textTheme.bodySmall)
-                  : Column(children: [for (final s in upcoming.take(5)) _SessionRow(sessionId: s.id)]),
-            );
-            final attentionCard = SectionCard(
-              title: 'Needs Attention',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (provider.draftBookingCount == 0 && provider.incidents.isEmpty)
-                    Text('Nothing needs attention right now.', style: FarmTypography.textTheme.bodySmall)
-                  else ...[
-                    if (provider.draftBookingCount > 0)
-                      _AttentionRow(text: '${provider.draftBookingCount} draft booking(s) awaiting confirmation.', level: FarmStatusLevel.watch),
-                    if (provider.incidents.isNotEmpty)
-                      _AttentionRow(text: '${provider.incidents.length} incident(s) logged this season.', level: FarmStatusLevel.alert),
-                  ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LayoutBuilder(builder: (context, c) {
+          final perRow = c.maxWidth > 900 ? 4 : 2;
+          final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
+          final cards = [
+            KpiCard(icon: FarmIcon.calendar, label: 'Upcoming Sessions', value: '${upcoming.length}', onTap: () => onNavigate?.call(5)),
+            KpiCard(icon: FarmIcon.task, label: 'Draft Bookings', value: '${provider.draftBookingCount}', onTap: () => onNavigate?.call(4)),
+            KpiCard(icon: FarmIcon.check, label: 'Confirmed', value: '${provider.confirmedBookingCount}', tint: FarmColors.success),
+            KpiCard(icon: FarmIcon.eye, label: 'Checked In', value: '${provider.checkedInBookingCount}', onTap: () => onNavigate?.call(6)),
+            KpiCard(icon: FarmIcon.money, label: 'Visitor Revenue', value: '\$${report.summary.visitorRevenue.toStringAsFixed(0)}', tint: FarmColors.success, onTap: () => onNavigate?.call(9)),
+            KpiCard(icon: FarmIcon.report, label: 'Gross Margin', value: '\$${report.summary.grossMargin.toStringAsFixed(0)}', tint: report.summary.grossMargin >= 0 ? FarmColors.success : FarmColors.danger),
+          ];
+          return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
+        }),
+        const SizedBox(height: FarmSpacing.md),
+        LayoutBuilder(builder: (context, c) {
+          final wide = c.maxWidth > kTabletBreakpoint;
+          final sessionsCard = SectionCard(
+            title: 'Upcoming Sessions',
+            subtitle: 'Configured opening days only — see Opening Calendar',
+            child: upcoming.isEmpty
+                ? Text('No open sessions scheduled yet.', style: FarmTypography.textTheme.bodySmall)
+                : Column(children: [for (final s in upcoming.take(5)) _SessionRow(sessionId: s.id)]),
+          );
+          final attentionCard = SectionCard(
+            title: 'Needs Attention',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (provider.draftBookingCount == 0 && provider.incidents.isEmpty)
+                  Text('Nothing needs attention right now.', style: FarmTypography.textTheme.bodySmall)
+                else ...[
+                  if (provider.draftBookingCount > 0)
+                    _AttentionRow(text: '${provider.draftBookingCount} draft booking(s) awaiting confirmation.', level: FarmStatusLevel.watch),
+                  if (provider.incidents.isNotEmpty)
+                    _AttentionRow(text: '${provider.incidents.length} incident(s) logged this season.', level: FarmStatusLevel.alert),
                 ],
-              ),
-            );
-            if (!wide) return Column(children: [sessionsCard, const SizedBox(height: FarmSpacing.md), attentionCard]);
-            return IntrinsicHeight(
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: sessionsCard),
-                const SizedBox(width: FarmSpacing.md),
-                Expanded(child: attentionCard),
-              ]),
-            );
-          }),
-        ],
-      ),
+              ],
+            ),
+          );
+          if (!wide) return Column(children: [sessionsCard, const SizedBox(height: FarmSpacing.md), attentionCard]);
+          return IntrinsicHeight(
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: sessionsCard),
+              const SizedBox(width: FarmSpacing.md),
+              Expanded(child: attentionCard),
+            ]),
+          );
+        }),
+      ],
     );
   }
 }

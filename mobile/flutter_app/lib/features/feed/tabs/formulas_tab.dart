@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/form_dialog.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -265,86 +266,82 @@ class _FormulaDialogState extends State<_FormulaDialog> {
     final lang = Localizations.localeOf(context).languageCode;
     final ingredients = feeding.ingredients;
     final size = double.tryParse(_batchSize.text) ?? 0;
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(_isVersion ? '${context.t('newVersion')} — ${widget.formula!.name}' : context.t('newFormula')),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (!_isVersion) ...[
-              TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('formula'))),
-              const SizedBox(height: 10),
-              Row(children: [
+      width: 520,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (!_isVersion) ...[
+            TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('formula'))),
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _productId,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: context.t('producesFeed')),
+                  items: [for (final p in feeding.farmProduced) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+                  onChanged: (v) => setState(() => _productId = v),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String?>(
+                  value: _species,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: context.t('forSpecies')),
+                  items: [
+                    DropdownMenuItem<String?>(value: null, child: Text(context.t('anySpecies'))),
+                    for (final s in livestock.species) DropdownMenuItem<String?>(value: s.code, child: Text(s.name(lang))),
+                  ],
+                  onChanged: (v) => setState(() => _species = v),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 10),
+          ],
+          TextField(
+            controller: _batchSize,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: '${context.t('batchSize')} (kg)'),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 10),
+          Text(context.t('components'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+          for (var i = 0; i < _lines.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(children: [
                 Expanded(
+                  flex: 3,
                   child: DropdownButtonFormField<String>(
-                    value: _productId,
+                    value: ingredients.any((p) => p.id == _lines[i].productId) ? _lines[i].productId : null,
                     isExpanded: true,
-                    decoration: InputDecoration(labelText: context.t('producesFeed')),
-                    items: [for (final p in feeding.farmProduced) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-                    onChanged: (v) => setState(() => _productId = v),
+                    decoration: InputDecoration(labelText: context.t('ingredient')),
+                    items: [for (final p in ingredients) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+                    onChanged: (v) => setState(() => _lines[i].productId = v),
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: DropdownButtonFormField<String?>(
-                    value: _species,
-                    isExpanded: true,
-                    decoration: InputDecoration(labelText: context.t('forSpecies')),
-                    items: [
-                      DropdownMenuItem<String?>(value: null, child: Text(context.t('anySpecies'))),
-                      for (final s in livestock.species) DropdownMenuItem<String?>(value: s.code, child: Text(s.name(lang))),
-                    ],
-                    onChanged: (v) => setState(() => _species = v),
+                  flex: 2,
+                  child: TextField(
+                    controller: _lines[i].quantity,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: context.t('targetQuantity'), suffixText: size > 0 ? '${((double.tryParse(_lines[i].quantity.text) ?? 0) / size * 100).toStringAsFixed(1)}%' : null),
+                    onChanged: (_) => setState(() {}),
                   ),
+                ),
+                IconButton(
+                  onPressed: _lines.length == 1 ? null : () => setState(() => _lines.removeAt(i).quantity.dispose()),
+                  icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted),
                 ),
               ]),
-              const SizedBox(height: 10),
-            ],
-            TextField(
-              controller: _batchSize,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(labelText: '${context.t('batchSize')} (kg)'),
-              onChanged: (_) => setState(() {}),
             ),
-            const SizedBox(height: 10),
-            Text(context.t('components'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-            for (var i = 0; i < _lines.length; i++)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Row(children: [
-                  Expanded(
-                    flex: 3,
-                    child: DropdownButtonFormField<String>(
-                      value: ingredients.any((p) => p.id == _lines[i].productId) ? _lines[i].productId : null,
-                      isExpanded: true,
-                      decoration: InputDecoration(labelText: context.t('ingredient')),
-                      items: [for (final p in ingredients) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-                      onChanged: (v) => setState(() => _lines[i].productId = v),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _lines[i].quantity,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: InputDecoration(labelText: context.t('targetQuantity'), suffixText: size > 0 ? '${((double.tryParse(_lines[i].quantity.text) ?? 0) / size * 100).toStringAsFixed(1)}%' : null),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _lines.length == 1 ? null : () => setState(() => _lines.removeAt(i).quantity.dispose()),
-                    icon: const Icon(Icons.remove_circle_outline, size: 18, color: FarmColors.muted),
-                  ),
-                ]),
-              ),
-            TextButton.icon(onPressed: () => setState(() => _lines.add(_ComponentLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addComponent'))),
-            FeedKeyValue(context.t('total'), '${feedNumber(_total)} / ${feedNumber(size)} kg', bold: true, valueColor: (size - _total).abs() > size * 0.02 ? FarmColors.danger : FarmColors.success),
-            TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
-          ]),
-        ),
-      ),
+          TextButton.icon(onPressed: () => setState(() => _lines.add(_ComponentLine())), icon: const Icon(Icons.add, size: 16), label: Text(context.t('addComponent'))),
+          FeedKeyValue(context.t('total'), '${feedNumber(_total)} / ${feedNumber(size)} kg', bold: true, valueColor: (size - _total).abs() > size * 0.02 ? FarmColors.danger : FarmColors.success),
+          TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t(_isVersion ? 'newVersion' : 'save'))),

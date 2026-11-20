@@ -5,6 +5,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/typography.dart';
 import '../../core/util/number_input.dart';
 import '../../core/widgets/ux_blocks.dart';
+import '../../core/widgets/form_dialog.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
@@ -213,108 +214,104 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
     final feeds = feeding.feedable;
     final shortfalls = _shortfalls(feeding);
     final missingSlot = _lines.any((l) => l.slot != null && l.productId == null);
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text('${context.t('recordFeeding')} — ${widget.subjectName}'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _eventType,
-                    decoration: InputDecoration(labelText: context.t('eventType')),
-                    items: [for (final t in _types) DropdownMenuItem(value: t, child: Text(context.t('event_$t')))],
-                    onChanged: (v) => setState(() => _eventType = v ?? _eventType),
-                  ),
+      width: 520,
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _eventType,
+                decoration: InputDecoration(labelText: context.t('eventType')),
+                items: [for (final t in _types) DropdownMenuItem(value: t, child: Text(context.t('event_$t')))],
+                onChanged: (v) => setState(() => _eventType = v ?? _eventType),
+              ),
+            ),
+            if (widget.subjectType == 'group') ...[
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 110,
+                child: TextField(
+                  controller: _head,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: context.t('headCount')),
                 ),
-                if (widget.subjectType == 'group') ...[
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 110,
-                    child: TextField(
-                      controller: _head,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(labelText: context.t('headCount')),
-                    ),
-                  ),
-                ],
-              ]),
-              const SizedBox(height: 6),
-              Text(context.t('feedRowsHint'), style: FarmTypography.textTheme.bodySmall),
-              const SizedBox(height: 10),
-              for (var i = 0; i < _lines.length; i++) ...[
-                _FeedRow(
-                  key: ObjectKey(_lines[i]),
-                  line: _lines[i],
-                  feeds: feeds,
-                  lang: lang,
-                  onChanged: () => setState(() {}),
-                  onRemove: _lines[i].slot == null ? () => setState(() => _lines.removeAt(i).quantity.dispose()) : null,
-                ),
-                const SizedBox(height: 10),
-              ],
-              Wrap(spacing: 8, runSpacing: 4, children: [
-                TextButton.icon(
-                  onPressed: feeds.isEmpty ? null : () => setState(() => _lines.add(FeedingLine())),
-                  icon: const Icon(Icons.add, size: 16),
-                  label: Text(context.t('addFeedLine')),
-                ),
-                if (missingSlot && canSetUp)
-                  TextButton.icon(
-                    onPressed: _settingUp ? null : _setUpStandardFeeds,
-                    icon: _settingUp
-                        ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.playlist_add, size: 16),
-                    label: Text(context.t('feedSetUpStandard')),
-                  ),
-              ]),
-              if (missingSlot && !canSetUp)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(context.t('feedAskManagerStandard'), style: FarmTypography.textTheme.bodySmall),
-                ),
-              TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
-              if (shortfalls.isNotEmpty || _serverShortfall) ...[
-                const SizedBox(height: 12),
-                NoticeBanner(
-                  title: context.t('feedStockShortTitle'),
-                  text: [
-                    for (final (p, qty) in shortfalls)
-                      '${p.label(lang)}: ${_fmt(p.availability.available)} ${p.unit} ${context.t('feedInStock')}, ${_fmt(qty)} ${p.unit} ${context.t('feedEntered')}',
-                    context.t('feedStockShortBody'),
-                  ].join('\n'),
-                ),
-                // Only Feed or Inventory approval records past the ledger.
-                if (context.watch<AccessProvider>().canOverrideFeedStock)
-                  Material(
-                    type: MaterialType.transparency,
-                    child: CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      controlAffinity: ListTileControlAffinity.leading,
-                      dense: true,
-                      value: _overrideStock,
-                      title: Text(context.t('feedRecordAnyway')),
-                      onChanged: (v) => setState(() => _overrideStock = v ?? false),
-                    ),
-                  )
-                else
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
-                  ),
-              ],
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-              ],
+              ),
             ],
-          ),
-        ),
+          ]),
+          const SizedBox(height: 6),
+          Text(context.t('feedRowsHint'), style: FarmTypography.textTheme.bodySmall),
+          const SizedBox(height: 10),
+          for (var i = 0; i < _lines.length; i++) ...[
+            _FeedRow(
+              key: ObjectKey(_lines[i]),
+              line: _lines[i],
+              feeds: feeds,
+              lang: lang,
+              onChanged: () => setState(() {}),
+              onRemove: _lines[i].slot == null ? () => setState(() => _lines.removeAt(i).quantity.dispose()) : null,
+            ),
+            const SizedBox(height: 16),
+          ],
+          Wrap(spacing: 8, runSpacing: 4, children: [
+            TextButton.icon(
+              onPressed: feeds.isEmpty ? null : () => setState(() => _lines.add(FeedingLine())),
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(context.t('addFeedLine')),
+            ),
+            if (missingSlot && canSetUp)
+              TextButton.icon(
+                onPressed: _settingUp ? null : _setUpStandardFeeds,
+                icon: _settingUp
+                    ? const SizedBox(height: 14, width: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.playlist_add, size: 16),
+                label: Text(context.t('feedSetUpStandard')),
+              ),
+          ]),
+          if (missingSlot && !canSetUp)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(context.t('feedAskManagerStandard'), style: FarmTypography.textTheme.bodySmall),
+            ),
+          TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
+          if (shortfalls.isNotEmpty || _serverShortfall) ...[
+            const SizedBox(height: 12),
+            NoticeBanner(
+              title: context.t('feedStockShortTitle'),
+              text: [
+                for (final (p, qty) in shortfalls)
+                  '${p.label(lang)}: ${_fmt(p.availability.available)} ${p.unit} ${context.t('feedInStock')}, ${_fmt(qty)} ${p.unit} ${context.t('feedEntered')}',
+                context.t('feedStockShortBody'),
+              ].join('\n'),
+            ),
+            // Only Feed or Inventory approval records past the ledger.
+            if (context.watch<AccessProvider>().canOverrideFeedStock)
+              Material(
+                type: MaterialType.transparency,
+                child: CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  value: _overrideStock,
+                  title: Text(context.t('feedRecordAnyway')),
+                  onChanged: (v) => setState(() => _overrideStock = v ?? false),
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
+              ),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 10),
+            Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
+          ],
+        ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text(context.t('cancel'))),

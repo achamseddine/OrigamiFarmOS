@@ -32,26 +32,24 @@ class _VisitDayBriefingTabState extends State<VisitDayBriefingTab> {
     _sessionId ??= sessions.isNotEmpty ? sessions.last.id : null;
     final session = _sessionId == null ? null : provider.sessionById(_sessionId!);
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'Choose a Session',
-            child: DropdownButtonFormField<String>(
-              isExpanded: true,
-              value: _sessionId,
-              decoration: const InputDecoration(labelText: 'Session'),
-              items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime} · ${s.status}'))],
-              onChanged: sessions.isEmpty ? null : (v) => setState(() => _sessionId = v),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Choose a Session',
+          child: DropdownButtonFormField<String>(
+            isExpanded: true,
+            value: _sessionId,
+            decoration: const InputDecoration(labelText: 'Session'),
+            items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month}/${s.date.year} · ${s.startTime}–${s.endTime} · ${s.status}'))],
+            onChanged: sessions.isEmpty ? null : (v) => setState(() => _sessionId = v),
           ),
-          if (session != null) ...[
-            const SizedBox(height: FarmSpacing.md),
-            _SessionBriefing(session: session),
-          ],
+        ),
+        if (session != null) ...[
+          const SizedBox(height: FarmSpacing.md),
+          _SessionBriefing(session: session),
         ],
-      ),
+      ],
     );
   }
 }

@@ -1,5 +1,14 @@
 # Releases
 
+## v0.7.7 — Feed, reports and module pages read at full height
+
+On the tablet and the web app (one codebase):
+- **Fixed — a tab was shown in a small window.** Feed, Mouneh and Farm Visits drew their header, figures and tab bar, and put the chosen tab in what was left under them: on a 10" tablet a mix, the day's feeding or a report scrolled inside a window a few lines tall, and a report's last rows were hard to reach. They now open as one page, like Health: the band and figures scroll away, the tab bar stays at the top of the screen, and the chosen tab is read at its full height down to its last line (`core/widgets/module_workspace.dart`, used by Feed, Health, Mouneh and Farm Visits). Choosing another tab starts it from its top; a tab keeps what was typed in it while another is shown; Farm Visits uses the same tab bar as the other modules.
+- **Feed forms full screen on the tablet.** Record purchase, Record a mix, Record feeding, opening a mix (its history), and the other feed forms (new feed, delivery, reservation, formula, program, lab analysis, mixing, reconciliation, stock movement) take the whole screen on a tablet or phone: the title and a close button at the top, the form at a readable width, Cancel / Save in a bar that stays above the keyboard. On a large desktop screen they stay a dialog (`core/widgets/form_dialog.dart`). The mix and feeding rows have more room, so a row's "in stock" line no longer runs into the next row's label.
+- **Layout faults the wider check found**, in tabs the tablet-size check never opened before: the pharmacy table's status column and the stock-alert buttons on an 8" tablet, and a section heading's buttons beside a long title. The check now opens every tab of every module page.
+- Fixed a backend test that failed whenever it ran before 07:00 UTC (early morning in Lebanon): it dated a feeding at today's 07:00, which the server rightly refuses as a future date (`tests/test_feed_performance.py`).
+- No server change, no migration. Tests: app +13 (`test/layout/module_pages_test.dart`: every tab of Feed, Health, Mouneh and Visits is one page scroll the height of the screen; the tab bar stays at the top; reports reach their last line; the feed forms open full screen with Save above the keyboard, and as a dialog on a desktop screen); the tablet-size sweep now walks every module tab.
+
 ## v0.7.6 — Milk entered for an earlier day
 
 On the tablet and the web app (one form):

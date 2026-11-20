@@ -6,6 +6,7 @@ import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
 import '../../../core/widgets/section_card.dart';
 import '../../../core/widgets/status_pill.dart';
+import '../../../core/widgets/form_dialog.dart';
 import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
@@ -260,77 +261,73 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('newFeed')),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('feedName'))),
-            const SizedBox(height: 10),
-            TextField(controller: _nameAr, decoration: InputDecoration(labelText: '${context.t('feedName')} (AR)')),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _source,
-                  decoration: InputDecoration(labelText: context.t('sourceType')),
-                  items: [
-                    DropdownMenuItem(value: 'purchased', child: Text(context.t('purchasedFeed'))),
-                    DropdownMenuItem(value: 'farm_produced', child: Text(context.t('farmProducedFeed'))),
-                  ],
-                  onChanged: (v) => setState(() => _source = v ?? _source),
-                ),
+      width: 460,
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: _name, autofocus: true, decoration: InputDecoration(labelText: context.t('feedName'))),
+          const SizedBox(height: 10),
+          TextField(controller: _nameAr, decoration: InputDecoration(labelText: '${context.t('feedName')} (AR)')),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _source,
+                decoration: InputDecoration(labelText: context.t('sourceType')),
+                items: [
+                  DropdownMenuItem(value: 'purchased', child: Text(context.t('purchasedFeed'))),
+                  DropdownMenuItem(value: 'farm_produced', child: Text(context.t('farmProducedFeed'))),
+                ],
+                onChanged: (v) => setState(() => _source = v ?? _source),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _category,
-                  decoration: InputDecoration(labelText: context.t('category')),
-                  items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(context.t('feedCategory_$c')))],
-                  onChanged: (v) => setState(() => _category = v ?? _category),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 90,
-                child: DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _unit,
-                  decoration: const InputDecoration(labelText: 'Unit'),
-                  items: const [
-                    DropdownMenuItem(value: 'kg', child: Text('kg')),
-                    DropdownMenuItem(value: 't', child: Text('t')),
-                    DropdownMenuItem(value: 'l', child: Text('L')),
-                    DropdownMenuItem(value: 'bale', child: Text('bale')),
-                  ],
-                  onChanged: (v) => setState(() => _unit = v ?? _unit),
-                ),
-              ),
-            ]),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
-              value: _ingredient, title: Text(context.t('ingredient')), subtitle: Text(context.t('ingredientHint')),
-              onChanged: (v) => setState(() => _ingredient = v ?? false),
             ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
-              value: _feedable, title: Text(context.t('feedable')), subtitle: Text(context.t('feedableHint')),
-              onChanged: (v) => setState(() => _feedable = v ?? false),
+            const SizedBox(width: 10),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _category,
+                decoration: InputDecoration(labelText: context.t('category')),
+                items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(context.t('feedCategory_$c')))],
+                onChanged: (v) => setState(() => _category = v ?? _category),
+              ),
             ),
-            Row(children: [
-              Expanded(child: TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('unitCost')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _opening, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('openingQuantity')))),
-            ]),
-            const SizedBox(height: 10),
-            TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier'))),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 90,
+              child: DropdownButtonFormField<String>(
+                isExpanded: true,
+                value: _unit,
+                decoration: const InputDecoration(labelText: 'Unit'),
+                items: const [
+                  DropdownMenuItem(value: 'kg', child: Text('kg')),
+                  DropdownMenuItem(value: 't', child: Text('t')),
+                  DropdownMenuItem(value: 'l', child: Text('L')),
+                  DropdownMenuItem(value: 'bale', child: Text('bale')),
+                ],
+                onChanged: (v) => setState(() => _unit = v ?? _unit),
+              ),
+            ),
           ]),
-        ),
-      ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
+            value: _ingredient, title: Text(context.t('ingredient')), subtitle: Text(context.t('ingredientHint')),
+            onChanged: (v) => setState(() => _ingredient = v ?? false),
+          ),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
+            value: _feedable, title: Text(context.t('feedable')), subtitle: Text(context.t('feedableHint')),
+            onChanged: (v) => setState(() => _feedable = v ?? false),
+          ),
+          Row(children: [
+            Expanded(child: TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('unitCost')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _opening, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('openingQuantity')))),
+          ]),
+          const SizedBox(height: 10),
+          TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier'))),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),
@@ -415,55 +412,51 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
     final feeding = context.watch<FeedingProvider>();
     final lang = Localizations.localeOf(context).languageCode;
     final products = feeding.products.where((p) => p.status == 'active').toList();
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('receiveDelivery')),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            DropdownButtonFormField<String>(
-              value: products.any((p) => p.id == _productId) ? _productId : null,
-              isExpanded: true,
-              decoration: InputDecoration(labelText: context.t('feedItem')),
-              items: [for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
-              onChanged: (v) => setState(() => _productId = v),
-            ),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: TextField(controller: _ordered, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('ordered')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _qty, autofocus: true, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('received')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _rejected, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('rejected')))),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: TextField(controller: _lotCode, decoration: InputDecoration(labelText: context.t('lotCode')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('unitCost')))),
-            ]),
-            const SizedBox(height: 10),
-            Row(children: [
-              Expanded(child: TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier')))),
-              const SizedBox(width: 10),
-              Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('reference')))),
-            ]),
-            const SizedBox(height: 10),
-            Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 90)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 1500)));
-                  if (picked != null) setState(() => _expiry = picked);
-                },
-                icon: const Icon(Icons.event, size: 16),
-                label: Text(_expiry == null ? context.t('expiry') : '${context.t('expiry')} ${feedDate(_expiry!)}'),
-              ),
-            ),
-            if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+      width: 460,
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: products.any((p) => p.id == _productId) ? _productId : null,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: context.t('feedItem')),
+            items: [for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis))],
+            onChanged: (v) => setState(() => _productId = v),
+          ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: _ordered, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('ordered')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _qty, autofocus: true, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('received')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _rejected, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('rejected')))),
           ]),
-        ),
-      ),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: _lotCode, decoration: InputDecoration(labelText: context.t('lotCode')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('unitCost')))),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier')))),
+            const SizedBox(width: 10),
+            Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('reference')))),
+          ]),
+          const SizedBox(height: 10),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 90)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 1500)));
+                if (picked != null) setState(() => _expiry = picked);
+              },
+              icon: const Icon(Icons.event, size: 16),
+              label: Text(_expiry == null ? context.t('expiry') : '${context.t('expiry')} ${feedDate(_expiry!)}'),
+            ),
+          ),
+          if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+        ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),
@@ -534,46 +527,44 @@ class _ReserveDialogState extends State<_ReserveDialog> {
   Widget build(BuildContext context) {
     final feeding = context.watch<FeedingProvider>();
     final lang = Localizations.localeOf(context).languageCode;
-    return AlertDialog(
+    return FarmFormDialog(
       title: Text(context.t('reserveStock')),
-      content: SizedBox(
-        width: 440,
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          DropdownButtonFormField<String>(
-            value: _productId,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: context.t('feedItem')),
-            items: [
-              for (final p in feeding.products)
-                DropdownMenuItem(value: p.id, child: Text('${p.label(lang)} — ${feedNumber(p.availability.available)} ${p.unit} ${context.t('available').toLowerCase()}', overflow: TextOverflow.ellipsis)),
-            ],
-            onChanged: (v) => setState(() => _productId = v),
-          ),
-          const SizedBox(height: 10),
-          TextField(controller: _qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('quantity'))),
-          const SizedBox(height: 10),
-          TextField(controller: _species, decoration: InputDecoration(labelText: context.t('forSpecies'), hintText: 'cow, goat, layer_hen…')),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<String?>(
-            value: _programId,
-            isExpanded: true,
-            decoration: InputDecoration(labelText: context.t('feedingProgram')),
-            items: [
-              const DropdownMenuItem<String?>(value: null, child: Text('—')),
-              for (final p in feeding.programs) DropdownMenuItem<String?>(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
-            ],
-            onChanged: (v) => setState(() => _programId = v),
-          ),
-          const SizedBox(height: 10),
-          TextField(controller: _purpose, decoration: InputDecoration(labelText: context.t('purpose'))),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
-            value: _transferable, title: Text(context.t('transferable')),
-            onChanged: (v) => setState(() => _transferable = v ?? false),
-          ),
-          if (_error != null) Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-        ]),
-      ),
+      width: 440,
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        DropdownButtonFormField<String>(
+          value: _productId,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: context.t('feedItem')),
+          items: [
+            for (final p in feeding.products)
+              DropdownMenuItem(value: p.id, child: Text('${p.label(lang)} — ${feedNumber(p.availability.available)} ${p.unit} ${context.t('available').toLowerCase()}', overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) => setState(() => _productId = v),
+        ),
+        const SizedBox(height: 10),
+        TextField(controller: _qty, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: context.t('quantity'))),
+        const SizedBox(height: 10),
+        TextField(controller: _species, decoration: InputDecoration(labelText: context.t('forSpecies'), hintText: 'cow, goat, layer_hen…')),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String?>(
+          value: _programId,
+          isExpanded: true,
+          decoration: InputDecoration(labelText: context.t('feedingProgram')),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('—')),
+            for (final p in feeding.programs) DropdownMenuItem<String?>(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
+          ],
+          onChanged: (v) => setState(() => _programId = v),
+        ),
+        const SizedBox(height: 10),
+        TextField(controller: _purpose, decoration: InputDecoration(labelText: context.t('purpose'))),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
+          value: _transferable, title: Text(context.t('transferable')),
+          onChanged: (v) => setState(() => _transferable = v ?? false),
+        ),
+        if (_error != null) Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
+      ]),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(onPressed: _saving ? null : _submit, child: Text(context.t('save'))),

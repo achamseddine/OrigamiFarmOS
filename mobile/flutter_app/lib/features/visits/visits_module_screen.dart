@@ -6,6 +6,7 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/hero_band.dart';
+import '../../core/widgets/module_workspace.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../providers/visits_provider.dart';
 import 'activity_manager_tab.dart';
@@ -51,87 +52,49 @@ class _VisitsModuleScreenState extends State<VisitsModuleScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<VisitsProvider>();
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        HeroBand(
-          eyebrow: context.t('ebVisits'),
-          title: context.t('navVisits'),
-          subtitle: context.t('navVisitsSub'),
-          icon: FarmIcon.calendar,
-          scenery: false,
-          trailing: StatusPill(
-            // Included, not bought: this used to say Active/Inactive,
-            // when it was an add-on a farm turned on for itself.
-            label: context.t(provider.isActive ? 'moduleIncluded' : 'moduleUnavailable'),
-            level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
-          ),
-        ),
-        const SizedBox(height: FarmSpacing.md),
-        if (!provider.isActive)
-          Expanded(child: _LockedState())
-        else ...[
-          _TabBar(selected: _tab, onSelect: (i) => setState(() => _tab = i)),
-          const SizedBox(height: FarmSpacing.md),
-          Expanded(
-            child: IndexedStack(
-              index: _tab,
-              children: [
-                VisitsDashboardTab(onNavigate: (i) => setState(() => _tab = i)),
-                const OpeningCalendarTab(),
-                const PackageBuilderTab(),
-                const ActivityManagerTab(),
-                const BookingFormTab(),
-                const VisitDayBriefingTab(),
-                const VisitorCheckinTab(),
-                const FarmShopPosTab(),
-                const StaffRosterCostsTab(),
-                const VisitorProfitabilityTab(),
-              ],
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _TabBar extends StatelessWidget {
-  const _TabBar({required this.selected, required this.onSelect});
-  final int selected;
-  final ValueChanged<int> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          for (var i = 0; i < kVisitsTabLabels.length; i++)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Material(
-                // Selection is carried by the fill alone: cedar when
-                // chosen, sand when not. The outline every tab used to
-                // wear said "tappable" a second time and made the strip
-                // read as a row of web buttons.
-                color: i == selected ? FarmColors.cedar : FarmColors.sand,
-                borderRadius: BorderRadius.circular(FarmRadii.pill),
-                child: InkWell(
-                  onTap: () => onSelect(i),
-                  borderRadius: BorderRadius.circular(FarmRadii.pill),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    child: Text(
-                      kVisitsTabLabels[i],
-                      style: FarmTypography.textTheme.labelMedium?.copyWith(color: i == selected ? FarmColors.white : FarmColors.ink),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
+    final hero = HeroBand(
+      eyebrow: context.t('ebVisits'),
+      title: context.t('navVisits'),
+      subtitle: context.t('navVisitsSub'),
+      icon: FarmIcon.calendar,
+      scenery: false,
+      trailing: StatusPill(
+        // Included, not bought: this used to say Active/Inactive,
+        // when it was an add-on a farm turned on for itself.
+        label: context.t(provider.isActive ? 'moduleIncluded' : 'moduleUnavailable'),
+        level: provider.isActive ? FarmStatusLevel.good : FarmStatusLevel.alert,
       ),
+    );
+
+    if (!provider.isActive) {
+      return SingleChildScrollView(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          hero,
+          const SizedBox(height: FarmSpacing.xl),
+          _LockedState(),
+        ]),
+      );
+    }
+    // The same one-page layout and tab bar as Feed, Health and Mouneh:
+    // the band scrolls away, the tabs stay at the top, and a tab — the
+    // profitability report included — is read at its full height.
+    return ModuleWorkspace(
+      header: [hero],
+      labels: kVisitsTabLabels,
+      selected: _tab,
+      onSelect: (i) => setState(() => _tab = i),
+      tabBuilder: (context, i) => switch (i) {
+        0 => VisitsDashboardTab(onNavigate: (i) => setState(() => _tab = i)),
+        1 => const OpeningCalendarTab(),
+        2 => const PackageBuilderTab(),
+        3 => const ActivityManagerTab(),
+        4 => const BookingFormTab(),
+        5 => const VisitDayBriefingTab(),
+        6 => const VisitorCheckinTab(),
+        7 => const FarmShopPosTab(),
+        8 => const StaffRosterCostsTab(),
+        _ => const VisitorProfitabilityTab(),
+      },
     );
   }
 }

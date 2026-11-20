@@ -139,142 +139,140 @@ class _BookingFormTabState extends State<BookingFormTab> {
     final provider = context.watch<VisitsProvider>();
     final sessions = provider.upcomingSessions;
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SectionCard(
-            title: 'Add a Session',
-            subtitle: 'Only dates on a configured open weekday should be scheduled — see Opening Calendar.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () async {
-                        final picked = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                        if (picked != null) setState(() => _newSessionDate = picked);
-                      },
-                      child: Text(_newSessionDate == null ? 'Pick a date' : '${_newSessionDate!.day}/${_newSessionDate!.month}/${_newSessionDate!.year}'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _newSessionStart, decoration: const InputDecoration(labelText: 'Start (HH:MM)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _newSessionEnd, decoration: const InputDecoration(labelText: 'End (HH:MM)'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _newSessionCapacity, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Capacity (blank = calendar default)'))),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: _sessionSaving ? null : _createSession,
-                    child: _sessionSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add Session'),
-                  ),
-                ]),
-                if (_sessionError != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_sessionError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'New Booking',
-            subtitle: 'Every booking starts as a draft — confirm it once the deposit / guest count is settled.',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _sessionId,
-                      decoration: const InputDecoration(labelText: 'Session'),
-                      items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month} · ${s.startTime}–${s.endTime}'))],
-                      onChanged: (v) => setState(() => _sessionId = v),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _packageId,
-                      decoration: const InputDecoration(labelText: 'Package'),
-                      items: [for (final p in provider.packages) DropdownMenuItem(value: p.id, child: Text(p.name))],
-                      onChanged: (v) => setState(() => _packageId = v),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      isExpanded: true,
-                      value: _source,
-                      decoration: const InputDecoration(labelText: 'Source'),
-                      items: [for (final s in kVisitBookingSources) DropdownMenuItem(value: s, child: Text(s))],
-                      onChanged: (v) => setState(() => _source = v ?? _source),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  ChoiceChip(label: const Text('Existing visitor'), selected: !_walkIn, onSelected: (_) => setState(() => _walkIn = false)),
-                  const SizedBox(width: 8),
-                  ChoiceChip(label: const Text('Walk-in guest'), selected: _walkIn, onSelected: (_) => setState(() => _walkIn = true)),
-                ]),
-                const SizedBox(height: 12),
-                if (!_walkIn)
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    value: _visitorId,
-                    decoration: const InputDecoration(labelText: 'Visitor'),
-                    items: [for (final v in provider.visitors) DropdownMenuItem(value: v.id, child: Text(v.fullName))],
-                    onChanged: (v) => setState(() => _visitorId = v),
-                  )
-                else
-                  Row(children: [
-                    Expanded(child: TextField(controller: _newVisitorName, decoration: const InputDecoration(labelText: 'Walk-in guest name'))),
-                    const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: _newVisitorPhone, decoration: const InputDecoration(labelText: 'Phone (optional)'))),
-                  ]),
-                const SizedBox(height: 12),
-                Row(children: [
-                  Expanded(child: TextField(controller: _adults, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Adults'))),
-                  const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _children, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Children'))),
-                  const SizedBox(width: 12),
-                  Expanded(flex: 2, child: TextField(controller: _notes, decoration: const InputDecoration(labelText: 'Notes (optional)'))),
-                ]),
-                const SizedBox(height: FarmSpacing.md),
-                Row(children: [
-                  Text('Activity add-ons', style: FarmTypography.textTheme.titleSmall),
-                  const Spacer(),
-                  TextButton.icon(onPressed: () => setState(() => _activityLines.add(_ActivityLineDraft())), icon: const Icon(Icons.add, size: 16), label: const Text('Add activity')),
-                ]),
-                for (var i = 0; i < _activityLines.length; i++)
-                  _ActivityLineRow(key: ValueKey(_activityLines[i]), line: _activityLines[i], onRemove: () => setState(() => _activityLines.removeAt(i))),
-                const SizedBox(height: FarmSpacing.md),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton(
-                    onPressed: _saving ? null : _submitBooking,
-                    child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create Booking'),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Add a Session',
+          subtitle: 'Only dates on a configured open weekday should be scheduled — see Opening Calendar.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () async {
+                      final picked = await showDatePicker(context: context, initialDate: DateTime.now().add(const Duration(days: 1)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
+                      if (picked != null) setState(() => _newSessionDate = picked);
+                    },
+                    child: Text(_newSessionDate == null ? 'Pick a date' : '${_newSessionDate!.day}/${_newSessionDate!.month}/${_newSessionDate!.year}'),
                   ),
                 ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
-                ],
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _newSessionStart, decoration: const InputDecoration(labelText: 'Start (HH:MM)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _newSessionEnd, decoration: const InputDecoration(labelText: 'End (HH:MM)'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _newSessionCapacity, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Capacity (blank = calendar default)'))),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: _sessionSaving ? null : _createSession,
+                  child: _sessionSaving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Add Session'),
+                ),
+              ]),
+              if (_sessionError != null) ...[
+                const SizedBox(height: 8),
+                Text(_sessionError!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
               ],
-            ),
+            ],
           ),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            title: 'Bookings',
-            child: provider.bookings.isEmpty ? Text('No bookings yet.', style: FarmTypography.textTheme.bodySmall) : Column(children: [for (final b in provider.bookings) _BookingRow(bookingId: b.id)]),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'New Booking',
+          subtitle: 'Every booking starts as a draft — confirm it once the deposit / guest count is settled.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _sessionId,
+                    decoration: const InputDecoration(labelText: 'Session'),
+                    items: [for (final s in sessions) DropdownMenuItem(value: s.id, child: Text('${s.date.day}/${s.date.month} · ${s.startTime}–${s.endTime}'))],
+                    onChanged: (v) => setState(() => _sessionId = v),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _packageId,
+                    decoration: const InputDecoration(labelText: 'Package'),
+                    items: [for (final p in provider.packages) DropdownMenuItem(value: p.id, child: Text(p.name))],
+                    onChanged: (v) => setState(() => _packageId = v),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    isExpanded: true,
+                    value: _source,
+                    decoration: const InputDecoration(labelText: 'Source'),
+                    items: [for (final s in kVisitBookingSources) DropdownMenuItem(value: s, child: Text(s))],
+                    onChanged: (v) => setState(() => _source = v ?? _source),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                ChoiceChip(label: const Text('Existing visitor'), selected: !_walkIn, onSelected: (_) => setState(() => _walkIn = false)),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('Walk-in guest'), selected: _walkIn, onSelected: (_) => setState(() => _walkIn = true)),
+              ]),
+              const SizedBox(height: 12),
+              if (!_walkIn)
+                DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _visitorId,
+                  decoration: const InputDecoration(labelText: 'Visitor'),
+                  items: [for (final v in provider.visitors) DropdownMenuItem(value: v.id, child: Text(v.fullName))],
+                  onChanged: (v) => setState(() => _visitorId = v),
+                )
+              else
+                Row(children: [
+                  Expanded(child: TextField(controller: _newVisitorName, decoration: const InputDecoration(labelText: 'Walk-in guest name'))),
+                  const SizedBox(width: 12),
+                  Expanded(child: TextField(controller: _newVisitorPhone, decoration: const InputDecoration(labelText: 'Phone (optional)'))),
+                ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: TextField(controller: _adults, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Adults'))),
+                const SizedBox(width: 12),
+                Expanded(child: TextField(controller: _children, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Children'))),
+                const SizedBox(width: 12),
+                Expanded(flex: 2, child: TextField(controller: _notes, decoration: const InputDecoration(labelText: 'Notes (optional)'))),
+              ]),
+              const SizedBox(height: FarmSpacing.md),
+              Row(children: [
+                Text('Activity add-ons', style: FarmTypography.textTheme.titleSmall),
+                const Spacer(),
+                TextButton.icon(onPressed: () => setState(() => _activityLines.add(_ActivityLineDraft())), icon: const Icon(Icons.add, size: 16), label: const Text('Add activity')),
+              ]),
+              for (var i = 0; i < _activityLines.length; i++)
+                _ActivityLineRow(key: ValueKey(_activityLines[i]), line: _activityLines[i], onRemove: () => setState(() => _activityLines.removeAt(i))),
+              const SizedBox(height: FarmSpacing.md),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: FilledButton(
+                  onPressed: _saving ? null : _submitBooking,
+                  child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create Booking'),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5)),
+              ],
+            ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          title: 'Bookings',
+          child: provider.bookings.isEmpty ? Text('No bookings yet.', style: FarmTypography.textTheme.bodySmall) : Column(children: [for (final b in provider.bookings) _BookingRow(bookingId: b.id)]),
+        ),
+      ],
     );
   }
 }

@@ -22,51 +22,49 @@ class FinishedGoodsTab extends StatelessWidget {
     final rows = [...provider.finishedGoods]..sort((a, b) => (a.expiryDate ?? DateTime(9999)).compareTo(b.expiryDate ?? DateTime(9999)));
     final soon = DateTime.now().add(const Duration(days: 30));
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          SectionHeading(eyebrow: context.t('mnTabStock'), title: context.t('mnStockTitle'), subtitle: context.t('mnStockSub')),
-          const SizedBox(height: FarmSpacing.md),
-          SectionCard(
-            child: rows.isEmpty
-                ? EmptyState(message: context.t('mnNoStock'), icon: FarmIcon.inventory)
-                : FarmDataTable(
-                    columns: [
-                      context.t('mnColProduct'), context.t('mnColBatch'), context.t('mnColLocation'), context.t('mnColProduced'),
-                      context.t('mnColAvailable'), context.t('mnColSold'), context.t('mnColUnitCost'), context.t('mnColExpiry'),
-                    ],
-                    columnFlex: const [2, 2, 2, 1, 1, 1, 1, 2],
-                    rows: [
-                      for (final r in rows)
-                        [
-                          Text(provider.productById(r.productId)?.name ?? r.productId, style: FarmTypography.textTheme.titleSmall),
-                          Text(provider.batches.where((b) => b.id == r.batchId).map((b) => b.batchCode).firstOrNull ?? '—', style: FarmTypography.textTheme.bodySmall),
-                          Text(r.warehouseLocation ?? '—', style: FarmTypography.textTheme.bodySmall),
-                          Text(r.quantityProduced.toStringAsFixed(0)),
-                          _availability(context, r.quantityAvailable, provider.productById(r.productId)?.lowStockThreshold),
-                          Text(r.quantitySold.toStringAsFixed(0)),
-                          Text('\$${r.unitCost.toStringAsFixed(2)}'),
-                          r.expiryDate == null
-                              ? Text('—', style: FarmTypography.textTheme.bodySmall)
-                              : r.expiryDate!.isBefore(soon)
-                                  ? Align(
-                                      alignment: AlignmentDirectional.centerStart,
-                                      child: StatusPill(
-                                        label: feedDate(r.expiryDate!),
-                                        level: r.expiryDate!.isBefore(DateTime.now()) ? FarmStatusLevel.alert : FarmStatusLevel.watch,
-                                        dense: true,
-                                      ),
-                                    )
-                                  : Text(feedDate(r.expiryDate!), style: FarmTypography.textTheme.bodySmall),
-                        ],
-                    ],
-                  ),
-          ),
-          const SizedBox(height: FarmSpacing.md),
-          NoticeBanner(tone: NoticeTone.info, text: context.t('mnStockNote')),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SectionHeading(eyebrow: context.t('mnTabStock'), title: context.t('mnStockTitle'), subtitle: context.t('mnStockSub')),
+        const SizedBox(height: FarmSpacing.md),
+        SectionCard(
+          child: rows.isEmpty
+              ? EmptyState(message: context.t('mnNoStock'), icon: FarmIcon.inventory)
+              : FarmDataTable(
+                  columns: [
+                    context.t('mnColProduct'), context.t('mnColBatch'), context.t('mnColLocation'), context.t('mnColProduced'),
+                    context.t('mnColAvailable'), context.t('mnColSold'), context.t('mnColUnitCost'), context.t('mnColExpiry'),
+                  ],
+                  columnFlex: const [2, 2, 2, 1, 1, 1, 1, 2],
+                  rows: [
+                    for (final r in rows)
+                      [
+                        Text(provider.productById(r.productId)?.name ?? r.productId, style: FarmTypography.textTheme.titleSmall),
+                        Text(provider.batches.where((b) => b.id == r.batchId).map((b) => b.batchCode).firstOrNull ?? '—', style: FarmTypography.textTheme.bodySmall),
+                        Text(r.warehouseLocation ?? '—', style: FarmTypography.textTheme.bodySmall),
+                        Text(r.quantityProduced.toStringAsFixed(0)),
+                        _availability(context, r.quantityAvailable, provider.productById(r.productId)?.lowStockThreshold),
+                        Text(r.quantitySold.toStringAsFixed(0)),
+                        Text('\$${r.unitCost.toStringAsFixed(2)}'),
+                        r.expiryDate == null
+                            ? Text('—', style: FarmTypography.textTheme.bodySmall)
+                            : r.expiryDate!.isBefore(soon)
+                                ? Align(
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: StatusPill(
+                                      label: feedDate(r.expiryDate!),
+                                      level: r.expiryDate!.isBefore(DateTime.now()) ? FarmStatusLevel.alert : FarmStatusLevel.watch,
+                                      dense: true,
+                                    ),
+                                  )
+                                : Text(feedDate(r.expiryDate!), style: FarmTypography.textTheme.bodySmall),
+                      ],
+                  ],
+                ),
+        ),
+        const SizedBox(height: FarmSpacing.md),
+        NoticeBanner(tone: NoticeTone.info, text: context.t('mnStockNote')),
+      ],
     );
   }
 
