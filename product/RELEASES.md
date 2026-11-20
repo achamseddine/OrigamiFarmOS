@@ -1,5 +1,17 @@
 # Releases
 
+## v0.7.8 — Employees enter data, the manager approves; the cow queue
+
+On the tablet and the web app (one codebase), enforced by the server:
+- **Who may do what.** An employee with Feed or Milk access records the day's milk and feedings. Buying feed, recording a numbered feed mix, changing the feed list or an animal's ration, reserving stock and correcting a record already on file are the farm manager's (Feed / Milk *approve*). Drafting a recipe or a feeding program stays open to employees — a draft does nothing until the manager activates it.
+- **Buying feed — ask, manager approves.** *Ask to buy feed* (Feed page, Stock tab) sends a purchase request (feed, quantity, needed by, why). The manager approves or rejects it (with a reason). Once approved, whoever receives the delivery records it against the request — up to the approved quantity + 10% — and the stock goes up then. A delivery with no approved request is refused.
+- **An employee's mix waits for the manager.** *Make feed mix* says *Send to the manager*: the mix is kept as a request; ingredients leave the stock and the mix gets its number only when the manager approves it (short stock: the manager may approve anyway).
+- **Corrections.** A milk record (amount, session, day, destination) and a feeding (amounts, or undo it) can now be corrected from the animal's Milk tab and Feeding section. The manager corrects directly; an employee sends the correction with a reason and it applies when the manager approves. A milk record is corrected in place with the before/after in the audit log; a feeding is undone (its stock returns) and what was really fed recorded in its place.
+- **Approvals card.** On My Day (and on the Feed and Milk pages): the manager sees what waits — mixes, corrections, purchase requests — with Approve / Reject; an employee sees their own requests and the answers, and can withdraw one still waiting. Both are notified in the bell.
+- **The cow queue.** *Cow queue* (+ button, Animals, Milk page *Milking queue*, Feed intake *Feeding queue*, My Day's routine): today's morning or evening milking, or the feeding of animals on their own program, in tag order with who is done. *Follow the queue* opens the next cow and moves on after each save (with *Skip*); *Scan QR codes* records in any order — both count in the same list.
+- **Milk with its date from the Milk page.** *Record milk* on the Milk page (it had no record button — the web looked as if the date could not be changed) opens the milk form with *Milked on*.
+- Server: new table `approval_requests` — **migration `d5f7b9c1e3a6`**; `POST /approval-requests` (+ approve / reject / cancel), `POST /production/milk/{id}/correct`, `POST /feeding-events/{id}/correct`; purchase requests accept a feed and `submit`; deliveries take `requisition_id`. Tests: backend +11 (`test_employee_approvals.py`), app +12 (`test/records/employee_approvals_test.dart`); the tablet-size sweep covers the queue and the new forms.
+
 ## v0.7.7 — Feed, reports and module pages read at full height
 
 On the tablet and the web app (one codebase):

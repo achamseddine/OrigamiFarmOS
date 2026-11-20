@@ -10,9 +10,12 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../core/widgets/form_dialog.dart';
 import '../../domain/entities/access.dart';
+import '../../domain/entities/approvals.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
+import '../../providers/approvals_provider.dart';
 import '../../providers/feeding_provider.dart';
+import '../approvals/ask_to_buy_dialog.dart';
 
 /// The feed room's three everyday records, each one form (generic feed
 /// architecture §3, §5a):
@@ -28,12 +31,20 @@ import '../../providers/feeding_provider.dart';
 
 const _kinds = ['grain', 'forage', 'complete', 'mineral'];
 
-Future<void> showRecordPurchaseDialog(BuildContext context, {String? productId}) =>
-    showDialog<void>(context: context, builder: (_) => _PurchaseDialog(productId: productId));
+/// Buying feed is the farm manager's (v0.7.8): they record any delivery.
+/// Anyone else asks them to buy, and records the delivery of a request the
+/// manager approved ([request]) — the server holds the same rule.
+Future<void> showRecordPurchaseDialog(BuildContext context, {String? productId, PurchaseRequest? request}) {
+  if (request == null && !context.read<AccessProvider>().canBuyFeed) return showAskToBuyDialog(context, productId: productId);
+  return showDialog<void>(context: context, builder: (_) => _PurchaseDialog(productId: productId, request: request));
+}
 
 class _PurchaseDialog extends StatefulWidget {
-  const _PurchaseDialog({this.productId});
+  const _PurchaseDialog({this.productId, this.request});
   final String? productId;
+
+  /// The approved purchase request this delivery fills.
+  final PurchaseRequest? request;
 
   @override
   State<_PurchaseDialog> createState() => _PurchaseDialogState();
@@ -56,6 +67,20 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
   String? _grade;
   bool _saving = false;
   String? _error;
+
+  /// The approved request the delivery fills (the manager may name one).
+  late String? _requestId = widget.request?.id;
+
+  @override
+  void initState() {
+    super.initState();
+    final request = widget.request;
+    if (request != null && request.lines.isNotEmpty) {
+      final line = request.lines.first;
+      _productId = context.read<FeedingProvider>().products.where((p) => p.inventoryItemId == line.inventoryItemId).firstOrNull?.id ?? _productId;
+      _qty.text = _fmt(line.quantity);
+    }
+  }
 
   @override
   void dispose() {
@@ -113,10 +138,12 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
         'quality_grade': ?_grade,
         'moisture_pct': ?moisture,
         if (_qualityNotes.text.trim().isNotEmpty) 'quality_notes': _qualityNotes.text.trim(),
+        'requisition_id': ?_requestId,
       },
     );
     if (!mounted) return;
     if (result.success) {
+      if (_requestId != null) context.read<ApprovalsProvider>().load();
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.queued ? context.t('workingOffline') : context.t('deliveryReceived'))));
       return;
@@ -134,20 +161,51 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
     final products = [for (final p in feeding.products) if (p.status == 'active') p]..sort((a, b) => a.label(lang).compareTo(b.label(lang)));
     final product = products.where((p) => p.id == _productId).firstOrNull;
     final unit = _productId == _newFeed ? _unit : (product?.unit ?? 'kg');
+    final request = widget.request;
+    // Approved requests for this feed that the delivery could fill.
+    final fillable = request != null || product == null
+        ? const <PurchaseRequest>[]
+        : [for (final r in context.watch<ApprovalsProvider>().deliverable) if (r.lines.any((l) => l.inventoryItemId == product.inventoryItemId)) r];
     return FarmFormDialog(
-      title: Text(context.t('fpRecordPurchase')),
+      title: Text(request == null ? context.t('fpRecordPurchase') : '${context.t('prRecordDelivery')} — ${request.number}'),
       width: 560,
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (request != null) ...[
+            NoticeBanner(
+              key: const ValueKey('delivery-of-request'),
+              title: '${request.number} · ${request.what}',
+              text: context.t('prDeliveryOfApproved'),
+            ),
+            const SizedBox(height: 12),
+          ],
           DropdownButtonFormField<String>(
             initialValue: _productId == _newFeed || products.any((p) => p.id == _productId) ? _productId : null,
             isExpanded: true,
             decoration: InputDecoration(labelText: context.t('fpWhatArrived')),
             items: [
               for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.label(lang), overflow: TextOverflow.ellipsis)),
-              DropdownMenuItem(value: _newFeed, child: Text('+ ${context.t('fpNewFeed')}')),
+              if (request == null) DropdownMenuItem(value: _newFeed, child: Text('+ ${context.t('fpNewFeed')}')),
             ],
-            onChanged: (v) => setState(() => _productId = v),
+            // A delivery of a request is that request's feed.
+            onChanged: request != null ? null : (v) => setState(() {
+                  _productId = v;
+                  _requestId = null;
+                }),
           ),
+          if (fillable.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String?>(
+              key: const ValueKey('fills-request'),
+              initialValue: fillable.any((r) => r.id == _requestId) ? _requestId : null,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: context.t('prFillsRequest')),
+              items: [
+                DropdownMenuItem<String?>(value: null, child: Text(context.t('prNoRequest'))),
+                for (final r in fillable) DropdownMenuItem<String?>(value: r.id, child: Text('${r.number} · ${r.what}', overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) => setState(() => _requestId = v),
+            ),
+          ],
           if (_productId == _newFeed) ...[
             const SizedBox(height: 10),
             TextField(controller: _name, decoration: InputDecoration(labelText: context.t('fpNewFeedName'), hintText: context.t('fpNewFeedHint'))),
@@ -348,7 +406,10 @@ class _MixDialogState extends State<_MixDialog> {
       return;
     }
     final output = parseLocalizedDouble(_outputQty.text);
-    if (_shortfalls(feeding).isNotEmpty && !_overrideStock) {
+    // The farm manager records a mix; anyone else sends it to them, and
+    // the manager decides — short stock included (backend approval_service).
+    final direct = context.read<AccessProvider>().canMixFeed;
+    if (direct && _shortfalls(feeding).isNotEmpty && !_overrideStock) {
       final canOverride = context.read<AccessProvider>().canOverrideFeedStock;
       setState(() => _error = context.t(canOverride ? 'feedStockShortConfirm' : 'feedOverrideNeedsApproval'));
       return;
@@ -357,20 +418,23 @@ class _MixDialogState extends State<_MixDialog> {
       _saving = true;
       _error = null;
     });
-    final result = await feeding.recordMix({
+    final body = {
       if (_output != _newMix) 'feed_product_id': _output,
       if (_output == _newMix) 'new_product_name': _newName.text.trim(),
       'components': components,
       'output_quantity': ?output,
       'produced_at': recordedInstant(_day).toUtc().toIso8601String(),
       if (_overrideStock) 'allow_negative': true,
-    });
+    };
+    final result = direct ? await feeding.recordMix(body) : await context.read<ApprovalsProvider>().sendMix(body);
     if (!mounted) return;
     if (result.success) {
       final code = result.data is Map ? (result.data! as Map)['mix_code'] as String? : null;
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.queued ? context.t('fmSavedOffline') : '${context.t('fmSaved')}${code != null ? ' — $code' : ''}'),
+        content: Text(!direct
+            ? context.t(result.queued ? 'apSentOffline' : 'fmSentForApproval')
+            : (result.queued ? context.t('fmSavedOffline') : '${context.t('fmSaved')}${code != null ? ' — $code' : ''}')),
       ));
       return;
     }
@@ -393,9 +457,9 @@ class _MixDialogState extends State<_MixDialog> {
     // Draft → approval → mixing (handbook §5): a feed with no approved
     // recipe is first mixed by someone with Feed approval, whose mix
     // becomes the recipe. Anyone else is told so before typing it all in.
-    final needsRecipe = _output == _newMix || !feeding.formulas.any((f) => f.feedProductId == _output && f.active != null);
-    final blocked = needsRecipe && !access.canApproveFeed;
-    final outputName = _output == _newMix ? _newName.text.trim() : (feeding.productById(_output ?? '')?.label(lang) ?? '');
+    // Someone without Feed approval sends the mix to the manager — a feed's
+    // first mix, which approves its recipe, included.
+    final direct = access.canMixFeed;
     return FarmFormDialog(
       title: Text(context.t('fmTitle')),
       width: 560,
@@ -417,13 +481,9 @@ class _MixDialogState extends State<_MixDialog> {
             const SizedBox(height: 8),
             TextField(controller: _newName, decoration: InputDecoration(labelText: context.t('fmNewMixName'))),
           ],
-          if (blocked) ...[
+          if (!direct) ...[
             const SizedBox(height: 10),
-            NoticeBanner(
-              key: const ValueKey('mix-needs-approval'),
-              title: context.t('fmTitle'),
-              text: _output == _newMix ? context.t('mixNewNeedsApproval') : context.t('mixNeedsApprovedRecipe').replaceAll('{product}', outputName),
-            ),
+            NoticeBanner(key: const ValueKey('mix-goes-to-manager'), title: context.t('apGoesToManager'), text: context.t('fmManagerApproves')),
           ],
           const SizedBox(height: 12),
           RecordDateButton(label: context.t('fmMixedOn'), value: _day, onPicked: (d) => setState(() => _day = d)),
@@ -497,7 +557,7 @@ class _MixDialogState extends State<_MixDialog> {
                 context.t('fmStockShortBody'),
               ].join('\n'),
             ),
-            if (access.canOverrideFeedStock)
+            if (direct && access.canOverrideFeedStock)
               Material(
                 type: MaterialType.transparency,
                 child: CheckboxListTile(
@@ -512,7 +572,8 @@ class _MixDialogState extends State<_MixDialog> {
             else
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
+                child: Text(context.t(direct ? 'feedOverrideNeedsApproval' : 'fmShortManagerDecides'),
+                    style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
               ),
           ],
           if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
@@ -520,8 +581,10 @@ class _MixDialogState extends State<_MixDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
         FilledButton(
-          onPressed: _saving || blocked ? null : _submit,
-          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('fmSave')),
+          onPressed: _saving ? null : _submit,
+          child: _saving
+              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(context.t(direct ? 'fmSave' : 'apSendToManager')),
         ),
       ],
     );

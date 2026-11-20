@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../approvals/correction_dialogs.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -88,6 +89,7 @@ class _PlanBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final canRecord = context.watch<AccessProvider>().canCreate(FarmModule.feedNutrition);
     final program = plan.program;
     final feeding = context.read<FeedingProvider>();
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -154,11 +156,23 @@ class _PlanBody extends StatelessWidget {
       if (plan.recentEvents.isNotEmpty) ...[
         const SizedBox(height: 6),
         for (final e in plan.recentEvents.take(3))
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Text(
-              '${feedDate(e.occurredAt)} · ${context.t('event_${e.eventType}')} · ${feedNumber(e.totalQuantity)} kg${e.status == 'reversed' ? ' · ${context.t('reversed')}' : ''}',
-              style: FarmTypography.textTheme.bodySmall?.copyWith(decoration: e.status == 'reversed' ? TextDecoration.lineThrough : null),
+          // A feeding entered wrongly is corrected from here — by the
+          // manager directly, by anyone else for approval.
+          InkWell(
+            key: ValueKey('feeding-row-${e.id}'),
+            onTap: canRecord && e.status == 'recorded' ? () => showCorrectFeedingDialog(context, e) : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    '${feedDate(e.occurredAt)} · ${context.t('event_${e.eventType}')} · ${feedNumber(e.totalQuantity)} kg${e.status == 'reversed' ? ' · ${context.t('reversed')}' : ''}',
+                    style: FarmTypography.textTheme.bodySmall?.copyWith(decoration: e.status == 'reversed' ? TextDecoration.lineThrough : null),
+                  ),
+                ),
+                if (canRecord && e.status == 'recorded')
+                  Tooltip(message: context.t('crCorrect'), child: const Icon(Icons.edit_outlined, size: 15, color: FarmColors.muted)),
+              ]),
             ),
           ),
       ],

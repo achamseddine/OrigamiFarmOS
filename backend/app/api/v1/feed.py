@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import ensure_stock_override, owned_or_404, require_any_permission, require_farm_access
+from app.api.deps import ensure_stock_override, owned_or_404, require_any_permission, require_farm_access, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import feed_models as fm
@@ -75,6 +75,12 @@ def create_feed_transaction(
     """
     item = owned_or_404(db, models.InventoryItem, payload.item_id, current_user, "Inventory item")
     ensure_stock_override(db, current_user, payload.allow_negative, perms.FEED_NUTRITION)
+    # Stock coming in is a purchase: the farm manager's (v0.7.8). Employees
+    # send a purchase request and record the delivery against it.
+    if payload.direction == "in" and not (user_can(db, current_user, perms.FEED_NUTRITION, perms.APPROVE)
+                                          or user_can(db, current_user, perms.INVENTORY, perms.APPROVE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Buying feed needs the farm manager. Send a purchase request; once it is approved, "
+                                                       "record the delivery against it.")
 
     if _is_feed(item):
         product = inv.ensure_product_for_item(db, item, created_by=current_user.id)

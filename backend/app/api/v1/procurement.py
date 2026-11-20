@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, require_permission
+from app.api.deps import get_current_user, require_any_permission, require_permission
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
@@ -21,8 +21,10 @@ from app.services import procurement_service as procurement
 
 router = APIRouter(prefix="/procurement", tags=["procurement"])
 
-_view = require_permission(perms.INVENTORY, perms.VIEW)
-_create = require_permission(perms.INVENTORY, perms.CREATE)
+# Feed staff ask to buy feed from the Feed module (v0.7.8): Feed &
+# Nutrition counts as well as Inventory for reading and asking.
+_view = require_any_permission(perms.INVENTORY, perms.FEED_NUTRITION, action=perms.VIEW)
+_create = require_any_permission(perms.INVENTORY, perms.FEED_NUTRITION, action=perms.CREATE)
 _edit = require_permission(perms.INVENTORY, perms.EDIT)
 
 
@@ -44,8 +46,12 @@ def list_requisitions(req_status: str | None = Query(None, alias="status"), inve
 def create_requisition(payload: RequisitionIn, db: Session = Depends(get_db), user: models.User = Depends(_create)) -> dict:
     """A manual DRAFT requisition. Submitting and approving are separate
     steps; an approved requisition is not a purchase."""
-    req = procurement.create_requisition(db, user.farm_id, lines=[l.model_dump() for l in payload.lines], requested_by=user.id, purpose_code=payload.purpose_code or "manual",
+    lines = [procurement.resolve_line(db, user.farm_id, l.model_dump()) for l in payload.lines]
+    req = procurement.create_requisition(db, user.farm_id, lines=lines, requested_by=user.id, purpose_code=payload.purpose_code or "manual",
                                          needed_by=payload.needed_by, justification=payload.justification, source_type="manual", currency=payload.currency, user_id=user.id)
+    if payload.submit:
+        procurement.submit(db, req, user_id=user.id)
+        procurement.notify_submitted(db, req, user)
     db.commit()
     return procurement.requisition_dict(db, req)
 
@@ -58,6 +64,7 @@ def get_requisition(requisition_id: str, db: Session = Depends(get_db), user: mo
 @router.post("/requisitions/{requisition_id}/submit")
 def submit_requisition(requisition_id: str, db: Session = Depends(get_db), user: models.User = Depends(_create)) -> dict:
     req = procurement.submit(db, procurement.get_requisition(db, requisition_id, user.farm_id), user_id=user.id)
+    procurement.notify_submitted(db, req, user)
     db.commit()
     return procurement.requisition_dict(db, req)
 

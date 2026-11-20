@@ -16,6 +16,7 @@ import '../../providers/production_provider.dart';
 import '../../providers/tasks_provider.dart';
 import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
+import '../animals/animal_queue_screen.dart';
 import '../animals/animal_quick_entry_screen.dart';
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../feed/feed_movement_dialog.dart';
@@ -69,6 +70,15 @@ final List<RecordAction> _actions = [
     open: (context) async => Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
     ),
+  ),
+  // Today's milking or feeding as an ordered queue: follow it cow by cow,
+  // or scan labels in any order (animal_queue_screen.dart).
+  RecordAction(
+    icon: FarmIcon.cow,
+    labelKey: 'queueTitle',
+    accent: FarmColors.cedar2,
+    modules: [FarmModule.milkProduction, FarmModule.feedNutrition],
+    open: (context) async => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnimalQueueScreen())),
   ),
   RecordAction(
     icon: FarmIcon.milkBottle,
@@ -271,6 +281,10 @@ class _RecordTile extends StatelessWidget {
 // animal screen already opens, so a milking recorded from the bottom bar
 // and one recorded from the herd list are the same write.
 // ---------------------------------------------------------------------------
+
+/// Record milk for an animal picked from a list (the Milk page's "Record
+/// milk" and the + sheet): the milk form, with its day, opens for her.
+Future<void> recordMilkFlow(BuildContext context) => _recordMilk(context);
 
 Future<void> _recordMilk(BuildContext context) async {
   // Only animals that can be milked (a bull or a hen is not offered), those

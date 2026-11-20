@@ -5,7 +5,11 @@ import 'package:farmos/core/i18n/locale_controller.dart';
 import 'package:farmos/features/animals/add_animal_form.dart';
 import 'package:farmos/features/animals/animal_digital_twin_screen.dart';
 import 'package:farmos/features/animals/animal_quick_actions.dart';
+import 'package:farmos/features/animals/animal_queue_screen.dart';
 import 'package:farmos/features/animals/animal_quick_entry_screen.dart';
+import 'package:farmos/features/animals/quick_round.dart';
+import 'package:farmos/features/approvals/ask_to_buy_dialog.dart';
+import 'package:farmos/features/approvals/correction_dialogs.dart';
 import 'package:farmos/features/animals/animal_status_screen.dart';
 import 'package:farmos/features/animals/group_form.dart';
 import 'package:farmos/features/employees/employees_screen.dart';
@@ -25,6 +29,8 @@ import 'package:farmos/features/settings/settings_screen.dart';
 import 'package:farmos/features/tasks/tasks_screen.dart';
 import 'package:farmos/features/visits/visits_module_screen.dart';
 import 'package:farmos/providers/animals_provider.dart';
+import 'package:farmos/providers/feeding_provider.dart';
+import 'package:farmos/providers/production_provider.dart';
 
 import '../support/snapshot_farm.dart';
 
@@ -56,6 +62,8 @@ void main() {
     'Settings': () => const SettingsScreen(),
     'Digital twin': () => const AnimalDigitalTwinScreen(animalId: 'cow-744'),
     'Quick entry': () => const AnimalQuickEntryScreen(initialAnimalId: 'cow-744'),
+    'Cow queue': () => const AnimalQueueScreen(),
+    'Queue entry': () => const AnimalQuickEntryScreen(round: QuickRound.milking('morning'), followQueue: true),
   };
 
   final forms = <String, void Function(BuildContext)>{
@@ -70,6 +78,9 @@ void main() {
     'open health case': (c) => showOpenCaseForm(c),
     'give medicine': (c) => showAdministerDialog(c, subjectType: 'animal', subjectId: 'cow-744'),
     'receive medicine': (c) => showReceiveMedicineDialog(c),
+    'ask to buy feed': (c) => showAskToBuyDialog(c, productId: 'fp-barley'),
+    'correct milk': (c) => showCorrectMilkDialog(c, c.read<ProductionProvider>().milkRecords.firstWhere((r) => r.animalId == 'cow-744')),
+    'correct feeding': (c) => showCorrectFeedingDialog(c, c.read<FeedingProvider>().recentEvents.firstWhere((e) => e.status == 'recorded')),
   };
 
   /// Draws [build] at [size] in [locale]; returns what went wrong, one line each.

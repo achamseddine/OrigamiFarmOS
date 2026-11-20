@@ -14,6 +14,8 @@ import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../../../providers/livestock_provider.dart';
 import '../feed_workspace_screen.dart';
+import '../../animals/animal_queue_screen.dart';
+import '../../animals/quick_round.dart';
 import '../feeding_event_dialog.dart';
 
 /// Today's feeding (§9, §17): every group and individually assigned
@@ -33,6 +35,20 @@ class DailyFeedingTab extends StatelessWidget {
     final plan = feeding.dailyPlan;
 
     return FeedTabScaffold(children: [
+      // Animals on a program of their own, fed cow by cow: the queue
+      // (follow it, or scan labels in any order).
+      if (canRecord)
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: OutlinedButton.icon(
+            key: const ValueKey('feeding-queue'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => const AnimalQueueScreen(initial: QuickRound.feeding()),
+            )),
+            icon: const Icon(Icons.format_list_numbered, size: 18),
+            label: Text(context.t('queueFeeding')),
+          ),
+        ),
       SectionCard(
         title: context.t('plannedToday'),
         subtitle: plan.date.isEmpty ? null : plan.date,

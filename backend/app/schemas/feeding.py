@@ -134,6 +134,10 @@ class LotReceive(BaseModel):
     # The same delivery note, or the same quantity from the same supplier
     # within half an hour, is refused as a possible duplicate unless confirmed.
     confirm_duplicate: bool = False
+    # The approved purchase request this delivery fills. An employee records
+    # a delivery only against one (buying feed is the manager's); naming it
+    # closes the request's line.
+    requisition_id: str | None = None
 
 
 class LotStatusUpdate(BaseModel):

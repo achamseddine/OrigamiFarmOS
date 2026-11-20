@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../domain/entities/access.dart';
+import '../../providers/access_provider.dart';
+import '../animals/animal_queue_screen.dart';
+import '../approvals/approvals_card.dart';
+import '../record/record_sheet.dart' show recordMilkFlow;
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -74,6 +79,7 @@ class MilkProductionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final production = context.watch<ProductionProvider>();
     final animalsProvider = context.watch<AnimalsProvider>();
+    final canRecord = context.watch<AccessProvider>().canCreate(FarmModule.milkProduction);
     final animals = animalsProvider.animals;
     final milkRecords = production.milkRecords;
 
@@ -122,8 +128,23 @@ class MilkProductionScreen extends StatelessWidget {
             title: context.t('milkProductionTitle'),
             subtitle: context.t('milkProductionSubtitle'),
             icon: FarmIcon.milkBottle,
+            // Milk is recorded from here too: one animal (with the day it
+            // was milked — milk noted on paper is entered later), or the
+            // whole milking as a queue.
+            actions: [
+              if (canRecord)
+                HeroAction(primary: true, icon: FarmIcon.plus, label: context.t('recordMilk'), onPressed: () => recordMilkFlow(context)),
+              if (canRecord)
+                HeroAction(
+                  icon: FarmIcon.cow,
+                  label: context.t('queueMilking'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnimalQueueScreen())),
+                ),
+            ],
           ),
           const SizedBox(height: FarmSpacing.md),
+          // Milk corrections waiting for the manager, or the answers to one's own.
+          const ApprovalsCard(modules: {FarmModule.milkProduction}),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 1100 ? 5 : (c.maxWidth > 700 ? 3 : 2);
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;

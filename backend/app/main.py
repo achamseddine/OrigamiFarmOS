@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1 import (
     agriculture,
+    approvals,
     animals,
     auth,
     employees,
@@ -54,6 +55,7 @@ from app.domain import emergency_models  # noqa: F401 - emergency protocols, ass
 from app.domain import platform_models  # noqa: F401 - units of measure, assets, notification routes, scheduled job runs
 from app.domain import health_models  # noqa: F401 - health cases, diagnoses, treatment plans, conditions, weight records
 from app.domain import procurement_models  # noqa: F401 - purchase requisitions and approvals
+from app.domain import approval_models  # noqa: F401 - employee mixes and corrections waiting for the manager
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
@@ -142,6 +144,7 @@ app.include_router(pharmacy.router, prefix=api_prefix)
 app.include_router(emergency.router, prefix=api_prefix)
 app.include_router(health_cases.router, prefix=api_prefix)
 app.include_router(procurement.router, prefix=api_prefix)
+app.include_router(approvals.router, prefix=api_prefix)
 app.include_router(platform.router, prefix=api_prefix)
 
 

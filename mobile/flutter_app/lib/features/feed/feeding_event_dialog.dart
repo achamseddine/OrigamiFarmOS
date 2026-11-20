@@ -6,7 +6,6 @@ import '../../core/theme/typography.dart';
 import '../../core/util/number_input.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../core/widgets/form_dialog.dart';
-import '../../domain/entities/access.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
@@ -209,7 +208,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
   @override
   Widget build(BuildContext context) {
     final feeding = context.watch<FeedingProvider>();
-    final canSetUp = context.watch<AccessProvider>().canCreate(FarmModule.feedNutrition);
+    final canSetUp = context.watch<AccessProvider>().canManageFeed;
     final lang = Localizations.localeOf(context).languageCode;
     final feeds = feeding.feedable;
     final shortfalls = _shortfalls(feeding);

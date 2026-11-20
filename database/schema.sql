@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 136 tables, 40 secondary indexes.
+-- 137 tables, 42 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -644,6 +644,32 @@ CREATE TABLE animals (
     FOREIGN KEY(management_profile) REFERENCES management_profiles (code),
     FOREIGN KEY(location_id) REFERENCES locations (id)
 );
+
+CREATE TABLE approval_requests (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    kind VARCHAR(40) NOT NULL,
+    module_code VARCHAR(40) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    subject_type VARCHAR(30),
+    subject_id VARCHAR(36),
+    target_id VARCHAR(36),
+    summary VARCHAR(300) NOT NULL,
+    payload JSON NOT NULL,
+    reason TEXT,
+    requested_by VARCHAR(36) NOT NULL,
+    requested_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    decided_by VARCHAR(36),
+    decided_at TIMESTAMP WITH TIME ZONE,
+    decision_note TEXT,
+    result_type VARCHAR(40),
+    result_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(requested_by) REFERENCES users (id)
+);
+CREATE INDEX ix_approval_requests_status ON approval_requests (farm_id, status);
+CREATE INDEX ix_approval_requests_target ON approval_requests (farm_id, target_id);
 
 CREATE TABLE crop_plantings (
     id VARCHAR(36) NOT NULL,

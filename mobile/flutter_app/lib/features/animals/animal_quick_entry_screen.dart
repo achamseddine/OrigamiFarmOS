@@ -52,11 +52,15 @@ import 'reproduction_forms.dart' show confirmLactationChange, showWeightForm;
 ///   - a **round** (the 06:00 milking, the individual feeding) shows who
 ///     is done and who is left, opened from the day's routine.
 class AnimalQuickEntryScreen extends StatefulWidget {
-  const AnimalQuickEntryScreen({super.key, this.initialAnimalId, this.initialGroupId, this.round, this.startWithCamera = false});
+  const AnimalQuickEntryScreen({super.key, this.initialAnimalId, this.initialGroupId, this.round, this.startWithCamera = false, this.followQueue = false});
 
   final String? initialAnimalId;
   final String? initialGroupId;
   final QuickRound? round;
+
+  /// Follow the [round] as a queue: open its next animal still to do, and
+  /// after each save move on to the next one (animal_queue_screen.dart).
+  final bool followQueue;
 
   /// Open the camera as soon as the screen appears.
   final bool startWithCamera;
@@ -120,7 +124,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     _autoScan = widget.startWithCamera;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_animalId != null) {
+      final first = _animalId == null && _following ? nextInQueue(_status()!) : null;
+      if (first != null) {
+        _selectAnimal(first.id);
+      } else if (_animalId != null) {
         _loadFeedRows(_animalId!);
       } else if (widget.startWithCamera) {
         _scanWithCamera();
@@ -142,6 +149,31 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   }
 
   bool get _hasDraft => _milk.text.trim().isNotEmpty || _feeds.any((r) => r.hasValues);
+
+  bool get _following => widget.followQueue && widget.round != null;
+
+  /// Who is in the round and who is done, as the providers have it now.
+  RoundStatus? _status() {
+    final round = widget.round;
+    if (round == null) return null;
+    final livestock = context.read<LivestockProvider>();
+    final feeding = context.read<FeedingProvider>();
+    return roundStatus(
+      round,
+      animals: context.read<AnimalsProvider>().animals,
+      milked: (a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction),
+      milk: context.read<ProductionProvider>().milkRecords,
+      plan: feeding.dailyPlan,
+      fedToday: feeding.fedToday,
+    );
+  }
+
+  /// The queue's next animal still to do after the current one.
+  Future<void> _skip() async {
+    final next = nextInQueue(_status()!, after: _animalId);
+    if (next == null) return;
+    await _selectAnimal(next.id);
+  }
 
   Future<bool> _confirmDiscard() async {
     if (!_hasDraft) return true;
@@ -368,11 +400,21 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${animal.name} — ${context.t('qrSavedOnDevice')}')));
+      // Following the queue: straight on to the next animal still to do.
+      final next = _following ? nextInQueue(_status()!, after: animal.id) : null;
       setState(() {
         _animalId = null;
         _code.clear();
         _replaceFeeds(const []);
       });
+      if (next != null) {
+        await _selectAnimal(next.id);
+        return;
+      }
+      if (_following) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('queueComplete'))));
+        return;
+      }
       if (_autoScan) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _scanWithCamera();
@@ -439,6 +481,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                 if (status != null) ...[
                   const SizedBox(height: FarmSpacing.md),
                   _RoundPanel(status: status, current: _animalId, onSelect: _selectAnimal),
+                ],
+                if (_following && status != null && animal != null) ...[
+                  const SizedBox(height: FarmSpacing.md),
+                  _QueueBar(status: status, current: animal, onSkip: _saving ? null : _skip),
                 ],
                 const SizedBox(height: FarmSpacing.md),
                 if (animal != null)
@@ -905,5 +951,43 @@ class _GroupEntry extends StatelessWidget {
         ),
       ),
     ]);
+  }
+}
+
+
+/// Where the worker is in the queue, and Skip to the next one still to do
+/// (an animal not in the parlour, one to come back to).
+class _QueueBar extends StatelessWidget {
+  const _QueueBar({required this.status, required this.current, required this.onSkip});
+  final RoundStatus status;
+  final Animal current;
+  final VoidCallback? onSkip;
+
+  @override
+  Widget build(BuildContext context) {
+    final position = status.entries.indexWhere((e) => e.animal.id == current.id) + 1;
+    final next = nextInQueue(status, after: current.id);
+    return Container(
+      key: const ValueKey('queue-bar'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(color: FarmColors.tint(FarmColors.cedar, 0.08), borderRadius: BorderRadius.circular(12)),
+      child: Row(children: [
+        const Icon(Icons.format_list_numbered, size: 20, color: FarmColors.cedarDark),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(
+              position > 0
+                  ? context.t('queuePosition').replaceAll('{n}', '$position').replaceAll('{total}', '${status.total}')
+                  : context.t('queueNotInQueue'),
+              style: FarmTypography.textTheme.titleSmall,
+            ),
+            Text(next == null ? context.t('queueLastOne') : '${context.t('queueNext')}: ${next.name}', style: FarmTypography.textTheme.bodySmall),
+          ]),
+        ),
+        if (next != null)
+          TextButton.icon(key: const ValueKey('queue-skip'), onPressed: onSkip, icon: const Icon(Icons.skip_next, size: 18), label: Text(context.t('queueSkip'))),
+      ]),
+    );
   }
 }

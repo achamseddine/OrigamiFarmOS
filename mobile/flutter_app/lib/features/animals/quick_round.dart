@@ -54,6 +54,43 @@ class RoundStatus {
 /// the animals in milk that are milked at all; a feeding round is every
 /// animal on a program of its own, done once today's feedings reach the
 /// program's feedings per day.
+/// The order a worker walks a queue: by tag in natural order — the letters
+/// before the number first (plain numbers, then "G-…", then "S-…"), then
+/// the number as a number, so cow 9 comes before cow 10 — then by name.
+int queueOrder(Animal a, Animal b) {
+  (String, int?, String) key(Animal x) {
+    final tag = (x.tag ?? '').trim().toUpperCase();
+    // An animal with no tag comes after every tagged one.
+    if (tag.isEmpty) return ('\u{10FFFF}', null, '');
+    final m = RegExp(r'^([^0-9]*)([0-9]+)(.*)$').firstMatch(tag);
+    if (m == null) return (tag, null, '');
+    return (m.group(1)!.replaceAll(RegExp(r'[^A-Z]'), ''), int.parse(m.group(2)!), m.group(3)!);
+  }
+
+  final (pa, na, ra) = key(a);
+  final (pb, nb, rb) = key(b);
+  if (pa != pb) return pa.compareTo(pb);
+  if (na != null && nb != null && na != nb) return na.compareTo(nb);
+  if (na != null && nb == null) return -1;
+  if (na == null && nb != null) return 1;
+  final rest = ra.compareTo(rb);
+  return rest != 0 ? rest : a.name.toLowerCase().compareTo(b.name.toLowerCase());
+}
+
+/// The next animal still to do in [status] after [after] (going round to
+/// the start of the queue), or the first one still to do when [after] is
+/// null. Null when the queue is done.
+Animal? nextInQueue(RoundStatus status, {String? after}) {
+  final entries = status.entries;
+  if (entries.isEmpty) return null;
+  final at = after == null ? -1 : entries.indexWhere((e) => e.animal.id == after);
+  for (var i = 1; i <= entries.length; i++) {
+    final e = entries[(at + i) % entries.length];
+    if (!e.done && e.animal.id != after) return e.animal;
+  }
+  return null;
+}
+
 RoundStatus roundStatus(
   QuickRound round, {
   required List<Animal> animals,
@@ -66,7 +103,7 @@ RoundStatus roundStatus(
   final today = now ?? DateTime.now();
   switch (round.kind) {
     case RoundKind.milking:
-      final inRound = [for (final a in animals) if (a.onFarm && a.lactating && milked(a)) a];
+      final inRound = [for (final a in animals) if (a.onFarm && a.lactating && milked(a)) a]..sort(queueOrder);
       final recorded = {for (final r in milk) if (r.session == round.session && _sameDay(r.recordedAt, today)) r.animalId};
       return RoundStatus([for (final a in inRound) RoundEntry(a, done: recorded.contains(a.id))]);
     case RoundKind.feeding:
@@ -75,7 +112,7 @@ RoundStatus roundStatus(
         for (final line in plan.lines)
           if (line.subjectType == 'animal' && line.program != null && byId.containsKey(line.subjectId))
             RoundEntry(byId[line.subjectId]!, done: fedToday(line.subjectId).length >= (line.program!.feedingsPerDay < 1 ? 1 : line.program!.feedingsPerDay)),
-      ]);
+      ]..sort((a, b) => queueOrder(a.animal, b.animal)));
   }
 }
 

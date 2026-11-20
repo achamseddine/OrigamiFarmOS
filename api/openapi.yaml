@@ -4490,6 +4490,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feeding-events/{event_id}/correct:
+    post:
+      tags:
+      - feeding
+      summary: Correct Feeding Event
+      description: 'Undo a feeding (its stock returns to its lots) and, with components,
+
+        record what was really fed in its place. An employee sends the same
+
+        correction for approval (POST /approval-requests).'
+      operationId: correct_feeding_event_api_v1_feeding_events__event_id__correct_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: event_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Event Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedingCorrectionIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedingEventOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feeding-plan/today:
     get:
       tags:
@@ -7996,6 +8035,223 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/approval-requests:
+    get:
+      tags:
+      - approvals
+      summary: List Requests
+      description: '[status] pending | approved | rejected | cancelled (all when unset).
+
+        A manager sees the requests of every module they approve (and their
+
+        own); anyone else sees only their own. [mine] limits to one''s own.'
+      operationId: list_requests_api_v1_approval_requests_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: mine
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Mine
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Requests Api V1 Approval Requests Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - approvals
+      summary: Create Request
+      operationId: create_request_api_v1_approval_requests_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalRequestIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Request Api V1 Approval Requests Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/approval-requests/{request_id}:
+    get:
+      tags:
+      - approvals
+      summary: Get Request
+      operationId: get_request_api_v1_approval_requests__request_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Request Api V1 Approval Requests  Request Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/approval-requests/{request_id}/approve:
+    post:
+      tags:
+      - approvals
+      summary: Approve Request
+      operationId: approve_request_api_v1_approval_requests__request_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/ApprovalDecisionIn'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Approve Request Api V1 Approval Requests  Request Id  Approve Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/approval-requests/{request_id}/reject:
+    post:
+      tags:
+      - approvals
+      summary: Reject Request
+      operationId: reject_request_api_v1_approval_requests__request_id__reject_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reject Request Api V1 Approval Requests  Request Id  Reject Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/approval-requests/{request_id}/cancel:
+    post:
+      tags:
+      - approvals
+      summary: Cancel Request
+      operationId: cancel_request_api_v1_approval_requests__request_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: request_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Request Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Request Api V1 Approval Requests  Request Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/units-of-measure:
     get:
       tags:
@@ -8925,6 +9181,47 @@ paths:
                 type: object
                 additionalProperties: true
                 title: Response Record Harvest Api V1 Production Harvest Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk/{record_id}/correct:
+    post:
+      tags:
+      - production
+      summary: Correct Milk Record
+      description: 'A milk record entered wrongly — the amount, the session, the day,
+
+        the destination or the animal. Corrected in place with the before and
+
+        after in the audit log; every total reads the corrected value. Needs
+
+        Milk Production approval; an employee asks through an approval request.'
+      operationId: correct_milk_record_api_v1_production_milk__record_id__correct_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Record Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkCorrectionIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilkRecordOut'
         '422':
           description: Validation Error
           content:
@@ -12035,6 +12332,63 @@ components:
       description: 'Full edit (tech spec §12). `location_label` is here too, so the
 
         dedicated Move action and a general edit share one code path.'
+    ApprovalDecisionIn:
+      properties:
+        note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Note
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      title: ApprovalDecisionIn
+      description: 'Approve or reject. A rejection says why. Approving a mix that is now
+
+        more than the stock on record is the manager''s stock override.'
+    ApprovalRequestIn:
+      properties:
+        kind:
+          type: string
+          title: Kind
+        target_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Target Id
+        payload:
+          additionalProperties: true
+          type: object
+          title: Payload
+        reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reason
+      type: object
+      required:
+      - kind
+      title: ApprovalRequestIn
+      description: '`POST /approval-requests` — an employee''s mix or correction, sent to
+
+        the manager instead of being applied.
+
+
+        kind = feed_mix: [payload] is a `POST /feed-mixes` body.
+
+        kind = milk_correction: [target_id] is the milk record, [payload] a
+
+        MilkCorrectionIn without its reason.
+
+        kind = feeding_correction: [target_id] is the feeding event, [payload] a
+
+        FeedingCorrectionIn without its reason.'
     ApproveVersionIn:
       properties:
         approval_reference:
@@ -14889,6 +15243,30 @@ components:
       - feed_product_id
       - quantity_offered
       title: FeedingComponentIn
+    FeedingCorrectionIn:
+      properties:
+        components:
+          items:
+            $ref: '#/components/schemas/FeedingComponentIn'
+          type: array
+          title: Components
+        reason:
+          type: string
+          title: Reason
+          default: ''
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+      type: object
+      title: FeedingCorrectionIn
+      description: '`POST /feeding-events/{id}/correct` — undo a feeding; with
+
+        [components], record what was really fed in its place (same animal or
+
+        group, same time and kind of feeding). The stock of the original
+
+        returns to its lots.'
     FeedingEventCreate:
       properties:
         subject_type:
@@ -16128,6 +16506,11 @@ components:
           type: boolean
           title: Confirm Duplicate
           default: false
+        requisition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requisition Id
       type: object
       required:
       - feed_product_id
@@ -16822,6 +17205,44 @@ components:
       required:
       - animal_id
       title: MembershipIn
+    MilkCorrectionIn:
+      properties:
+        animal_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Animal Id
+        session:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Session
+        liters:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Liters
+        destination:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Destination
+        recorded_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Recorded At
+        reason:
+          type: string
+          title: Reason
+          default: ''
+      type: object
+      title: MilkCorrectionIn
+      description: '`POST /production/milk/{id}/correct` — the fields to change (unset
+
+        ones keep their value) and why.'
     MilkRecordCreate:
       properties:
         animal_id:
@@ -20441,6 +20862,10 @@ components:
           - type: string
           - type: 'null'
           title: Currency
+        submit:
+          type: boolean
+          title: Submit
+          default: false
       type: object
       title: RequisitionIn
       description: '`POST /procurement/requisitions` — a manual request to buy. It is
@@ -20449,8 +20874,15 @@ components:
     RequisitionLineIn:
       properties:
         inventory_item_id:
-          type: string
+          anyOf:
+          - type: string
+          - type: 'null'
           title: Inventory Item Id
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
         requested_quantity:
           type: number
           title: Requested Quantity
@@ -20476,7 +20908,6 @@ components:
           title: Specification
       type: object
       required:
-      - inventory_item_id
       - requested_quantity
       title: RequisitionLineIn
     ReservationIn:

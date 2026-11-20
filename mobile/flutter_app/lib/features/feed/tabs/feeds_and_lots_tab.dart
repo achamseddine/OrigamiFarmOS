@@ -12,6 +12,7 @@ import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../feed_workspace_screen.dart';
+import '../../approvals/ask_to_buy_dialog.dart';
 
 /// Feed products and their lots (§2.1, §2.2, §3, §25, §26): what can be
 /// fed or mixed, what is on hand, reserved and usable, and the lots it is
@@ -35,12 +36,23 @@ class FeedsAndLotsTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (canCreate)
+            // The feed list, deliveries and reservations are the manager's;
+            // anyone else asks the manager to buy (v0.7.8).
+            if (access.canManageFeed || access.canBuyFeed)
               Wrap(spacing: 8, runSpacing: 8, children: [
-                FilledButton.icon(onPressed: () => _showNewFeedDialog(context), icon: const Icon(Icons.add, size: 16), label: Text(context.t('newFeed'))),
-                OutlinedButton.icon(onPressed: () => _showReceiveDialog(context), icon: const Icon(Icons.local_shipping_outlined, size: 16), label: Text(context.t('receiveDelivery'))),
-                OutlinedButton.icon(onPressed: () => _showReserveDialog(context), icon: const Icon(Icons.lock_outline, size: 16), label: Text(context.t('reserveStock'))),
-              ]),
+                if (access.canManageFeed)
+                  FilledButton.icon(onPressed: () => _showNewFeedDialog(context), icon: const Icon(Icons.add, size: 16), label: Text(context.t('newFeed'))),
+                if (access.canBuyFeed)
+                  OutlinedButton.icon(onPressed: () => _showReceiveDialog(context), icon: const Icon(Icons.local_shipping_outlined, size: 16), label: Text(context.t('receiveDelivery'))),
+                if (access.canManageFeed)
+                  OutlinedButton.icon(onPressed: () => _showReserveDialog(context), icon: const Icon(Icons.lock_outline, size: 16), label: Text(context.t('reserveStock'))),
+              ])
+            else if (canCreate && access.canAskToBuyFeed)
+              FilledButton.icon(
+                onPressed: () => showAskToBuyDialog(context),
+                icon: const Icon(Icons.shopping_cart_outlined, size: 16),
+                label: Text(context.t('prAskToBuy')),
+              ),
             if (feeding.products.isEmpty) const FeedEmpty('noFeedItems'),
             for (final p in feeding.products) ...[
               const SizedBox(height: 10),

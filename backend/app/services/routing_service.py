@@ -35,6 +35,7 @@ DEFAULT_ROLES: dict[str, tuple[str, ...]] = {
     "emergency_reassessment": ("manager", "owner"),
     "feed_performance": ("manager", "owner"),
     "procurement_requisition": ("manager", "owner"),
+    "approval_request": ("manager", "owner"),
 }
 # Routes that also reach the designated stock-responsible person by default.
 _STOCK_ROUTES = ("pharmacy_stock", "pharmacy_critical", "pharmacy_expiry", "procurement_requisition")

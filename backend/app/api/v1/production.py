@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
-from app.services import capability_service, feed_performance_service, feeding_program_service, livestock_state_service, reproduction_service
+from app.services import approval_service, capability_service, feed_performance_service, feeding_program_service, livestock_state_service, milk_service
 from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.core import duplicates
 from app.core.record_time import not_in_future
-from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.repositories.base import new_id, now, write_event
+from app.schemas.approvals import MilkCorrectionIn
 from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
 
 router = APIRouter(prefix="/production", tags=["production"])
@@ -28,6 +29,9 @@ _EGGS_VIEW = require_farm_access(perms.EGG_PRODUCTION, perms.PRODUCE_HARVEST)
 _HARVEST_VIEW = require_farm_access(perms.PRODUCE_HARVEST, perms.AGRICULTURE)
 # Writes: the same modules the tablet's record sheet offers each action to.
 _MILK_CREATE = require_any_permission(perms.MILK_PRODUCTION, action=perms.CREATE)
+# Correcting milk already on record is the manager's (approve); an employee
+# sends the correction as an approval request (POST /approval-requests).
+_MILK_APPROVE = require_any_permission(perms.MILK_PRODUCTION, action=perms.APPROVE)
 _EGGS_CREATE = require_any_permission(perms.EGG_PRODUCTION, action=perms.CREATE)
 _HARVEST_CREATE = require_any_permission(perms.PRODUCE_HARVEST, perms.AGRICULTURE, action=perms.CREATE)
 
@@ -84,43 +88,10 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
     livestock_state_service.ensure_on_farm(animal, "milk")
     recorded_at = not_in_future(payload.recorded_at, "Milk")
-
-    # Milk is a capability (generic animal model §12): a bull, a hen, a
-    # meat ewe or a mare cannot have a milk record, however the form was
-    # filled in.
-    cap_set = capability_service.resolve_for_animal(db, animal)
-    if not cap_set.has(Cap.MILK_PRODUCTION):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            capability_service.describe_missing(cap_set, Cap.MILK_PRODUCTION, animal.name),
-        )
-
-    # Milk belongs to a lactation (PRODUCTION-SCHEMA §8): the round, the
-    # days in milk and the dry-off plan all read "in milk" from the record,
-    # so milk from an animal that is not being milked is refused with what
-    # to do instead — never a second, silent idea of who is in milk.
-    lactation = reproduction_service.active_lactation(db, animal.id)
-    if lactation is None and not animal.lactating:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"{animal.name} is not recorded as being milked. Start her milking first (her profile → Is she being milked? → "
-            "Producing milk), then record the milk.",
-        )
-    if lactation is not None and recorded_at is not None and recorded_at < ensure_utc(lactation.started_at) - timedelta(days=1):
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"{animal.name} started this lactation on {ensure_utc(lactation.started_at).date().isoformat()}; milk cannot be dated before it. "
-            "If she calved earlier, correct the calving date on her profile.",
-        )
-
-    under_withdrawal = animal.withdrawal_until is not None and ensure_utc(animal.withdrawal_until) > datetime.now(timezone.utc)
-    # Server-side safety gate, including when an offline tablet is stale.
-    if under_withdrawal and payload.destination != "withheld":
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"{animal.name} is under withdrawal until {animal.withdrawal_until.isoformat()}. "
-            "Record this milk as withheld; it must not enter stored, sold, processed or consumed stock.",
-        )
+    # On the farm, able to give milk, in milk, within her lactation, and
+    # withheld while under withdrawal (milk_service — the same checks a
+    # correction passes).
+    under_withdrawal = milk_service.ensure_milk_allowed(db, animal, recorded_at, payload.destination)
 
     # The same cow, the same session, the same farm day: two people (or one
     # person twice) recording one milking. A second milking is confirmed.
@@ -165,6 +136,19 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     )
     db.commit()
     return {"id": record.id, "animal_id": record.animal_id, "liters": record.liters, "under_withdrawal_warning": under_withdrawal}
+
+
+@router.post("/milk/{record_id}/correct", response_model=MilkRecordOut)
+def correct_milk_record(record_id: str, payload: MilkCorrectionIn, db: Session = Depends(get_db), current_user: models.User = Depends(_MILK_APPROVE)):
+    """A milk record entered wrongly — the amount, the session, the day,
+    the destination or the animal. Corrected in place with the before and
+    after in the audit log; every total reads the corrected value. Needs
+    Milk Production approval; an employee asks through an approval request."""
+    record, _ = milk_service.get_record(db, record_id, current_user.farm_id)
+    approval_service.ensure_none_pending(db, current_user.farm_id, record.id)
+    milk_service.apply_correction(db, record, payload.model_dump(exclude={"reason"}, exclude_none=True), reason=payload.reason, user=current_user)
+    db.commit()
+    return record
 
 
 @router.post("/eggs", status_code=status.HTTP_201_CREATED)

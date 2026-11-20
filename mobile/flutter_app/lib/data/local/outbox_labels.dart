@@ -54,6 +54,8 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/emergency/offline-runs': (labelKey: 'outboxEmergencyOffline', moduleCode: FarmModule.animalHealth),
   '/health/cases': (labelKey: 'outboxHealthCase', moduleCode: FarmModule.animalHealth),
   '/procurement': (labelKey: 'outboxRequisition', moduleCode: FarmModule.inventory),
+  // A mix or a correction sent to the manager (approval requests).
+  '/approval-requests': (labelKey: 'outboxApprovalRequest', moduleCode: FarmModule.feedNutrition),
   '/feed-nutrient-profiles': (labelKey: 'outboxNutrientProfile', moduleCode: FarmModule.feedNutrition),
   '/recommendations': (labelKey: 'outboxDecision', moduleCode: FarmModule.aiIntelligence),
   '/notifications': (labelKey: 'outboxNotificationRead', moduleCode: FarmModule.morningOperations),

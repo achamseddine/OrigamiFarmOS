@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../approvals/correction_dialogs.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
@@ -10,10 +11,12 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/ux_blocks.dart';
+import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
 import '../../domain/entities/production_records.dart';
 import '../../domain/entities/reproduction.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/herd_records_provider.dart';
 import '../../providers/production_provider.dart';
@@ -52,6 +55,7 @@ class TwinMilkTab extends StatelessWidget {
     final weekTotal = week.fold<double>(0, (s, r) => s + r.liters);
     final month = records.where((r) => r.recordedAt.isAfter(now.subtract(const Duration(days: 30)))).length;
     final last = records.isEmpty ? null : records.first;
+    final canCorrect = context.watch<AccessProvider>().canCreate(FarmModule.milkProduction);
     final recordButton = onRecord == null
         ? null
         : FilledButton.icon(
@@ -91,10 +95,25 @@ class TwinMilkTab extends StatelessWidget {
             title: context.t('twMilkRecent'),
             child: Column(children: [
               for (final r in records.take(14))
-                FactRow(
-                  label: '${_d(r.recordedAt)} · ${_sessionLabel(context, r.session)}',
-                  value: '${r.liters.toStringAsFixed(1)} L · ${context.t(r.destination)}',
-                  last: r == records.take(14).last,
+                // A record entered wrongly is corrected from here: by the
+                // manager directly, by anyone else for approval.
+                InkWell(
+                  key: ValueKey('milk-row-${r.id}'),
+                  onTap: canCorrect ? () => showCorrectMilkDialog(context, r) : null,
+                  child: Row(children: [
+                    Expanded(
+                      child: FactRow(
+                        label: '${_d(r.recordedAt)} · ${_sessionLabel(context, r.session)}',
+                        value: '${r.liters.toStringAsFixed(1)} L · ${context.t(r.destination)}',
+                        last: r == records.take(14).last,
+                      ),
+                    ),
+                    if (canCorrect)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 6),
+                        child: Tooltip(message: context.t('crCorrect'), child: const Icon(Icons.edit_outlined, size: 16, color: FarmColors.muted)),
+                      ),
+                  ]),
                 ),
             ]),
           ),

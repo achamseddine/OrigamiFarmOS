@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import ensure_stock_override, require_permission, user_can
+from app.api.deps import ensure_stock_override, get_current_user, require_permission, user_can
 from app.core import duplicates
 from app.core.record_time import not_in_future
 from app.core import permissions as perms
@@ -33,11 +33,14 @@ from app.schemas.feeding import (
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
     QuickMixIn, StandardFeedSlotOut,
 )
+from app.schemas.approvals import FeedingCorrectionIn
+from app.services import approval_service as approvals
 from app.services import feed_batch_service as batches
 from app.services import feed_forecast_service as forecast
 from app.services import feed_inventory_service as inv
 from app.services import feed_performance_service as perf
 from app.services import feed_policy_service as policy
+from app.services import procurement_service as procurement
 from app.services import feeding_program_service as programs
 from app.services.feed_inventory_service import FeedError
 
@@ -47,6 +50,28 @@ _view = require_permission(perms.FEED_NUTRITION, perms.VIEW)
 _create = require_permission(perms.FEED_NUTRITION, perms.CREATE)
 _edit = require_permission(perms.FEED_NUTRITION, perms.EDIT)
 _approve = require_permission(perms.FEED_NUTRITION, perms.APPROVE)
+
+
+def _manager(what: str, instead: str = ""):
+    """The farm's rule (handbook §5, v0.7.8): employees record the day's
+    feedings and may draft a recipe or a feeding program (a draft does
+    nothing until someone with approval activates it); buying feed, making
+    a numbered mix, the feed catalogue, assigning rations, stock
+    reservations and corrections are the farm manager's — Feed & Nutrition
+    approval. The refusal says what the employee can do instead."""
+
+    def _check(user: models.User = Depends(get_current_user), db: Session = Depends(get_db)) -> models.User:
+        if not user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"{what} needs the farm manager (Feed & Nutrition approval).{(' ' + instead) if instead else ''}")
+        return user
+
+    return _check
+
+
+_mix_manager = _manager("Recording a feed mix", "Send the mix for the manager's approval.")
+_recipe_manager = _manager("Changing the feed list or an animal's ration")
+_stock_manager = _manager("Reserving or releasing feed stock")
+_correct_manager = _manager("Correcting a feeding", "Ask the manager to correct it (send the correction for approval).")
 
 
 def _can_approve(db: Session, user: models.User) -> bool:
@@ -257,7 +282,7 @@ def standard_feed_slots(db: Session = Depends(get_db), user: models.User = Depen
 
 
 @router.post("/feed-products/standard", response_model=list[StandardFeedSlotOut])
-def ensure_standard_feeds(db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def ensure_standard_feeds(db: Session = Depends(get_db), user: models.User = Depends(_recipe_manager)):
     """Creates whichever standard feed the farm lacks (idempotent): an
     ordinary feed product with an empty ledger, never invented stock."""
     slots = inv.ensure_standard_feeds(db, user.farm_id, created_by=user.id)
@@ -266,7 +291,7 @@ def ensure_standard_feeds(db: Session = Depends(get_db), user: models.User = Dep
 
 
 @router.post("/feed-products", response_model=FeedProductOut, status_code=status.HTTP_201_CREATED)
-def create_feed_product(payload: FeedProductCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def create_feed_product(payload: FeedProductCreate, db: Session = Depends(get_db), user: models.User = Depends(_recipe_manager)):
     # One feed, one name: a second "Corn grain" would split its stock.
     clash = db.scalar(select(fm.FeedProduct).where(fm.FeedProduct.farm_id == user.farm_id, fm.FeedProduct.status == "active",
                                                    func.lower(fm.FeedProduct.name) == payload.name.strip().lower()))
@@ -286,7 +311,7 @@ def get_feed_product(product_id: str, db: Session = Depends(get_db), user: model
 
 
 @router.patch("/feed-products/{product_id}", response_model=FeedProductOut)
-def update_feed_product(product_id: str, payload: FeedProductUpdate, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def update_feed_product(product_id: str, payload: FeedProductUpdate, db: Session = Depends(get_db), user: models.User = Depends(_recipe_manager)):
     product = inv.get_product(db, product_id, user.farm_id)
     changes = payload.model_dump(exclude_unset=True)
     if "is_ingredient" in changes or "is_feedable" in changes:
@@ -351,10 +376,13 @@ def list_lots(feed_product_id: str | None = None, lot_status: str | None = Query
 def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
     not_in_future(payload.received_at, "A delivery")
+    requisition = _purchase_authority(db, user, product, payload)
     if payload.lot_code and db.scalar(select(fm.FeedLot.id).where(fm.FeedLot.farm_id == user.farm_id, fm.FeedLot.lot_code == payload.lot_code.strip())):
         raise FeedError(f"Lot {payload.lot_code.strip()} is already recorded; a delivery is received once.", 409)
     match = duplicates.guard(_duplicate_receipt(db, product, payload), _receipt_message(product, payload), confirm=payload.confirm_duplicate)
-    lot = inv.receive(db, product, **payload.model_dump(exclude={"feed_product_id", "confirm_duplicate"}), user_id=user.id)
+    lot = inv.receive(db, product, **payload.model_dump(exclude={"feed_product_id", "confirm_duplicate", "requisition_id"}), user_id=user.id)
+    if requisition is not None:
+        procurement.mark_received(db, requisition, inventory_item_id=product.inventory_item_id, user_id=user.id)
     if payload.quality_grade == "poor" and lot.status == "active":
         # Possession is not permission to use (FEED-SCHEMA §2): a poor
         # delivery waits for someone with Feed approval to release it.
@@ -363,6 +391,37 @@ def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models
                              what=f"lot:{lot.id}", user_id=user.id)
     _commit(db, lot)
     return _lot_out(lot)
+
+
+# A delivery may come in a little over what was approved (a full bag, a
+# rounded weighbridge ticket); more than this needs the manager.
+DELIVERY_TOLERANCE = 0.10
+
+
+def _purchase_authority(db: Session, user: models.User, product: fm.FeedProduct, payload: LotReceive):
+    """Buying feed is the farm manager's (Feed or Inventory approval). An
+    employee records a delivery only against a purchase request the
+    manager approved, for that feed, up to the approved quantity (+10%).
+    Returns the requisition the delivery closes, if one is named."""
+    manager = user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE) or user_can(db, user, perms.INVENTORY, perms.APPROVE)
+    if not payload.requisition_id:
+        if manager:
+            return None
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Buying feed needs the farm manager. Send a purchase request; once it is approved, "
+                                                       "record the delivery against it.")
+    req = procurement.get_requisition(db, payload.requisition_id, user.farm_id)
+    if req.status not in ("approved", "ordered"):
+        raise FeedError(f"Purchase request {req.requisition_no} is {req.status}; a delivery is recorded against an approved request.", 409)
+    line = next((l for l in req.lines if l.inventory_item_id == product.inventory_item_id and l.status in ("approved", "ordered")), None)
+    if line is None:
+        raise FeedError(f"Purchase request {req.requisition_no} does not include {product.name}.")
+    if not manager:
+        approved = uom.convert(line.requested_quantity, line.uom_code, product.unit)
+        received = uom.convert(payload.quantity, payload.unit or product.unit, product.unit)
+        if received > approved * (1 + DELIVERY_TOLERANCE) + 1e-9:
+            raise FeedError(f"{received:g} {product.unit} is more than the {approved:g} {product.unit} approved in {req.requisition_no}; "
+                            "ask the manager to record the difference.")
+    return req
 
 
 def _duplicate_receipt(db: Session, product: fm.FeedProduct, payload: LotReceive) -> fm.FeedLot | None:
@@ -512,7 +571,7 @@ def list_batches(batch_status: str | None = Query(None, alias="status"), mix_num
 
 
 @router.post("/feed-batches", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
-def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models.User = Depends(_mix_manager)):
     batch = batches.start_batch(db, user.farm_id, formula_version_id=payload.formula_version_id, formula_id=payload.formula_id, batch_code=payload.batch_code,
                                 target_quantity=payload.target_quantity, unit=payload.unit, notes=payload.notes,
                                 intended_species_code=payload.intended_species_code, intended_management_profile=payload.intended_management_profile,
@@ -523,7 +582,7 @@ def start_batch(payload: BatchStart, db: Session = Depends(get_db), user: models
 
 
 @router.post("/feed-mixes", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
-def record_mix(payload: QuickMixIn, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def record_mix(payload: QuickMixIn, db: Session = Depends(get_db), user: models.User = Depends(_mix_manager)):
     """A mix recorded in one step (date, ingredients as weighed, output):
     a numbered mix from the output feed's formula — created from this mix
     when the feed has none — with its ingredient lots drawn and its output
@@ -589,7 +648,7 @@ def batch_usage(batch_id: str, db: Session = Depends(get_db), user: models.User 
 
 
 @router.post("/feed-batches/{batch_id}/complete", response_model=BatchOut)
-def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_mix_manager)):
     batch = _batch_or_404(db, batch_id, user.farm_id)
     _require_override(db, user, payload.allow_negative)
     batches.complete_batch(db, batch, actuals=[a.model_dump() for a in payload.actuals], actual_quantity=payload.actual_quantity, produced_at=payload.produced_at,
@@ -730,7 +789,7 @@ def list_assignments(subject_id: str, include_ended: bool = False, db: Session =
 
 
 @router.post("/livestock-subjects/{subject_id}/feeding-assignments", response_model=AssignmentOut, status_code=status.HTTP_201_CREATED)
-def create_assignment(subject_id: str, payload: AssignmentCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def create_assignment(subject_id: str, payload: AssignmentCreate, db: Session = Depends(get_db), user: models.User = Depends(_recipe_manager)):
     subject_type, subject = programs.find_subject(db, subject_id, user.farm_id)
     if payload.assignment_type == "restriction" and not user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE) and not user_can(db, user, perms.ANIMAL_HEALTH, perms.CREATE):
         raise FeedError("A feed restriction is a veterinary or management decision; it needs Animal Health or feed approval rights.", 403)
@@ -740,7 +799,7 @@ def create_assignment(subject_id: str, payload: AssignmentCreate, db: Session = 
 
 
 @router.delete("/livestock-subjects/{subject_id}/feeding-assignments/{assignment_id}", response_model=AssignmentOut)
-def end_assignment(subject_id: str, assignment_id: str, reason: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def end_assignment(subject_id: str, assignment_id: str, reason: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_recipe_manager)):
     subject_type, subject = programs.find_subject(db, subject_id, user.farm_id)
     a = db.get(fm.FeedingAssignment, assignment_id)
     if a is None or a.subject_id != subject.id or a.farm_id != user.farm_id:
@@ -787,13 +846,27 @@ def list_feeding_events(days: int = Query(7, ge=1, le=365), subject_type: str | 
 
 
 @router.post("/feeding-events/{event_id}/reverse", response_model=FeedingEventOut, status_code=status.HTTP_201_CREATED)
-def reverse_feeding_event(event_id: str, payload: FeedingEventReverse, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def reverse_feeding_event(event_id: str, payload: FeedingEventReverse, db: Session = Depends(get_db), user: models.User = Depends(_correct_manager)):
     event = db.get(fm.FeedingEvent, event_id)
     if event is None or event.farm_id != user.farm_id:
         raise FeedError("Feeding event not found", 404)
     reversal = programs.reverse_feeding(db, event, reason=payload.reason, user_id=user.id)
     _commit(db, reversal)
     return programs.event_to_dict(reversal)
+
+
+@router.post("/feeding-events/{event_id}/correct", response_model=FeedingEventOut, status_code=status.HTTP_201_CREATED)
+def correct_feeding_event(event_id: str, payload: FeedingCorrectionIn, db: Session = Depends(get_db), user: models.User = Depends(_correct_manager)):
+    """Undo a feeding (its stock returns to its lots) and, with components,
+    record what was really fed in its place. An employee sends the same
+    correction for approval (POST /approval-requests)."""
+    event = db.get(fm.FeedingEvent, event_id)
+    if event is None or event.farm_id != user.farm_id:
+        raise FeedError("Feeding event not found", 404)
+    approvals.ensure_none_pending(db, user.farm_id, event.id)
+    result = approvals.correct_feeding(db, event, payload, user=user, allow_negative=payload.allow_negative)
+    _commit(db, result)
+    return programs.event_to_dict(result)
 
 
 @router.get("/feeding-plan/today")
@@ -847,7 +920,7 @@ def list_reorder_policies(db: Session = Depends(get_db), user: models.User = Dep
 
 
 @router.put("/feed-reorder-policies", response_model=ReorderPolicyOut)
-def upsert_reorder_policy(payload: ReorderPolicyUpsert, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def upsert_reorder_policy(payload: ReorderPolicyUpsert, db: Session = Depends(get_db), user: models.User = Depends(_stock_manager)):
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
     row = db.scalar(select(fm.FeedReorderPolicy).where(fm.FeedReorderPolicy.feed_product_id == product.id, fm.FeedReorderPolicy.location_label == payload.location_label))
     if row is None:
@@ -874,7 +947,7 @@ def list_allocations(feed_product_id: str | None = None, alloc_status: str | Non
 
 
 @router.post("/feed-allocations", response_model=AllocationOut, status_code=status.HTTP_201_CREATED)
-def create_allocation(payload: AllocationCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
+def create_allocation(payload: AllocationCreate, db: Session = Depends(get_db), user: models.User = Depends(_stock_manager)):
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
     alloc = inv.allocate(db, product, **payload.model_dump(exclude={"feed_product_id"}), user_id=user.id)
     _commit(db, alloc)
@@ -889,7 +962,7 @@ def _allocation_or_404(db: Session, allocation_id: str, farm_id: str) -> fm.Feed
 
 
 @router.post("/feed-allocations/{allocation_id}/release", response_model=AllocationOut)
-def release_allocation(allocation_id: str, reason: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def release_allocation(allocation_id: str, reason: str | None = None, db: Session = Depends(get_db), user: models.User = Depends(_stock_manager)):
     a = _allocation_or_404(db, allocation_id, user.farm_id)
     inv.release_allocation(db, a, user_id=user.id, reason=reason)
     _commit(db, a)
@@ -897,7 +970,7 @@ def release_allocation(allocation_id: str, reason: str | None = None, db: Sessio
 
 
 @router.post("/feed-allocations/{allocation_id}/transfer", response_model=AllocationOut, status_code=status.HTTP_201_CREATED)
-def transfer_allocation(allocation_id: str, payload: AllocationTransfer, db: Session = Depends(get_db), user: models.User = Depends(_edit)):
+def transfer_allocation(allocation_id: str, payload: AllocationTransfer, db: Session = Depends(get_db), user: models.User = Depends(_stock_manager)):
     a = _allocation_or_404(db, allocation_id, user.farm_id)
     product = db.get(fm.FeedProduct, a.feed_product_id)
     moved = inv.transfer_allocation(
