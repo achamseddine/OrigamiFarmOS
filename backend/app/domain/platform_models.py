@@ -41,7 +41,7 @@ ASSET_TYPES = ("mixer", "tractor", "pump", "generator", "milking_machine", "cool
 ASSET_STATUSES = ("active", "out_of_service", "retired")
 ROUTE_CODES = (
     "pharmacy_stock", "pharmacy_critical", "pharmacy_expiry", "emergency_escalation", "emergency_manager", "emergency_veterinarian",
-    "emergency_reassessment", "feed_performance", "procurement_requisition",
+    "emergency_reassessment", "feed_performance", "procurement_requisition", "approval_request",
 )
 JOB_CODES = ("feed_performance_cycle", "pharmacy_scan", "emergency_reassessment_check")
 

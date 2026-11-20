@@ -29,7 +29,9 @@ class MixingTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final feeding = context.watch<FeedingProvider>();
     final access = context.watch<AccessProvider>();
-    final canCreate = access.canCreate(FarmModule.feedNutrition);
+    // A numbered mix is the manager's (v0.7.8); others use "Make feed mix",
+    // which sends theirs for approval.
+    final canCreate = access.canMixFeed;
     final canApprove = access.can(FarmModule.feedNutrition, PermissionAction.approve);
     final open = feeding.batches.where((b) => b.isOpen).toList();
     final done = feeding.batches.where((b) => !b.isOpen).toList();

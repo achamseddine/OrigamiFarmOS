@@ -93,20 +93,22 @@ void main() {
       expect(find.text('Stock not entered yet — record anyway'), findsOneWidget);
     });
 
-    testWidgets("a worker cannot make a feed's first mix (it would approve its recipe)", (tester) async {
-      await open(tester, (c) => showRecordMixDialog(c, productId: 'fp-corn-silage'), worker: true);
+    testWidgets("a worker's mix — a feed's first one included — is sent to the manager (v0.7.8)", (tester) async {
+      final farm = await open(tester, (c) => showRecordMixDialog(c, productId: 'fp-corn-silage'), worker: true);
       await tester.tap(find.text('open'));
       await settle(tester);
-      expect(find.byKey(const ValueKey('mix-needs-approval')), findsOneWidget);
-      expect(find.textContaining('Corn Silage has no approved recipe yet'), findsOneWidget);
-      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save the mix')).onPressed, isNull);
+      expect(find.byKey(const ValueKey('mix-goes-to-manager')), findsOneWidget);
+      final send = find.widgetWithText(FilledButton, 'Send to the manager');
+      expect(tester.widget<FilledButton>(send).onPressed, isNotNull);
+      expect(find.widgetWithText(FilledButton, 'Save the mix'), findsNothing);
+      expect(farm.api.writes.where((w) => w.$2 == '/feed-mixes'), isEmpty);
     });
 
-    testWidgets('a feed with an approved recipe is mixed by the worker', (tester) async {
-      await open(tester, (c) => showRecordMixDialog(c, productId: 'fp-dairy-mix'), worker: true);
+    testWidgets('the manager records a mix directly', (tester) async {
+      await open(tester, (c) => showRecordMixDialog(c, productId: 'fp-dairy-mix'));
       await tester.tap(find.text('open'));
       await settle(tester);
-      expect(find.byKey(const ValueKey('mix-needs-approval')), findsNothing);
+      expect(find.byKey(const ValueKey('mix-goes-to-manager')), findsNothing);
       expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save the mix')).onPressed, isNotNull);
     });
 

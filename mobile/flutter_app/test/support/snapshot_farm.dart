@@ -12,6 +12,7 @@ import 'package:farmos/core/widgets/duplicate_confirmation.dart';
 import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
+import 'package:farmos/providers/approvals_provider.dart';
 import 'package:farmos/providers/animals_provider.dart';
 import 'package:farmos/providers/emergency_provider.dart';
 import 'package:farmos/providers/employees_provider.dart';
@@ -116,6 +117,7 @@ class SnapshotFarm {
         ChangeNotifierProvider(lazy: false, create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedingProvider(apiClient: api)..load()),
+        ChangeNotifierProvider(lazy: false, create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => PharmacyProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => EmergencyProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)..load()),

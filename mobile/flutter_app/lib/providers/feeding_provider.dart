@@ -401,6 +401,23 @@ class FeedingProvider extends ChangeNotifier {
         await _fetchRecentEvents();
         await refreshStock();
       });
+  /// After a feeding was corrected — by the manager directly or by
+  /// approving an employee's request: the plan, recent feedings and stock.
+  Future<void> afterFeedingCorrected(String? subjectId) async {
+    if (subjectId != null) await planFor(subjectId, force: true);
+    await _fetchRecentEvents();
+    await refreshStock();
+    notifyListeners();
+  }
+
+  /// After an employee's mix was approved: the numbered mixes and stock.
+  Future<void> afterMixApproved() async {
+    await _reloadBatches();
+    await _reloadFormulas();
+    await refreshStock();
+    notifyListeners();
+  }
+
   Future<WriteResult> reverseFeeding(String eventId, String reason, {String? subjectId}) =>
       _write(() => _api.post('/feeding-events/$eventId/reverse', body: {'reason': reason}), then: () async {
         if (subjectId != null) await planFor(subjectId, force: true);

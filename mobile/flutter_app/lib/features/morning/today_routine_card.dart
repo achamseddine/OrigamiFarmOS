@@ -18,7 +18,7 @@ import '../../providers/animals_provider.dart';
 import '../../providers/feeding_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
-import '../animals/animal_quick_entry_screen.dart';
+import '../animals/animal_queue_screen.dart';
 import '../animals/quick_round.dart';
 import '../feed/feeding_event_dialog.dart';
 
@@ -176,9 +176,9 @@ class TodayRoutineCard extends StatelessWidget {
     switch (c.kind) {
       case RoutineKind.milking:
         if (!access.canCreate(FarmModule.milkProduction)) return null;
-        // The round, scan by scan, with who is left on screen.
+        // The round as a queue: follow it cow by cow, or scan labels.
         return () => Navigator.of(context).push(MaterialPageRoute<void>(
-              builder: (_) => AnimalQuickEntryScreen(round: QuickRound.milking(c.key), startWithCamera: true),
+              builder: (_) => AnimalQueueScreen(initial: QuickRound.milking(c.key)),
             ));
       case RoutineKind.eggs:
         if (!access.canCreate(FarmModule.eggProduction)) return null;
@@ -188,7 +188,7 @@ class TodayRoutineCard extends StatelessWidget {
         final line = c.line;
         if (line == null) {
           return () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (_) => const AnimalQuickEntryScreen(round: QuickRound.feeding(), startWithCamera: true),
+                builder: (_) => const AnimalQueueScreen(initial: QuickRound.feeding()),
               ));
         }
         final rounds = line.program?.feedingsPerDay ?? 1;

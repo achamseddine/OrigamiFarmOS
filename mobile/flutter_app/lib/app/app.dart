@@ -13,6 +13,7 @@ import '../domain/entities/user_profile.dart';
 import '../features/auth/login_screen.dart';
 import '../providers/access_provider.dart';
 import '../providers/agriculture_provider.dart';
+import '../providers/approvals_provider.dart';
 import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
@@ -133,6 +134,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => EmergencyProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ProductionProvider(apiClient: api, farmId: user.farmId)),
@@ -283,6 +285,11 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       // At sign-in only what recording a feeding needs; the rest of the feed
       // workspace (cover, costs, performance) loads when it is opened.
       ifAllowed(FarmModuleShortcuts.feed, () => context.read<FeedingProvider>().load(essentialsOnly: true)),
+      // What waits for the manager, and what this person asked for: mixes,
+      // corrections and requests to buy.
+      if ((access.isModuleAvailable(FarmModuleShortcuts.feed) || access.isModuleAvailable('milk_production') || access.isModuleAvailable('inventory')) &&
+          touched(const ['feed_nutrition', 'milk_production', 'inventory']))
+        quietly(() => context.read<ApprovalsProvider>().load()),
       // The farm pharmacy sits between stock and animal health: whoever
       // can see either gets the essential-medicine dashboard.
       if ((access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) && touched(const ['inventory', 'animal_health']))

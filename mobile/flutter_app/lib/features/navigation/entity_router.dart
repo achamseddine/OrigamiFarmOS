@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../providers/approvals_provider.dart';
 import '../../app/app_navigator.dart';
 import '../../domain/entities/access.dart';
 import '../animals/animal_digital_twin_screen.dart';
@@ -60,6 +61,9 @@ class EntityRouter {
     'feed_performance_monitor': FarmModule.feedNutrition,
     'supplier': FarmModule.feedNutrition,
     'purchase_requisition': FarmModule.inventory,
+    // An employee's mix or correction waiting for the manager, and the
+    // answer to it: the approvals card on My Day.
+    'approval_request': FarmModule.morningOperations,
     'farm_asset': FarmModule.settings,
     'unit_of_measure': FarmModule.settings,
     'animal_group': FarmModule.animals,
@@ -94,6 +98,10 @@ class EntityRouter {
 
     final module = _moduleForEntity[entityType];
     if (module == null) return false;
+    // The card shows the request as the server has it now.
+    if (entityType == 'approval_request' || entityType == 'purchase_requisition') {
+      context.read<ApprovalsProvider>().load();
+    }
     return navigator.goToModule(module, entityType: entityType, entityId: entityId);
   }
 

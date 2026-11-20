@@ -22,6 +22,7 @@ import 'animal_digital_twin_screen.dart';
 import '../../core/widgets/ux_blocks.dart';
 import 'animal_herd_section.dart' show showAllGroupsSheet;
 import 'animal_reproduction_section.dart' show ReproOverviewCard;
+import 'animal_queue_screen.dart';
 import 'animal_quick_entry_screen.dart';
 import '../scan/qr_labels.dart';
 import '../../core/widgets/hero_band.dart';
@@ -132,6 +133,12 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const AnimalQuickEntryScreen(startWithCamera: true)),
                   ),
+                ),
+              if ([FarmModule.milkProduction, FarmModule.feedNutrition].any(context.watch<AccessProvider>().canCreate))
+                HeroAction(
+                  icon: FarmIcon.cow,
+                  label: context.t('queueTitle'),
+                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnimalQueueScreen())),
                 ),
               // Labels for the animals the registry shows, to print once and
               // tie to each animal's tag.

@@ -15,7 +15,9 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/inventory.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feed_provider.dart';
+import '../../providers/feeding_provider.dart';
 import 'feed_movement_dialog.dart';
+import '../approvals/ask_to_buy_dialog.dart';
 
 /// Feed & Inventory, laid out as the v1 pack's screen build map has it:
 /// the valley band with the screen's two buttons on it, the three
@@ -294,17 +296,26 @@ class _RowMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Stock coming in is a purchase — the manager's (v0.7.8); anyone else
+    // gets "Ask to buy" instead.
+    final buys = context.watch<AccessProvider>().canBuyFeed;
     return PopupMenuButton<FeedMovementDirection>(
       tooltip: item.name,
       icon: const Icon(Icons.more_vert, color: FarmColors.muted),
-      onSelected: (direction) => showFeedMovementDialog(context, direction: direction, itemId: item.id),
+      onSelected: (direction) {
+        if (direction == FeedMovementDirection.inbound && !buys) {
+          _askToBuy(context, item);
+        } else {
+          showFeedMovementDialog(context, direction: direction, itemId: item.id);
+        }
+      },
       itemBuilder: (context) => [
         PopupMenuItem(
           value: FeedMovementDirection.inbound,
           child: Row(children: [
             const AppIcon(FarmIcon.plus, size: 16, color: FarmColors.cedar),
             const SizedBox(width: 10),
-            Text(context.t('recordPurchase')),
+            Text(context.t(buys ? 'recordPurchase' : 'prAskToBuy')),
           ]),
         ),
         PopupMenuItem(
@@ -318,6 +329,12 @@ class _RowMenu extends StatelessWidget {
       ],
     );
   }
+}
+
+/// An employee's "buy more": the feed this stock line is, asked of the manager.
+void _askToBuy(BuildContext context, InventoryItem item) {
+  final product = context.read<FeedingProvider>().products.where((p) => p.inventoryItemId == item.id).firstOrNull;
+  showAskToBuyDialog(context, productId: product?.id);
 }
 
 class _ReorderCard extends StatelessWidget {
@@ -348,7 +365,13 @@ class _ReorderCard extends StatelessWidget {
               ],
             ),
           ),
-          if (canRecord)
+          if (canRecord && !context.watch<AccessProvider>().canBuyFeed)
+            FilledButton(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 14)),
+              onPressed: () => _askToBuy(context, item),
+              child: Text(context.t('prAskToBuy')),
+            )
+          else if (canRecord)
             FilledButton(
               style: FilledButton.styleFrom(minimumSize: const Size(0, 40), padding: const EdgeInsets.symmetric(horizontal: 14)),
               onPressed: () async {

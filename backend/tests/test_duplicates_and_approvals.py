@@ -7,8 +7,8 @@ handbook/03-Behavioral-Model.md §5, §13).
   recorded, and the event log says what it resembles.
 * A repeat that can never be right (a group, field, feed or raw material
   of the same name; a lot code already used) is a plain 409 — no override.
-* Taking stock below the ledger, activating a recipe and changing the farm
-  calendar need *approve* / *configure*, not just *create*.
+* Taking stock below the ledger, activating a recipe, recording a mix and
+  changing the farm calendar need *approve* / *configure*, not just *create*.
 """
 from __future__ import annotations
 
@@ -181,17 +181,22 @@ def test_a_workers_recipe_is_a_draft_until_approved(client):
     assert r.json()["active_version"] is None and r.json()["versions"][0]["status"] != "active"
 
 
-def test_a_worker_cannot_create_a_recipe_by_mixing_a_new_feed(client):
+def test_a_workers_mix_waits_for_the_manager(client):
+    """v0.7.8: an employee's mix — even of an approved recipe — counts only
+    once the manager approves it (tests/test_employee_approvals.py has the
+    whole request flow)."""
     worker, manager = _h(client, WORKER), _h(client)
     body = {"new_product_name": "Goat pellets", "components": [{"feed_product_id": BARLEY, "actual_quantity": 50}]}
     refused = client.post(f"{API}/feed-mixes", json=body, headers=worker)
-    assert refused.status_code == 403 and "approved recipe" in refused.json()["detail"], refused.text
+    assert refused.status_code == 403 and "approval" in refused.json()["detail"], refused.text
     made = client.post(f"{API}/feed-mixes", json=body, headers=manager)
     assert made.status_code == 201, made.text
-    # Once the manager's first mix approved the recipe, the worker mixes it.
     again = client.post(f"{API}/feed-mixes", json={"feed_product_id": made.json()["feed_product_id"],
                                                    "components": [{"feed_product_id": BARLEY, "actual_quantity": 40}]}, headers=worker)
-    assert again.status_code == 201, again.text
+    assert again.status_code == 403, again.text
+    sent = client.post(f"{API}/approval-requests", json={"kind": "feed_mix", "payload": {"feed_product_id": made.json()["feed_product_id"],
+                       "components": [{"feed_product_id": BARLEY, "actual_quantity": 40}]}}, headers=worker)
+    assert sent.status_code == 201 and sent.json()["status"] == "pending", sent.text
 
 
 def test_a_poor_grade_delivery_is_held_until_released(client):

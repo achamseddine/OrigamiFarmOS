@@ -14,6 +14,7 @@ import '../../domain/entities/access.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
+import '../approvals/approvals_card.dart';
 import 'feed_inventory_screen.dart';
 import 'purchase_and_mix_dialogs.dart';
 import 'tabs/costs_tab.dart';
@@ -71,7 +72,9 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
   Widget build(BuildContext context) {
     final access = context.watch<AccessProvider>();
     final feeding = context.watch<FeedingProvider>();
-    final canStock = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
+    // The manager records a purchase; anyone else asks them to buy and
+    // records the delivery of an approved request (the same dialog route).
+    final canStock = access.canBuyFeed || access.canAskToBuyFeed;
     final canFeed = access.canCreate(FarmModule.feedNutrition);
     final atRisk = feeding.reorder.where((r) => r.coveredByTaskId == null).length;
     final tabs = FeedWorkspaceTab.values;
@@ -90,7 +93,12 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
           // mixed, what was fed (purchase_and_mix_dialogs.dart).
           actions: [
             if (canStock)
-              HeroAction(primary: true, icon: FarmIcon.inventory, label: context.t('fpRecordPurchase'), onPressed: () => showRecordPurchaseDialog(context)),
+              HeroAction(
+                primary: true,
+                icon: FarmIcon.inventory,
+                label: context.t(access.canBuyFeed ? 'fpRecordPurchase' : 'prAskToBuy'),
+                onPressed: () => showRecordPurchaseDialog(context),
+              ),
             if (canFeed)
               HeroAction(icon: FarmIconMap.add, label: context.t('fwMakeMix'), onPressed: () => showRecordMixDialog(context)),
             if (canFeed)
@@ -98,6 +106,9 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
           ],
         ),
         const SizedBox(height: FarmSpacing.md),
+        // Mixes, corrections and requests to buy waiting for the manager —
+        // or, for an employee, what became of theirs.
+        const ApprovalsCard(modules: {FarmModule.feedNutrition, FarmModule.inventory}),
         FeedGettingStartedCard(onFeed: () => setState(() => _tab = FeedWorkspaceTab.intake)),
         const SizedBox(height: FarmSpacing.sm),
         FeedKpiRow(feeding: feeding),

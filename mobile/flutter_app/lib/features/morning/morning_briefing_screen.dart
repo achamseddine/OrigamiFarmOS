@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../approvals/approvals_card.dart';
 import '../../api/api_client.dart';
 import '../../auth/session_controller.dart';
 import '../../core/i18n/strings.dart';
@@ -208,6 +209,9 @@ class _MorningBriefingScreenState extends State<MorningBriefingScreen> {
             ],
           ),
           const SizedBox(height: FarmSpacing.lg),
+          // What waits for the manager's approval — or, for an employee,
+          // what became of what they asked for.
+          const ApprovalsCard(),
           _KpiStrip(kpis: kpis),
           const SizedBox(height: FarmSpacing.lg),
           // The animals and duties this person is responsible for.

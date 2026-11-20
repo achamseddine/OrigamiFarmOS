@@ -250,6 +250,27 @@ final List<_Rule> _rules = [
     ];
   }),
   _Rule('POST', '/feeding-events/$_id/reverse', (m) => [MergeRecord('/feeding-events', m.ids[0], const {'status': 'reversed'})]),
+  // A feeding corrected by the manager: the original is undone; what was
+  // really fed arrives with the server's answer after sync.
+  _Rule('POST', '/feeding-events/$_id/correct', (m) => [MergeRecord('/feeding-events', m.ids[0], const {'status': 'reversed'})]),
+  // A milk record corrected by the manager reads its new values at once.
+  _Rule('POST', '/production/milk/$_id/correct', (m) => [
+        MergeRecord('/production/milk', m.ids[0], {for (final e in m.body.entries) if (e.key != 'reason') e.key: e.value}),
+      ]),
+  // A mix or a correction sent to the manager, and the manager's answer
+  // (v0.7.8): the request shows as waiting before the queue drains.
+  _Rule('POST', '/approval-requests', (m) => [
+        AppendRecord('/approval-requests', _newRecord(m, extra: {'status': 'pending', 'summary': m.body['summary'] ?? '', 'requested_at': _now()})),
+      ]),
+  _Rule('POST', '/approval-requests/$_id/approve', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'approved', 'decided_at': _now()})]),
+  _Rule('POST', '/approval-requests/$_id/reject', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'rejected', 'decided_at': _now(), 'decision_note': m.body['note']})]),
+  _Rule('POST', '/approval-requests/$_id/cancel', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'cancelled', 'decided_at': _now()})]),
+  _Rule('POST', '/procurement/requisitions', (m) => [
+        AppendRecord('/procurement/requisitions',
+            _newRecord(m, extra: {'status': m.body['submit'] == true ? 'submitted' : 'draft', 'requisition_no': '…', 'requested_at': _now()})),
+      ]),
+  _Rule('POST', '/procurement/requisitions/$_id/approve', (m) => [MergeRecord('/procurement/requisitions', m.ids[0], const {'status': 'approved'})]),
+  _Rule('POST', '/procurement/requisitions/$_id/reject', (m) => [MergeRecord('/procurement/requisitions', m.ids[0], const {'status': 'rejected'})]),
   // A delivery is a new lot; what it does to availability comes back with
   // the next refresh.
   _Rule('POST', '/feed-lots/receive', (m) {

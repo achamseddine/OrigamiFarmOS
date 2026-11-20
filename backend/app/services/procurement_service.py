@@ -110,24 +110,76 @@ def create_requisition(db: Session, farm_id: str, *, lines: list[dict], requeste
     return req
 
 
+def resolve_line(db: Session, farm_id: str, line: dict) -> dict:
+    """A line names an inventory item or a feed (whose stock is its
+    inventory item)."""
+    if line.get("feed_product_id"):
+        from app.domain import feed_models as fm  # local: the feed services import this module
+
+        product = db.get(fm.FeedProduct, line["feed_product_id"])
+        if product is None or product.farm_id != farm_id:
+            raise ProcurementError("Feed not found", 404)
+        line = {**line, "inventory_item_id": product.inventory_item_id, "uom_code": line.get("uom_code") or product.unit}
+    if not line.get("inventory_item_id"):
+        raise ProcurementError("Each line names the item or the feed to buy.")
+    line.pop("feed_product_id", None)
+    return line
+
+
+def notify_submitted(db: Session, req: prm.PurchaseRequisition, user: models.User) -> None:
+    """The managers hear of a request to buy as it is sent (bell menu)."""
+    first = req.lines[0] if req.lines else None
+    item = db.get(models.InventoryItem, first.inventory_item_id) if first else None
+    what = f"{item.name} × {first.requested_quantity:g} {first.uom_code}" if item and first else req.requisition_no
+    for u in routing.recipients(db, req.farm_id, "procurement_requisition"):
+        if u.id == user.id:
+            continue
+        db.add(models.Notification(
+            id=new_id(), farm_id=req.farm_id, user_id=u.id, module_code=perms.INVENTORY, notification_type="purchase_request",
+            title=f"Purchase request {req.requisition_no}: {what}"[:300], description=f"Asked by {user.name}." + (f" {req.justification}" if req.justification else ""),
+            priority="high", entity_type="purchase_requisition", entity_id=req.id, source_type="purchase_requisition", source_id=f"{req.id}|{u.id}",
+            created_at=now(),
+        ))
+
+
 def submit(db: Session, req: prm.PurchaseRequisition, *, user_id: str) -> prm.PurchaseRequisition:
     if req.status != "draft":
         raise ProcurementError(f"Requisition {req.requisition_no} is {req.status}; only a draft can be submitted.")
     req.status = "submitted"
     req.submitted_at = now()
+    if req.task_id:
+        t = db.get(models.Task, req.task_id)
+        if t is not None and t.status == "open" and t.title.startswith("Draft requisition"):
+            t.title = ("Purchase request" + t.title[len("Draft requisition"):] + " — approve or reject")[:300]
+            t.description = (f"Submitted purchase request ({req.purpose_code or 'manual'}). {req.justification or ''} "
+                             "Approve or reject it; an approved request is not an order.").strip()[:1500]
     write_event(db, farm_id=req.farm_id, entity_type="purchase_requisition", entity_id=req.id, event_type="purchase_requisition_submitted",
                 payload={"requisition_no": req.requisition_no}, created_by=user_id)
     _on_incoming_changed(db, req, user_id=user_id)
     return req
 
 
-def _authority(db: Session, user: models.User) -> dict:
+def _authority(db: Session, user: models.User, req: prm.PurchaseRequisition | None = None) -> dict:
+    """Who may decide: a manager or owner, inventory approve, or — for a
+    request to buy feed only — Feed & Nutrition approve."""
     role_ok = user.role in ("owner", "manager")
-    perm_ok = False
-    row = db.scalar(select(models.UserModulePermission).where(models.UserModulePermission.user_id == user.id, models.UserModulePermission.module_code == perms.INVENTORY))
-    if row is not None and row.can_approve:
-        perm_ok = True
-    return {"user_id": user.id, "role": user.role, "basis": "role" if role_ok else ("inventory.approve" if perm_ok else None), "decided_at": now().isoformat()}
+
+    def holds(module: str) -> bool:
+        row = db.scalar(select(models.UserModulePermission).where(models.UserModulePermission.user_id == user.id, models.UserModulePermission.module_code == module))
+        return row is not None and bool(row.can_approve)
+
+    basis = "role" if role_ok else ("inventory.approve" if holds(perms.INVENTORY) else None)
+    if basis is None and req is not None and req.lines and _all_feed(db, req) and holds(perms.FEED_NUTRITION):
+        basis = "feed_nutrition.approve"
+    return {"user_id": user.id, "role": user.role, "basis": basis, "decided_at": now().isoformat()}
+
+
+def _all_feed(db: Session, req: prm.PurchaseRequisition) -> bool:
+    from app.domain import feed_models as fm  # local: the feed services import this module
+
+    items = {l.inventory_item_id for l in req.lines}
+    feeds = set(db.scalars(select(fm.FeedProduct.inventory_item_id).where(fm.FeedProduct.inventory_item_id.in_(items))))
+    return items <= feeds
 
 
 def decide(db: Session, req: prm.PurchaseRequisition, *, decision: str, user: models.User, comments: str | None = None) -> prm.PurchaseRequisition:
@@ -138,7 +190,7 @@ def decide(db: Session, req: prm.PurchaseRequisition, *, decision: str, user: mo
         raise ProcurementError("decision must be approved or rejected")
     if req.status not in ("draft", "submitted"):
         raise ProcurementError(f"Requisition {req.requisition_no} is {req.status} and cannot be decided.")
-    authority = _authority(db, user)
+    authority = _authority(db, user, req)
     if authority["basis"] is None:
         raise ProcurementError("Approving a purchase requisition needs a farm manager, the owner, or inventory approve permission.", 403)
     if decision == "rejected" and not (comments and comments.strip()):
@@ -157,6 +209,15 @@ def decide(db: Session, req: prm.PurchaseRequisition, *, decision: str, user: mo
     write_event(db, farm_id=req.farm_id, entity_type="purchase_requisition", entity_id=req.id,
                 event_type="purchase_requisition_approved" if decision == "approved" else "purchase_requisition_rejected",
                 payload={"requisition_no": req.requisition_no, "by": user.id, "authority": authority["basis"], "comments": comments}, created_by=user.id)
+    if req.requested_by != user.id:
+        # The person who asked hears the answer.
+        verb = "approved" if decision == "approved" else "not approved"
+        db.add(models.Notification(
+            id=new_id(), farm_id=req.farm_id, user_id=req.requested_by, module_code=perms.INVENTORY, notification_type="purchase_request",
+            title=f"{user.name} {verb} purchase request {req.requisition_no}"[:300], description=comments or None, priority="medium",
+            entity_type="purchase_requisition", entity_id=req.id, source_type="purchase_requisition_decision", source_id=f"{req.id}|{req.requested_by}",
+            created_at=now(),
+        ))
     _on_incoming_changed(db, req, user_id=user.id)
     return req
 

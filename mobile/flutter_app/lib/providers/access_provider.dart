@@ -59,6 +59,28 @@ class AccessProvider extends ChangeNotifier {
   /// — Feed or Inventory approval (backend api/deps.ensure_stock_override).
   bool get canOverrideFeedStock => canApproveFeed || can(FarmModule.inventory, PermissionAction.approve);
 
+  // The farm's rule (v0.7.8): employees enter the day's milk and feedings;
+  // buying feed, a numbered mix and corrections are the manager's. Someone
+  // without the approval sends them as a request (ApprovalsProvider).
+
+  /// Buys feed and records any delivery (Feed or Inventory approval).
+  bool get canBuyFeed => canOverrideFeedStock;
+
+  /// May ask the manager to buy feed and record an approved delivery.
+  bool get canAskToBuyFeed => canCreate(FarmModule.feedNutrition) || canCreate(FarmModule.inventory);
+
+  /// Records a numbered mix directly; anyone else with Feed create sends it.
+  bool get canMixFeed => canApproveFeed;
+
+  /// Changes the feed list, an animal's ration or a reservation.
+  bool get canManageFeed => canApproveFeed;
+
+  /// Corrects a milk record directly; an employee asks for it.
+  bool get canCorrectMilk => can(FarmModule.milkProduction, PermissionAction.approve);
+
+  /// Corrects or undoes a feeding directly; an employee asks for it.
+  bool get canCorrectFeeding => canApproveFeed;
+
   /// A death is recorded with Animals *edit*; a sale, cull, slaughter or
   /// transfer is a business decision and needs Animals *approve* (backend
   /// livestock exit).
