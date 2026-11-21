@@ -167,7 +167,9 @@ class SessionController extends ChangeNotifier {
       loginProgress = 'Contacting the farm server…';
       notifyListeners();
       final json = await apiClient.authenticate('/auth/login', body: {
-        'email': email.trim(),
+        // One spelling for the address: a keyboard that capitalised the
+        // first letter must not lock a worker out.
+        'email': email.trim().toLowerCase(),
         'password': password,
         if (install != null) 'installation_id': install,
         if (install != null) 'device_name': 'Origami tablet',

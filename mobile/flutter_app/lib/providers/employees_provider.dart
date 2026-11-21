@@ -59,7 +59,7 @@ class EmployeesProvider extends ChangeNotifier {
     final result = await _api.write(() => _api.post('/employees', body: {
           'name': name,
           'password': password,
-          'email': email,
+          'email': email?.trim().toLowerCase(),
           'phone': phone,
           'role': role,
           'department': department,
