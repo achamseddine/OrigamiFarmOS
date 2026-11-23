@@ -13,6 +13,7 @@ import '../features/mouneh/mouneh_module_screen.dart';
 import '../features/produce/produce_harvest_screen.dart';
 import '../features/production/egg_production_screen.dart';
 import '../features/production/milk_production_screen.dart';
+import '../features/reports/reports_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/tasks/tasks_screen.dart';
 import '../features/visits/visits_module_screen.dart';
@@ -64,6 +65,10 @@ final List<_Destination> _destinations = [
       accent: FarmColors.lilac, modules: [FarmModule.farmVisits]),
   _Destination(FarmIcon.money, 'navSales', () => const SalesFinanceScreen(),
       accent: FarmColors.cedar2, modules: [FarmModule.finance, FarmModule.sales, FarmModule.expenses]),
+  // Milk, feed, the herd and the money for a chosen period (v0.7.9); also
+  // opened from each module's own page for whoever reads only that area.
+  _Destination(FarmIcon.report, 'navReports', () => const ReportsScreen(),
+      accent: FarmColors.olive, modules: [FarmModule.reports, FarmModule.finance]),
   _Destination(FarmIcon.task, 'navTasks', () => const TasksScreen(), accent: FarmColors.cedar, modules: [FarmModule.tasks]),
   _Destination(FarmIcon.people, 'navEmployees', () => const EmployeesScreen(), accent: FarmColors.milkBlue, modules: [FarmModule.employees]),
   _Destination(FarmIcon.settings, 'navSettings', () => const SettingsScreen(),

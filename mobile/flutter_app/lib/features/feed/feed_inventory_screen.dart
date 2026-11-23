@@ -18,6 +18,7 @@ import '../../providers/feed_provider.dart';
 import '../../providers/feeding_provider.dart';
 import 'feed_movement_dialog.dart';
 import '../approvals/ask_to_buy_dialog.dart';
+import '../reports/reports_screen.dart' show openReport;
 
 /// Feed & Inventory, laid out as the v1 pack's screen build map has it:
 /// the valley band with the screen's two buttons on it, the three
@@ -63,7 +64,7 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
     final access = context.watch<AccessProvider>();
     final items = feed.items;
     final canRecord = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
-    final canExport = access.can(FarmModule.feedNutrition, PermissionAction.export);
+    final canExport = access.can(FarmModule.feedNutrition, PermissionAction.export) && access.canReadReport('feed');
 
     final totalStockMT = items.fold<double>(0, (sum, i) => sum + (i.unit == 'kg' ? i.currentQty : 0)) / 1000;
     final lowStock = items.where((i) => i.status != StockStatus.good).toList();
@@ -99,11 +100,8 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
                   HeroAction(
                     icon: FarmIconMap.download,
                     label: context.t('exportReport'),
-                    // There is no report endpoint yet. Saying so beats a
-                    // button that does nothing.
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(context.t('reportsNotYet'))),
-                    ),
+                    // The Feed report: used, delivered, mixed, in stock.
+                    onPressed: () => openReport(context, 'feed'),
                   ),
               ],
             ),

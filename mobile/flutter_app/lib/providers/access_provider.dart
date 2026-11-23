@@ -81,6 +81,35 @@ class AccessProvider extends ChangeNotifier {
   /// Corrects or undoes a feeding directly; an employee asks for it.
   bool get canCorrectFeeding => canApproveFeed;
 
+  // Selling milk (v0.7.9): a commercial act — Sales or Finance, or the
+  // milk module's approval (backend production.py).
+
+  /// Sells milk from the tank and marks a sale paid.
+  bool get canSellMilk => canCreate(FarmModule.sales) || canCreate(FarmModule.finance) || can(FarmModule.milkProduction, PermissionAction.approve);
+
+  /// Cancels a milk sale recorded by mistake.
+  bool get canCancelMilkSale =>
+      can(FarmModule.milkProduction, PermissionAction.approve) || can(FarmModule.sales, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve);
+
+  /// Counts the tank and records milk spoiled or used outside a sale.
+  bool get canAdjustMilkTank => can(FarmModule.milkProduction, PermissionAction.approve);
+
+  /// Sees money: milk sales and revenue in the reports.
+  bool get canSeeMoney => [FarmModule.reports, FarmModule.finance, FarmModule.sales].any((m) => can(m, PermissionAction.view));
+
+  /// Reads the farm report [kind] (backend reports.py: Reports, or the
+  /// report's own area).
+  bool canReadReport(String kind) {
+    final modules = switch (kind) {
+      'milk' => [FarmModule.milkProduction],
+      'feed' => [FarmModule.feedNutrition, FarmModule.inventory],
+      'herd' => [FarmModule.animals, FarmModule.animalHealth],
+      'finance' => [FarmModule.finance, FarmModule.sales],
+      _ => const <String>[],
+    };
+    return [FarmModule.reports, ...modules].any((m) => can(m, PermissionAction.view));
+  }
+
   /// A death is recorded with Animals *edit*; a sale, cull, slaughter or
   /// transfer is a business decision and needs Animals *approve* (backend
   /// livestock exit).

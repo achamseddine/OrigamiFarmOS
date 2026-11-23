@@ -25,6 +25,8 @@ import 'package:farmos/features/mouneh/mouneh_module_screen.dart';
 import 'package:farmos/features/produce/produce_harvest_screen.dart';
 import 'package:farmos/features/production/egg_production_screen.dart';
 import 'package:farmos/features/production/milk_production_screen.dart';
+import 'package:farmos/features/production/milk_sales_ui.dart';
+import 'package:farmos/features/reports/reports_screen.dart';
 import 'package:farmos/features/settings/settings_screen.dart';
 import 'package:farmos/features/tasks/tasks_screen.dart';
 import 'package:farmos/features/visits/visits_module_screen.dart';
@@ -64,6 +66,7 @@ void main() {
     'Quick entry': () => const AnimalQuickEntryScreen(initialAnimalId: 'cow-744'),
     'Cow queue': () => const AnimalQueueScreen(),
     'Queue entry': () => const AnimalQuickEntryScreen(round: QuickRound.milking('morning'), followQueue: true),
+    'Reports': () => const ReportsScreen(),
   };
 
   final forms = <String, void Function(BuildContext)>{
@@ -81,6 +84,8 @@ void main() {
     'ask to buy feed': (c) => showAskToBuyDialog(c, productId: 'fp-barley'),
     'correct milk': (c) => showCorrectMilkDialog(c, c.read<ProductionProvider>().milkRecords.firstWhere((r) => r.animalId == 'cow-744')),
     'correct feeding': (c) => showCorrectFeedingDialog(c, c.read<FeedingProvider>().recentEvents.firstWhere((e) => e.status == 'recorded')),
+    'sell milk': (c) => showSellMilkDialog(c),
+    'count the milk tank': (c) => showMilkTankDialog(c),
   };
 
   /// Draws [build] at [size] in [locale]; returns what went wrong, one line each.

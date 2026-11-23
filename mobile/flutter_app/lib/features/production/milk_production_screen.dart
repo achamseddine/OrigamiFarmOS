@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../reports/reports_screen.dart' show openReport;
+import 'milk_sales_ui.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
 import '../animals/animal_queue_screen.dart';
@@ -79,7 +81,8 @@ class MilkProductionScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final production = context.watch<ProductionProvider>();
     final animalsProvider = context.watch<AnimalsProvider>();
-    final canRecord = context.watch<AccessProvider>().canCreate(FarmModule.milkProduction);
+    final access = context.watch<AccessProvider>();
+    final canRecord = access.canCreate(FarmModule.milkProduction);
     final animals = animalsProvider.animals;
     final milkRecords = production.milkRecords;
 
@@ -140,11 +143,18 @@ class MilkProductionScreen extends StatelessWidget {
                   label: context.t('queueMilking'),
                   onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnimalQueueScreen())),
                 ),
+              // Milk stored in the tank is sold from here (v0.7.9).
+              if (access.canSellMilk) HeroAction(icon: FarmIcon.money, label: context.t('msSellMilk'), onPressed: () => showSellMilkDialog(context)),
+              if (access.canReadReport('milk'))
+                HeroAction(icon: FarmIcon.report, label: context.t('rpMilkReport'), onPressed: () => openReport(context, 'milk')),
             ],
           ),
           const SizedBox(height: FarmSpacing.md),
           // Milk corrections waiting for the manager, or the answers to one's own.
           const ApprovalsCard(modules: {FarmModule.milkProduction}),
+          // What is in the tank and the milk sold from it.
+          const MilkTankCard(),
+          const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 1100 ? 5 : (c.maxWidth > 700 ? 3 : 2);
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
@@ -251,7 +261,8 @@ class MilkProductionScreen extends StatelessWidget {
             );
             final destination = SectionCard(
               title: context.t('milkDestinationToday'),
-              trailing: context.t('viewDestinationDetails'),
+              trailing: access.canReadReport('milk') ? context.t('viewDestinationDetails') : null,
+              onTrailingTap: access.canReadReport('milk') ? () => openReport(context, 'milk') : null,
               child: destSum == 0
                   ? Text(context.t('noMilkToday'), style: FarmTypography.textTheme.bodySmall)
                   : Row(children: [

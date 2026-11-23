@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 137 tables, 42 secondary indexes.
+-- 139 tables, 44 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -342,6 +342,21 @@ CREATE TABLE management_profiles (
     PRIMARY KEY (code),
     FOREIGN KEY(species_code) REFERENCES species (code)
 );
+
+CREATE TABLE milk_tank_adjustments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    liters FLOAT NOT NULL,
+    reason VARCHAR(20) NOT NULL,
+    counted_level FLOAT,
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id)
+);
+CREATE INDEX ix_milk_tank_adjustments_farm ON milk_tank_adjustments (farm_id, occurred_at);
 
 CREATE TABLE module_licenses (
     id VARCHAR(36) NOT NULL,
@@ -1452,6 +1467,34 @@ CREATE TABLE milk_records (
     PRIMARY KEY (id),
     FOREIGN KEY(animal_id) REFERENCES animals (id)
 );
+
+CREATE TABLE milk_sales (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    liters FLOAT NOT NULL,
+    price_per_liter FLOAT NOT NULL,
+    amount FLOAT NOT NULL,
+    currency VARCHAR(10) NOT NULL,
+    customer_id VARCHAR(36),
+    buyer_name VARCHAR(200),
+    payment_status VARCHAR(20) NOT NULL,
+    paid_at TIMESTAMP WITH TIME ZONE,
+    reference VARCHAR(120),
+    notes TEXT,
+    status VARCHAR(20) NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    sale_id VARCHAR(36),
+    reversal_sale_id VARCHAR(36),
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id),
+    FOREIGN KEY(sale_id) REFERENCES sales (id)
+);
+CREATE INDEX ix_milk_sales_farm_sold ON milk_sales (farm_id, sold_at);
 
 CREATE TABLE production_batches (
     id VARCHAR(36) NOT NULL,

@@ -227,7 +227,22 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     case_ids = [c.id for c in db.query(health_models.HealthCase).filter_by(farm_id=FARM_ID).all()]
     paths += [("/health/cases", None), ("/health/cases", {"status": "all"}), ("/observations", {"farm_id": FARM_ID})]
     paths += [(f"/health/cases/{cid}", None) for cid in case_ids]
+    # The milk tank and the milk sold from it, and the farm reports
+    # (v0.7.9). A report is recorded for its default period, the last 30
+    # days; offline, any period the tablet asks for reads that one.
+    paths += NEW_IN_079
     return paths
+
+
+NEW_IN_079: list[tuple[str, dict | None]] = [
+    ("/production/milk-tank", None),
+    ("/production/milk-sales", {"days": 90}),
+    ("/production/milk-tank/adjustments", {"days": 90}),
+    ("/reports/milk", None),
+    ("/reports/feed", None),
+    ("/reports/herd", None),
+    ("/reports/finance", None),
+]
 
 
 def main() -> int:

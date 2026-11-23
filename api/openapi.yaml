@@ -9228,6 +9228,223 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-tank:
+    get:
+      tags:
+      - production
+      summary: Milk Tank
+      description: 'Milk in the tank: stored milk recorded − sold + adjustments. Worked
+
+        out from the records every time, never stored.'
+      operationId: milk_tank_api_v1_production_milk_tank_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Milk Tank Api V1 Production Milk Tank Get
+      security:
+      - HTTPBearer: []
+  /api/v1/production/milk-sales:
+    get:
+      tags:
+      - production
+      summary: List Milk Sales
+      operationId: list_milk_sales_api_v1_production_milk_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 90
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Milk Sales Api V1 Production Milk Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - production
+      summary: Sell Milk
+      description: 'Milk sold from the tank: litres, price per litre, buyer, paid or to be
+
+        paid. Writes the farm''s revenue record (product "milk") as well.'
+      operationId: sell_milk_api_v1_production_milk_sales_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkSaleCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sell Milk Api V1 Production Milk Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-sales/{sale_id}/paid:
+    post:
+      tags:
+      - production
+      summary: Milk Sale Paid
+      operationId: milk_sale_paid_api_v1_production_milk_sales__sale_id__paid_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sale_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sale Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Milk Sale Paid Api V1 Production Milk Sales  Sale Id  Paid Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-sales/{sale_id}/cancel:
+    post:
+      tags:
+      - production
+      summary: Cancel Milk Sale
+      description: 'A sale recorded by mistake: kept, marked cancelled with the reason;
+
+        the revenue is reversed and the milk is back in the tank.'
+      operationId: cancel_milk_sale_api_v1_production_milk_sales__sale_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sale_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sale Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkSaleCancel'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Milk Sale Api V1 Production Milk Sales  Sale Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-tank/adjustments:
+    get:
+      tags:
+      - production
+      summary: List Tank Adjustments
+      operationId: list_tank_adjustments_api_v1_production_milk_tank_adjustments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 90
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Tank Adjustments Api V1 Production Milk Tank Adjustments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - production
+      summary: Adjust Milk Tank
+      description: 'Milk that left the tank outside a sale, or a count of the tank —
+
+        the farm manager''s (Milk production approval).'
+      operationId: adjust_milk_tank_api_v1_production_milk_tank_adjustments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkTankAdjust'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Adjust Milk Tank Api V1 Production Milk Tank Adjustments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/health/treatments:
     get:
       tags:
@@ -9464,6 +9681,181 @@ paths:
                 type: object
                 additionalProperties: true
                 title: Response Daily Summary Api V1 Reports Daily Summary Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/milk:
+    get:
+      tags:
+      - reports
+      summary: Milk Report
+      description: 'Milk for a period: produced, per day and animal, where it went, the tank; with money,
+        the sales.'
+      operationId: milk_report_api_v1_reports_milk_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Milk Report Api V1 Reports Milk Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/feed:
+    get:
+      tags:
+      - reports
+      summary: Feed Report
+      description: 'Feed for a period: feedings, feed used and its cost, deliveries, mixes, stock now.'
+      operationId: feed_report_api_v1_reports_feed_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Feed Report Api V1 Reports Feed Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/herd:
+    get:
+      tags:
+      - reports
+      summary: Herd Report
+      description: 'The herd for a period: on the farm by species, births, animals added and that left,
+        health cases.'
+      operationId: herd_report_api_v1_reports_herd_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Herd Report Api V1 Reports Herd Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/finance:
+    get:
+      tags:
+      - reports
+      summary: Finance Report
+      description: 'Money for a period: revenue, expenses, margin, cash collected, unpaid; by product,
+        category and day.'
+      operationId: finance_report_api_v1_reports_finance_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Finance Report Api V1 Reports Finance Get
         '422':
           description: Validation Error
           content:
@@ -17332,6 +17724,101 @@ components:
       - destination
       - recorded_at
       title: MilkRecordOut
+    MilkSaleCancel:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          default: ''
+      type: object
+      title: MilkSaleCancel
+    MilkSaleCreate:
+      properties:
+        liters:
+          type: number
+          title: Liters
+        price_per_liter:
+          type: number
+          title: Price Per Liter
+        sold_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Sold At
+        customer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Customer Id
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - liters
+      - price_per_liter
+      title: MilkSaleCreate
+      description: POST /production/milk-sales — milk sold from the tank.
+    MilkTankAdjust:
+      properties:
+        reason:
+          type: string
+          title: Reason
+        liters:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Liters
+        counted_level:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Counted Level
+        occurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Occurred At
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - reason
+      title: MilkTankAdjust
+      description: 'POST /production/milk-tank/adjustments — milk out of the tank outside
+
+        a sale (`liters`, reason spoiled | calves | home_use | other) or a count
+
+        of the tank (`counted_level`, reason count).'
     MixSettingsOut:
       properties:
         farm_id:

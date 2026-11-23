@@ -9,23 +9,30 @@ import '../../core/widgets/charts/line_trend_chart.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/sales_provider.dart';
+import '../production/milk_sales_ui.dart';
+import '../reports/report_docs.dart' show codeLabel;
+import '../reports/reports_screen.dart' show openReport;
 
 /// Sales & Finance (manager-only) is always-online now: [SalesProvider] is
 /// already loaded once at app startup (see app/app.dart's `_DataLoader`),
 /// backed by the real `/reports/daily-summary` + `/sales` + `/expenses`
 /// endpoints instead of the old fabricated `DemoData` dataset.
 ///
-/// `SalesProvider` is read-only — there is no create-a-sale/expense
-/// endpoint yet, so the old "record a sale" flow this screen never actually
-/// had a form for stays that way; nothing was removed here because nothing
-/// like that existed on this screen to begin with.
+/// Milk is sold from here as from the Milk page (v0.7.9): a milk sale
+/// takes the milk out of the tank and writes the farm's revenue on the
+/// server, and the figures below reload. The full picture for any period
+/// is the Finance report.
 class SalesFinanceScreen extends StatelessWidget {
   const SalesFinanceScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final sales = context.watch<SalesProvider>();
+    final access = context.watch<AccessProvider>();
+    final canReport = access.canReadReport('finance');
+    void report() => openReport(context, 'finance');
     final summary = sales.dailySummary;
     final revenue = sales.revenueToday;
     final expenseTotal = sales.expensesToday;
@@ -37,7 +44,7 @@ class SalesFinanceScreen extends StatelessWidget {
     final topProducts = sales.topSellingProducts;
     final insights = sales.businessInsights;
     final profitTrend = sales.profitTrend7Days();
-    const profitTrendLabels = ['D-6', 'D-5', 'D-4', 'D-3', 'D-2', 'Yesterday', 'Today'];
+    final profitTrendLabels = ['-6', '-5', '-4', '-3', '-2', context.t('yesterday'), context.t('today')];
 
     String pctOfRevenue(double amount, {int decimals = 0}) => revenue == 0 ? '—' : '${(amount / revenue * 100).toStringAsFixed(decimals)}%';
 
@@ -54,6 +61,18 @@ class SalesFinanceScreen extends StatelessWidget {
             subtitle: context.t('salesSubtitle'),
             icon: FarmIcon.coins,
             scenery: false,
+            actions: [
+              if (access.canSellMilk)
+                HeroAction(
+                  key: const ValueKey('finance-sell-milk'),
+                  primary: true,
+                  icon: FarmIcon.milkBottle,
+                  label: context.t('msSellMilk'),
+                  onPressed: () => showSellMilkDialog(context),
+                ),
+              if (canReport)
+                HeroAction(key: const ValueKey('finance-report'), icon: FarmIcon.report, label: context.t('rpFinanceReport'), onPressed: report),
+            ],
           ),
           const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
@@ -62,25 +81,30 @@ class SalesFinanceScreen extends StatelessWidget {
             final cards = [
               KpiCard(icon: FarmIcon.money, label: context.t('revenueToday'), value: '\$${revenue.toStringAsFixed(0)}'),
               KpiCard(icon: FarmIcon.report, label: context.t('expensesToday'), value: '\$${expenseTotal.toStringAsFixed(0)}'),
-              KpiCard(icon: FarmIcon.chartLine, label: context.t('grossMargin'), value: '\$${margin.toStringAsFixed(0)}', caption: '${pctOfRevenue(margin, decimals: 1)} margin'),
-              KpiCard(icon: FarmIcon.inventory, label: context.t('cashCollected'), value: '\$${cashCollected.toStringAsFixed(0)}', caption: '${pctOfRevenue(cashCollected)} of revenue'),
-              KpiCard(icon: FarmIcon.calendar, label: context.t('pendingPayments'), value: '\$${pending.toStringAsFixed(0)}', caption: '${pctOfRevenue(pending)} of revenue', tint: FarmColors.warning),
+              KpiCard(icon: FarmIcon.chartLine, label: context.t('grossMargin'), value: '\$${margin.toStringAsFixed(0)}', caption: '${pctOfRevenue(margin, decimals: 1)} ${context.t('finMarginWord')}'),
+              KpiCard(icon: FarmIcon.inventory, label: context.t('cashCollected'), value: '\$${cashCollected.toStringAsFixed(0)}', caption: '${pctOfRevenue(cashCollected)} ${context.t('finOfRevenue')}'),
+              KpiCard(icon: FarmIcon.calendar, label: context.t('pendingPayments'), value: '\$${pending.toStringAsFixed(0)}', caption: '${pctOfRevenue(pending)} ${context.t('finOfRevenue')}', tint: FarmColors.warning),
             ];
             return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
           }),
           const SizedBox(height: FarmSpacing.md),
+          // The milk sold and still to be paid — sell, mark paid, cancel.
+          if (access.canSellMilk || access.canCancelMilkSale) ...[
+            const MilkTankCard(),
+            const SizedBox(height: FarmSpacing.md),
+          ],
           LayoutBuilder(builder: (context, c) {
             final wide = c.maxWidth > kTabletBreakpoint;
             final salesCard = SectionCard(
               title: context.t('salesBreakdown'),
               trailing: '${context.t('total')} \$${revenue.toStringAsFixed(0)}',
               child: salesBreakdown.isEmpty
-                  ? Text('No sales recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('finNoSales'), style: FarmTypography.textTheme.bodySmall)
                   : Column(children: [
                       for (final s in salesBreakdown)
                         _BreakdownRow(
                           icon: _iconForProduct(s['product_type'] as String? ?? ''),
-                          label: _productTypeLabel(s['product_type'] as String? ?? '—'),
+                          label: codeLabel(context, 'product_', s['product_type'] as String? ?? ''),
                           amount: (s['amount'] as num?)?.toDouble() ?? 0,
                           total: revenue,
                         ),
@@ -90,12 +114,12 @@ class SalesFinanceScreen extends StatelessWidget {
               title: context.t('expenseBreakdown'),
               trailing: '${context.t('total')} \$${expenseTotal.toStringAsFixed(0)}',
               child: expenseBreakdown.isEmpty
-                  ? Text('No expenses recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('finNoExpenses'), style: FarmTypography.textTheme.bodySmall)
                   : Column(children: [
                       for (final e in expenseBreakdown)
                         _BreakdownRow(
                           icon: _iconForExpense(e['category'] as String? ?? ''),
-                          label: _expenseLabel(e['category'] as String? ?? '—'),
+                          label: codeLabel(context, 'expense_', e['category'] as String? ?? ''),
                           amount: (e['amount'] as num?)?.toDouble() ?? 0,
                           total: expenseTotal,
                           danger: true,
@@ -104,7 +128,8 @@ class SalesFinanceScreen extends StatelessWidget {
             );
             final profitCard = SectionCard(
               title: context.t('profitTrend'),
-              trailing: context.t('viewReport'),
+              trailing: canReport ? context.t('viewReport') : null,
+              onTrailingTap: canReport ? report : null,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -131,10 +156,11 @@ class SalesFinanceScreen extends StatelessWidget {
             final wide = c.maxWidth > kTabletBreakpoint;
             final topProductsCard = SectionCard(
               title: context.t('topSellingProducts'),
-              subtitle: 'by Revenue',
-              trailing: context.t('viewAllProducts'),
+              subtitle: context.t('finByRevenue'),
+              trailing: canReport ? context.t('viewAllProducts') : null,
+              onTrailingTap: canReport ? report : null,
               child: topProducts.isEmpty
-                  ? Text('No sales recorded yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('finNoSales'), style: FarmTypography.textTheme.bodySmall)
                   : Column(
                       children: [
                         for (var i = 0; i < topProducts.length; i++)
@@ -143,7 +169,7 @@ class SalesFinanceScreen extends StatelessWidget {
                             child: Row(children: [
                               Text('${i + 1}.', style: FarmTypography.textTheme.titleSmall),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(topProducts[i]['product_label'] as String? ?? '—', style: FarmTypography.textTheme.titleSmall)),
+                              Expanded(child: Text(_productLabel(context, topProducts[i]['product_label'] as String?), style: FarmTypography.textTheme.titleSmall)),
                               Text('\$${((topProducts[i]['amount'] as num?)?.toDouble() ?? 0).toStringAsFixed(0)}', style: FarmTypography.textTheme.titleSmall),
                               const SizedBox(width: 8),
                               Text(pctOfRevenue((topProducts[i]['amount'] as num?)?.toDouble() ?? 0, decimals: 1), style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
@@ -155,7 +181,7 @@ class SalesFinanceScreen extends StatelessWidget {
             final insightsCard = SectionCard(
               title: context.t('businessInsights'),
               child: insights.isEmpty
-                  ? Text('No insights yet.', style: FarmTypography.textTheme.bodySmall)
+                  ? Text(context.t('finNoInsights'), style: FarmTypography.textTheme.bodySmall)
                   : Column(
                       children: [
                         for (final insight in insights)
@@ -180,6 +206,14 @@ class SalesFinanceScreen extends StatelessWidget {
       ),
     );
   }
+
+  /// The farm server names a milk sale "Raw milk"; other names were typed.
+  static String _productLabel(BuildContext context, String? label) => switch (label ?? '') {
+        'Raw milk' => context.t('msRawMilk'),
+        'Raw milk (cancelled sale)' => context.t('msRawMilkCancelled'),
+        '' => '—',
+        final other => other,
+      };
 
   FarmIcon _iconForProduct(String type) {
     switch (type) {
@@ -210,11 +244,6 @@ class SalesFinanceScreen extends StatelessWidget {
         return FarmIcon.report;
     }
   }
-
-  String _productTypeLabel(String type) =>
-      type.isEmpty ? '—' : type.split('_').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
-
-  String _expenseLabel(String category) => category.isEmpty ? '—' : category[0].toUpperCase() + category.substring(1);
 }
 
 class _BreakdownRow extends StatelessWidget {

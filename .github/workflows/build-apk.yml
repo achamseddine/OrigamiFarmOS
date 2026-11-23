@@ -101,14 +101,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.7.8-build-${{ github.run_number }}
+          tag_name: tablet-v0.7.9-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.7.8 — tablet APK 0.7.${{ github.run_number }}"
+          name: "Origami FarmOS v0.7.9 — tablet APK 0.7.${{ github.run_number }}"
           body: |
             **Build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.7.9:** **Sell milk** from the tank (Milk page and Sales & Finance: litres, price, buyer, paid or to be paid; mark paid, cancel with a reason; the tank worked out from the records, counted by the manager); **Reports** — milk, feed, herd and finance for a chosen period, printed or saved as PDF or exported as a spreadsheet (CSV). **The server needs migration `e6a8c0d2f4b7`.**
             - **v0.7.8:** employees enter the day's milk and feedings; buying feed, a feed mix and corrections go to the farm manager for approval (approvals card on My Day; *Ask to buy feed*; delivery against an approved request); the **cow queue** — follow the milking or feeding cow by cow, or scan in any order; *Record milk* with its date on the Milk page. **The server needs migration `d5f7b9c1e3a6`.**
             - **v0.7.7:** Feed, Mouneh, Farm Visits and Health open as one page — the band scrolls away, the tabs stay at the top and every tab (a mix, the day's feeding, a report) is read at full height instead of in a small window; the feed forms (purchase, mix, feeding, a mix's history) open full screen on the tablet with Save above the keyboard.
             - **v0.7.6:** *Milked on* — the milk record and quick entry take the day it was milked (today by default, up to 60 days back) for milk noted on paper and entered later; a milk record made offline keeps its date.

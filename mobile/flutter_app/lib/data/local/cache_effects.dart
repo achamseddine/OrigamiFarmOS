@@ -212,6 +212,16 @@ final List<_Rule> _rules = [
         AppendRecord('/production/milk', _newRecord(m, extra: {'recorded_at': m.body['recorded_at'] ?? _now()})),
       ]),
   _Rule('POST', '/production/eggs', (m) => [AppendRecord('/production/eggs', _newRecord(m))]),
+  // Milk sold from the tank (v0.7.9): shown at once, flagged as waiting.
+  _Rule('POST', '/production/milk-sales', (m) => [
+        AppendRecord('/production/milk-sales', _newRecord(m, extra: {
+          'status': 'recorded',
+          'amount': ((m.body['liters'] as num? ?? 0) * (m.body['price_per_liter'] as num? ?? 0)),
+        })),
+      ]),
+  _Rule('POST', '/production/milk-sales/$_id/paid', (m) => [MergeRecord('/production/milk-sales', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
+  _Rule('POST', '/production/milk-sales/$_id/cancel', (m) => [MergeRecord('/production/milk-sales', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
+  _Rule('POST', '/production/milk-tank/adjustments', (m) => [AppendRecord('/production/milk-tank/adjustments', _newRecord(m, extra: {'occurred_at': _now()}))]),
   _Rule('POST', '/production/harvest', (m) => [AppendRecord('/production/harvest', _newRecord(m))]),
 
   // Agriculture: created at /fields, read back at /production/fields.
