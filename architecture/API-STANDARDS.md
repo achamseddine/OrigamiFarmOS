@@ -45,6 +45,8 @@ Where a repeat can never be right the refusal is a plain 409 with no override: a
 - A delivery graded `poor` is received **quarantined**; releasing it is a Feed approval.
 - A death is an Animals *edit*; a sale, cull, slaughter or transfer needs Animals *approve*. Correcting a lactation start needs *edit* (Animals or Milk production).
 - The farm calendar (`PATCH /farms/me`) needs Settings *configure*.
+- **Selling milk (v0.7.9).** `POST /production/milk-sales` and `/milk-sales/{id}/paid` need Sales or Finance *create*, or Milk production *approve*; `/milk-sales/{id}/cancel` needs *approve* on Milk production, Sales or Finance; reading the tank and the sales needs *view* on any of the three. Selling more than the tank holds (`allow_negative`) and `POST /production/milk-tank/adjustments` (a count, or milk out with a reason) need Milk production *approve*. The tank is never stored: stored milk − recorded sales + adjustments.
+- **Reports (v0.7.9).** `GET /reports/{milk|feed|herd|finance}?start&end` (farm days, both included, at most 366; default the last 30) needs *view* on Reports or on the report's own area (Milk; Feed or Inventory; Animals or Animal health; Finance or Sales). Money in the milk report only with *view* on Reports, Finance or Sales.
 
 ## Record consistency
 What a record may not state, enforced on the server whatever the client's form allows (`backend/tests/test_record_consistency.py`):

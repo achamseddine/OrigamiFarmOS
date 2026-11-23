@@ -22,6 +22,8 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/incubations': (labelKey: 'outboxIncubation', moduleCode: FarmModule.animals),
   '/health/treatments': (labelKey: 'outboxTreatment', moduleCode: FarmModule.animalHealth),
   '/production/milk': (labelKey: 'outboxMilkRecord', moduleCode: FarmModule.milkProduction),
+  '/production/milk-sales': (labelKey: 'outboxMilkSale', moduleCode: FarmModule.milkProduction),
+  '/production/milk-tank': (labelKey: 'outboxMilkTank', moduleCode: FarmModule.milkProduction),
   '/production/eggs': (labelKey: 'outboxEggRecord', moduleCode: FarmModule.eggProduction),
   '/production/harvest': (labelKey: 'outboxHarvest', moduleCode: FarmModule.produceHarvest),
   '/harvest': (labelKey: 'outboxHarvest', moduleCode: FarmModule.produceHarvest),

@@ -26,6 +26,7 @@ import 'animal_queue_screen.dart';
 import 'animal_quick_entry_screen.dart';
 import '../scan/qr_labels.dart';
 import '../../core/widgets/hero_band.dart';
+import '../reports/reports_screen.dart' show openReport;
 
 class AnimalStatusScreen extends StatefulWidget {
   const AnimalStatusScreen({super.key});
@@ -159,14 +160,12 @@ class _AnimalStatusScreenState extends State<AnimalStatusScreen> {
                   label: context.t('addAnimal'),
                   onPressed: () => showAnimalForm(context),
                 ),
-              if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export))
+              if (context.watch<AccessProvider>().can(FarmModule.animals, PermissionAction.export) && context.watch<AccessProvider>().canReadReport('herd'))
                 HeroAction(
                   icon: FarmIconMap.download,
                   label: context.t('exportReport'),
-                  // No report endpoint yet; say so rather than do nothing.
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(context.t('reportsNotYet'))),
-                  ),
+                  // The Herd report: on the farm, births, animals that left.
+                  onPressed: () => openReport(context, 'herd'),
                 ),
             ],
           ),

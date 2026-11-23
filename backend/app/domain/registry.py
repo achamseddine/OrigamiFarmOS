@@ -26,6 +26,7 @@ MODEL_MODULES: tuple[str, ...] = (
     "app.domain.health_models",      # health cases, diagnoses, treatment plans, conditions, weight records
     "app.domain.procurement_models", # purchase requisitions, lines, approvals
     "app.domain.approval_models",    # employee work waiting for the manager: mixes, corrections
+    "app.domain.milk_models",        # milk sales and the milk tank's adjustments
 )
 
 

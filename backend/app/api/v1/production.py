@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
 from app.services import approval_service, capability_service, feed_performance_service, feeding_program_service, livestock_state_service, milk_service
-from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access
+from app.services import milk_sales_service as milk_sales
+from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
@@ -16,7 +17,8 @@ from app.core import duplicates
 from app.core.record_time import not_in_future
 from app.repositories.base import new_id, now, write_event
 from app.schemas.approvals import MilkCorrectionIn
-from app.schemas.production import EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut
+from app.schemas.production import (EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut,
+                                    MilkSaleCancel, MilkSaleCreate, MilkTankAdjust)
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -149,6 +151,85 @@ def correct_milk_record(record_id: str, payload: MilkCorrectionIn, db: Session =
     milk_service.apply_correction(db, record, payload.model_dump(exclude={"reason"}, exclude_none=True), reason=payload.reason, user=current_user)
     db.commit()
     return record
+
+
+# ------------------------------------------------------------ selling milk
+# Selling is a commercial act: Sales or Finance *create*, or the milk
+# module's approval (the farm manager). Cancelling a sale and adjusting the
+# tank change the record: *approve*. Reading: whoever sees milk or sales.
+_MILK_SALES_VIEW = require_any_permission(perms.MILK_PRODUCTION, perms.SALES, perms.FINANCE, action=perms.VIEW)
+_MILK_SALES_APPROVE = require_any_permission(perms.MILK_PRODUCTION, perms.SALES, perms.FINANCE, action=perms.APPROVE)
+
+
+def _sell_dep(db: Session = Depends(get_db), user: models.User = Depends(require_any_permission(perms.MILK_PRODUCTION, perms.SALES, perms.FINANCE))):
+    if not (user_can(db, user, perms.SALES, perms.CREATE) or user_can(db, user, perms.FINANCE, perms.CREATE)
+            or user_can(db, user, perms.MILK_PRODUCTION, perms.APPROVE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Selling milk needs Sales or Finance, or Milk production approval — ask the farm manager.")
+    return user
+
+
+@router.get("/milk-tank")
+def milk_tank(db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_VIEW)) -> dict:
+    """Milk in the tank: stored milk recorded − sold + adjustments. Worked
+    out from the records every time, never stored."""
+    return milk_sales.tank(db, user.farm_id)
+
+
+@router.get("/milk-sales")
+def list_milk_sales(days: int = 90, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_VIEW)) -> list[dict]:
+    from app.domain import milk_models as mm
+
+    cutoff = now() - timedelta(days=days)
+    rows = db.scalars(select(mm.MilkSale).where(mm.MilkSale.farm_id == user.farm_id, mm.MilkSale.sold_at >= cutoff).order_by(mm.MilkSale.sold_at.desc()))
+    return [milk_sales.sale_dict(r) for r in rows]
+
+
+@router.post("/milk-sales", status_code=status.HTTP_201_CREATED)
+def sell_milk(payload: MilkSaleCreate, db: Session = Depends(get_db), user: models.User = Depends(_sell_dep)) -> dict:
+    """Milk sold from the tank: litres, price per litre, buyer, paid or to be
+    paid. Writes the farm's revenue record (product "milk") as well."""
+    sale = milk_sales.sell(db, user, liters=payload.liters, price_per_liter=payload.price_per_liter, sold_at=payload.sold_at,
+                           customer_id=payload.customer_id, buyer_name=payload.buyer_name, payment_status=payload.payment_status,
+                           reference=payload.reference, notes=payload.notes, allow_negative=payload.allow_negative,
+                           can_override=user_can(db, user, perms.MILK_PRODUCTION, perms.APPROVE), confirm_duplicate=payload.confirm_duplicate)
+    db.commit()
+    return milk_sales.sale_dict(sale)
+
+
+@router.post("/milk-sales/{sale_id}/paid")
+def milk_sale_paid(sale_id: str, db: Session = Depends(get_db), user: models.User = Depends(_sell_dep)) -> dict:
+    sale = milk_sales.mark_paid(db, milk_sales.get_sale(db, sale_id, user.farm_id), user)
+    db.commit()
+    return milk_sales.sale_dict(sale)
+
+
+@router.post("/milk-sales/{sale_id}/cancel")
+def cancel_milk_sale(sale_id: str, payload: MilkSaleCancel, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_APPROVE)) -> dict:
+    """A sale recorded by mistake: kept, marked cancelled with the reason;
+    the revenue is reversed and the milk is back in the tank."""
+    sale = milk_sales.cancel(db, milk_sales.get_sale(db, sale_id, user.farm_id), user, reason=payload.reason)
+    db.commit()
+    return milk_sales.sale_dict(sale)
+
+
+@router.get("/milk-tank/adjustments")
+def list_tank_adjustments(days: int = 90, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_VIEW)) -> list[dict]:
+    from app.domain import milk_models as mm
+
+    cutoff = now() - timedelta(days=days)
+    rows = db.scalars(select(mm.MilkTankAdjustment).where(mm.MilkTankAdjustment.farm_id == user.farm_id, mm.MilkTankAdjustment.occurred_at >= cutoff)
+                      .order_by(mm.MilkTankAdjustment.occurred_at.desc()))
+    return [milk_sales.adjustment_dict(r) for r in rows]
+
+
+@router.post("/milk-tank/adjustments", status_code=status.HTTP_201_CREATED)
+def adjust_milk_tank(payload: MilkTankAdjust, db: Session = Depends(get_db), user: models.User = Depends(_MILK_APPROVE)) -> dict:
+    """Milk that left the tank outside a sale, or a count of the tank —
+    the farm manager's (Milk production approval)."""
+    row = milk_sales.adjust_tank(db, user, reason=payload.reason, liters=payload.liters, counted_level=payload.counted_level,
+                                 occurred_at=payload.occurred_at, notes=payload.notes)
+    db.commit()
+    return milk_sales.adjustment_dict(row)
 
 
 @router.post("/eggs", status_code=status.HTTP_201_CREATED)

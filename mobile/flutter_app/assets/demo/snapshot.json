@@ -33422,6 +33422,17 @@
    "waste_qty": 7.0
   }
  ],
+ "GET /production/milk-sales?days=90": [],
+ "GET /production/milk-tank": {
+  "adjusted_l": 0.0,
+  "balance_l": 617.3,
+  "currency": "USD",
+  "last_buyer_name": null,
+  "last_price_per_liter": null,
+  "sold_l": 0.0,
+  "stored_l": 617.3
+ },
+ "GET /production/milk-tank/adjustments?days=90": [],
  "GET /production/milk?days=30&farm_id=farm-origami": [
   {
    "animal_id": "cow-744",
@@ -33955,6 +33966,986 @@
     "product_label": "Farm Products"
    }
   ]
+ },
+ "GET /reports/feed": {
+  "currency": "USD",
+  "days": 30,
+  "deliveries": [
+   {
+    "cost": 216.0,
+    "date": "2026-11-09",
+    "feed_product_id": "fp-wheat-straw",
+    "lot_code": "WST-2609-04",
+    "name": "Wheat straw",
+    "quantity": 1800.0,
+    "supplier": "Bekaa Hay Co.",
+    "unit": "kg",
+    "unit_cost": 0.12
+   },
+   {
+    "cost": 432.0,
+    "date": "2026-11-11",
+    "feed_product_id": "fp-barley",
+    "lot_code": "BAR-2609-01",
+    "name": "Barley",
+    "quantity": 1200.0,
+    "supplier": "Bekaa Hay Co.",
+    "unit": "kg",
+    "unit_cost": 0.36
+   },
+   {
+    "cost": 1200.0,
+    "date": "2026-11-12",
+    "feed_product_id": "fp-dairy-premix",
+    "lot_code": "PMX-2609-03",
+    "name": "Cattle Dairy Premix",
+    "quantity": 500.0,
+    "supplier": "NutriPlus",
+    "unit": "kg",
+    "unit_cost": 2.4
+   },
+   {
+    "cost": 1040.0,
+    "date": "2026-11-14",
+    "feed_product_id": "fp-dairy-concentrate",
+    "lot_code": "DC18-2609-07",
+    "name": "Dairy Concentrate 18",
+    "quantity": 2000.0,
+    "supplier": "Al Mashreq",
+    "unit": "kg",
+    "unit_cost": 0.52
+   },
+   {
+    "cost": 376.0,
+    "date": "2026-11-17",
+    "feed_product_id": "fp-broiler-grower",
+    "lot_code": "BRG-2609-02",
+    "name": "Broiler Grower",
+    "quantity": 800.0,
+    "supplier": "Al Mashreq",
+    "unit": "kg",
+    "unit_cost": 0.47
+   }
+  ],
+  "end": "2026-11-23",
+  "farm_name": "Origami Farms",
+  "generated_at": "2026-11-23T06:18:43.176710+00:00",
+  "kind": "feed",
+  "kpis": {
+   "delivered_cost": 3264.0,
+   "delivered_kg": 6300.0,
+   "deliveries": 5,
+   "feed_cost": 1064.57,
+   "feed_used_kg": 2684.0,
+   "feedings": 21,
+   "mixed_kg": 1000.0,
+   "mixes": 1,
+   "subjects_fed": 3
+  },
+  "mixes": [
+   {
+    "cost": 354.03,
+    "date": "2026-11-13",
+    "feed_product_id": "fp-dairy-mix",
+    "mix_code": "MIX-000001",
+    "name": "Dairy Mix 24L",
+    "quantity": 1000.0,
+    "unit": "kg"
+   }
+  ],
+  "start": "2026-10-25",
+  "stock": [
+   {
+    "available": 4800.0,
+    "daily_demand": 50.2,
+    "days_of_cover": 95.6,
+    "feed_product_id": "fp-alfalfa",
+    "name": "Alfalfa Hay",
+    "on_hand": 4800.0,
+    "unit": "kg"
+   },
+   {
+    "available": 1160.0,
+    "daily_demand": 3.4,
+    "days_of_cover": 341.2,
+    "feed_product_id": "fp-barley",
+    "name": "Barley",
+    "on_hand": 1160.0,
+    "unit": "kg"
+   },
+   {
+    "available": 800.0,
+    "daily_demand": null,
+    "days_of_cover": null,
+    "feed_product_id": "fp-broiler-grower",
+    "name": "Broiler Grower",
+    "on_hand": 800.0,
+    "unit": "kg"
+   },
+   {
+    "available": 90.0,
+    "daily_demand": 0.6,
+    "days_of_cover": 150.0,
+    "feed_product_id": "fp-dairy-premix",
+    "name": "Cattle Dairy Premix",
+    "on_hand": 490.0,
+    "unit": "kg"
+   },
+   {
+    "available": 2200.0,
+    "daily_demand": 22.8,
+    "days_of_cover": 96.5,
+    "feed_product_id": "fp-corn-silage",
+    "name": "Corn Silage",
+    "on_hand": 2200.0,
+    "unit": "kg"
+   },
+   {
+    "available": 1534.0,
+    "daily_demand": 41.0,
+    "days_of_cover": 37.4,
+    "feed_product_id": "fp-dairy-concentrate",
+    "name": "Dairy Concentrate 18",
+    "on_hand": 1534.0,
+    "unit": "kg"
+   },
+   {
+    "available": 3250.0,
+    "daily_demand": 60.0,
+    "days_of_cover": 54.2,
+    "feed_product_id": "fp-dairy-mix",
+    "name": "Dairy Mix 24L",
+    "on_hand": 3250.0,
+    "unit": "kg"
+   },
+   {
+    "available": 900.0,
+    "daily_demand": 2.4,
+    "days_of_cover": 375.0,
+    "feed_product_id": "fp-goat-mix",
+    "name": "Goat Mix",
+    "on_hand": 900.0,
+    "unit": "kg"
+   },
+   {
+    "available": 1150.0,
+    "daily_demand": 294.1,
+    "days_of_cover": 3.9,
+    "feed_product_id": "fp-layer-feed",
+    "name": "Layer Feed",
+    "on_hand": 1150.0,
+    "unit": "kg"
+   },
+   {
+    "available": 320.0,
+    "daily_demand": null,
+    "days_of_cover": null,
+    "feed_product_id": "fp-minerals",
+    "name": "Minerals",
+    "on_hand": 320.0,
+    "unit": "kg"
+   },
+   {
+    "available": 1800.0,
+    "daily_demand": null,
+    "days_of_cover": null,
+    "feed_product_id": "fp-wheat-straw",
+    "name": "Wheat straw",
+    "on_hand": 1800.0,
+    "unit": "kg"
+   }
+  ],
+  "used": [
+   {
+    "cost": 802.62,
+    "feed_product_id": "fp-layer-feed",
+    "feedings": 7,
+    "name": "Layer Feed",
+    "quantity": 2058.0,
+    "unit": "kg"
+   },
+   {
+    "cost": 163.8,
+    "feed_product_id": "fp-dairy-mix",
+    "feedings": 13,
+    "name": "Dairy Mix 24L",
+    "quantity": 390.0,
+    "unit": "kg"
+   },
+   {
+    "cost": 61.88,
+    "feed_product_id": "fp-dairy-concentrate",
+    "feedings": 14,
+    "name": "Dairy Concentrate 18",
+    "quantity": 119.0,
+    "unit": "kg"
+   },
+   {
+    "cost": 36.27,
+    "feed_product_id": "fp-alfalfa",
+    "feedings": 13,
+    "name": "Alfalfa Hay",
+    "quantity": 117.0,
+    "unit": "kg"
+   }
+  ]
+ },
+ "GET /reports/finance": {
+  "by_day": [
+   {
+    "date": "2026-10-25",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-26",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-27",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-28",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-29",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-30",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-10-31",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-01",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-02",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-03",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-04",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-05",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-06",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-07",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-08",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-09",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-10",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-11",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-12",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-13",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-14",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-15",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-16",
+    "expenses": 0.0,
+    "margin": 13.0,
+    "revenue": 13.0
+   },
+   {
+    "date": "2026-11-17",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-18",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-19",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-20",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-21",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-22",
+    "expenses": 0.0,
+    "margin": 0.0,
+    "revenue": 0.0
+   },
+   {
+    "date": "2026-11-23",
+    "expenses": 4230.0,
+    "margin": 8615.0,
+    "revenue": 12845.0
+   }
+  ],
+  "currency": "USD",
+  "days": 30,
+  "end": "2026-11-23",
+  "expenses_by_category": [
+   {
+    "amount": 1680.0,
+    "category": "feed"
+   },
+   {
+    "amount": 1150.0,
+    "category": "labor"
+   },
+   {
+    "amount": 720.0,
+    "category": "medicine"
+   },
+   {
+    "amount": 420.0,
+    "category": "fuel"
+   },
+   {
+    "amount": 260.0,
+    "category": "other"
+   }
+  ],
+  "farm_name": "Origami Farms",
+  "generated_at": "2026-11-23T06:18:43.244156+00:00",
+  "kind": "finance",
+  "kpis": {
+   "cash_collected": 8793.0,
+   "expenses": 4230.0,
+   "margin": 8628.0,
+   "pending": 4065.0,
+   "revenue": 12858.0,
+   "sales": 6
+  },
+  "revenue_by_product": [
+   {
+    "amount": 4250.0,
+    "product": "Milk",
+    "product_type": "milk",
+    "quantity": 340.0,
+    "unit": "L"
+   },
+   {
+    "amount": 3120.0,
+    "product": "Produce",
+    "product_type": "produce",
+    "quantity": 260.0,
+    "unit": "kg"
+   },
+   {
+    "amount": 2380.0,
+    "product": "Eggs",
+    "product_type": "eggs",
+    "quantity": 285.0,
+    "unit": "dozen"
+   },
+   {
+    "amount": 2150.0,
+    "product": "Animals",
+    "product_type": "animals",
+    "quantity": 1.0,
+    "unit": "head"
+   },
+   {
+    "amount": 945.0,
+    "product": "Farm Products",
+    "product_type": "farm_products",
+    "quantity": 40.0,
+    "unit": "units"
+   },
+   {
+    "amount": 13.0,
+    "product": "Visitor farm shop purchase",
+    "product_type": "visitor_retail",
+    "quantity": 0.0,
+    "unit": null
+   }
+  ],
+  "revenue_by_type": [
+   {
+    "amount": 4250.0,
+    "product_type": "milk"
+   },
+   {
+    "amount": 3120.0,
+    "product_type": "produce"
+   },
+   {
+    "amount": 2380.0,
+    "product_type": "eggs"
+   },
+   {
+    "amount": 2150.0,
+    "product_type": "animals"
+   },
+   {
+    "amount": 945.0,
+    "product_type": "farm_products"
+   },
+   {
+    "amount": 13.0,
+    "product_type": "visitor_retail"
+   }
+  ],
+  "sales": [
+   {
+    "amount": 13.0,
+    "date": "2026-11-16",
+    "payment_status": "paid",
+    "product": "Visitor farm shop purchase",
+    "product_type": "visitor_retail",
+    "quantity": null,
+    "unit": null
+   },
+   {
+    "amount": 4250.0,
+    "date": "2026-11-23",
+    "payment_status": "paid",
+    "product": "Milk",
+    "product_type": "milk",
+    "quantity": 340.0,
+    "unit": "L"
+   },
+   {
+    "amount": 2380.0,
+    "date": "2026-11-23",
+    "payment_status": "paid",
+    "product": "Eggs",
+    "product_type": "eggs",
+    "quantity": 285.0,
+    "unit": "dozen"
+   },
+   {
+    "amount": 3120.0,
+    "date": "2026-11-23",
+    "payment_status": "pending",
+    "product": "Produce",
+    "product_type": "produce",
+    "quantity": 260.0,
+    "unit": "kg"
+   },
+   {
+    "amount": 2150.0,
+    "date": "2026-11-23",
+    "payment_status": "paid",
+    "product": "Animals",
+    "product_type": "animals",
+    "quantity": 1.0,
+    "unit": "head"
+   },
+   {
+    "amount": 945.0,
+    "date": "2026-11-23",
+    "payment_status": "partial",
+    "product": "Farm Products",
+    "product_type": "farm_products",
+    "quantity": 40.0,
+    "unit": "units"
+   }
+  ],
+  "start": "2026-10-25"
+ },
+ "GET /reports/herd": {
+  "births": [],
+  "by_species": [
+   {
+    "females": 4,
+    "in_milk": 2,
+    "males": 0,
+    "on_farm": 4,
+    "pregnant": 0,
+    "species": "goat"
+   },
+   {
+    "females": 3,
+    "in_milk": 3,
+    "males": 0,
+    "on_farm": 3,
+    "pregnant": 1,
+    "species": "cow"
+   },
+   {
+    "females": 2,
+    "in_milk": 0,
+    "males": 0,
+    "on_farm": 2,
+    "pregnant": 0,
+    "species": "layer_hen"
+   },
+   {
+    "females": 1,
+    "in_milk": 0,
+    "males": 0,
+    "on_farm": 1,
+    "pregnant": 0,
+    "species": "sheep"
+   },
+   {
+    "females": 0,
+    "in_milk": 0,
+    "males": 1,
+    "on_farm": 1,
+    "pregnant": 0,
+    "species": "horse"
+   },
+   {
+    "females": 1,
+    "in_milk": 0,
+    "males": 0,
+    "on_farm": 1,
+    "pregnant": 0,
+    "species": "duck"
+   }
+  ],
+  "currency": "USD",
+  "days": 30,
+  "end": "2026-11-23",
+  "exit_counts": [],
+  "exits": [],
+  "farm_name": "Origami Farms",
+  "generated_at": "2026-11-23T06:18:43.231974+00:00",
+  "kind": "herd",
+  "kpis": {
+   "added": 12,
+   "births": 0,
+   "born_alive": 0,
+   "exits": 0,
+   "health_cases": 1,
+   "health_cases_open": 1,
+   "in_milk": 5,
+   "on_farm": 12,
+   "pregnant": 1
+  },
+  "start": "2026-10-25"
+ },
+ "GET /reports/milk": {
+  "by_animal": [
+   {
+    "animal_id": "cow-214",
+    "avg_per_day_l": 32.3,
+    "best_day_l": 32.6,
+    "days_milked": 8,
+    "milkings": 8,
+    "name": "Luna",
+    "species": "cow",
+    "tag": "214",
+    "total_l": 258.1
+   },
+   {
+    "animal_id": "cow-clover",
+    "avg_per_day_l": 23.8,
+    "best_day_l": 24.1,
+    "days_milked": 8,
+    "milkings": 8,
+    "name": "Clover",
+    "species": "cow",
+    "tag": "381",
+    "total_l": 190.1
+   },
+   {
+    "animal_id": "cow-744",
+    "avg_per_day_l": 21.1,
+    "best_day_l": 23.0,
+    "days_milked": 8,
+    "milkings": 8,
+    "name": "Bella",
+    "species": "cow",
+    "tag": "744",
+    "total_l": 169.1
+   }
+  ],
+  "by_buyer": [],
+  "by_day": [
+   {
+    "date": "2026-10-25",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-26",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-27",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-28",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-29",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-30",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-10-31",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-01",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-02",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-03",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-04",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-05",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-06",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-07",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-08",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-09",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-10",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-11",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-12",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-13",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-14",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-15",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-16",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 79.1,
+    "sold": 0.0,
+    "total": 79.1,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-17",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 78.0,
+    "sold": 0.0,
+    "total": 78.0,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-18",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 78.7,
+    "sold": 0.0,
+    "total": 78.7,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-19",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 77.6,
+    "sold": 0.0,
+    "total": 77.6,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-20",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 76.5,
+    "sold": 0.0,
+    "total": 76.5,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-21",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 77.2,
+    "sold": 0.0,
+    "total": 77.2,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-22",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 76.1,
+    "sold": 0.0,
+    "total": 76.1,
+    "withheld": 0.0
+   },
+   {
+    "date": "2026-11-23",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 74.1,
+    "sold": 0.0,
+    "total": 74.1,
+    "withheld": 0.0
+   }
+  ],
+  "currency": "USD",
+  "days": 30,
+  "destinations": [
+   {
+    "destination": "stored",
+    "liters": 617.3
+   }
+  ],
+  "end": "2026-11-23",
+  "farm_name": "Origami Farms",
+  "generated_at": "2026-11-23T06:18:43.162361+00:00",
+  "kind": "milk",
+  "kpis": {
+   "animals_milked": 3,
+   "avg_per_animal_day_l": 25.7,
+   "avg_per_day_l": 20.6,
+   "avg_price_per_liter": null,
+   "pending_amount": 0.0,
+   "revenue": 0.0,
+   "sold_l": 0.0,
+   "tank_at_end_l": 617.3,
+   "tank_now_l": 617.3,
+   "total_l": 617.3,
+   "withheld_l": 0.0
+  },
+  "sales": [],
+  "start": "2026-10-25"
  },
  "GET /reproduction/overview": {
   "awaiting_pregnancy_check": [

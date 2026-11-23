@@ -56,6 +56,7 @@ from app.domain import platform_models  # noqa: F401 - units of measure, assets,
 from app.domain import health_models  # noqa: F401 - health cases, diagnoses, treatment plans, conditions, weight records
 from app.domain import procurement_models  # noqa: F401 - purchase requisitions and approvals
 from app.domain import approval_models  # noqa: F401 - employee mixes and corrections waiting for the manager
+from app.domain import milk_models  # noqa: F401 - milk sales and the milk tank
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables

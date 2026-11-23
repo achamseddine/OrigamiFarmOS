@@ -163,11 +163,15 @@ void main() {
     setUp(() => previous = QrScan.source);
     tearDown(() => QrScan.source = previous);
 
-    Future<SnapshotFarm> open(WidgetTester tester, Widget home) async {
+    Future<SnapshotFarm> open(WidgetTester tester, Widget home, {(String, DateTime)? withdrawal}) async {
       tester.view.physicalSize = const Size(1000, 2400);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final farm = await SnapshotFarm.open();
+      // The bundled farm was recorded on one day; a withdrawal in it ends on
+      // a fixed date. A test about an animal under withdrawal sets the end
+      // from today, so it does not stop holding once that date has passed.
+      if (withdrawal != null) _withdrawUntil(farm.api.snapshot, withdrawal.$1, withdrawal.$2);
       await tester.pumpWidget(farm.app(home));
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(milliseconds: 200));
@@ -205,7 +209,7 @@ void main() {
 
     testWidgets("Willow's milk is withheld during her withdrawal", (tester) async {
       QrScan.source = _FakeScanner(const []);
-      final farm = await open(tester, const AnimalQuickEntryScreen());
+      final farm = await open(tester, const AnimalQuickEntryScreen(), withdrawal: ('goat-willow', DateTime.now().add(const Duration(days: 3))));
       await tester.enterText(find.byKey(const ValueKey('qr-code-field')), 'S-118');
       await tester.testTextInput.receiveAction(TextInputAction.go);
       for (var i = 0; i < 6; i++) {
@@ -247,4 +251,18 @@ void main() {
       expect(find.textContaining('Luna'), findsWidgets);
     });
   });
+}
+
+/// Every copy of animal [id] in the snapshot is under withdrawal until [until].
+void _withdrawUntil(Object? node, String id, DateTime until) {
+  if (node is Map) {
+    if (node['id'] == id && node.containsKey('withdrawal_until')) node['withdrawal_until'] = until.toIso8601String();
+    for (final v in node.values) {
+      _withdrawUntil(v, id, until);
+    }
+  } else if (node is List) {
+    for (final v in node) {
+      _withdrawUntil(v, id, until);
+    }
+  }
 }
