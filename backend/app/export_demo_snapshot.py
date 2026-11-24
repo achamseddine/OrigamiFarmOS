@@ -235,6 +235,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += NEW_IN_080
     # The milking routine and payments (v0.8.1).
     paths += NEW_IN_081
+    # Each cow's morning and afternoon in the milk report (v0.8.2).
+    paths += NEW_IN_082
     return paths
 
 
@@ -263,6 +265,11 @@ NEW_IN_081: list[tuple[str, dict | None]] = [
     ("/production/milk-routine", None),
     ("/finance/payments", {"days": 365}),
     # The milk report now carries the calves' milk and the milkings' names.
+    ("/reports/milk", None),
+]
+
+NEW_IN_082: list[tuple[str, dict | None]] = [
+    # Each cow's milk by milking, and the day-by-day sheet of every cow.
     ("/reports/milk", None),
 ]
 

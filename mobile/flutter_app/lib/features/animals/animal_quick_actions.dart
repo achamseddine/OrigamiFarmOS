@@ -157,7 +157,31 @@ class _ObserveDialogState extends State<_ObserveDialog> {
 ///
 /// [justStarted]: the caller has this moment recorded the start of her
 /// milking (the animal form), so it is not asked again.
-Future<void> showMilkDialog(BuildContext context, Animal animal, {bool justStarted = false}) async {
+/// What became of one cow's milk in the manual entry: saved or skipped,
+/// with the milking and day used — the next cow in the queue opens on the
+/// same ones.
+class MilkEntryOutcome {
+  const MilkEntryOutcome({required this.saved, required this.session, required this.day});
+  final bool saved;
+  final String session;
+  final DateTime day;
+}
+
+/// Where the cow stands in the milking queue, shown on the form when the
+/// manual entry walks the queue (record_sheet.dart): her number, her place
+/// in the line and who comes after her.
+class MilkQueueInfo {
+  const MilkQueueInfo({this.number, required this.position, required this.total, this.nextName});
+  final int? number;
+  final int position;
+  final int total;
+  final String? nextName;
+}
+
+/// Milk for one cow. Null when closed without saving. With [queue], the
+/// form says where she is in the queue and offers Skip and Save & next.
+Future<MilkEntryOutcome?> showMilkDialog(BuildContext context, Animal animal,
+    {bool justStarted = false, String? session, DateTime? day, MilkQueueInfo? queue}) async {
   var target = animal;
   if (!animal.lactating && !justStarted) {
     final started = await confirmLactationChange(
@@ -166,28 +190,36 @@ Future<void> showMilkDialog(BuildContext context, Animal animal, {bool justStart
       start: true,
       intro: context.t('milkNotInMilk').replaceAll('{name}', animal.name),
     );
-    if (!started || !context.mounted) return;
+    if (!started || !context.mounted) return null;
     final animals = context.read<AnimalsProvider>();
     await animals.load();
-    if (!context.mounted) return;
+    if (!context.mounted) return null;
     target = animals.find(animal.id) ?? animal;
   }
-  return showDialog(context: context, builder: (context) => _MilkDialog(animal: target));
+  return showDialog<MilkEntryOutcome>(
+    context: context,
+    builder: (context) => _MilkDialog(animal: target, session: session, day: day, queue: queue),
+  );
 }
 
 class _MilkDialog extends StatefulWidget {
-  const _MilkDialog({required this.animal});
+  const _MilkDialog({required this.animal, this.session, this.day, this.queue});
   final Animal animal;
+  final String? session;
+  final DateTime? day;
+  final MilkQueueInfo? queue;
 
   @override
   State<_MilkDialog> createState() => _MilkDialogState();
 }
 
 class _MilkDialogState extends State<_MilkDialog> {
-  String _session = 'morning';
+  // The milking the queue carries on (record_sheet.walkMilkQueue starts
+  // on the milking of this time of day); the morning one otherwise.
+  late String _session = widget.session ?? 'morning';
   String _destination = 'stored';
   // Today unless changed: milk noted on paper is entered for its own day.
-  DateTime _day = DateTime.now();
+  late DateTime _day = widget.day ?? DateTime.now();
   final _liters = TextEditingController();
   bool _saving = false;
   String? _error;
@@ -201,6 +233,7 @@ class _MilkDialogState extends State<_MilkDialog> {
   @override
   Widget build(BuildContext context) {
     final isUnderWithdrawal = widget.animal.isUnderWithdrawal;
+    final queue = widget.queue;
     return AlertDialog(
       title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.primaryId}'),
       content: SizedBox(
@@ -209,6 +242,25 @@ class _MilkDialogState extends State<_MilkDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (queue != null)
+              Container(
+                key: const ValueKey('milk-queue-info'),
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(color: FarmColors.tint(FarmColors.cedar, 0.08), borderRadius: BorderRadius.circular(FarmRadii.sm)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(
+                    [
+                      if (queue.number != null) context.t('queueNumberShort').replaceAll('{n}', '${queue.number}'),
+                      context.t('queuePosition').replaceAll('{n}', '${queue.position}').replaceAll('{total}', '${queue.total}'),
+                    ].join(' · '),
+                    style: FarmTypography.textTheme.titleSmall,
+                  ),
+                  Text(queue.nextName == null ? context.t('queueLastOne') : '${context.t('queueNext')}: ${queue.nextName}',
+                      style: FarmTypography.textTheme.bodySmall),
+                ]),
+              ),
             if (isUnderWithdrawal)
               Container(
                 padding: const EdgeInsets.all(10),
@@ -236,8 +288,12 @@ class _MilkDialogState extends State<_MilkDialog> {
             MilkDayField(day: _day, onPicked: (d) => setState(() => _day = d)),
             const SizedBox(height: 12),
             TextField(
+              key: const ValueKey('milk-dialog-liters'),
               controller: _liters,
+              autofocus: queue != null,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              textInputAction: TextInputAction.done,
+              onSubmitted: queue != null && !_saving ? (_) => _submit() : null,
               decoration: InputDecoration(labelText: '${context.t('quantity')} (${context.t('liters')})'),
             ),
             const SizedBox(height: 12),
@@ -270,10 +326,23 @@ class _MilkDialogState extends State<_MilkDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
+        TextButton(
+          key: const ValueKey('milk-dialog-close'),
+          onPressed: () => Navigator.pop(context),
+          child: Text(context.t(queue != null ? 'queueStop' : 'cancel')),
+        ),
+        if (queue != null && queue.nextName != null)
+          TextButton(
+            key: const ValueKey('milk-dialog-skip'),
+            onPressed: _saving ? null : () => Navigator.pop(context, MilkEntryOutcome(saved: false, session: _session, day: _day)),
+            child: Text(context.t('queueSkip')),
+          ),
         FilledButton(
+          key: const ValueKey('milk-dialog-save'),
           onPressed: _saving ? null : _submit,
-          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('save')),
+          child: _saving
+              ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : Text(context.t(queue != null && queue.nextName != null ? 'queueSaveNext' : 'save')),
         ),
       ],
     );
@@ -298,8 +367,8 @@ class _MilkDialogState extends State<_MilkDialog> {
         );
     if (!mounted) return;
     if (result.success) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('saved'))));
+      Navigator.pop(context, MilkEntryOutcome(saved: true, session: _session, day: _day));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.animal.name} — ${context.t('saved')}'), duration: const Duration(seconds: 2)));
     } else {
       setState(() {
         _saving = false;

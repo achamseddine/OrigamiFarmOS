@@ -51,6 +51,7 @@ class Animal {
     this.eggsToday,
     this.weightKg,
     this.groupName,
+    this.milkingQueueNumber,
     this.acquisitionDate,
     this.acquisitionSource,
     this.sireTag,
@@ -103,6 +104,11 @@ class Animal {
   final int? eggsToday;
   final double? weightKg;
   final String? groupName;
+
+  /// Her number in the milking line (v0.8.2), set by the manager: the
+  /// milking queue and the manual milk entry follow it. Null = not
+  /// numbered (queued after the numbered ones, by tag).
+  final int? milkingQueueNumber;
   final DateTime? acquisitionDate;
   final String? acquisitionSource;
   final String? sireTag;
@@ -192,6 +198,7 @@ class Animal {
         withdrawalReason: json['withdrawal_reason'] as String?,
         weightKg: (json['weight_kg'] as num?)?.toDouble(),
         groupName: json['group_name'] as String?,
+        milkingQueueNumber: (json['milking_queue_number'] as num?)?.toInt(),
         acquisitionDate: json['acquisition_date'] != null ? DateTime.parse(json['acquisition_date'] as String) : null,
         acquisitionSource: json['acquisition_source'] as String?,
         sireTag: json['sire_tag'] as String?,
@@ -243,6 +250,7 @@ class Animal {
         eggsToday: eggsToday,
         weightKg: weightKg ?? this.weightKg,
         groupName: groupName,
+        milkingQueueNumber: milkingQueueNumber,
         acquisitionDate: acquisitionDate,
         acquisitionSource: acquisitionSource,
         sireTag: sireTag,

@@ -22,8 +22,9 @@ const reportKinds = ['sales', 'stock', 'milk', 'feed', 'herd', 'finance'];
 const _kindLabels = {'sales': 'rpTabSales', 'stock': 'rpTabStock', 'milk': 'rpTabMilk', 'feed': 'rpTabFeed', 'herd': 'rpTabHerd', 'finance': 'rpTabFinance'};
 
 /// Opens the Reports page on report [kind] — from the Milk page, the
-/// animals list, the feed stock, Sales & Finance.
-Future<void> openReport(BuildContext context, String kind) => Navigator.of(context).push(MaterialPageRoute<void>(
+/// animals list, the feed stock, Sales & Finance — for [preset] (the last
+/// 30 days unless said).
+Future<void> openReport(BuildContext context, String kind, {ReportPreset preset = ReportPreset.last30}) => Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (context) => Scaffold(
         backgroundColor: FarmColors.stone,
         appBar: AppBar(backgroundColor: FarmColors.stone, title: Text(context.t('navReports'))),
@@ -31,21 +32,34 @@ Future<void> openReport(BuildContext context, String kind) => Navigator.of(conte
           top: false,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: FarmSpacing.md),
-            child: ReportsScreen(initialKind: kind),
+            child: ReportsScreen(initialKind: kind, initialPreset: preset),
           ),
         ),
       ),
     ));
 
-enum ReportPreset { last7, last30, thisMonth, lastMonth, custom }
+enum ReportPreset { today, yesterday, last7, last30, thisMonth, lastMonth, custom }
+
+ReportPeriod _periodOf(ReportPreset preset, DateTime? today, ReportPeriod current) => switch (preset) {
+      ReportPreset.today => ReportPeriod.lastDays(1, today: today),
+      ReportPreset.yesterday => ReportPeriod.yesterday(today: today),
+      ReportPreset.last7 => ReportPeriod.lastDays(7, today: today),
+      ReportPreset.last30 => ReportPeriod.lastDays(30, today: today),
+      ReportPreset.thisMonth => ReportPeriod.thisMonth(today: today),
+      ReportPreset.lastMonth => ReportPeriod.lastMonth(today: today),
+      ReportPreset.custom => current,
+    };
 
 /// Reports: milk, feed, the herd and the money, for a chosen period —
 /// worked out by the farm server from the records themselves, shown here,
 /// printed or saved as a PDF, or exported as a spreadsheet (CSV).
 class ReportsScreen extends StatefulWidget {
-  const ReportsScreen({super.key, this.initialKind, this.today});
+  const ReportsScreen({super.key, this.initialKind, this.initialPreset = ReportPreset.last30, this.today});
 
   final String? initialKind;
+
+  /// The period shown first (not custom).
+  final ReportPreset initialPreset;
 
   /// The farm day the periods count back from (tests); today otherwise.
   final DateTime? today;
@@ -56,8 +70,8 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   late String? _kind = widget.initialKind;
-  ReportPreset _preset = ReportPreset.last30;
-  late ReportPeriod _period = ReportPeriod.lastDays(30, today: widget.today);
+  late ReportPreset _preset = widget.initialPreset == ReportPreset.custom ? ReportPreset.last30 : widget.initialPreset;
+  late ReportPeriod _period = _periodOf(_preset, widget.today, ReportPeriod.lastDays(30, today: widget.today));
   final Map<String, List<GlobalKey>> _keys = {};
   bool _exporting = false;
 
@@ -82,13 +96,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final today = widget.today;
     setState(() {
       _preset = preset;
-      _period = switch (preset) {
-        ReportPreset.last7 => ReportPeriod.lastDays(7, today: today),
-        ReportPreset.last30 => ReportPeriod.lastDays(30, today: today),
-        ReportPreset.thisMonth => ReportPeriod.thisMonth(today: today),
-        ReportPreset.lastMonth => ReportPeriod.lastMonth(today: today),
-        ReportPreset.custom => _period,
-      };
+      _period = _periodOf(preset, today, _period);
     });
   }
 
@@ -227,9 +235,31 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  /// The header with the figures, the milk chart, then one per table.
-  static int _blockCount(String kind, ReportDoc doc) => 1 + (kind == 'milk' ? 1 : 0) + doc.tables.length;
+  /// The header with the figures, the milk chart, then one per table part.
+  static int _blockCount(String kind, ReportDoc doc) => 1 + (kind == 'milk' ? 1 : 0) + tableParts(doc.tables, continued: '').length;
 }
+
+/// The rows a table part holds on screen and in the PDF: a long table (a
+/// month of every cow, every day) is cut into parts, each painted and
+/// printed on its own — never one picture too tall to paint.
+const kReportPartRows = 40;
+
+/// [tables] cut into parts of at most [kReportPartRows] rows; a part after
+/// the first is titled "… ([continued])".
+List<ReportTable> tableParts(List<ReportTable> tables, {required String continued}) => [
+      for (final table in tables)
+        if (table.rows.length <= kReportPartRows)
+          table
+        else
+          for (var i = 0; i < table.rows.length; i += kReportPartRows)
+            ReportTable(
+              title: i == 0 ? table.title : '${table.title} ($continued)',
+              columns: table.columns,
+              rows: table.rows.sublist(i, (i + kReportPartRows).clamp(0, table.rows.length)),
+              numeric: table.numeric,
+              flex: table.flex,
+            ),
+    ];
 
 class _PeriodChips extends StatelessWidget {
   const _PeriodChips({required this.preset, required this.period, required this.onPreset, required this.onCustom});
@@ -240,6 +270,8 @@ class _PeriodChips extends StatelessWidget {
   final VoidCallback onCustom;
 
   static const _labels = {
+    ReportPreset.today: 'today',
+    ReportPreset.yesterday: 'yesterday',
     ReportPreset.last7: 'rpLast7',
     ReportPreset.last30: 'rpLast30',
     ReportPreset.thisMonth: 'rpThisMonth',
@@ -326,7 +358,8 @@ class ReportView extends StatelessWidget {
         if (kind == 'milk') block(_MilkChart(
               days: [for (final d in (data['by_day'] as List<dynamic>? ?? const [])) (d as Map).cast<String, dynamic>()],
               afternoon: data['second_milking'] == 'afternoon')),
-        for (final table in doc.tables) block(SectionCard(title: table.title, child: ReportTableView(table: table))),
+        for (final table in tableParts(doc.tables, continued: context.t('rpContinued')))
+          block(SectionCard(title: table.title, child: ReportTableView(table: table))),
       ],
     );
   }

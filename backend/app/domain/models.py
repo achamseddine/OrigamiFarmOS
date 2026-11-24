@@ -279,6 +279,10 @@ class Animal(Base):
     dried_off_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     group_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     photo_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Her place in the milking line (v0.8.2): the queue and the manual milk
+    # entry follow it. Unique among the animals on the farm (animal_service.
+    # set_milking_queue); null = not numbered, queued after by tag.
+    milking_queue_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Full Add-Animal record (tech spec §13) — provenance, physical
     # description and the financial fields a manager may record.
     acquisition_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

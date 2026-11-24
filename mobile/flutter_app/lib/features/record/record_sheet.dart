@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../auth/session_controller.dart';
 import '../../core/i18n/strings.dart';
+import '../../core/util/number_input.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
@@ -18,6 +19,8 @@ import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
 import '../animals/animal_queue_screen.dart';
 import '../animals/animal_quick_entry_screen.dart';
+import '../animals/animal_scan.dart' show milkSessionForHour;
+import '../animals/quick_round.dart';
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../feed/feed_movement_dialog.dart';
 import '../produce/agriculture_forms.dart';
@@ -287,17 +290,64 @@ class _RecordTile extends StatelessWidget {
 Future<void> recordMilkFlow(BuildContext context) => _recordMilk(context);
 
 Future<void> _recordMilk(BuildContext context) async {
-  // Only animals that can be milked (a bull or a hen is not offered), those
-  // already in milk first.
+  // Only animals that can be milked (a bull or a hen is not offered), in
+  // the order of the milking queue (v0.8.2): the next cow still to milk at
+  // this time of day is offered on top, and each cow's number is shown.
   final livestock = context.read<LivestockProvider>();
+  bool milked(Animal a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction);
+  final status = milkingRoundStatus(milkSessionForHour(DateTime.now().hour),
+      animals: context.read<AnimalsProvider>().animals, milked: milked, milk: context.read<ProductionProvider>().milkRecords);
   final animal = await _pickAnimal(
     context,
-    where: (a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction),
+    where: milked,
     first: (a) => a.lactating,
     emptyText: context.t('noMilkAnimals'),
+    order: milkingQueueOrder,
+    queueNumbers: true,
+    suggested: nextInQueue(status),
   );
   if (animal == null || !context.mounted) return;
-  await showMilkDialog(context, animal);
+  await walkMilkQueue(context, animal);
+}
+
+/// Milk entered by hand, cow after cow (v0.8.2): after each save the next
+/// cow in the milking queue — by her number — opens by herself, on the
+/// same milking and day; Skip passes a cow, Stop ends. A cow outside the
+/// queue (not in milk, not milked) is a single entry.
+Future<void> walkMilkQueue(BuildContext context, Animal first, {String? session, DateTime? day}) async {
+  final livestock = context.read<LivestockProvider>();
+  final animals = context.read<AnimalsProvider>();
+  final production = context.read<ProductionProvider>();
+  bool milked(Animal a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction);
+  RoundStatus queueOf(String s, DateTime d) => milkingRoundStatus(s, animals: animals.animals, milked: milked, milk: production.milkRecords, now: d);
+  var s = session ?? milkSessionForHour(DateTime.now().hour);
+  var d = day ?? DateTime.now();
+  // Saved or skipped in this run: not offered again.
+  final passed = <String>{};
+  Animal? current = first;
+  while (current != null) {
+    final status = queueOf(s, d);
+    final at = status.entries.indexWhere((e) => e.animal.id == current!.id);
+    final next = at < 0 ? null : nextInQueue(status, after: current.id, passed: passed);
+    final outcome = await showMilkDialog(
+      context,
+      current,
+      session: s,
+      day: d,
+      queue: at < 0 ? null : MilkQueueInfo(number: current.milkingQueueNumber, position: at + 1, total: status.total, nextName: next?.name),
+    );
+    if (outcome == null || at < 0 || !context.mounted) return;
+    passed.add(current.id);
+    s = outcome.session;
+    d = outcome.day;
+    // The queue reads who is already milked.
+    if (outcome.saved) await production.load();
+    if (!context.mounted) return;
+    current = nextInQueue(queueOf(s, d), after: current.id, passed: passed);
+    if (current == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t('queueComplete'))));
+    }
+  }
 }
 
 Future<void> _recordObservation(BuildContext context) async {
@@ -312,15 +362,25 @@ Future<void> _recordTreatment(BuildContext context) async {
   await showAdministerDialog(context, subjectType: 'animal', subjectId: animal.id);
 }
 
-Future<Animal?> _pickAnimal(BuildContext context, {bool Function(Animal)? where, bool Function(Animal)? first, String? emptyText}) {
+Future<Animal?> _pickAnimal(BuildContext context,
+    {bool Function(Animal)? where, bool Function(Animal)? first, String? emptyText, Comparator<Animal>? order, bool queueNumbers = false, Animal? suggested}) {
   return showDialog<Animal>(
     context: context,
-    builder: (context) => _AnimalPickerDialog(where: where, first: first, emptyText: emptyText),
+    builder: (context) => _AnimalPickerDialog(where: where, first: first, emptyText: emptyText, order: order, queueNumbers: queueNumbers, suggested: suggested),
   );
 }
 
 class _AnimalPickerDialog extends StatefulWidget {
-  const _AnimalPickerDialog({this.where, this.first, this.emptyText});
+  const _AnimalPickerDialog({this.where, this.first, this.emptyText, this.order, this.queueNumbers = false, this.suggested});
+
+  /// The order the animals are listed in (the milking queue for milk).
+  final Comparator<Animal>? order;
+
+  /// Shows each cow's number in the milking queue; typing a number finds her.
+  final bool queueNumbers;
+
+  /// Offered on top: the next cow still to milk.
+  final Animal? suggested;
 
   /// Which animals this record applies to; null offers every animal.
   final bool Function(Animal)? where;
@@ -352,6 +412,7 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
       for (final a in context.watch<AnimalsProvider>().animals)
         if (a.onFarm && (where == null || where(a))) a,
     ];
+    if (widget.order != null) all.sort(widget.order);
     if (first != null) {
       // A stable partition: the likely ones first, the order otherwise kept.
       final likely = [for (final a in all) if (first(a)) a];
@@ -365,6 +426,19 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
     final matches = needle.isEmpty
         ? all
         : all.where((a) => a.matches(needle)).toList();
+    // A queue number typed in finds her cow, first.
+    final typed = widget.queueNumbers ? parseLocalizedInt(needle) : null;
+    if (typed != null) {
+      final numbered = [for (final a in all) if (a.milkingQueueNumber == typed) a];
+      matches
+        ..removeWhere(numbered.contains)
+        ..insertAll(0, numbered);
+    }
+    final suggested = needle.isEmpty ? widget.suggested : null;
+    String title(Animal a) => [
+          if (widget.queueNumbers && a.milkingQueueNumber != null) context.t('queueNumberShort').replaceAll('{n}', '${a.milkingQueueNumber}'),
+          a.primaryId.isEmpty ? a.name : '${a.name}  #${a.primaryId}',
+        ].join(' · ');
 
     return AlertDialog(
       title: Text(context.t('chooseAnimal')),
@@ -383,6 +457,22 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
               ),
             ),
             const SizedBox(height: FarmSpacing.sm),
+            if (suggested != null) ...[
+              Material(
+                color: FarmColors.tint(FarmColors.cedar, 0.08),
+                borderRadius: BorderRadius.circular(FarmRadii.sm),
+                child: ListTile(
+                  key: const ValueKey('pick-next-in-queue'),
+                  dense: true,
+                  leading: const Icon(Icons.format_list_numbered, color: FarmColors.cedarDark),
+                  title: Text('${context.t('queueNext')}: ${title(suggested)}', style: FarmTypography.textTheme.titleSmall),
+                  subtitle: Text(context.t('queueOpensNext'), style: FarmTypography.textTheme.bodySmall),
+                  trailing: const ForwardChevron(size: 18, color: FarmColors.cedarDark),
+                  onTap: () => Navigator.pop(context, suggested),
+                ),
+              ),
+              const SizedBox(height: FarmSpacing.sm),
+            ],
             Expanded(
               child: matches.isEmpty
                   ? Center(
@@ -401,8 +491,7 @@ class _AnimalPickerDialogState extends State<_AnimalPickerDialog> {
                             .speciesName(animal.species, Localizations.localeOf(context).languageCode);
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: Text(animal.primaryId.isEmpty ? animal.name : '${animal.name}  #${animal.primaryId}',
-                              style: FarmTypography.textTheme.titleSmall),
+                          title: Text(title(animal), style: FarmTypography.textTheme.titleSmall),
                           subtitle: Text(
                             '$speciesName • ${animal.groupName ?? animal.location}',
                             style: FarmTypography.textTheme.bodySmall,

@@ -116,3 +116,58 @@ def create_animal(db: Session, user: models.User, data: dict, *, identifiers_in:
         module_code=perms.ANIMALS, summary=audit_summary or f"{user.name} created {animal.name} #{animal.tag}",
     )
     return animal
+
+
+# ------------------------------------------------- the milking queue (v0.8.2)
+def set_milking_queue(db: Session, user: models.User, entries: list[tuple[str, int | None]]) -> list[models.Animal]:
+    """Gives animals their number in the milking line — or takes it away
+    (None). Only an animal on the farm that can be milked gets a number,
+    and no two animals on the farm hold the same one. Animals not named
+    keep theirs. Returns every animal that changed."""
+    from sqlalchemy import select
+
+    named: dict[str, models.Animal] = {}
+    for animal_id, number in entries:
+        animal = db.get(models.Animal, animal_id)
+        if animal is None or animal.farm_id != user.farm_id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Animal not found")
+        if number is not None:
+            if not animal.active:
+                raise HTTPException(status.HTTP_409_CONFLICT, f"{animal.name} is no longer on the farm and has no place in the milking queue.")
+            cap_set = capability_service.resolve_for_animal(db, animal)
+            if not cap_set.has(Cap.MILK_PRODUCTION):
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                    capability_service.describe_missing(cap_set, Cap.MILK_PRODUCTION, animal.name))
+        named[animal_id] = animal
+    wanted = dict(entries)
+    # The numbers the farm's animals hold once this is applied.
+    holders: dict[int, models.Animal] = {}
+    on_farm = db.scalars(select(models.Animal).where(models.Animal.farm_id == user.farm_id, models.Animal.active.is_(True)))
+    for animal in on_farm:
+        number = wanted[animal.id] if animal.id in wanted else animal.milking_queue_number
+        if number is None:
+            continue
+        other = holders.get(number)
+        if other is not None:
+            first, second = sorted((other, animal), key=lambda a: a.id not in wanted)
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                f"Number {number} is given to both {first.name} and {second.name}. Each cow has her own number in the queue.")
+        holders[number] = animal
+    changed = []
+    for animal_id, number in entries:
+        animal = named[animal_id]
+        if animal.milking_queue_number == number:
+            continue
+        before = animal.milking_queue_number
+        animal.milking_queue_number = number
+        changed.append(animal)
+        write_audit_log(
+            db, farm_id=animal.farm_id, user_id=user.id, action="milking_queue_number_set",
+            entity_type="animal", entity_id=animal.id, module_code=perms.ANIMALS,
+            summary=(f"{user.name} gave {animal.name} number {number} in the milking queue" if number is not None
+                     else f"{user.name} took {animal.name} out of the numbered milking queue"),
+            changes={"milking_queue_number": {"from": before, "to": number}},
+        )
+        write_event(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, event_type="milking_queue_number_set",
+                    payload={"from": before, "to": number}, created_by=user.id)
+    return changed

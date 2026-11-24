@@ -1942,6 +1942,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/animals/milking-queue:
+    put:
+      tags:
+      - animals
+      summary: Set Milking Queue
+      description: 'Each cow''s number in the milking line (v0.8.2) — the queue and the
+
+        manual milk entry follow it. Sending the same numbers again changes
+
+        nothing (safe to retry). Returns the animals whose number changed.'
+      operationId: set_milking_queue_api_v1_animals_milking_queue_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkingQueueUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/AnimalOut'
+                type: array
+                title: Response Set Milking Queue Api V1 Animals Milking Queue Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/animals/{animal_id}:
     put:
       tags:
@@ -12634,6 +12669,11 @@ components:
           - type: string
           - type: 'null'
           title: Photo Path
+        milking_queue_number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Milking Queue Number
         acquisition_date:
           anyOf:
           - type: string
@@ -13125,6 +13165,11 @@ components:
           - type: string
           - type: 'null'
           title: Photo Path
+        milking_queue_number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Milking Queue Number
         acquisition_date:
           anyOf:
           - type: string
@@ -18716,6 +18761,34 @@ components:
         a sale (`liters`, reason spoiled | calves | home_use | other) or a count
 
         of the tank (`counted_level`, reason count).'
+    MilkingQueueEntry:
+      properties:
+        animal_id:
+          type: string
+          title: Animal Id
+        number:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Number
+      type: object
+      required:
+      - animal_id
+      title: MilkingQueueEntry
+    MilkingQueueUpdate:
+      properties:
+        numbers:
+          items:
+            $ref: '#/components/schemas/MilkingQueueEntry'
+          type: array
+          title: Numbers
+      type: object
+      required:
+      - numbers
+      title: MilkingQueueUpdate
+      description: 'Numbers for some or all of the animals in milk (v0.8.2). Animals not
+
+        named keep theirs; the numbers must stay unique on the farm.'
     MixSettingsOut:
       properties:
         farm_id:

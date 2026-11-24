@@ -12,7 +12,7 @@ from app.domain import livestock_models as lm
 from app.domain import models
 from app.domain import pharmacy_models as pm
 from app.repositories.base import diff_changes, ensure_utc, now, snapshot, write_audit_log, write_event
-from app.schemas.animals import AnimalCreate, AnimalDigitalTwinOut, AnimalMove, AnimalOut, AnimalUpdate
+from app.schemas.animals import AnimalCreate, AnimalDigitalTwinOut, AnimalMove, AnimalOut, AnimalUpdate, MilkingQueueUpdate
 from app.services import (
     animal_service,
     capability_service,
@@ -170,6 +170,26 @@ def create_animal(
     db.commit()
     db.refresh(animal)
     return animal
+
+
+def _milking_queue_dep(db: Session = Depends(get_db), user: models.User = Depends(require_any_permission(perms.ANIMALS, perms.MILK_PRODUCTION))):
+    """The milking order is the manager's: whoever may edit the animals, or
+    approve in Milk."""
+    if not (user_can(db, user, perms.ANIMALS, perms.EDIT) or user_can(db, user, perms.MILK_PRODUCTION, perms.APPROVE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The cows' numbers in the milking queue are set by the farm manager.")
+    return user
+
+
+@router.put("/milking-queue", response_model=list[AnimalOut])
+def set_milking_queue(payload: MilkingQueueUpdate, db: Session = Depends(get_db), user: models.User = Depends(_milking_queue_dep)) -> list[models.Animal]:
+    """Each cow's number in the milking line (v0.8.2) — the queue and the
+    manual milk entry follow it. Sending the same numbers again changes
+    nothing (safe to retry). Returns the animals whose number changed."""
+    changed = animal_service.set_milking_queue(db, user, [(e.animal_id, e.number) for e in payload.numbers])
+    db.commit()
+    for a in changed:
+        db.refresh(a)
+    return changed
 
 
 @router.put("/{animal_id}", response_model=AnimalOut)

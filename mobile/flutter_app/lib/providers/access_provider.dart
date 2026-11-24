@@ -100,6 +100,11 @@ class AccessProvider extends ChangeNotifier {
   /// collector and his price are the manager's settings).
   bool get canHandOverMilk => canCreate(FarmModule.milkProduction);
 
+  /// Gives the cows their numbers in the milking queue (v0.8.2) — the
+  /// manager: whoever may edit the animals or approve in Milk (backend
+  /// PUT /animals/milking-queue).
+  bool get canSetMilkingQueue => canEdit(FarmModule.animals) || can(FarmModule.milkProduction, PermissionAction.approve);
+
   /// Sets the milk collector, his price and what the second milking is called.
   bool get canSetMilkRoutine =>
       can(FarmModule.milkProduction, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve) || can(FarmModule.settings, PermissionAction.configure);

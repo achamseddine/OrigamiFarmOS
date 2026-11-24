@@ -60,6 +60,15 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
     case 'milk':
       final byDay = rows('by_day');
       final midday = byDay.any((d) => ((d['midday'] as num?) ?? 0) > 0);
+      final second = t(data['second_milking'] == 'afternoon' ? 'sessionAfternoon' : 'sessionEvening');
+      // A cow named with her queue number, her tag and her name.
+      String cow(Map<String, dynamic> a) => [
+            if (a['queue_number'] != null) t('queueNumberShort').replaceAll('{n}', '${a['queue_number']}'),
+            if ((a['tag'] as String?)?.isNotEmpty ?? false) a['tag'],
+            a['name'],
+          ].join(' · ');
+      // Every cow, every day (v0.8.2): given for a period up to a month.
+      final sheet = data['by_animal_day'] is List ? rows('by_animal_day') : null;
       return ReportDoc(
         title: t('rpMilkReport'),
         period: period,
@@ -82,23 +91,36 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
         tables: [
           ReportTable(
             title: t('rpPerDayTable'),
-            columns: [t('rpDate'), t('sessionMorning'), if (midday) t('sessionMidday'), t(data['second_milking'] == 'afternoon' ? 'sessionAfternoon' : 'sessionEvening'), t('rpCalvesL'), t('rpTotalL'), t('rpSoldL')],
+            columns: [t('rpDate'), t('sessionMorning'), if (midday) t('sessionMidday'), second, t('rpCalvesL'), t('rpTotalL'), t('rpSoldL')],
             numeric: {1, 2, 3, 4, 5, if (midday) 6},
             rows: [
               for (final d in byDay.reversed)
                 [date(d['date']), n(d['morning']), if (midday) n(d['midday']), n(d['evening']), n(d['calves']), n(d['total']), n(d['sold'])],
             ],
           ),
+          // Each cow: her mornings and her afternoons (v0.8.2), most milk first.
           ReportTable(
             title: t('rpPerAnimal'),
-            columns: [t('rpAnimal'), t('rpMilkings'), t('rpDaysMilked'), t('rpTotalL'), t('rpAvgDayL'), t('rpBestDayL')],
-            numeric: {1, 2, 3, 4, 5},
-            flex: const [3, 1, 1, 1, 1, 1],
+            columns: [t('rpAnimal'), t('sessionMorning'), if (midday) t('sessionMidday'), second, t('rpTotalL'), t('rpDaysMilked'), t('rpAvgDayL'), t('rpBestDayL')],
+            numeric: {for (var i = 1; i <= (midday ? 7 : 6); i++) i},
+            flex: [3, 1, if (midday) 1, 1, 1, 1, 1, 1],
             rows: [
               for (final a in rows('by_animal'))
-                [[if ((a['tag'] as String?)?.isNotEmpty ?? false) a['tag'], a['name']].join(' · '), n(a['milkings']), n(a['days_milked']), n(a['total_l']), n(a['avg_per_day_l']), n(a['best_day_l'])],
+                [cow(a), n(a['morning_l']), if (midday) n(a['midday_l']), n(a['evening_l']), n(a['total_l']), n(a['days_milked']), n(a['avg_per_day_l']), n(a['best_day_l'])],
             ],
           ),
+          // The milking sheet: each day, each cow in queue order.
+          if (sheet != null)
+            ReportTable(
+              title: t('rpCowSheet'),
+              columns: [t('rpDate'), t('rpAnimal'), t('sessionMorning'), if (midday) t('sessionMidday'), second, t('rpTotalL')],
+              numeric: {for (var i = 2; i <= (midday ? 5 : 4); i++) i},
+              flex: [2, 3, 1, if (midday) 1, 1, 1],
+              rows: [
+                for (final r in sheet)
+                  [date(r['date']), cow(r), n(r['morning_l']), if (midday) n(r['midday_l']), n(r['evening_l']), n(r['total_l'])],
+              ],
+            ),
           ReportTable(
             title: t('rpWhereMilkWent'),
             columns: [t('destination'), t('rpLiters')],

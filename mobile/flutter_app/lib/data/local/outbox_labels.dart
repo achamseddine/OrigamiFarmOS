@@ -16,6 +16,7 @@ const OutboxDescriptor _unknown = (labelKey: 'outboxChange', moduleCode: FarmMod
 const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/tasks': (labelKey: 'outboxTask', moduleCode: FarmModule.tasks),
   '/animals': (labelKey: 'outboxAnimal', moduleCode: FarmModule.animals),
+  '/animals/milking-queue': (labelKey: 'outboxMilkingQueue', moduleCode: FarmModule.milkProduction),
   '/observations': (labelKey: 'outboxObservation', moduleCode: FarmModule.animals),
   '/animal-groups': (labelKey: 'outboxGroup', moduleCode: FarmModule.animals),
   '/births': (labelKey: 'outboxBirth', moduleCode: FarmModule.animals),
