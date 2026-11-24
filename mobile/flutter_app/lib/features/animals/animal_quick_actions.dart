@@ -11,6 +11,7 @@ import '../../domain/entities/observation.dart';
 import '../../providers/animals_provider.dart';
 import '../feed/feeding_event_dialog.dart';
 import 'reproduction_forms.dart' show confirmLactationChange;
+import '../production/milk_sessions.dart';
 
 const _observationTypes = [
   'reduced_appetite',
@@ -227,7 +228,7 @@ class _MilkDialogState extends State<_MilkDialog> {
               decoration: InputDecoration(labelText: context.t('session')),
               items: [
                 DropdownMenuItem(value: 'morning', child: Text(context.t('sessionMorning'))),
-                DropdownMenuItem(value: 'evening', child: Text(context.t('sessionEvening'))),
+                DropdownMenuItem(value: 'evening', child: Text(milkSessionLabel(context, 'evening'))),
               ],
               onChanged: (v) => setState(() => _session = v ?? _session),
             ),

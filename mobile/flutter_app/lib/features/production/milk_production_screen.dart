@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../reports/reports_screen.dart' show openReport;
+import 'milk_handover_ui.dart';
 import 'milk_sales_ui.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
@@ -152,6 +153,9 @@ class MilkProductionScreen extends StatelessWidget {
           const SizedBox(height: FarmSpacing.md),
           // Milk corrections waiting for the manager, or the answers to one's own.
           const ApprovalsCard(modules: {FarmModule.milkProduction}),
+          // After each milking: the calves, then the collector (v0.8.1).
+          const MilkHandoverCard(),
+          const SizedBox(height: FarmSpacing.md),
           // What is in the tank and the milk sold from it.
           const MilkTankCard(),
           const SizedBox(height: FarmSpacing.md),

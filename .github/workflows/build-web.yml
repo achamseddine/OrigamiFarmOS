@@ -80,9 +80,9 @@ jobs:
       - name: Publish versioned web prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: web-v0.8.0-build-${{ github.run_number }}
+          tag_name: web-v0.8.1-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.0 — web app 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.1 — web app 0.8.${{ github.run_number }}"
           prerelease: true
           files: mobile/flutter_app/origami-farmos-web.zip
           body: |

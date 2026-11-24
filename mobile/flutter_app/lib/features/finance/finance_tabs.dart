@@ -358,6 +358,20 @@ class FinanceOwedTab extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (access.canReceivePayment) ...[
+                    const SizedBox(height: FarmSpacing.sm),
+                    // One payment for all of a buyer's sales — the collector's week.
+                    Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final b in byBuyer.values)
+                        if (b.name != context.t('finNoName'))
+                          OutlinedButton.icon(
+                            key: ValueKey('receive-payment-${b.name}'),
+                            onPressed: () => showReceivePaymentDialog(context, buyer: b.name),
+                            icon: const Icon(Icons.payments_outlined, size: 18),
+                            label: Text('${context.t('payReceiveFrom')} ${b.name}'),
+                          ),
+                    ]),
+                  ],
                   const SizedBox(height: FarmSpacing.md),
                   for (final s in unpaid) FinanceSaleRow(sale: s),
                 ]),

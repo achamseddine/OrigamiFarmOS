@@ -25,6 +25,7 @@ import '../sync/sync_pill.dart' show PendingChip;
 import 'animal_feeding_section.dart';
 import 'animal_quick_actions.dart' show observationLabel;
 import 'animal_reproduction_section.dart';
+import '../production/milk_sessions.dart';
 
 /// The tabs of the Digital Twin past its Overview (see
 /// `animal_digital_twin_screen.dart`). Each opens on the prototype's
@@ -35,7 +36,7 @@ String _d(DateTime d) => feedDate(d);
 
 String _sessionLabel(BuildContext context, String session) => switch (session) {
       'morning' => context.t('sessionMorning'),
-      'evening' => context.t('sessionEvening'),
+      'evening' => milkSessionLabel(context, 'evening'),
       _ => session,
     };
 

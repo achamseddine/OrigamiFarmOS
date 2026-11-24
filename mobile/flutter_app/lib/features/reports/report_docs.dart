@@ -70,6 +70,7 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
           (t('rpAnimalsMilked'), n(kpis['animals_milked'])),
           (t('rpPerAnimalDay'), '${n(kpis['avg_per_animal_day_l'])} L'),
           (t('rpWithheld'), '${n(kpis['withheld_l'])} L'),
+          (t('rpCalves'), '${n(kpis['calves_l'])} L'),
           if (money) ...[
             (t('rpMilkSold'), '${n(kpis['sold_l'])} L'),
             (t('rpRevenue'), m(kpis['revenue'])),
@@ -81,11 +82,11 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
         tables: [
           ReportTable(
             title: t('rpPerDayTable'),
-            columns: [t('rpDate'), t('sessionMorning'), if (midday) t('sessionMidday'), t('sessionEvening'), t('rpTotalL'), t('rpSoldL')],
-            numeric: {1, 2, 3, 4, if (midday) 5},
+            columns: [t('rpDate'), t('sessionMorning'), if (midday) t('sessionMidday'), t(data['second_milking'] == 'afternoon' ? 'sessionAfternoon' : 'sessionEvening'), t('rpCalvesL'), t('rpTotalL'), t('rpSoldL')],
+            numeric: {1, 2, 3, 4, 5, if (midday) 6},
             rows: [
               for (final d in byDay.reversed)
-                [date(d['date']), n(d['morning']), if (midday) n(d['midday']), n(d['evening']), n(d['total']), n(d['sold'])],
+                [date(d['date']), n(d['morning']), if (midday) n(d['midday']), n(d['evening']), n(d['calves']), n(d['total']), n(d['sold'])],
             ],
           ),
           ReportTable(

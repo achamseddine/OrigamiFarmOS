@@ -21,7 +21,7 @@ from app.api.deps import require_any_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
-from app.schemas.finance import CancelWithReason, ExchangeRateCreate, ExpenseCreate, MarkPaid, SaleCreate
+from app.schemas.finance import CancelWithReason, ExchangeRateCreate, ExpenseCreate, MarkPaid, PaymentCreate, SaleCreate
 from app.services import finance_service as finance
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -51,6 +51,10 @@ _SPEND = _need((perms.EXPENSES, perms.CREATE), (perms.FINANCE, perms.CREATE),
                message="Recording an expense needs Expenses or Finance — ask the farm manager.")
 _CANCEL_EXPENSE = _need((perms.EXPENSES, perms.APPROVE), (perms.FINANCE, perms.APPROVE),
                         message="Cancelling an expense is the farm manager's (Expenses or Finance approval).")
+# A buyer's payment for several sales: Sales or Finance, or Milk approval
+# (the collector's weekly payment on the Milk page).
+_RECEIVE = _need((perms.SALES, perms.CREATE), (perms.FINANCE, perms.CREATE), (perms.MILK_PRODUCTION, perms.APPROVE),
+                 message="Recording a payment needs Sales or Finance — ask the farm manager.")
 _SET_RATE = _need((perms.FINANCE, perms.APPROVE), (perms.SETTINGS, perms.CONFIGURE),
                   message="The exchange rate is set by the farm manager (Finance approval).")
 
@@ -105,6 +109,23 @@ def cancel_sale(sale_id: str, payload: CancelWithReason, db: Session = Depends(g
     db.commit()
     db.refresh(sale)
     return finance.sale_dict(db, sale)
+
+
+@router.get("/payments")
+def list_payments(days: int = Query(365, ge=1, le=731), db: Session = Depends(get_db), user: models.User = Depends(_SALES_VIEW)) -> list[dict]:
+    """Payments received for several sales at once, newest first."""
+    return finance.list_payments(db, user.farm_id, days=days)
+
+
+@router.post("/payments", status_code=status.HTTP_201_CREATED)
+def receive_payment(payload: PaymentCreate, db: Session = Depends(get_db), user: models.User = Depends(_RECEIVE)) -> dict:
+    """One payment for several sales of one buyer — the milk collector's week.
+    Every sale is marked paid; a difference with what they came to is kept."""
+    payment = finance.receive_payment(db, user, sale_ids=payload.sale_ids, amount_received=payload.amount_received, currency=payload.currency,
+                                      exchange_rate=payload.exchange_rate, paid_at=payload.paid_at, reference=payload.reference,
+                                      notes=payload.notes, confirm_duplicate=payload.confirm_duplicate)
+    db.commit()
+    return finance.payment_dict(payment)
 
 
 # ----------------------------------------------------------- expenses

@@ -599,3 +599,231 @@ class _ExchangeRateDialogState extends State<_ExchangeRateDialog> {
 /// A sale's or expense's money as a row reads it.
 String financeAmount(FinanceSale s) => moneyWithOriginal(s.amount, s.originalAmount, s.originalCurrency);
 String expenseAmount(FinanceExpense e) => moneyWithOriginal(e.amount, e.originalAmount, e.originalCurrency);
+
+// ------------------------------------------------------ receive a payment
+/// One payment from [buyer] for several of their unpaid sales — the milk
+/// collector paying for the week. Every sale ticked is marked paid on the
+/// payment's day; what was really received (USD or LBP) is recorded, and a
+/// difference with what the sales came to is kept (a deduction or a bonus).
+Future<void> showReceivePaymentDialog(BuildContext context, {required String buyer}) =>
+    showDialog<void>(context: context, builder: (_) => _ReceivePaymentDialog(buyer: buyer));
+
+class _ReceivePaymentDialog extends StatefulWidget {
+  const _ReceivePaymentDialog({required this.buyer});
+  final String buyer;
+
+  @override
+  State<_ReceivePaymentDialog> createState() => _ReceivePaymentDialogState();
+}
+
+class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
+  final Set<String> _chosen = {};
+  bool _initialised = false;
+  final _amount = TextEditingController();
+  late final _rate = TextEditingController(text: _RecordSaleDialogState._rateText(context.read<FinanceProvider>().rates.lbpPerUsd));
+  final _reference = TextEditingController();
+  final _notes = TextEditingController();
+  String _currency = 'USD';
+  bool _amountEdited = false;
+  DateTime _day = DateTime.now();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    for (final c in [_amount, _rate]) {
+      c.addListener(() => setState(() {}));
+    }
+    final finance = context.read<FinanceProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!finance.loaded) await finance.load(expenses: false, profitLoss: false);
+      if (mounted) _init();
+    });
+    if (finance.loaded) _init();
+  }
+
+  void _init() {
+    if (_initialised) return;
+    final sales = context.read<FinanceProvider>().unpaidOf(widget.buyer);
+    if (sales.isEmpty && !context.read<FinanceProvider>().loaded) return;
+    _initialised = true;
+    _chosen.addAll(sales.map((s) => s.id));
+    _syncAmount();
+  }
+
+  double _due(List<FinanceSale> sales) => sales.where((s) => _chosen.contains(s.id)).fold(0.0, (t, s) => t + s.amount);
+
+  /// The amount received follows what is due until someone types it.
+  void _syncAmount() {
+    if (_amountEdited || !mounted) return;
+    final due = _due(context.read<FinanceProvider>().unpaidOf(widget.buyer));
+    final rate = parseLocalizedDouble(_rate.text);
+    final v = _currency == 'USD' ? due : (rate == null ? null : due * rate);
+    _amount.text = v == null || v == 0 ? '' : (_currency == 'USD' ? v.toStringAsFixed(2) : v.round().toString());
+    setState(() {});
+  }
+
+  @override
+  void dispose() {
+    for (final c in [_amount, _rate, _reference, _notes]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amount = parseLocalizedDouble(_amount.text);
+    final rate = parseLocalizedDouble(_rate.text);
+    String? problem;
+    if (_chosen.isEmpty) problem = context.t('paySayWhich');
+    if (amount == null || amount < 0) problem ??= context.t('finSayAmount');
+    if (_currency == 'LBP' && (rate == null || rate <= 0)) problem ??= context.t('finSayRate');
+    if (problem != null) {
+      setState(() => _error = problem);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final result = await context.read<FinanceProvider>().receivePayment(
+          saleIds: _chosen.toList(),
+          amountReceived: amount!,
+          currency: _currency,
+          exchangeRate: _currency == 'LBP' ? rate : null,
+          paidAt: recordedInstant(_day),
+          reference: _reference.text,
+          notes: _notes.text,
+        );
+    if (!mounted) return;
+    if (result.success) {
+      if (!result.queued) refreshMoney(context);
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result.queued ? context.t('finSavedOffline') : context.t('payReceived'))));
+      return;
+    }
+    if (result.isPossibleDuplicate) {
+      setState(() => _saving = false);
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _error = result.error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final finance = context.watch<FinanceProvider>();
+    final sales = finance.unpaidOf(widget.buyer);
+    final due = _due(sales);
+    final litresDue = sales.where((s) => _chosen.contains(s.id) && s.unit == 'L').fold(0.0, (t, s) => t + (s.quantity ?? 0));
+    final amount = parseLocalizedDouble(_amount.text);
+    final rate = parseLocalizedDouble(_rate.text);
+    final receivedUsd = amount == null ? null : (_currency == 'USD' ? amount : (rate == null || rate <= 0 ? null : amount / rate));
+    final difference = receivedUsd == null ? null : receivedUsd - due;
+    return FarmFormDialog(
+      title: Text('${context.t('payTitle')} — ${widget.buyer}'),
+      width: 560,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        if (!finance.loaded)
+          const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()))
+        else if (sales.isEmpty)
+          Text(context.t('payNothingOwed'), style: FarmTypography.textTheme.bodyMedium)
+        else ...[
+          Row(children: [
+            Expanded(child: Text(context.t('payWhichSales'), style: FarmTypography.textTheme.labelMedium)),
+            TextButton(
+              onPressed: () => setState(() {
+                if (_chosen.length == sales.length) {
+                  _chosen.clear();
+                } else {
+                  _chosen.addAll(sales.map((s) => s.id));
+                }
+                _syncAmount();
+              }),
+              child: Text(context.t(_chosen.length == sales.length ? 'payNone' : 'payAll')),
+            ),
+          ]),
+          for (final s in sales)
+            CheckboxListTile(
+              key: ValueKey('pay-sale-${s.id}'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _chosen.contains(s.id),
+              onChanged: (v) => setState(() {
+                if (v == true) {
+                  _chosen.add(s.id);
+                } else {
+                  _chosen.remove(s.id);
+                }
+                _syncAmount();
+              }),
+              title: Text(
+                '${_d(s.soldAt.toLocal())} · ${s.productLabel == 'Raw milk' ? context.t('msRawMilk') : (s.productLabel ?? s.productType)}'
+                '${s.quantity == null ? '' : ' · ${s.quantity! == s.quantity!.roundToDouble() ? s.quantity!.toStringAsFixed(0) : s.quantity!.toStringAsFixed(1)} ${s.unit ?? ''}'}',
+              ),
+              secondary: Text(moneyWithOriginal(s.amount, s.originalAmount, s.originalCurrency)),
+            ),
+          const Divider(height: 20, color: FarmColors.border),
+          Text(
+            key: const ValueKey('pay-due'),
+            '${context.t('payDue')}: ${money(due, 'USD')} · ${_chosen.length} ${context.t('rpSales').toLowerCase()}${litresDue > 0 ? ' · ${litresDueLabel(litresDue)} L' : ''}',
+            style: FarmTypography.textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: RecordDateButton(label: context.t('payPaidOn'), value: _day, maxDaysBack: 60, onPicked: (d) => setState(() => _day = d)),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('pay-amount'),
+            controller: _amount,
+            onChanged: (_) => _amountEdited = true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(labelText: context.t('payReceivedAmount'), suffixText: _currency),
+          ),
+          const SizedBox(height: 10),
+          CurrencyChooser(
+            currency: _currency,
+            onCurrency: (c) => setState(() {
+              _currency = c;
+              _amountEdited = false;
+              _syncAmount();
+            }),
+            rate: _rate,
+            amount: amount,
+            farmRate: finance.rates.lbpPerUsd,
+          ),
+          if (difference != null && difference.abs() >= 0.01) ...[
+            const SizedBox(height: 8),
+            Text(
+              key: const ValueKey('pay-difference'),
+              '${context.t(difference < 0 ? 'payShort' : 'payExtra')}: ${money(difference.abs(), 'USD')} — ${context.t('payDifferenceKept')}',
+              style: FarmTypography.textTheme.bodySmall?.copyWith(color: difference < 0 ? FarmColors.danger : FarmColors.success),
+            ),
+          ],
+          const SizedBox(height: 12),
+          TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('msReference'), hintText: context.t('optional'))),
+          const SizedBox(height: 10),
+          TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'), hintText: context.t('optional'))),
+        ],
+        if (_error != null) ...[const SizedBox(height: 10), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
+        if (sales.isNotEmpty)
+          FilledButton(
+            key: const ValueKey('pay-save'),
+            onPressed: _saving ? null : _submit,
+            child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('payRecord')),
+          ),
+      ],
+    );
+  }
+}
+
+String litresDueLabel(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);

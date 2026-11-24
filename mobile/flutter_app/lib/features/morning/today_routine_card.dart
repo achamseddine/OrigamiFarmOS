@@ -21,6 +21,7 @@ import '../../providers/production_provider.dart';
 import '../animals/animal_queue_screen.dart';
 import '../animals/quick_round.dart';
 import '../feed/feeding_event_dialog.dart';
+import '../production/milk_sessions.dart';
 
 /// The husbandry routine of the day (V3 prototype, "My Day"): the
 /// milkings, the feeding rounds and the egg collection, each ticked off
@@ -211,7 +212,7 @@ class _RoutineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, title) = switch (check.kind) {
-      RoutineKind.milking => (FarmIcon.milkBottle, check.key == 'morning' ? context.t('routineMilkMorning') : context.t('routineMilkEvening')),
+      RoutineKind.milking => (FarmIcon.milkBottle, milkingRoundLabel(context, check.key == 'morning' ? 'morning' : 'evening')),
       RoutineKind.feeding => (
           FarmIcon.feedBag,
           check.key == kIndividualFeeding ? '${context.t('routineFeeding')} · ${context.t('routineIndividual')} (${check.name})' : '${context.t('routineFeeding')} · ${check.name}'

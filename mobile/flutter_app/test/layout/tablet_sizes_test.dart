@@ -26,6 +26,7 @@ import 'package:farmos/features/mouneh/mouneh_module_screen.dart';
 import 'package:farmos/features/produce/produce_harvest_screen.dart';
 import 'package:farmos/features/production/egg_production_screen.dart';
 import 'package:farmos/features/production/milk_production_screen.dart';
+import 'package:farmos/features/production/milk_handover_ui.dart';
 import 'package:farmos/features/production/milk_sales_ui.dart';
 import 'package:farmos/features/reports/reports_screen.dart';
 import 'package:farmos/features/settings/settings_screen.dart';
@@ -90,6 +91,9 @@ void main() {
     'record a sale': (c) => showRecordSaleDialog(c),
     'record an expense': (c) => showRecordExpenseDialog(c, category: 'feed'),
     'exchange rate': (c) => showExchangeRateDialog(c),
+    'hand over the milk': (c) => showHandOverDialog(c, session: 'morning'),
+    'milk collector': (c) => showMilkRoutineDialog(c),
+    'payment received': (c) => showReceivePaymentDialog(c, buyer: 'Laiterie Bekaa'),
   };
 
   /// Draws [build] at [size] in [locale]; returns what went wrong, one line each.

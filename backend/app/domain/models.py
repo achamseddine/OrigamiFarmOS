@@ -44,6 +44,14 @@ class Farm(Base):
     milk_peak_end_days: Mapped[int] = mapped_column(Integer, default=70, server_default="70")
     breeding_wait_days: Mapped[int] = mapped_column(Integer, default=50, server_default="50")
     heat_cycle_days: Mapped[int] = mapped_column(Integer, default=21, server_default="21")
+    # v0.8.1 — the farm's milking routine. What the farm calls its second
+    # milking ("afternoon" or "evening"; the records keep the session code
+    # "evening"), and the milk collector who takes the milk after each
+    # milking at an agreed price and pays once a week.
+    second_milking: Mapped[str] = mapped_column(String(10), default="evening", server_default="evening")
+    milk_collector_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    milk_collector_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    milk_collector_currency: Mapped[str] = mapped_column(String(10), default="USD", server_default="USD")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -620,6 +628,8 @@ class Sale(Base):
     activity: Mapped[str | None] = mapped_column(String(20), nullable=True)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # v0.8.1 — the payment that settled it (finance_models.CustomerPayment).
+    payment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class Expense(Base):

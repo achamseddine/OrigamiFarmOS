@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.0-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.1-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.0 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.1 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.1:** **After each milking** on the Milk page: litres to the calves, the rest to the collector at his agreed price (workers type litres only); **Collector paid** settles the whole week at once (USD or LBP, a deduction kept on record); the second milking is called **Afternoon** if the farm says so. **The server needs migration `a2c4e6f8b0d3`.**
             - **v0.8.0:** **Sales & Finance** — record any sale (eggs, vegetables, animals…) and any expense or bill, in USD or LBP at the rate the manager sets; mark paid, cancel with a reason; who owes what; profit and loss per month and activity. **Reports** gain *Sales* (everything sold) and *Stock* (everything in stock now). **Settings → App updates**: update to the newest APK from the app, and a notice when one is out. **The server needs migration `f7b9d1e3a5c8`.**
             - **v0.7.9:** **Sell milk** from the tank (Milk page and Sales & Finance: litres, price, buyer, paid or to be paid; mark paid, cancel with a reason; the tank worked out from the records, counted by the manager); **Reports** — milk, feed, herd and finance for a chosen period, printed or saved as PDF or exported as a spreadsheet (CSV). **The server needs migration `e6a8c0d2f4b7`.**
             - **v0.7.8:** employees enter the day's milk and feedings; buying feed, a feed mix and corrections go to the farm manager for approval (approvals card on My Day; *Ask to buy feed*; delivery against an approved request); the **cow queue** — follow the milking or feeding cow by cow, or scan in any order; *Record milk* with its date on the Milk page. **The server needs migration `d5f7b9c1e3a6`.**

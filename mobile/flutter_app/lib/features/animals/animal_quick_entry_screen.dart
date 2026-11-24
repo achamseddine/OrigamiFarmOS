@@ -33,6 +33,7 @@ import 'animal_quick_actions.dart' show MilkDayField, showObserveDialog;
 import 'animal_scan.dart';
 import 'quick_round.dart';
 import 'reproduction_forms.dart' show confirmLactationChange, showWeightForm;
+import '../production/milk_sessions.dart';
 
 /// The worker's screen at the animal (docs/QR-ANIMAL-QUICK-ENTRY.md):
 /// scan the label — with the tablet's camera, a keyboard-wedge reader, or
@@ -502,7 +503,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   }
 
   String _roundTitle(BuildContext context, QuickRound round) => switch (round.kind) {
-        RoundKind.milking => round.session == 'evening' ? context.t('routineMilkEvening') : context.t('routineMilkMorning'),
+        RoundKind.milking => milkingRoundLabel(context, round.session == 'evening' ? 'evening' : 'morning'),
         RoundKind.feeding => '${context.t('routineFeeding')} · ${context.t('routineIndividual')}',
       };
 
@@ -598,7 +599,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
               label: context.t('qrMilkToday'),
               value: milked.isEmpty
                   ? context.t('qrNoneYet')
-                  : [for (final r in milked) '${r.session == 'morning' ? context.t('sessionMorning') : context.t('sessionEvening')} ${r.liters.toStringAsFixed(1)} L'].join(' · '),
+                  : [for (final r in milked) '${milkSessionLabel(context, r.session)} ${r.liters.toStringAsFixed(1)} L'].join(' · '),
             ),
           FactRow(
             label: context.t('qrFeedToday'),
@@ -636,7 +637,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
             SegmentedButton<String>(
               segments: [
                 ButtonSegment(value: 'morning', label: Text(context.t('sessionMorning'))),
-                ButtonSegment(value: 'evening', label: Text(context.t('sessionEvening'))),
+                ButtonSegment(value: 'evening', label: Text(milkSessionLabel(context, 'evening'))),
               ],
               selected: {_session},
               onSelectionChanged: _saving ? null : (v) => setState(() {

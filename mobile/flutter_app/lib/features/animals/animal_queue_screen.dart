@@ -17,6 +17,7 @@ import '../../providers/production_provider.dart';
 import 'animal_quick_entry_screen.dart';
 import 'animal_scan.dart' show milkSessionForHour;
 import 'quick_round.dart';
+import '../production/milk_sessions.dart';
 
 /// The cow queue: today's milking or feeding round as an ordered list —
 /// by tag number — with who is done and who is still to do.
@@ -96,7 +97,7 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
                   for (final (r, label) in rounds)
                     ChoiceChip(
                       key: ValueKey('queue-round-$label'),
-                      label: Text(context.t(label)),
+                      label: Text(label == 'routineMilkEvening' ? milkingRoundLabel(context, 'evening') : context.t(label)),
                       selected: _same(r, _round),
                       onSelected: (_) => setState(() => _round = r),
                     ),

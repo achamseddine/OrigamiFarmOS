@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -47,4 +47,33 @@ class ExchangeRate(Base):
     effective_date: Mapped[date] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     set_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class CustomerPayment(Base):
+    """Money a customer paid for several sales at once — the milk collector's
+    weekly payment for every collection of the week. The sales it settles
+    point to it (`sales.payment_id`); when the money received differs from
+    what the sales came to, the difference is its own revenue row
+    (`difference_sale_id`), so revenue is what was really received."""
+
+    __tablename__ = "customer_payments"
+    __table_args__ = (Index("ix_customer_payments_farm_paid", "farm_id", "paid_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    customer_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("customers.id"), nullable=True)
+    buyer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    sales_count: Mapped[int] = mapped_column(Integer, default=0)
+    # In USD: what the sales came to, and what was received.
+    amount_due: Mapped[float] = mapped_column(Float)
+    amount_received: Mapped[float] = mapped_column(Float)
+    original_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    original_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    difference_sale_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
