@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../reports/reports_screen.dart' show openReport;
+import '../reports/reports_screen.dart' show ReportPreset, openReport;
+import '../animals/animal_digital_twin_screen.dart';
+import '../../core/widgets/directional_icon.dart';
 import 'milk_handover_ui.dart';
+import 'milk_sessions.dart';
 import 'milk_sales_ui.dart';
 import '../../domain/entities/access.dart';
 import '../../providers/access_provider.dart';
@@ -164,8 +167,8 @@ class MilkProductionScreen extends StatelessWidget {
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
             final cards = [
               KpiCard(icon: FarmIcon.milkBottle, label: context.t('milkToday'), value: total.toStringAsFixed(0), unit: context.t('liters')),
-              KpiCard(icon: FarmIcon.sun, label: context.t('morningSession'), value: morningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${morningPct.toStringAsFixed(0)}% of total'),
-              KpiCard(icon: FarmIcon.leaf, label: context.t('eveningSession'), value: eveningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${eveningPct.toStringAsFixed(0)}% of total'),
+              KpiCard(icon: FarmIcon.sun, label: milkingRoundLabel(context, 'morning'), value: morningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${morningPct.toStringAsFixed(0)}% of total'),
+              KpiCard(icon: FarmIcon.leaf, label: milkingRoundLabel(context, 'evening'), value: eveningTotal.toStringAsFixed(0), unit: context.t('liters'), caption: '${eveningPct.toStringAsFixed(0)}% of total'),
               KpiCard(icon: FarmIcon.milkBottle, label: context.t('averagePerAnimal'), value: avgPerAnimal.toStringAsFixed(1), unit: context.t('liters'), caption: '${lactating.length} ${context.t('animalsMilked')}'),
               KpiCard(icon: FarmIcon.warning, label: context.t('underWithdrawal'), value: '${underWithdrawal.length}', caption: context.t('milkNotForSale'), tint: underWithdrawal.isEmpty ? null : FarmColors.warning),
             ];
@@ -188,9 +191,12 @@ class MilkProductionScreen extends StatelessWidget {
                 height: 230,
               ),
             );
+            // Every cow's milk, morning and afternoon: the milk report of today.
+            final canReport = access.canReadReport('milk');
             final producersCard = SectionCard(
               title: context.t('topMilkProducersToday'),
-              trailing: context.t('viewAll'),
+              trailing: canReport ? context.t('viewAll') : null,
+              onTrailingTap: canReport ? () => openReport(context, 'milk', preset: ReportPreset.today) : null,
               child: Column(
                 children: [
                   if (producers.isEmpty)
@@ -200,7 +206,15 @@ class MilkProductionScreen extends StatelessWidget {
                       _ProducerRow(rank: i + 1, producer: producers[i]),
                       const Divider(height: 16, color: FarmColors.border),
                     ],
-                  Align(alignment: Alignment.centerLeft, child: TextButton(onPressed: () {}, child: Text(context.t('seeAllAnimals')))),
+                  if (canReport)
+                    Align(
+                      alignment: AlignmentDirectional.centerStart,
+                      child: TextButton(
+                        key: const ValueKey('milk-each-cow'),
+                        onPressed: () => openReport(context, 'milk', preset: ReportPreset.today),
+                        child: Text(context.t('milkEachCow')),
+                      ),
+                    ),
                 ],
               ),
             );
@@ -221,7 +235,12 @@ class MilkProductionScreen extends StatelessWidget {
                         Text(context.t('cannotBeSoldToday'), style: FarmTypography.textTheme.bodySmall),
                         const SizedBox(height: 10),
                         for (final a in underWithdrawal)
-                          Row(children: [
+                          InkWell(
+                            onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => AnimalDigitalTwinScreen(animalId: a.id))),
+                            borderRadius: BorderRadius.circular(FarmRadii.sm),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(children: [
                             SizedBox(width: 40, height: 40, child: PhotoSlot(icon: FarmIcon.goat, filePath: a.photoPath)),
                             const SizedBox(width: 10),
                             Expanded(
@@ -233,9 +252,10 @@ class MilkProductionScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
+                            const ForwardChevron(size: 16, color: FarmColors.muted),
                           ]),
-                        const SizedBox(height: 10),
-                        OutlinedButton(onPressed: () {}, child: Text(context.t('viewAnimalRecord'))),
+                            ),
+                          ),
                       ],
                     ),
             );
@@ -258,9 +278,9 @@ class MilkProductionScreen extends StatelessWidget {
             final sessions = SectionCard(
               title: context.t('sessionOverview'),
               child: Row(children: [
-                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('morningSession'), value: morningTotal, sub: lactatingSummary)),
+                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: milkingRoundLabel(context, 'morning'), value: morningTotal, sub: lactatingSummary)),
                 const SizedBox(width: 10),
-                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: context.t('eveningSession'), value: eveningTotal, sub: lactatingSummary)),
+                Expanded(child: _SessionTile(icon: FarmIcon.sun, label: milkingRoundLabel(context, 'evening'), value: eveningTotal, sub: lactatingSummary)),
               ]),
             );
             final destination = SectionCard(

@@ -45,6 +45,8 @@ class AnimalOut(ORMModel):
     weight_kg: float | None = None
     group_name: str | None = None
     photo_path: str | None = None
+    # Her number in the milking line (v0.8.2); set with PUT /animals/milking-queue.
+    milking_queue_number: int | None = None
     acquisition_date: datetime | None = None
     acquisition_source: str | None = None
     sire_tag: str | None = None
@@ -274,3 +276,34 @@ class AnimalDigitalTwinOut(AnimalOut):
     groups: list[dict] = []
     relationships: dict = {}
     recent_history: list[dict] = []
+
+
+class MilkingQueueEntry(BaseModel):
+    animal_id: str
+    # Her place in the milking line; null takes her number away.
+    number: int | None = None
+
+    @field_validator("number")
+    @classmethod
+    def _number_in_range(cls, v: int | None) -> int | None:
+        if v is not None and not 1 <= v <= 999:
+            raise ValueError("A queue number is a whole number from 1 to 999.")
+        return v
+
+
+class MilkingQueueUpdate(BaseModel):
+    """Numbers for some or all of the animals in milk (v0.8.2). Animals not
+    named keep theirs; the numbers must stay unique on the farm."""
+
+    numbers: list[MilkingQueueEntry]
+
+    @field_validator("numbers")
+    @classmethod
+    def _not_empty(cls, v: list[MilkingQueueEntry]) -> list[MilkingQueueEntry]:
+        if not v:
+            raise ValueError("Give at least one animal's number.")
+        if len(v) > 999:
+            raise ValueError("At most 999 animals at once.")
+        if len({e.animal_id for e in v}) != len(v):
+            raise ValueError("Each animal is named once.")
+        return v

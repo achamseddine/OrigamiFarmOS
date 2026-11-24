@@ -1,5 +1,18 @@
 # Releases
 
+## v0.8.2 — Each cow's number in the milking queue; each cow's morning and afternoon in the milk report
+
+On the tablet and the web app (one codebase):
+- **Each cow's number in the queue.** *Cow queue → Queue numbers* (the farm manager): every cow in milk with a number field — the order the cows come in to be milked. *Number them 1, 2, 3… in this order* fills them in; any number can be changed or cleared; a number given to two cows is refused (on the form and by the server). A dry cow keeps her number for her next lactation and is listed so it can be taken from her. Cows without a number come after the numbered ones, by tag, as before.
+- **The queue follows the numbers** — the cow queue, *Follow the queue*, the quick entry's round and the milk report all list the cows by their number.
+- **Record milk opens the next cow by herself.** *Record milk* (Milk page, +) offers the next cow still to milk at this time of day on top (*Next: No. 1 · Bella*) and shows each cow's number; typing her number finds her. After each save the next number opens on the same milking and day — no picking again — with *Skip* (come back to her later) and *Stop*. The form says where she is: *No. 3 · Cow 3 of 12 in the queue*, and who comes next.
+- **A number typed in opens her cow.** In the quick entry of a milking, typing the cow's queue number (*4*, *No. 4*, *#4*, or in Arabic digits) opens her; a tag or identifier always wins over a number. Her number is on her card.
+- **The milk report, each cow.** *Per animal* now shows each cow's **morning** and **afternoon** (or evening) litres over the period, with her number; a new table **Each cow, day by day** lists every cow's morning, afternoon and total for each day (a period up to a month), the latest day first, the cows in queue order. Periods **Today** and **Yesterday** are added. On the Milk page, *View all* and *Each cow — every milking* under the top producers (they did nothing before) open the milk report on today. A long table is cut into parts, so the PDF prints a month of every cow.
+- The Milk page names the second milking as the farm does (*Afternoon milking*); an animal under withdrawal opens her record when tapped (the *View Animal Record* button did nothing).
+- Who may do what: setting the numbers — Animals *edit* or Milk *approve* (the manager); employees follow them. Every change is in the audit history and the event log.
+- Offline: numbers set without the connection show on the queue at once and are sent when it is back.
+- Server: **migration `b3d5f7a9c1e4`** — `animals.milking_queue_number`. `PUT /animals/milking-queue` (safe to resend); `GET /reports/milk` adds `morning_l`, `midday_l`, `evening_l` and `queue_number` per animal and `by_animal_day` (null for a period over 31 days). Tests: backend +8 (`test_milking_queue.py`), app +15 (`test/records/milking_queue_test.dart`); the tablet-size sweep covers the queue-numbers form.
+
 ## v0.8.1 — The milking routine: calves, the collector, the weekly payment
 
 How the farm works: two milkings a day, morning and afternoon; after each, the calves get their milk and the rest goes to the milk collector, who takes it after every milking and pays once a week. On the tablet and the web app:

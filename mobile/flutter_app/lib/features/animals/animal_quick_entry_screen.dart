@@ -264,6 +264,15 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         await _selectGroup(group.id);
         if (mounted && _groupId == group.id) _code.clear();
       case NoScanTarget(:final reason):
+        // In a milking, a cow's number in the queue typed in opens her
+        // (v0.8.2) — a tag or identifier always comes first.
+        final round = widget.round;
+        final numbered = round?.kind == RoundKind.milking && reason == ScanMiss.unknown ? byQueueNumber(_status()!, raw) : null;
+        if (numbered != null) {
+          await _selectAnimal(numbered.id);
+          if (mounted && _animalId == numbered.id) _code.clear();
+          return;
+        }
         setState(() => _error = context.t(switch (reason) {
               ScanMiss.notOurs => 'qrMissNotOurs',
               ScanMiss.ambiguous => 'qrMissAmbiguous',
@@ -525,7 +534,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
           textInputAction: TextInputAction.go,
           onSubmitted: (v) => _resolve(v),
           decoration: InputDecoration(
-            labelText: context.t('qrScanOrType'),
+            labelText: context.t(widget.round?.kind == RoundKind.milking ? 'qrScanOrTypeQueue' : 'qrScanOrType'),
             isDense: true,
             prefixIcon: const Icon(Icons.keyboard_outlined, size: 20),
             suffixIcon: IconButton(tooltip: context.t('qrOpenAnimal'), onPressed: _saving ? null : () => _resolve(_code.text), icon: const Icon(Icons.arrow_forward)),
@@ -567,7 +576,12 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
           const SizedBox(width: FarmSpacing.md),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Eyebrow([livestock.speciesName(animal.species, lang), if (animal.primaryId.isNotEmpty) '#${animal.primaryId}'].join(' · ')),
+              Eyebrow([
+                livestock.speciesName(animal.species, lang),
+                if (animal.primaryId.isNotEmpty) '#${animal.primaryId}',
+                if (animal.milkingQueueNumber != null && caps.has(Cap.milkProduction))
+                  context.t('queueNumberShort').replaceAll('{n}', '${animal.milkingQueueNumber}'),
+              ].join(' · ')),
               Text(animal.name, style: FarmTypography.display(size: 26)),
               Text([animal.location, if (animal.groupName != null) animal.groupName!].where((s) => s.isNotEmpty).join(' · '), style: FarmTypography.textTheme.bodySmall),
               const SizedBox(height: 6),
@@ -853,7 +867,10 @@ class _RoundPanel extends StatelessWidget {
           for (final e in status.entries)
             ChoiceChip(
               avatar: Icon(e.done ? Icons.check_circle : Icons.radio_button_unchecked, size: 16, color: e.done ? FarmColors.success : FarmColors.muted),
-              label: Text(e.animal.primaryId.isEmpty ? e.animal.name : '${e.animal.name} #${e.animal.primaryId}'),
+              label: Text([
+                if (e.animal.milkingQueueNumber != null) '${e.animal.milkingQueueNumber}',
+                e.animal.primaryId.isEmpty ? e.animal.name : '${e.animal.name} #${e.animal.primaryId}',
+              ].join(' · ')),
               selected: e.animal.id == current,
               onSelected: (_) => onSelect(e.animal.id),
             ),

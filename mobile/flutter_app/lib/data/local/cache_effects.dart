@@ -158,6 +158,15 @@ List<_Rule> _crud(String path, {String? readPath, bool update = true, bool remov
 final List<_Rule> _rules = [
   // --- Daily field work: the writes a worker actually makes out of range.
   ..._crud('/tasks', remove: true),
+  // Each cow's number in the milking queue (v0.8.2) — before the animals'
+  // own PUT, which would take "milking-queue" for an animal id.
+  _Rule('PUT', '/animals/milking-queue', (m) => [
+        for (final e in (m.body['numbers'] as List<dynamic>? ?? const []))
+          if (e is Map && e['animal_id'] is String) ...[
+            MergeRecord('/animals', e['animal_id'] as String, {'milking_queue_number': e['number']}),
+            PatchDocument('/animals/${e['animal_id']}', {'milking_queue_number': e['number']}),
+          ],
+      ]),
   ..._crud('/animals'),
   // Identifiers live on the animal (generic animal model §4). A new one
   // shows on the animal's own list, on its Digital Twin and on its row in

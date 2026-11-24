@@ -1,3 +1,4 @@
+import '../../core/util/number_input.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/feeding.dart';
 import '../../domain/entities/production_records.dart';
@@ -77,19 +78,58 @@ int queueOrder(Animal a, Animal b) {
   return rest != 0 ? rest : a.name.toLowerCase().compareTo(b.name.toLowerCase());
 }
 
+/// The order a milking is walked (v0.8.2): the cows' numbers in the
+/// milking queue first — the manager sets them, the line the cows come in
+/// — then any cow without a number, by tag as [queueOrder]. The farm
+/// server's milk report uses the same order (farm_reports_service.queue_key).
+int milkingQueueOrder(Animal a, Animal b) {
+  final na = a.milkingQueueNumber;
+  final nb = b.milkingQueueNumber;
+  if (na != null && nb != null && na != nb) return na.compareTo(nb);
+  if (na != null && nb == null) return -1;
+  if (na == null && nb != null) return 1;
+  return queueOrder(a, b);
+}
+
+/// The animal in [status] holding queue number [typed] ("4", "No. 4",
+/// "#4"), or null — a cow opened by her number when it is typed in.
+Animal? byQueueNumber(RoundStatus status, String typed) {
+  final m = RegExp(r'^\s*(?:no\.?|#|n°|رقم)?\s*([0-9\u0660-\u0669\u06F0-\u06F9]{1,3})\s*$', caseSensitive: false).firstMatch(typed);
+  if (m == null) return null;
+  final n = parseLocalizedInt(m.group(1)!);
+  if (n == null) return null;
+  for (final e in status.entries) {
+    if (e.animal.milkingQueueNumber == n) return e.animal;
+  }
+  return null;
+}
+
 /// The next animal still to do in [status] after [after] (going round to
 /// the start of the queue), or the first one still to do when [after] is
-/// null. Null when the queue is done.
-Animal? nextInQueue(RoundStatus status, {String? after}) {
+/// null. Null when the queue is done. Animals in [passed] — saved or
+/// skipped already in this run — are not offered again.
+Animal? nextInQueue(RoundStatus status, {String? after, Set<String> passed = const {}}) {
   final entries = status.entries;
   if (entries.isEmpty) return null;
   final at = after == null ? -1 : entries.indexWhere((e) => e.animal.id == after);
   for (var i = 1; i <= entries.length; i++) {
     final e = entries[(at + i) % entries.length];
-    if (!e.done && e.animal.id != after) return e.animal;
+    if (!e.done && e.animal.id != after && !passed.contains(e.animal.id)) return e.animal;
   }
   return null;
 }
+
+/// One milking's queue on [now]'s day — [roundStatus] for a milking
+/// round, for screens that hold no feeding plan (the manual milk entry).
+RoundStatus milkingRoundStatus(
+  String session, {
+  required List<Animal> animals,
+  required bool Function(Animal) milked,
+  required List<MilkRecord> milk,
+  DateTime? now,
+}) =>
+    roundStatus(QuickRound.milking(session),
+        animals: animals, milked: milked, milk: milk, plan: DailyPlan.empty, fedToday: (_) => const [], now: now);
 
 RoundStatus roundStatus(
   QuickRound round, {
@@ -103,7 +143,7 @@ RoundStatus roundStatus(
   final today = now ?? DateTime.now();
   switch (round.kind) {
     case RoundKind.milking:
-      final inRound = [for (final a in animals) if (a.onFarm && a.lactating && milked(a)) a]..sort(queueOrder);
+      final inRound = [for (final a in animals) if (a.onFarm && a.lactating && milked(a)) a]..sort(milkingQueueOrder);
       final recorded = {for (final r in milk) if (r.session == round.session && _sameDay(r.recordedAt, today)) r.animalId};
       return RoundStatus([for (final a in inRound) RoundEntry(a, done: recorded.contains(a.id))]);
     case RoundKind.feeding:

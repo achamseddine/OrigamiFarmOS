@@ -656,6 +656,7 @@ CREATE TABLE animals (
     dried_off_at TIMESTAMP WITH TIME ZONE,
     group_name VARCHAR(100),
     photo_path VARCHAR(500),
+    milking_queue_number INTEGER,
     acquisition_date TIMESTAMP WITH TIME ZONE,
     acquisition_source VARCHAR(200),
     sire_tag VARCHAR(50),

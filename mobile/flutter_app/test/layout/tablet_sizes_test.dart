@@ -12,6 +12,7 @@ import 'package:farmos/features/approvals/ask_to_buy_dialog.dart';
 import 'package:farmos/features/approvals/correction_dialogs.dart';
 import 'package:farmos/features/animals/animal_status_screen.dart';
 import 'package:farmos/features/animals/group_form.dart';
+import 'package:farmos/features/animals/milking_queue_dialog.dart';
 import 'package:farmos/features/employees/employees_screen.dart';
 import 'package:farmos/features/feed/feed_workspace_screen.dart';
 import 'package:farmos/features/feed/feeding_event_dialog.dart';
@@ -94,6 +95,9 @@ void main() {
     'hand over the milk': (c) => showHandOverDialog(c, session: 'morning'),
     'milk collector': (c) => showMilkRoutineDialog(c),
     'payment received': (c) => showReceivePaymentDialog(c, buyer: 'Laiterie Bekaa'),
+    'queue numbers': (c) => showMilkingQueueDialog(c),
+    'milk in the queue': (c) => showMilkDialog(c, c.read<AnimalsProvider>().find('cow-744')!,
+        queue: const MilkQueueInfo(number: 1, position: 1, total: 5, nextName: 'Luna')),
   };
 
   /// Draws [build] at [size] in [locale]; returns what went wrong, one line each.

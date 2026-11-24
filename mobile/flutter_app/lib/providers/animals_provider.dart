@@ -120,6 +120,17 @@ class AnimalsProvider extends ChangeNotifier {
     return result;
   }
 
+  /// Each cow's number in the milking line (v0.8.2): [numbers] maps an
+  /// animal to her number, or to null to take it away. The server keeps
+  /// the numbers unique on the farm; animals not named keep theirs.
+  Future<WriteResult> setMilkingQueue(Map<String, int?> numbers) async {
+    final result = await _api.write(() => _api.put('/animals/milking-queue', body: {
+          'numbers': [for (final e in numbers.entries) {'animal_id': e.key, 'number': e.value}],
+        }));
+    if (result.success) await load();
+    return result;
+  }
+
   /// Full edit of an animal record (tech spec §12).
   Future<WriteResult> updateAnimal(String animalId, Map<String, dynamic> body) async {
     final result = await _api.write(() => _api.put('/animals/$animalId', body: body));

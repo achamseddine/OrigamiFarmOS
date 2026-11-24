@@ -83,6 +83,29 @@ def _base(db: Session, farm_id: str, kind: str, start: date, end: date) -> dict:
 
 
 # ------------------------------------------------------------------ milk
+# The day-by-day sheet of every cow (v0.8.2) is given for a period up to
+# this long; a longer report keeps the per-cow totals only.
+COW_SHEET_MAX_DAYS = 31
+
+
+def queue_key(animal: models.Animal) -> tuple:
+    """The order a milking is walked: the cows' numbers in the queue first,
+    then the rest by tag in natural order (cow 9 before cow 10) — the same
+    order the tablet's queue uses (quick_round.dart queueOrder)."""
+    import re
+
+    number = animal.milking_queue_number
+    tag = (animal.tag or "").strip().upper()
+    m = re.match(r"^([^0-9]*)([0-9]+)(.*)$", tag)
+    if not tag:
+        tag_key = ("\U0010ffff", 1, 0, "")
+    elif m is None:
+        tag_key = (tag, 1, 0, "")
+    else:
+        tag_key = (re.sub(r"[^A-Z]", "", m.group(1)), 0, int(m.group(2)), m.group(3))
+    return (number is None, number or 0, *tag_key, (animal.name or "").lower())
+
+
 def milk_report(db: Session, farm_id: str, start: date | None, end: date | None, *, with_sales: bool = True) -> dict:
     start, end, lo, hi, tz = period(db, farm_id, start, end)
     out = _base(db, farm_id, "milk", start, end)
@@ -104,20 +127,37 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
         if rec.destination == "withheld":
             d["withheld"] += rec.liters
         by_dest[rec.destination] += rec.liters
-        a = animals.setdefault(animal.id, {"animal_id": animal.id, "tag": animal.tag, "name": animal.name, "species": animal.species,
-                                           "milkings": 0, "total_l": 0.0, "days": set(), "best_day_l": 0.0, "_by_day": defaultdict(float)})
+        a = animals.setdefault(animal.id, {"animal": animal, "milkings": 0, "total_l": 0.0, "days": set(),
+                                           "_by_day": defaultdict(float), "_sessions": defaultdict(float),
+                                           "_sheet": defaultdict(lambda: defaultdict(float))})
         a["milkings"] += 1
         a["total_l"] += rec.liters
         a["days"].add(d["date"])
         a["_by_day"][d["date"]] += rec.liters
+        a["_sessions"][rec.session] += rec.liters
+        a["_sheet"][d["date"]][rec.session] += rec.liters
     total = sum(d["total"] for d in days.values())
     animal_rows = []
-    for a in animals.values():
-        animal_rows.append({"animal_id": a["animal_id"], "tag": a["tag"], "name": a["name"], "species": a["species"], "milkings": a["milkings"],
+    sheet = []
+    for a in sorted(animals.values(), key=lambda a: queue_key(a["animal"])):
+        animal = a["animal"]
+        who = {"animal_id": animal.id, "tag": animal.tag, "name": animal.name, "species": animal.species,
+               "queue_number": animal.milking_queue_number}
+        # Each cow's milk by milking (v0.8.2): her mornings and her
+        # afternoons (or evenings) over the period.
+        animal_rows.append({**who, "milkings": a["milkings"],
+                            "morning_l": _r(a["_sessions"].get("morning", 0), 1), "midday_l": _r(a["_sessions"].get("midday", 0), 1),
+                            "evening_l": _r(a["_sessions"].get("evening", 0), 1),
                             "total_l": _r(a["total_l"], 1), "days_milked": len(a["days"]),
                             "avg_per_day_l": _r(a["total_l"] / len(a["days"]), 1) if a["days"] else 0.0,
                             "best_day_l": _r(max(a["_by_day"].values()) if a["_by_day"] else 0, 1)})
+        for day, by_session in a["_sheet"].items():
+            sheet.append({"date": day, **who, "morning_l": _r(by_session.get("morning", 0), 1), "midday_l": _r(by_session.get("midday", 0), 1),
+                          "evening_l": _r(by_session.get("evening", 0), 1), "total_l": _r(sum(by_session.values()), 1)})
+    # The ranking: most milk first (the queue order breaks a tie).
     animal_rows.sort(key=lambda r: -r["total_l"])
+    # The sheet: the latest day first, each day's cows in queue order.
+    sheet.sort(key=lambda r: r["date"], reverse=True)
 
     sales = db.scalars(select(mm.MilkSale).where(mm.MilkSale.farm_id == farm_id, mm.MilkSale.status == "recorded",
                                                   mm.MilkSale.sold_at >= lo, mm.MilkSale.sold_at < hi).order_by(mm.MilkSale.sold_at)).all()
@@ -150,6 +190,9 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
         "destinations": [{"destination": k, "liters": _r(v, 1)} for k, v in sorted(by_dest.items(), key=lambda kv: -kv[1])],
         "by_day": [{k: (_r(v, 1) if isinstance(v, float) else v) for k, v in d.items()} for d in days.values()],
         "by_animal": animal_rows,
+        # Every cow, every day: her morning and afternoon litres. Only for a
+        # period up to COW_SHEET_MAX_DAYS; null for a longer one.
+        "by_animal_day": sheet if out["days"] <= COW_SHEET_MAX_DAYS else None,
     })
     if with_sales:
         buyers: dict[str, dict] = {}

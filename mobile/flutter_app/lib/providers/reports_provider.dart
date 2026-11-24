@@ -17,6 +17,12 @@ class ReportPeriod {
     return ReportPeriod(t.subtract(Duration(days: days - 1)), t);
   }
 
+  /// The day before [today].
+  factory ReportPeriod.yesterday({DateTime? today}) {
+    final y = _day(today ?? DateTime.now()).subtract(const Duration(days: 1));
+    return ReportPeriod(y, y);
+  }
+
   factory ReportPeriod.thisMonth({DateTime? today}) {
     final t = _day(today ?? DateTime.now());
     return ReportPeriod(DateTime(t.year, t.month), t);

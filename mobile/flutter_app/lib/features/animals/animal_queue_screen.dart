@@ -16,6 +16,7 @@ import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import 'animal_quick_entry_screen.dart';
 import 'animal_scan.dart' show milkSessionForHour;
+import 'milking_queue_dialog.dart';
 import 'quick_round.dart';
 import '../production/milk_sessions.dart';
 
@@ -77,6 +78,7 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
       fedToday: feeding.fedToday,
     );
     final next = nextInQueue(status);
+    final numbered = _round.kind == RoundKind.milking && status.entries.any((e) => e.animal.milkingQueueNumber != null);
     final rounds = <(QuickRound, String)>[
       if (canMilk) (const QuickRound.milking('morning'), 'routineMilkMorning'),
       if (canMilk) (const QuickRound.milking('evening'), 'routineMilkEvening'),
@@ -151,6 +153,19 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
                     }),
                   ]),
                 ),
+                // The cows' numbers in the line (v0.8.2): set by the manager.
+                if (_round.kind == RoundKind.milking && access.canSetMilkingQueue) ...[
+                  const SizedBox(height: FarmSpacing.sm),
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('queue-set-numbers'),
+                      onPressed: () => showMilkingQueueDialog(context),
+                      icon: const Icon(Icons.pin_outlined, size: 18),
+                      label: Text(context.t('mqSetNumbers')),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: FarmSpacing.md),
                 if (status.total == 0)
                   SectionCard(
@@ -162,10 +177,13 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
                 else
                   SectionCard(
                     title: context.t('queueInOrder'),
+                    subtitle: numbered ? context.t('queueByNumber') : null,
                     child: Column(children: [
                       for (var i = 0; i < status.entries.length; i++)
                         _QueueRow(
-                          number: i + 1,
+                          // Her number in the line when the cows are numbered;
+                          // else her place in the list.
+                          number: numbered ? status.entries[i].animal.milkingQueueNumber : i + 1,
                           entry: status.entries[i],
                           next: status.entries[i].animal.id == next?.id,
                           onTap: () => _open(animalId: status.entries[i].animal.id),
@@ -183,7 +201,7 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
 
 class _QueueRow extends StatelessWidget {
   const _QueueRow({required this.number, required this.entry, required this.next, required this.onTap});
-  final int number;
+  final int? number;
   final RoundEntry entry;
   final bool next;
   final VoidCallback onTap;
@@ -202,7 +220,7 @@ class _QueueRow extends StatelessWidget {
         child: Row(children: [
           SizedBox(
             width: 32,
-            child: Text('$number', style: FarmTypography.textTheme.labelMedium?.copyWith(color: FarmColors.muted)),
+            child: Text(number == null ? '–' : '$number', style: FarmTypography.textTheme.labelMedium?.copyWith(color: FarmColors.muted)),
           ),
           Expanded(
             child: Text(
