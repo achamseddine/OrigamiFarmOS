@@ -593,10 +593,33 @@ class Sale(Base):
     product_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
     unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # In the farm's currency (USD). A sale made in LBP keeps what was
+    # agreed in `original_amount` / `original_currency` and the rate used.
     amount: Mapped[float] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(String(10), default="USD")
+    # paid | pending | partial
     payment_status: Mapped[str] = mapped_column(String(20))
     sold_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # v0.8.0 — any sale recorded in Sales & Finance (finance_service.py).
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    buyer_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # recorded | cancelled | reversal — a cancelled sale stays on file and is
+    # undone by a second, negative row (`reversal_of_id`); nothing is edited.
+    status: Mapped[str] = mapped_column(String(20), default="recorded", server_default="recorded")
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reversal_of_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    original_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    original_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # dairy | poultry | livestock | crops | mouneh | visits | other —
+    # null: worked out from product_type.
+    activity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Expense(Base):
@@ -606,11 +629,31 @@ class Expense(Base):
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
     supplier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("suppliers.id"), nullable=True)
     category: Mapped[str] = mapped_column(String(30))
+    # In the farm's currency (USD); an LBP bill keeps its own amount and rate.
     amount: Mapped[float] = mapped_column(Float)
     currency: Mapped[str] = mapped_column(String(10), default="USD")
     linked_entity_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
     linked_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     incurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # v0.8.0 — expenses and bills recorded in Sales & Finance.
+    description: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    supplier_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # paid | pending (a bill still to pay)
+    payment_status: Mapped[str] = mapped_column(String(20), default="paid", server_default="paid")
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # recorded | cancelled — a cancelled expense stays on file, out of the totals.
+    status: Mapped[str] = mapped_column(String(20), default="recorded", server_default="recorded")
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    original_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    original_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    activity: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class SyncQueueItem(Base):

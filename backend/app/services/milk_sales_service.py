@@ -135,7 +135,10 @@ def sell(db: Session, user: models.User, *, liters: float, price_per_liter: floa
     currency = farm.default_currency if farm else "USD"
     amount = round(liters * price_per_liter, 2)
     revenue = models.Sale(id=new_id(), farm_id=farm_id, customer_id=cust_id, product_type="milk", product_label=PRODUCT_LABEL,
-                          quantity=liters, unit="L", amount=amount, currency=currency, payment_status=payment_status, sold_at=at)
+                          quantity=liters, unit="L", amount=amount, currency=currency, payment_status=payment_status, sold_at=at,
+                          unit_price=price_per_liter, buyer_name=name, reference=(reference or "").strip() or None,
+                          paid_at=at if payment_status == "paid" else None, status="recorded", activity="dairy",
+                          recorded_by=user.id, created_at=now())
     db.add(revenue)
     sale = mm.MilkSale(
         id=new_id(), farm_id=farm_id, sold_at=at, liters=liters, price_per_liter=price_per_liter, amount=amount, currency=currency,
@@ -165,7 +168,7 @@ def mark_paid(db: Session, sale: mm.MilkSale, user: models.User) -> mm.MilkSale:
     sale.payment_status, sale.paid_at = "paid", now()
     revenue = db.get(models.Sale, sale.sale_id) if sale.sale_id else None
     if revenue is not None:
-        revenue.payment_status = "paid"
+        revenue.payment_status, revenue.paid_at = "paid", sale.paid_at
     write_audit_log(db, farm_id=sale.farm_id, user_id=user.id, action="milk_sale_paid", entity_type="milk_sale", entity_id=sale.id,
                     module_code=perms.MILK_PRODUCTION, summary=f"Milk sale of {sale.liters:g} L marked paid"[:500],
                     changes={"payment_status": {"from": "pending", "to": "paid"}})
@@ -184,8 +187,13 @@ def cancel(db: Session, sale: mm.MilkSale, user: models.User, *, reason: str) ->
         raise MilkSaleError("Say why the sale is cancelled.")
     reversal = models.Sale(id=new_id(), farm_id=sale.farm_id, customer_id=sale.customer_id, product_type="milk",
                            product_label=f"{PRODUCT_LABEL} (cancelled sale)", quantity=-sale.liters, unit="L", amount=-sale.amount,
-                           currency=sale.currency, payment_status=sale.payment_status, sold_at=now())
+                           currency=sale.currency, payment_status=sale.payment_status, sold_at=now(), status="reversal",
+                           reversal_of_id=sale.sale_id, buyer_name=sale.buyer_name, activity="dairy",
+                           paid_at=now() if sale.payment_status == "paid" else None, recorded_by=user.id, created_at=now())
     db.add(reversal)
+    original = db.get(models.Sale, sale.sale_id) if sale.sale_id else None
+    if original is not None:
+        original.status, original.cancel_reason, original.cancelled_at = "cancelled", reason.strip(), now()
     sale.status, sale.cancel_reason, sale.cancelled_at, sale.reversal_sale_id = "cancelled", reason.strip(), now(), reversal.id
     db.flush()
     write_audit_log(db, farm_id=sale.farm_id, user_id=user.id, action="milk_sale_cancelled", entity_type="milk_sale", entity_id=sale.id,

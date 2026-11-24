@@ -23,6 +23,7 @@ from app.api.v1 import (
     feed_performance,
     pharmacy,
     feeding,
+    finance,
     health,
     health_cases,
     livestock,
@@ -57,6 +58,7 @@ from app.domain import health_models  # noqa: F401 - health cases, diagnoses, tr
 from app.domain import procurement_models  # noqa: F401 - purchase requisitions and approvals
 from app.domain import approval_models  # noqa: F401 - employee mixes and corrections waiting for the manager
 from app.domain import milk_models  # noqa: F401 - milk sales and the milk tank
+from app.domain import finance_models  # noqa: F401 - exchange rates (USD / LBP)
 from app.domain import mouneh_models  # noqa: F401 - ensures Mouneh tables are registered on Base.metadata
 from app.domain import visits_models  # noqa: F401 - ensures Visits tables are registered on Base.metadata
 from app.domain import livestock_models  # noqa: F401 - species / capability / identifier tables
@@ -136,6 +138,7 @@ app.include_router(agriculture.router, prefix=api_prefix)
 app.include_router(farms.router, prefix=api_prefix)
 app.include_router(sync.router, prefix=api_prefix)
 app.include_router(sales.router, prefix=api_prefix)
+app.include_router(finance.router, prefix=api_prefix)
 app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
 app.include_router(reproduction.router, prefix=api_prefix)

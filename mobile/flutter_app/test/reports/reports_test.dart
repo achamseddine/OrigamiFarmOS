@@ -33,9 +33,16 @@ void main() {
   }
 
   group('the Reports page', () {
-    testWidgets('the manager reads every report; milk first with its money', (tester) async {
+    testWidgets('the manager reads every report; sales first', (tester) async {
       await open(tester, const ReportsScreen());
-      for (final tab in ['Milk', 'Feed', 'Herd', 'Finance']) {
+      expect(find.text('Sales report'), findsOneWidget, reason: 'what was sold comes first');
+      expect(find.text('What was sold'), findsOneWidget);
+      expect(find.text('Still to be paid'), findsOneWidget);
+    });
+
+    testWidgets('the milk report with its money', (tester) async {
+      await open(tester, const ReportsScreen(initialKind: 'milk'));
+      for (final tab in ['Sales', 'Stock', 'Milk', 'Feed', 'Herd', 'Finance']) {
         expect(find.text(tab), findsWidgets, reason: tab);
       }
       expect(find.text('Milk report'), findsOneWidget);
@@ -55,13 +62,20 @@ void main() {
       await open(tester, const ReportsScreen());
       await tester.tap(find.byKey(const ValueKey('underline-tab-1')));
       await settle(tester);
+      expect(find.text('Stock report'), findsOneWidget);
+      for (final section in ['Feed', 'Medicine', 'Mouneh products', 'Milk']) {
+        expect(find.text(section), findsWidgets, reason: section);
+      }
+      expect(find.text('Stock value (at cost)'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('underline-tab-3')));
+      await settle(tester);
       expect(find.text('Feed report'), findsOneWidget);
       expect(find.text('In stock now'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('underline-tab-2')));
+      await tester.tap(find.byKey(const ValueKey('underline-tab-4')));
       await settle(tester);
       expect(find.text('Herd report'), findsOneWidget);
       expect(find.text('By species'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('underline-tab-3')));
+      await tester.tap(find.byKey(const ValueKey('underline-tab-5')));
       await settle(tester);
       expect(find.text('Finance report'), findsOneWidget);
       expect(find.text('Revenue by product'), findsOneWidget);
@@ -69,7 +83,7 @@ void main() {
 
     testWidgets('a period is chosen and that period is asked for', (tester) async {
       final today = DateTime(2026, 11, 23);
-      await open(tester, ReportsScreen(today: today));
+      await open(tester, ReportsScreen(today: today, initialKind: 'milk'));
       final reports = tester.element(find.byType(ReportsScreen)).read<ReportsProvider>();
       expect(reports.report('milk', ReportPeriod.lastDays(30, today: today)), isNotNull);
       await tester.tap(find.byKey(const ValueKey('report-period-last7')));
@@ -114,10 +128,10 @@ void main() {
             Expanded(child: IndexedStack(index: shown, children: const [SizedBox(), ReportsScreen()])),
           ])));
       final reports = tester.element(find.text('show reports')).read<ReportsProvider>();
-      expect(reports.report('milk', ReportPeriod.lastDays(30)), isNull, reason: 'not fetched at sign-in');
+      expect(reports.report('sales', ReportPeriod.lastDays(30)), isNull, reason: 'not fetched at sign-in');
       await tester.tap(find.text('show reports'));
       await settle(tester);
-      expect(reports.report('milk', ReportPeriod.lastDays(30)), isNotNull);
+      expect(reports.report('sales', ReportPeriod.lastDays(30)), isNotNull);
     });
 
     testWidgets('an employee reads only the areas they work in, without money', (tester) async {
@@ -132,10 +146,12 @@ void main() {
       milkOnly['kpis'] = kpis;
       milkOnly.remove('sales');
       milkOnly.remove('by_buyer');
-      await open(tester, const ReportsScreen(),
+      await open(tester, const ReportsScreen(initialKind: 'milk'),
           me: access({'milk_production': {'view': true, 'create': true}}), extra: {'GET /reports/milk': milkOnly});
       expect(find.text('Milk report'), findsOneWidget);
-      expect(find.byKey(const ValueKey('underline-tab-1')), findsNothing, reason: 'one report only');
+      // The milk in the tank (Stock) and the milk report — no sales, no money.
+      expect(find.byKey(const ValueKey('underline-tab-2')), findsNothing, reason: 'two reports only');
+      expect(find.text('Sales'), findsNothing);
       expect(find.text('Revenue'), findsNothing);
       expect(find.text('Milk sales'), findsNothing);
     });
@@ -151,7 +167,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       farm.api.snapshot['GET /reports/milk'] = 'not a report';
-      await tester.pumpWidget(farm.app(const Scaffold(body: ReportsScreen())));
+      await tester.pumpWidget(farm.app(const Scaffold(body: ReportsScreen(initialKind: 'milk'))));
       await settle(tester);
       expect(find.text('The report could not be loaded'), findsOneWidget);
       expect(find.byKey(const ValueKey('report-retry-milk')), findsOneWidget);
@@ -159,6 +175,10 @@ void main() {
 
     testWidgets('in Arabic', (tester) async {
       await open(tester, const ReportsScreen(), locale: const Locale('ar'));
+      expect(find.text('تقرير المبيعات'), findsOneWidget);
+      expect(find.text('شو انباع'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('underline-tab-2')));
+      await settle(tester);
       expect(find.text('تقرير الحليب'), findsOneWidget);
       expect(find.text('الحليب المنتج'), findsOneWidget);
     });

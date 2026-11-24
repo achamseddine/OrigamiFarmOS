@@ -10,6 +10,7 @@ import '../../providers/notifications_provider.dart';
 import '../theme/colors.dart';
 import '../theme/spacing.dart';
 import 'brand_logo.dart';
+import '../../app/update/app_update_provider.dart';
 
 /// Sync state, the notification bell, and the signed-in user's menu.
 ///
@@ -29,7 +30,8 @@ class TopBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionController>();
-    final unread = context.watch<NotificationsProvider>().unreadCount;
+    // A newer version of the app counts as one more thing to read.
+    final unread = context.watch<NotificationsProvider>().unreadCount + (context.watch<AppUpdateProvider>().showNotice ? 1 : 0);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(FarmSpacing.lg, 6, FarmSpacing.lg, 2),

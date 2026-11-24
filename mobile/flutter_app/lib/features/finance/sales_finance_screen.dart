@@ -6,26 +6,149 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/charts/line_trend_chart.dart';
+import '../../core/theme/farm_icon_map.dart';
 import '../../core/widgets/hero_band.dart';
 import '../../core/widgets/kpi_card.dart';
+import '../../core/widgets/module_workspace.dart';
 import '../../core/widgets/section_card.dart';
 import '../../providers/access_provider.dart';
+import '../../providers/finance_provider.dart';
 import '../../providers/sales_provider.dart';
 import '../production/milk_sales_ui.dart';
+import 'finance_forms.dart';
+import 'finance_tabs.dart';
 import '../reports/report_docs.dart' show codeLabel;
 import '../reports/reports_screen.dart' show openReport;
 
-/// Sales & Finance (manager-only) is always-online now: [SalesProvider] is
-/// already loaded once at app startup (see app/app.dart's `_DataLoader`),
-/// backed by the real `/reports/daily-summary` + `/sales` + `/expenses`
-/// endpoints instead of the old fabricated `DemoData` dataset.
-///
-/// Milk is sold from here as from the Milk page (v0.7.9): a milk sale
-/// takes the milk out of the tank and writes the farm's revenue on the
-/// server, and the figures below reload. The full picture for any period
-/// is the Finance report.
-class SalesFinanceScreen extends StatelessWidget {
-  const SalesFinanceScreen({super.key});
+/// Sales & Finance. Today's figures come from [SalesProvider]
+/// (`/reports/daily-summary`, loaded at sign-in); the sales, expenses,
+/// what is owed and profit and loss from [FinanceProvider] (`/finance/*`).
+/// Milk is sold from here as from the Milk page (v0.7.9). The full picture
+/// for any period is the Finance report.
+enum FinanceTab { today, sales, expenses, owed, profitLoss }
+
+/// Sales & Finance (v0.8.0): today's figures, every sale, expenses and
+/// bills, who owes what, and profit and loss — one page with its tabs, on
+/// the tablet and the web. The band records a sale, an expense or bill,
+/// sells milk, and sets the USD / LBP rate.
+class SalesFinanceScreen extends StatefulWidget {
+  const SalesFinanceScreen({super.key, this.initialTab = FinanceTab.today});
+
+  final FinanceTab initialTab;
+
+  @override
+  State<SalesFinanceScreen> createState() => _SalesFinanceScreenState();
+}
+
+class _SalesFinanceScreenState extends State<SalesFinanceScreen> {
+  late FinanceTab _tab = widget.initialTab;
+
+  static const _labels = {
+    FinanceTab.today: 'finTabToday',
+    FinanceTab.sales: 'finTabSales',
+    FinanceTab.expenses: 'finTabExpenses',
+    FinanceTab.owed: 'finTabOwed',
+    FinanceTab.profitLoss: 'finTabProfitLoss',
+  };
+
+  bool _asked = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final access = context.watch<AccessProvider>();
+    final finance = context.watch<FinanceProvider>();
+    final rates = finance.rates;
+    // The books load the first time the page is drawn for someone who may
+    // see money (once their permissions are known); later changes reload them.
+    if (!_asked && !finance.loaded && (access.canSeeSales || access.canSeeExpenses || access.canSeeProfitLoss)) {
+      _asked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<FinanceProvider>().load(sales: access.canSeeSales, expenses: access.canSeeExpenses, profitLoss: access.canSeeProfitLoss);
+        }
+      });
+    }
+    final tabs = [
+      FinanceTab.today,
+      if (access.canSeeSales) FinanceTab.sales,
+      if (access.canSeeExpenses) FinanceTab.expenses,
+      if (access.canSeeSales || access.canSeeExpenses) FinanceTab.owed,
+      if (access.canSeeProfitLoss) FinanceTab.profitLoss,
+    ];
+    final tab = tabs.contains(_tab) ? _tab : tabs.first;
+    final canReport = access.canReadReport('finance');
+    return ModuleWorkspace(
+      header: [
+        // The "compare with yesterday" button that used to sit here did
+        // nothing when tapped; the seven-day profit chart is the
+        // comparison, so the dead control is gone rather than moved.
+        HeroBand(
+          eyebrow: context.t('ebFinance'),
+          title: context.t('finTitle'),
+          subtitle: context.t('finSubtitle'),
+          icon: FarmIcon.coins,
+          scenery: false,
+          trailing: rates.lbpPerUsd == null
+              ? null
+              : ActionChip(
+                  key: const ValueKey('finance-rate-chip'),
+                  avatar: const Icon(Icons.currency_exchange, size: 18),
+                  label: Text('1 USD = ${grouped(rates.lbpPerUsd!)} LBP'),
+                  onPressed: () => showExchangeRateDialog(context),
+                ),
+          actions: [
+            if (access.canRecordSale)
+              HeroAction(
+                key: const ValueKey('finance-hero-sale'),
+                primary: true,
+                icon: FarmIconMap.add,
+                label: context.t('finRecordSale'),
+                onPressed: () => showRecordSaleDialog(context),
+              ),
+            if (access.canRecordExpense)
+              HeroAction(
+                key: const ValueKey('finance-hero-expense'),
+                icon: FarmIcon.report,
+                label: context.t('finRecordExpense'),
+                onPressed: () => showRecordExpenseDialog(context),
+              ),
+            if (access.canSellMilk)
+              HeroAction(
+                key: const ValueKey('finance-sell-milk'),
+                icon: FarmIcon.milkBottle,
+                label: context.t('msSellMilk'),
+                onPressed: () => showSellMilkDialog(context),
+              ),
+            if (access.canSetExchangeRate || (rates.lbpPerUsd == null && access.canSeeMoney))
+              HeroAction(
+                key: const ValueKey('finance-hero-rate'),
+                icon: FarmIcon.money,
+                label: context.t('finExchangeRate'),
+                onPressed: () => showExchangeRateDialog(context),
+              ),
+            if (canReport)
+              HeroAction(key: const ValueKey('finance-report'), icon: FarmIcon.report, label: context.t('rpFinanceReport'), onPressed: () => openReport(context, 'finance')),
+          ],
+        ),
+      ],
+      labels: [for (final t in tabs) context.t(_labels[t]!)],
+      selected: tabs.indexOf(tab),
+      onSelect: (i) => setState(() => _tab = tabs[i]),
+      tabBuilder: (context, i) => switch (tabs[i]) {
+        FinanceTab.today => const FinanceTodayTab(),
+        FinanceTab.sales => const FinanceSalesTab(),
+        FinanceTab.expenses => const FinanceExpensesTab(),
+        FinanceTab.owed => const FinanceOwedTab(),
+        FinanceTab.profitLoss => const FinanceProfitLossTab(),
+      },
+    );
+  }
+}
+
+/// Today: the day's revenue, expenses and margin, what sold and what was
+/// spent, the week's profit, the milk tank and its sales.
+class FinanceTodayTab extends StatelessWidget {
+  const FinanceTodayTab({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -48,33 +171,9 @@ class SalesFinanceScreen extends StatelessWidget {
 
     String pctOfRevenue(double amount, {int decimals = 0}) => revenue == 0 ? '—' : '${(amount / revenue * 100).toStringAsFixed(decimals)}%';
 
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // The "compare with yesterday" button that used to sit here did
-          // nothing when tapped; the seven-day profit chart below is the
-          // comparison, so the dead control is gone rather than moved.
-          HeroBand(
-            eyebrow: context.t('ebFinance'),
-            title: context.t('dailySummaryTitle'),
-            subtitle: context.t('salesSubtitle'),
-            icon: FarmIcon.coins,
-            scenery: false,
-            actions: [
-              if (access.canSellMilk)
-                HeroAction(
-                  key: const ValueKey('finance-sell-milk'),
-                  primary: true,
-                  icon: FarmIcon.milkBottle,
-                  label: context.t('msSellMilk'),
-                  onPressed: () => showSellMilkDialog(context),
-                ),
-              if (canReport)
-                HeroAction(key: const ValueKey('finance-report'), icon: FarmIcon.report, label: context.t('rpFinanceReport'), onPressed: report),
-            ],
-          ),
-          const SizedBox(height: FarmSpacing.md),
           LayoutBuilder(builder: (context, c) {
             final perRow = c.maxWidth > 1100 ? 5 : (c.maxWidth > 700 ? 3 : 2);
             final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
@@ -203,8 +302,7 @@ class SalesFinanceScreen extends StatelessWidget {
             return Row(children: [Expanded(child: topProductsCard), const SizedBox(width: FarmSpacing.md), Expanded(child: insightsCard)]);
           }),
         ],
-      ),
-    );
+      );
   }
 
   /// The farm server names a milk sale "Raw milk"; other names were typed.

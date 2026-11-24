@@ -94,6 +94,27 @@ class AccessProvider extends ChangeNotifier {
   /// Counts the tank and records milk spoiled or used outside a sale.
   bool get canAdjustMilkTank => can(FarmModule.milkProduction, PermissionAction.approve);
 
+  // Origami's financials (v0.8.0, backend finance.py).
+
+  /// Records a sale of any product and marks a sale paid.
+  bool get canRecordSale => canCreate(FarmModule.sales) || canCreate(FarmModule.finance);
+
+  /// Cancels a sale recorded by mistake.
+  bool get canCancelSale => can(FarmModule.sales, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve);
+
+  /// Records an expense or a bill and marks a bill paid.
+  bool get canRecordExpense => canCreate(FarmModule.expenses) || canCreate(FarmModule.finance);
+
+  /// Cancels an expense recorded by mistake.
+  bool get canCancelExpense => can(FarmModule.expenses, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve);
+
+  /// Sets the USD / LBP exchange rate.
+  bool get canSetExchangeRate => can(FarmModule.finance, PermissionAction.approve) || can(FarmModule.settings, PermissionAction.configure);
+
+  bool get canSeeSales => [FarmModule.sales, FarmModule.finance].any((m) => can(m, PermissionAction.view));
+  bool get canSeeExpenses => [FarmModule.expenses, FarmModule.finance].any((m) => can(m, PermissionAction.view));
+  bool get canSeeProfitLoss => [FarmModule.finance, FarmModule.reports].any((m) => can(m, PermissionAction.view));
+
   /// Sees money: milk sales and revenue in the reports.
   bool get canSeeMoney => [FarmModule.reports, FarmModule.finance, FarmModule.sales].any((m) => can(m, PermissionAction.view));
 
@@ -105,6 +126,8 @@ class AccessProvider extends ChangeNotifier {
       'feed' => [FarmModule.feedNutrition, FarmModule.inventory],
       'herd' => [FarmModule.animals, FarmModule.animalHealth],
       'finance' => [FarmModule.finance, FarmModule.sales],
+      'sales' => [FarmModule.sales, FarmModule.finance],
+      'stock' => [FarmModule.inventory, FarmModule.feedNutrition, FarmModule.mounehInventory, FarmModule.animalHealth, FarmModule.milkProduction],
       _ => const <String>[],
     };
     return [FarmModule.reports, ...modules].any((m) => can(m, PermissionAction.view));

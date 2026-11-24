@@ -31,6 +31,16 @@ class SaleOut(ORMModel):
     currency: str
     payment_status: str
     sold_at: datetime
+    # v0.8.0
+    status: str = "recorded"
+    unit_price: float | None = None
+    buyer_name: str | None = None
+    reference: str | None = None
+    paid_at: datetime | None = None
+    original_amount: float | None = None
+    original_currency: str | None = None
+    exchange_rate: float | None = None
+    activity: str | None = None
 
 
 class ExpenseOut(ORMModel):
@@ -43,3 +53,15 @@ class ExpenseOut(ORMModel):
     linked_entity_type: str | None = None
     linked_entity_id: str | None = None
     incurred_at: datetime
+    # v0.8.0
+    description: str | None = None
+    supplier_label: str | None = None
+    payment_status: str = "paid"
+    due_date: datetime | None = None
+    paid_at: datetime | None = None
+    status: str = "recorded"
+    reference: str | None = None
+    original_amount: float | None = None
+    original_currency: str | None = None
+    exchange_rate: float | None = None
+    activity: str | None = None

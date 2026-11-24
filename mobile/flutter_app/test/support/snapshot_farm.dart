@@ -13,6 +13,8 @@ import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
 import 'package:farmos/providers/approvals_provider.dart';
+import 'package:farmos/app/update/app_update_provider.dart';
+import 'package:farmos/providers/finance_provider.dart';
 import 'package:farmos/providers/milk_sales_provider.dart';
 import 'package:farmos/providers/reports_provider.dart';
 import 'package:farmos/providers/animals_provider.dart';
@@ -88,6 +90,9 @@ class SnapshotFarm {
   }
   final SnapshotApi api;
   final SessionController session;
+
+  /// The app-update check, answering from nowhere until a test sets [AppUpdateProvider.latest].
+  final AppUpdateProvider updates = AppUpdateProvider(currentBuild: '0.7.84', web: false);
   final navigatorKey = GlobalKey<NavigatorState>();
 
   static Future<SnapshotFarm> open() async {
@@ -121,6 +126,9 @@ class SnapshotFarm {
         ChangeNotifierProvider(lazy: false, create: (_) => FeedingProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => MilkSalesProvider(apiClient: api)..load()),
+        ChangeNotifierProvider(lazy: false, create: (_) => FinanceProvider(apiClient: api)),
+        // Never asks the network in a test; a test that needs an update injects one.
+        ChangeNotifierProvider<AppUpdateProvider>.value(value: updates),
         ChangeNotifierProvider(lazy: false, create: (_) => ReportsProvider(apiClient: api)),
         ChangeNotifierProvider(lazy: false, create: (_) => PharmacyProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => EmergencyProvider(apiClient: api)..load()),

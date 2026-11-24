@@ -12,6 +12,7 @@ import '../../providers/notifications_provider.dart';
 import '../navigation/entity_router.dart';
 import '../priorities/priorities_screen.dart';
 import '../../core/widgets/directional_icon.dart';
+import '../../app/update/update_ui.dart';
 
 /// The notification panel behind the bell (tech spec §3).
 ///
@@ -104,6 +105,8 @@ class _NotificationPanelState extends State<_NotificationPanel> {
                       ),
                   ]),
                 ),
+                // A newer version of the app, first.
+                const AppUpdateNotice(),
                 const SizedBox(height: 4),
                 SizedBox(
                   height: 40,

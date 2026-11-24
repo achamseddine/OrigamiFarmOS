@@ -223,6 +223,163 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
           ),
         ],
       );
+    case 'sales':
+      String qtyUnit(Object? q, Object? unit) {
+        if (q == null) return '—';
+        final u = '${unit ?? ''}';
+        final key = 'finUnit_$u';
+        final label = t(key);
+        return '${n(q, digits: 2)} ${label == key ? u : label}'.trim();
+      }
+      String amountWithOriginal(Map<String, dynamic> x) {
+        final o = x['original_amount'];
+        final c = x['original_currency'];
+        return o != null && c != null && c != 'USD' ? '${m(x['amount'])} (${n(o, digits: 0)} $c)' : m(x['amount']);
+      }
+      String state(Map<String, dynamic> x) => switch ('${x['status']}') {
+            'cancelled' => t('msCancelled'),
+            'reversal' => t('finReversal'),
+            _ => t(x['payment_status'] == 'paid' ? 'msPaid' : 'msToBePaid'),
+          };
+      return ReportDoc(
+        title: t('rpSalesReport'),
+        period: period,
+        fileStem: stem,
+        kpis: [
+          (t('rpSales'), n(kpis['sales'])),
+          (t('rpRevenue'), m(kpis['revenue'])),
+          (t('rpPaidAmount'), m(kpis['paid'])),
+          (t('msUnpaid'), m(kpis['unpaid'])),
+          (t('rpAvgSale'), m(kpis['average_sale'])),
+          (t('rpBuyers'), n(kpis['buyers'])),
+          (t('rpCancelledSales'), n(kpis['cancelled'])),
+        ],
+        tables: [
+          ReportTable(
+            title: t('rpWhatWasSold'),
+            columns: [t('rpProduct'), t('quantity'), t('rpAvgPrice'), t('rpAmount'), t('rpSales')],
+            numeric: {1, 2, 3, 4},
+            flex: const [3, 2, 1, 1, 1],
+            rows: [
+              for (final p in rows('by_product'))
+                [product(p['product']), qtyUnit(p['quantity'], p['unit']), p['average_price'] == null ? '—' : m(p['average_price']), m(p['amount']), n(p['sales'])],
+            ],
+          ),
+          ReportTable(
+            title: t('finByActivity'),
+            columns: [t('finActivity'), t('rpAmount')],
+            numeric: {1},
+            rows: [for (final a in rows('by_activity')) [code('finActivity_', a['activity']), m(a['amount'])]],
+          ),
+          ReportTable(
+            title: t('rpByBuyer'),
+            columns: [t('msBuyer'), t('rpSales'), t('rpAmount'), t('msUnpaid')],
+            numeric: {1, 2, 3},
+            flex: const [3, 1, 1, 1],
+            rows: [for (final b in rows('by_buyer')) ['${b['buyer'] ?? t('finNoName')}', n(b['sales']), m(b['amount']), m(b['unpaid'])]],
+          ),
+          ReportTable(
+            title: t('rpStillOwed'),
+            columns: [t('rpDate'), t('rpProduct'), t('msBuyer'), t('rpAmount'), t('rpDaysWaiting')],
+            numeric: {3, 4},
+            flex: const [2, 3, 3, 1, 1],
+            rows: [for (final u in rows('unpaid')) [date(u['date']), product(u['product']), '${u['buyer'] ?? '—'}', m(u['amount']), n(u['days'])]],
+          ),
+          ReportTable(
+            title: t('rpEverySale'),
+            columns: [t('rpDate'), t('rpProduct'), t('quantity'), t('rpAmount'), t('msBuyer'), t('msPayment')],
+            numeric: {2, 3},
+            flex: const [2, 3, 2, 2, 2, 2],
+            rows: [
+              for (final x in rows('sales').reversed)
+                [date(x['date']), product(x['product']), qtyUnit(x['quantity'], x['unit']), amountWithOriginal(x), '${x['buyer'] ?? '—'}', state(x)],
+            ],
+          ),
+        ],
+      );
+    case 'stock':
+      final sections = {for (final x in (data['sections'] as List<dynamic>? ?? const [])) '$x'};
+      final values = kpis['value'] != null;
+      String low(Object? flag) => flag == true ? t('rpLow') : '';
+      final milk = (data['milk'] as Map?)?.cast<String, dynamic>();
+      return ReportDoc(
+        title: t('rpStockReport'),
+        period: '${t('rpAsOf')}: ${date(data['as_of'])}',
+        fileStem: 'origami-stock-${data['as_of'] ?? ''}',
+        kpis: [
+          (t('rpStockLines'), n(kpis['lines'])),
+          (t('rpLowStock'), n(kpis['low'])),
+          (t('rpExpiringSoon'), n(kpis['expiring'])),
+          if (sections.contains('milk')) (t('msInTank'), '${n(kpis['milk_in_tank_l'])} L'),
+          if (values) (t('rpStockValue'), m(kpis['value'])),
+        ],
+        tables: [
+          if (sections.contains('feed'))
+            ReportTable(
+              title: t('rpFeedStock'),
+              columns: [t('rpFeed'), t('rpOnHand'), t('rpAvailable'), t('rpDaysCover'), if (values) t('rpValue'), t('rpState')],
+              numeric: {1, 2, 3, if (values) 4},
+              flex: [3, 2, 2, 1, if (values) 1, 1],
+              rows: [
+                for (final f in rows('feed'))
+                  ['${f['name']}', '${n(f['on_hand'])} ${f['unit']}', '${n(f['available'])} ${f['unit']}', f['days_of_cover'] == null ? '—' : n(f['days_of_cover']),
+                   if (values) m(f['value']), low(f['low'])],
+              ],
+            ),
+          if (sections.contains('medicine'))
+            ReportTable(
+              title: t('rpMedicineStock'),
+              columns: [t('rpMedicine'), t('rpOnHand'), t('rpUsable'), t('rpExpiringSoon'), t('rpFirstExpiry'), if (values) t('rpValue'), t('rpState')],
+              numeric: {1, 2, 3, if (values) 5},
+              flex: [3, 1, 1, 1, 2, if (values) 1, 1],
+              rows: [
+                for (final x in rows('medicine'))
+                  ['${x['name']}', '${n(x['on_hand'], digits: 2)} ${x['unit'] ?? ''}'.trim(), n(x['usable'], digits: 2), n(x['expiring_soon'], digits: 2),
+                   date(x['earliest_expiry']), if (values) m(x['value']), low(x['low'])],
+              ],
+            ),
+          if (sections.contains('mouneh_goods'))
+            ReportTable(
+              title: t('rpMounehStock'),
+              columns: [t('rpProduct'), t('rpAvailable'), t('rpReserved'), t('rpSold'), t('rpFirstExpiry'), if (values) t('rpValue'), t('rpState')],
+              numeric: {1, 2, 3, if (values) 5},
+              flex: [3, 1, 1, 1, 2, if (values) 1, 1],
+              rows: [
+                for (final x in rows('mouneh_goods'))
+                  ['${x['name']}', '${n(x['available'])} ${x['unit'] ?? ''}'.trim(), n(x['reserved']), n(x['sold']), date(x['earliest_expiry']),
+                   if (values) m(x['value']), low(x['low'])],
+              ],
+            ),
+          if (sections.contains('mouneh_materials'))
+            ReportTable(
+              title: t('rpMaterialsStock'),
+              columns: [t('rpMaterial'), t('rpOnHand'), if (values) t('rpValue'), t('rpState')],
+              numeric: {1, if (values) 2},
+              flex: [3, 2, if (values) 1, 1],
+              rows: [for (final x in rows('mouneh_materials')) ['${x['name']}', '${n(x['on_hand'], digits: 2)} ${x['unit']}', if (values) m(x['value']), low(x['low'])]],
+            ),
+          if (sections.contains('milk') && milk != null)
+            ReportTable(
+              title: t('rpMilkStock'),
+              columns: [t('msInTank'), if (values) t('msLastPrice'), if (values) t('rpValue')],
+              numeric: {0, if (values) 1, if (values) 2},
+              rows: [
+                ['${n(milk['in_tank_l'])} L', if (values) (milk['last_price_per_liter'] == null ? '—' : '${m(milk['last_price_per_liter'])}/L'), if (values) m(milk['value'])],
+              ],
+            ),
+          if (sections.contains('other'))
+            ReportTable(
+              title: t('rpOtherStock'),
+              columns: [t('rpItem'), t('rpCategory'), t('rpOnHand'), t('rpReorderAt'), if (values) t('rpValue'), t('rpState')],
+              numeric: {2, 3, if (values) 4},
+              flex: [3, 2, 2, 1, if (values) 1, 1],
+              rows: [
+                for (final x in rows('other'))
+                  ['${x['name']}', '${x['category'] ?? '—'}', '${n(x['on_hand'], digits: 2)} ${x['unit']}', n(x['reorder_level']), if (values) m(x['value']), low(x['low'])],
+              ],
+            ),
+        ],
+      );
     default:
       final byDay = [for (final d in rows('by_day')) if (((d['revenue'] as num?) ?? 0) != 0 || ((d['expenses'] as num?) ?? 0) != 0) d];
       return ReportDoc(

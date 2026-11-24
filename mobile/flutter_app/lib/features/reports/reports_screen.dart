@@ -17,9 +17,9 @@ import 'report_docs.dart';
 import 'report_export.dart';
 
 /// The reports a person can read, in this order (backend GET /reports/{kind}).
-const reportKinds = ['milk', 'feed', 'herd', 'finance'];
+const reportKinds = ['sales', 'stock', 'milk', 'feed', 'herd', 'finance'];
 
-const _kindLabels = {'milk': 'rpTabMilk', 'feed': 'rpTabFeed', 'herd': 'rpTabHerd', 'finance': 'rpTabFinance'};
+const _kindLabels = {'sales': 'rpTabSales', 'stock': 'rpTabStock', 'milk': 'rpTabMilk', 'feed': 'rpTabFeed', 'herd': 'rpTabHerd', 'finance': 'rpTabFinance'};
 
 /// Opens the Reports page on report [kind] — from the Milk page, the
 /// animals list, the feed stock, Sales & Finance.

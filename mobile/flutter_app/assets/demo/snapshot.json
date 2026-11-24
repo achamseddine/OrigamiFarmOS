@@ -24178,6 +24178,609 @@
    ]
   }
  ],
+ "GET /finance/exchange-rates": {
+  "base": "USD",
+  "currencies": [
+   "USD",
+   "LBP"
+  ],
+  "current": {
+   "LBP": null
+  },
+  "history": []
+ },
+ "GET /finance/expenses?days=365": [
+  {
+   "activity": "livestock",
+   "amount": 1680.0,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "category": "feed",
+   "currency": "USD",
+   "description": null,
+   "due_date": null,
+   "exchange_rate": null,
+   "id": "ebb36c72-e65e-4164-a5df-6891702ead2e",
+   "incurred_at": "2026-11-24T08:00:00",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "recorded_by": null,
+   "reference": null,
+   "status": "recorded",
+   "supplier_id": null,
+   "supplier_name": null
+  },
+  {
+   "activity": "livestock",
+   "amount": 720.0,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "category": "medicine",
+   "currency": "USD",
+   "description": null,
+   "due_date": null,
+   "exchange_rate": null,
+   "id": "14934549-8a2d-49e6-b487-427efc6cce08",
+   "incurred_at": "2026-11-24T08:00:00",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "recorded_by": null,
+   "reference": null,
+   "status": "recorded",
+   "supplier_id": null,
+   "supplier_name": null
+  },
+  {
+   "activity": "general",
+   "amount": 1150.0,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "category": "labor",
+   "currency": "USD",
+   "description": null,
+   "due_date": null,
+   "exchange_rate": null,
+   "id": "7e081c21-9b17-4f06-a354-c4742d03e700",
+   "incurred_at": "2026-11-24T08:00:00",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "recorded_by": null,
+   "reference": null,
+   "status": "recorded",
+   "supplier_id": null,
+   "supplier_name": null
+  },
+  {
+   "activity": "general",
+   "amount": 420.0,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "category": "fuel",
+   "currency": "USD",
+   "description": null,
+   "due_date": null,
+   "exchange_rate": null,
+   "id": "fab6760f-fa0f-4632-9078-488fff042f08",
+   "incurred_at": "2026-11-24T08:00:00",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "recorded_by": null,
+   "reference": null,
+   "status": "recorded",
+   "supplier_id": null,
+   "supplier_name": null
+  },
+  {
+   "activity": "general",
+   "amount": 260.0,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "category": "other",
+   "currency": "USD",
+   "description": null,
+   "due_date": null,
+   "exchange_rate": null,
+   "id": "1693b22a-6c4f-4fb1-96d1-1da175483609",
+   "incurred_at": "2026-11-24T08:00:00",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "recorded_by": null,
+   "reference": null,
+   "status": "recorded",
+   "supplier_id": null,
+   "supplier_name": null
+  }
+ ],
+ "GET /finance/owed": {
+  "currency": "USD",
+  "payables": {
+   "by_supplier": [],
+   "items": [],
+   "overdue": 0.0,
+   "total": 0
+  },
+  "receivables": {
+   "by_buyer": [
+    {
+     "amount": 4065.0,
+     "buyer_name": null,
+     "oldest_days": 0,
+     "sales": 2
+    }
+   ],
+   "items": [
+    {
+     "activity": "crops",
+     "amount": 3120.0,
+     "buyer_name": null,
+     "cancel_reason": null,
+     "cancelled_at": null,
+     "currency": "USD",
+     "customer_id": null,
+     "days_outstanding": 0,
+     "exchange_rate": null,
+     "id": "9a90deee-1857-423f-b2b1-74b77eca9709",
+     "notes": null,
+     "original_amount": null,
+     "original_currency": null,
+     "paid_at": null,
+     "payment_status": "pending",
+     "product_label": "Produce",
+     "product_type": "produce",
+     "quantity": 260.0,
+     "recorded_by": null,
+     "reference": null,
+     "reversal_of_id": null,
+     "sold_at": "2026-11-24T09:00:00",
+     "status": "recorded",
+     "unit": "kg",
+     "unit_price": null
+    },
+    {
+     "activity": "general",
+     "amount": 945.0,
+     "buyer_name": null,
+     "cancel_reason": null,
+     "cancelled_at": null,
+     "currency": "USD",
+     "customer_id": null,
+     "days_outstanding": 0,
+     "exchange_rate": null,
+     "id": "10980165-9b00-4800-9edf-c4e75e207c46",
+     "notes": null,
+     "original_amount": null,
+     "original_currency": null,
+     "paid_at": null,
+     "payment_status": "partial",
+     "product_label": "Farm Products",
+     "product_type": "farm_products",
+     "quantity": 40.0,
+     "recorded_by": null,
+     "reference": null,
+     "reversal_of_id": null,
+     "sold_at": "2026-11-24T09:00:00",
+     "status": "recorded",
+     "unit": "units",
+     "unit_price": null
+    }
+   ],
+   "total": 4065.0
+  }
+ },
+ "GET /finance/profit-loss": {
+  "by_activity": [
+   {
+    "activity": "dairy",
+    "costs": 261.95,
+    "profit": 3988.05,
+    "revenue": 4250.0
+   },
+   {
+    "activity": "poultry",
+    "costs": 802.62,
+    "profit": 1577.38,
+    "revenue": 2380.0
+   },
+   {
+    "activity": "livestock",
+    "costs": 2565.0,
+    "profit": -415.0,
+    "revenue": 2150.0
+   },
+   {
+    "activity": "crops",
+    "costs": 0.0,
+    "profit": 3120.0,
+    "revenue": 3120.0
+   },
+   {
+    "activity": "visits",
+    "costs": 53.0,
+    "profit": -40.0,
+    "revenue": 13.0
+   },
+   {
+    "activity": "general",
+    "costs": 1830.0,
+    "profit": -885.0,
+    "revenue": 945.0
+   }
+  ],
+  "cost_lines": [
+   {
+    "amount": 1680.0,
+    "line": "expense:feed"
+   },
+   {
+    "amount": 1150.0,
+    "line": "expense:labor"
+   },
+   {
+    "amount": 1064.57,
+    "line": "feed_fed"
+   },
+   {
+    "amount": 720.0,
+    "line": "expense:medicine"
+   },
+   {
+    "amount": 420.0,
+    "line": "expense:fuel"
+   },
+   {
+    "amount": 260.0,
+    "line": "expense:other"
+   },
+   {
+    "amount": 165.0,
+    "line": "medicine_received"
+   },
+   {
+    "amount": 53.0,
+    "line": "visit_costs"
+   }
+  ],
+  "currency": "USD",
+  "end": "2026-11-24",
+  "months": [
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2025-12",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-01",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-02",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-03",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-04",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 10.8,
+    "cost_lines": {
+     "medicine_received": 10.8
+    },
+    "costs": 10.8,
+    "month": "2026-05",
+    "net_cash": -10.8,
+    "profit": -10.8,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-06",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-07",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 0.0,
+    "cost_lines": {},
+    "costs": 0.0,
+    "month": "2026-08",
+    "net_cash": 0.0,
+    "profit": 0.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 27.0,
+    "cost_lines": {
+     "medicine_received": 27.0
+    },
+    "costs": 27.0,
+    "month": "2026-09",
+    "net_cash": -27.0,
+    "profit": -27.0,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 0.0,
+    "cash_out": 49.2,
+    "cost_lines": {
+     "medicine_received": 49.2
+    },
+    "costs": 49.2,
+    "month": "2026-10",
+    "net_cash": -49.2,
+    "profit": -49.2,
+    "revenue": 0.0,
+    "revenue_by_activity": {}
+   },
+   {
+    "cash_in": 8793.0,
+    "cash_out": 7625.0,
+    "cost_lines": {
+     "expense:feed": 1680.0,
+     "expense:fuel": 420.0,
+     "expense:labor": 1150.0,
+     "expense:medicine": 720.0,
+     "expense:other": 260.0,
+     "feed_fed": 1064.57,
+     "medicine_received": 78.0,
+     "visit_costs": 53.0
+    },
+    "costs": 5425.57,
+    "month": "2026-11",
+    "net_cash": 1168.0,
+    "profit": 7432.43,
+    "revenue": 12858.0,
+    "revenue_by_activity": {
+     "crops": 3120.0,
+     "dairy": 4250.0,
+     "general": 945.0,
+     "livestock": 2150.0,
+     "poultry": 2380.0,
+     "visits": 13.0
+    }
+   }
+  ],
+  "start": "2025-12-01",
+  "totals": {
+   "cash_in": 8793.0,
+   "cash_out": 7712.0,
+   "costs": 5512.57,
+   "net_cash": 1081.0,
+   "profit": 7345.43,
+   "revenue": 12858.0
+  }
+ },
+ "GET /finance/sales?days=365": [
+  {
+   "activity": "dairy",
+   "amount": 4250.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "ecbb3d06-6203-4296-bbe3-45186b33b285",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "product_label": "Milk",
+   "product_type": "milk",
+   "quantity": 340.0,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-24T09:00:00",
+   "status": "recorded",
+   "unit": "L",
+   "unit_price": null
+  },
+  {
+   "activity": "poultry",
+   "amount": 2380.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "5bfa4d1c-6dc3-467b-9196-429be4f251ec",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "product_label": "Eggs",
+   "product_type": "eggs",
+   "quantity": 285.0,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-24T09:00:00",
+   "status": "recorded",
+   "unit": "dozen",
+   "unit_price": null
+  },
+  {
+   "activity": "crops",
+   "amount": 3120.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "9a90deee-1857-423f-b2b1-74b77eca9709",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "pending",
+   "product_label": "Produce",
+   "product_type": "produce",
+   "quantity": 260.0,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-24T09:00:00",
+   "status": "recorded",
+   "unit": "kg",
+   "unit_price": null
+  },
+  {
+   "activity": "livestock",
+   "amount": 2150.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "65cd224d-57a3-493c-b29b-3389d6c7bb1f",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "product_label": "Animals",
+   "product_type": "animals",
+   "quantity": 1.0,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-24T09:00:00",
+   "status": "recorded",
+   "unit": "head",
+   "unit_price": null
+  },
+  {
+   "activity": "general",
+   "amount": 945.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "10980165-9b00-4800-9edf-c4e75e207c46",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "partial",
+   "product_label": "Farm Products",
+   "product_type": "farm_products",
+   "quantity": 40.0,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-24T09:00:00",
+   "status": "recorded",
+   "unit": "units",
+   "unit_price": null
+  },
+  {
+   "activity": "visits",
+   "amount": 13.0,
+   "buyer_name": null,
+   "cancel_reason": null,
+   "cancelled_at": null,
+   "currency": "USD",
+   "customer_id": null,
+   "exchange_rate": null,
+   "id": "8b052167-5d70-4ad1-90b2-e5205f3c78ed",
+   "notes": null,
+   "original_amount": null,
+   "original_currency": null,
+   "paid_at": null,
+   "payment_status": "paid",
+   "product_label": "Visitor farm shop purchase",
+   "product_type": "visitor_retail",
+   "quantity": null,
+   "recorded_by": null,
+   "reference": null,
+   "reversal_of_id": null,
+   "sold_at": "2026-11-17T10:40:13.575418",
+   "status": "recorded",
+   "unit": null,
+   "unit_price": null
+  }
+ ],
  "GET /health/cases": [
   {
    "active_diagnoses": [],
@@ -34946,6 +35549,686 @@
   },
   "sales": [],
   "start": "2026-10-25"
+ },
+ "GET /reports/sales": {
+  "by_activity": [
+   {
+    "activity": "dairy",
+    "amount": 4250.0
+   },
+   {
+    "activity": "crops",
+    "amount": 3120.0
+   },
+   {
+    "activity": "poultry",
+    "amount": 2380.0
+   },
+   {
+    "activity": "livestock",
+    "amount": 2150.0
+   },
+   {
+    "activity": "general",
+    "amount": 945.0
+   },
+   {
+    "activity": "visits",
+    "amount": 13.0
+   }
+  ],
+  "by_buyer": [
+   {
+    "amount": 12858.0,
+    "buyer": null,
+    "sales": 6,
+    "unpaid": 4065.0
+   }
+  ],
+  "by_day": [
+   {
+    "amount": 0.0,
+    "date": "2026-10-26",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-10-27",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-10-28",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-10-29",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-10-30",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-10-31",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-01",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-02",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-03",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-04",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-05",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-06",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-07",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-08",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-09",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-10",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-11",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-12",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-13",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-14",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-15",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-16",
+    "sales": 0
+   },
+   {
+    "amount": 13.0,
+    "date": "2026-11-17",
+    "sales": 1
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-18",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-19",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-20",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-21",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-22",
+    "sales": 0
+   },
+   {
+    "amount": 0.0,
+    "date": "2026-11-23",
+    "sales": 0
+   },
+   {
+    "amount": 12845.0,
+    "date": "2026-11-24",
+    "sales": 5
+   }
+  ],
+  "by_product": [
+   {
+    "amount": 4250.0,
+    "average_price": 12.5,
+    "product": "Milk",
+    "product_type": "milk",
+    "quantity": 340.0,
+    "sales": 1,
+    "unit": "L"
+   },
+   {
+    "amount": 3120.0,
+    "average_price": 12.0,
+    "product": "Produce",
+    "product_type": "produce",
+    "quantity": 260.0,
+    "sales": 1,
+    "unit": "kg"
+   },
+   {
+    "amount": 2380.0,
+    "average_price": 8.351,
+    "product": "Eggs",
+    "product_type": "eggs",
+    "quantity": 285.0,
+    "sales": 1,
+    "unit": "dozen"
+   },
+   {
+    "amount": 2150.0,
+    "average_price": 2150.0,
+    "product": "Animals",
+    "product_type": "animals",
+    "quantity": 1.0,
+    "sales": 1,
+    "unit": "head"
+   },
+   {
+    "amount": 945.0,
+    "average_price": 23.625,
+    "product": "Farm Products",
+    "product_type": "farm_products",
+    "quantity": 40.0,
+    "sales": 1,
+    "unit": "units"
+   },
+   {
+    "amount": 13.0,
+    "average_price": null,
+    "product": "Visitor farm shop purchase",
+    "product_type": "visitor_retail",
+    "quantity": 0.0,
+    "sales": 1,
+    "unit": null
+   }
+  ],
+  "currency": "USD",
+  "days": 30,
+  "end": "2026-11-24",
+  "farm_name": "Origami Farms",
+  "generated_at": "2026-11-24T10:40:14.517404+00:00",
+  "kind": "sales",
+  "kpis": {
+   "average_sale": 2143.0,
+   "buyers": 0,
+   "cancelled": 0,
+   "paid": 8793.0,
+   "revenue": 12858.0,
+   "sales": 6,
+   "unpaid": 4065.0
+  },
+  "sales": [
+   {
+    "amount": 13.0,
+    "buyer": null,
+    "date": "2026-11-17",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "paid",
+    "product": "Visitor farm shop purchase",
+    "product_type": "visitor_retail",
+    "quantity": null,
+    "status": "recorded",
+    "unit": null,
+    "unit_price": null
+   },
+   {
+    "amount": 4250.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "paid",
+    "product": "Milk",
+    "product_type": "milk",
+    "quantity": 340.0,
+    "status": "recorded",
+    "unit": "L",
+    "unit_price": null
+   },
+   {
+    "amount": 2380.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "paid",
+    "product": "Eggs",
+    "product_type": "eggs",
+    "quantity": 285.0,
+    "status": "recorded",
+    "unit": "dozen",
+    "unit_price": null
+   },
+   {
+    "amount": 3120.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "pending",
+    "product": "Produce",
+    "product_type": "produce",
+    "quantity": 260.0,
+    "status": "recorded",
+    "unit": "kg",
+    "unit_price": null
+   },
+   {
+    "amount": 2150.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "paid",
+    "product": "Animals",
+    "product_type": "animals",
+    "quantity": 1.0,
+    "status": "recorded",
+    "unit": "head",
+    "unit_price": null
+   },
+   {
+    "amount": 945.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "original_amount": null,
+    "original_currency": null,
+    "payment_status": "partial",
+    "product": "Farm Products",
+    "product_type": "farm_products",
+    "quantity": 40.0,
+    "status": "recorded",
+    "unit": "units",
+    "unit_price": null
+   }
+  ],
+  "start": "2026-10-26",
+  "unpaid": [
+   {
+    "amount": 3120.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "days": 0,
+    "product": "Produce"
+   },
+   {
+    "amount": 945.0,
+    "buyer": null,
+    "date": "2026-11-24",
+    "days": 0,
+    "product": "Farm Products"
+   }
+  ]
+ },
+ "GET /reports/stock": {
+  "as_of": "2026-11-24",
+  "currency": "USD",
+  "days": 30,
+  "end": "2026-11-24",
+  "farm_name": "Origami Farms",
+  "feed": [
+   {
+    "available": 4800.0,
+    "days_of_cover": 95.6,
+    "low": false,
+    "name": "Alfalfa Hay",
+    "on_hand": 4800.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 1488.0
+   },
+   {
+    "available": 1160.0,
+    "days_of_cover": 341.2,
+    "low": false,
+    "name": "Barley",
+    "on_hand": 1160.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 417.6
+   },
+   {
+    "available": 800.0,
+    "days_of_cover": null,
+    "low": false,
+    "name": "Broiler Grower",
+    "on_hand": 800.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 376.0
+   },
+   {
+    "available": 90.0,
+    "days_of_cover": 150.0,
+    "low": true,
+    "name": "Cattle Dairy Premix",
+    "on_hand": 490.0,
+    "reserved": 400.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 1176.0
+   },
+   {
+    "available": 2200.0,
+    "days_of_cover": 96.5,
+    "low": true,
+    "name": "Corn Silage",
+    "on_hand": 2200.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 396.0
+   },
+   {
+    "available": 1534.0,
+    "days_of_cover": 37.4,
+    "low": false,
+    "name": "Dairy Concentrate 18",
+    "on_hand": 1534.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 797.68
+   },
+   {
+    "available": 3250.0,
+    "days_of_cover": 54.2,
+    "low": false,
+    "name": "Dairy Mix 24L",
+    "on_hand": 3250.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 1299.03
+   },
+   {
+    "available": 900.0,
+    "days_of_cover": 375.0,
+    "low": false,
+    "name": "Goat Mix",
+    "on_hand": 900.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 396.0
+   },
+   {
+    "available": 1150.0,
+    "days_of_cover": 3.9,
+    "low": true,
+    "name": "Layer Feed",
+    "on_hand": 1150.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 448.5
+   },
+   {
+    "available": 320.0,
+    "days_of_cover": null,
+    "low": false,
+    "name": "Minerals",
+    "on_hand": 320.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 352.0
+   },
+   {
+    "available": 1800.0,
+    "days_of_cover": null,
+    "low": false,
+    "name": "Wheat straw",
+    "on_hand": 1800.0,
+    "reserved": 0.0,
+    "unit": "kg",
+    "unusable": 0.0,
+    "value": 216.0
+   }
+  ],
+  "generated_at": "2026-11-24T10:40:14.525310+00:00",
+  "kind": "stock",
+  "kpis": {
+   "expiring": 2,
+   "lines": 28,
+   "low": 4,
+   "milk_in_tank_l": 617.3,
+   "value": 9243.11
+  },
+  "medicine": [
+   {
+    "earliest_expiry": "2027-07-22",
+    "expired": 60.0,
+    "expiring_soon": 0.0,
+    "low": false,
+    "name": "Oxytetracycline 200 mg/mL injectable",
+    "on_hand": 160.0,
+    "unit": "ml",
+    "usable": 100.0,
+    "value": 28.8
+   },
+   {
+    "earliest_expiry": "2026-12-21",
+    "expired": 0.0,
+    "expiring_soon": 48.5,
+    "low": false,
+    "name": "Flunixin meglumine 50 mg/mL injectable",
+    "on_hand": 48.5,
+    "unit": "ml",
+    "usable": 48.5,
+    "value": 15.52
+   },
+   {
+    "earliest_expiry": "2027-09-20",
+    "expired": 0.0,
+    "expiring_soon": 0.0,
+    "low": false,
+    "name": "Sodium chloride 0.9% IV fluid 1 L",
+    "on_hand": 8.0,
+    "unit": "bag",
+    "usable": 8.0,
+    "value": 19.2
+   },
+   {
+    "earliest_expiry": "2027-01-08",
+    "expired": 0.0,
+    "expiring_soon": 25.0,
+    "low": false,
+    "name": "Oral electrolyte sachet",
+    "on_hand": 25.0,
+    "unit": "sachet",
+    "usable": 25.0,
+    "value": 22.5
+   },
+   {
+    "earliest_expiry": "2027-12-29",
+    "expired": 0.0,
+    "expiring_soon": 0.0,
+    "low": false,
+    "name": "Ivermectin pour-on 5 mg/mL",
+    "on_hand": 250.0,
+    "unit": "ml",
+    "usable": 250.0,
+    "value": 30.0
+   },
+   {
+    "earliest_expiry": null,
+    "expired": 0.0,
+    "expiring_soon": 0.0,
+    "low": true,
+    "name": "Clostridial vaccine (8-way)",
+    "on_hand": 40.0,
+    "unit": "dose",
+    "usable": 0.0,
+    "value": 44.0
+   }
+  ],
+  "milk": {
+   "in_tank_l": 617.3,
+   "last_price_per_liter": null,
+   "value": null
+  },
+  "mouneh_goods": [
+   {
+    "available": 51.0,
+    "earliest_expiry": "2027-11-09",
+    "low": false,
+    "name": "Makdous",
+    "reserved": 0.0,
+    "sold": 47.0,
+    "unit": "jar",
+    "value": 188.18
+   }
+  ],
+  "mouneh_materials": [
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Baby Eggplant",
+    "on_hand": 320.0,
+    "unit": "kg",
+    "value": 384.0
+   },
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Walnuts",
+    "on_hand": 25.0,
+    "unit": "kg",
+    "value": 187.5
+   },
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Red Pepper Paste",
+    "on_hand": 18.0,
+    "unit": "kg",
+    "value": 68.4
+   },
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Garlic",
+    "on_hand": 12.0,
+    "unit": "kg",
+    "value": 25.2
+   },
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Olive Oil",
+    "on_hand": 60.0,
+    "unit": "liter",
+    "value": 390.0
+   },
+   {
+    "category": "raw_material",
+    "low": false,
+    "name": "Salt",
+    "on_hand": 40.0,
+    "unit": "kg",
+    "value": 14.0
+   },
+   {
+    "category": "packaging",
+    "low": false,
+    "name": "Glass Jars (500ml)",
+    "on_hand": 600.0,
+    "unit": "piece",
+    "value": 210.0
+   },
+   {
+    "category": "packaging",
+    "low": false,
+    "name": "Jar Lids",
+    "on_hand": 600.0,
+    "unit": "piece",
+    "value": 48.0
+   },
+   {
+    "category": "packaging",
+    "low": false,
+    "name": "Labels",
+    "on_hand": 600.0,
+    "unit": "piece",
+    "value": 30.0
+   }
+  ],
+  "other": [
+   {
+    "category": "Medicine",
+    "low": false,
+    "name": "Medicine",
+    "on_hand": 14.0,
+    "reorder_level": 10.0,
+    "unit": "items",
+    "value": 175.0
+   }
+  ],
+  "sections": [
+   "feed",
+   "medicine",
+   "mouneh_goods",
+   "mouneh_materials",
+   "milk",
+   "other"
+  ],
+  "start": "2026-10-26"
  },
  "GET /reproduction/overview": {
   "awaiting_pregnancy_check": [
