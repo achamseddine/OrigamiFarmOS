@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.livestock.catalog import Cap
 from app.services import approval_service, capability_service, feed_performance_service, feeding_program_service, livestock_state_service, milk_service
+from app.services import milk_handover_service as handover
 from app.services import milk_sales_service as milk_sales
 from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access, user_can
 from app.core import permissions as perms
@@ -18,7 +19,7 @@ from app.core.record_time import not_in_future
 from app.repositories.base import new_id, now, write_event
 from app.schemas.approvals import MilkCorrectionIn
 from app.schemas.production import (EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut,
-                                    MilkSaleCancel, MilkSaleCreate, MilkTankAdjust)
+                                    MilkSaleCancel, MilkSaleCreate, MilkTankAdjust, MilkHandoverCreate, MilkRoutineUpdate)
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -210,6 +211,47 @@ def cancel_milk_sale(sale_id: str, payload: MilkSaleCancel, db: Session = Depend
     sale = milk_sales.cancel(db, milk_sales.get_sale(db, sale_id, user.farm_id), user, reason=payload.reason)
     db.commit()
     return milk_sales.sale_dict(sale)
+
+
+# ------------------------------------------- the milking routine (v0.8.1)
+def _routine_dep(db: Session = Depends(get_db), user: models.User = Depends(require_any_permission(perms.MILK_PRODUCTION, perms.SALES, perms.FINANCE))):
+    if not (user_can(db, user, perms.MILK_PRODUCTION, perms.APPROVE) or user_can(db, user, perms.FINANCE, perms.APPROVE)
+            or user_can(db, user, perms.SETTINGS, perms.CONFIGURE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "The milk collector and his price are set by the farm manager.")
+    return user
+
+
+@router.get("/milk-handovers")
+def list_milk_handovers(days: int = 14, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_VIEW)) -> dict:
+    """Each milking of the last [days] days: milk stored, to the calves, to
+    the collector, left; with the farm's collector, price and milking names."""
+    return handover.handovers(db, user.farm_id, days=days)
+
+
+@router.post("/milk-handovers", status_code=status.HTTP_201_CREATED)
+def hand_over_milk(payload: MilkHandoverCreate, db: Session = Depends(get_db),
+                   user: models.User = Depends(_MILK_CREATE)) -> dict:
+    """After a milking: litres to the calves and litres the collector took —
+    sold to him at the agreed price, to be paid with the week."""
+    out = handover.hand_over(db, user, day=payload.day, session=payload.session, calves_l=payload.calves_l, collected_l=payload.collected_l,
+                             notes=payload.notes, allow_negative=payload.allow_negative,
+                             can_override=user_can(db, user, perms.MILK_PRODUCTION, perms.APPROVE), confirm_duplicate=payload.confirm_duplicate)
+    db.commit()
+    return out
+
+
+@router.get("/milk-routine")
+def milk_routine(db: Session = Depends(get_db), user: models.User = Depends(_MILK_SALES_VIEW)) -> dict:
+    return handover.settings(db, user.farm_id)
+
+
+@router.put("/milk-routine")
+def set_milk_routine(payload: MilkRoutineUpdate, db: Session = Depends(get_db), user: models.User = Depends(_routine_dep)) -> dict:
+    """The collector, his price per litre (USD or LBP) and what the second milking is called."""
+    out = handover.set_settings(db, user, collector_name=payload.collector_name, collector_price=payload.collector_price,
+                                collector_currency=payload.collector_currency, second_milking=payload.second_milking)
+    db.commit()
+    return out
 
 
 @router.get("/milk-tank/adjustments")

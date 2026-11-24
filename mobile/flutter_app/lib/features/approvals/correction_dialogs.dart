@@ -14,6 +14,7 @@ import '../../providers/animals_provider.dart';
 import '../../providers/approvals_provider.dart';
 import '../../providers/feeding_provider.dart';
 import '../../providers/production_provider.dart';
+import '../production/milk_sessions.dart';
 
 /// Correcting a milk record or a feeding already on file (v0.7.8).
 ///
@@ -36,7 +37,7 @@ bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month 
 
 String _sessionLabel(BuildContext context, String session) => switch (session) {
       'morning' => context.t('sessionMorning'),
-      'evening' => context.t('sessionEvening'),
+      'evening' => milkSessionLabel(context, 'evening'),
       'midday' => context.t('sessionMidday'),
       _ => session,
     };

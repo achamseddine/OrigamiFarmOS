@@ -107,6 +107,34 @@ class FinanceProvider extends ChangeNotifier {
             if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
           }));
 
+  /// One payment for several sales of one buyer — the collector's week.
+  /// [amountReceived] is in [currency]; a difference with what the sales
+  /// came to is kept by the server as its own row.
+  Future<WriteResult> receivePayment({
+    required List<String> saleIds,
+    required double amountReceived,
+    String currency = 'USD',
+    double? exchangeRate,
+    required DateTime paidAt,
+    String? reference,
+    String? notes,
+  }) =>
+      _write(() => _api.post('/finance/payments', body: {
+            'sale_ids': saleIds,
+            'amount_received': amountReceived,
+            'currency': currency,
+            'exchange_rate': ?exchangeRate,
+            'paid_at': paidAt.toUtc().toIso8601String(),
+            if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
+            if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+          }));
+
+  /// Unpaid sales of [buyer] (case-insensitive), oldest first.
+  List<FinanceSale> unpaidOf(String buyer) {
+    final key = buyer.trim().toLowerCase();
+    return [for (final s in unpaidSales.reversed) if ((s.buyerName ?? '').trim().toLowerCase() == key) s];
+  }
+
   Future<WriteResult> markSalePaid(FinanceSale sale) => _write(() => _api.post('/finance/sales/${sale.id}/paid', body: <String, dynamic>{}));
 
   Future<WriteResult> cancelSale(FinanceSale sale, String reason) =>

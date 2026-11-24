@@ -91,7 +91,8 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
         .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
         .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= lo, models.MilkRecord.recorded_at < hi)
     ).all()
-    days = {d: {"date": d, "morning": 0.0, "midday": 0.0, "evening": 0.0, "total": 0.0, "withheld": 0.0, "sold": 0.0} for d in _days(start, end)}
+    days = {d: {"date": d, "morning": 0.0, "midday": 0.0, "evening": 0.0, "total": 0.0, "withheld": 0.0, "calves": 0.0, "sold": 0.0}
+            for d in _days(start, end)}
     by_dest: dict[str, float] = defaultdict(float)
     animals: dict[str, dict] = {}
     for rec, animal in rows:
@@ -126,6 +127,15 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
             d["sold"] += s.liters
     sold_l = sum(s.liters for s in sales)
     revenue = sum(s.amount for s in sales)
+    # Milk fed to the calves (v0.8.1): tank adjustments with that reason.
+    calves_l = 0.0
+    for a in db.scalars(select(mm.MilkTankAdjustment).where(mm.MilkTankAdjustment.farm_id == farm_id, mm.MilkTankAdjustment.reason == "calves",
+                                                            mm.MilkTankAdjustment.occurred_at >= lo, mm.MilkTankAdjustment.occurred_at < hi)):
+        calves_l += -a.liters
+        d = days.get(_day(a.occurred_at, tz))
+        if d is not None:
+            d["calves"] += -a.liters
+    out["second_milking"] = (db.get(models.Farm, farm_id).second_milking or "evening") if db.get(models.Farm, farm_id) else "evening"
     out.update({
         "kpis": {
             "total_l": _r(total, 1),
@@ -133,6 +143,7 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
             "animals_milked": len(animals),
             "avg_per_animal_day_l": _r(sum(r["avg_per_day_l"] for r in animal_rows) / len(animal_rows), 1) if animal_rows else 0.0,
             "withheld_l": _r(by_dest.get("withheld", 0), 1),
+            "calves_l": _r(calves_l, 1),
             "tank_now_l": _r(milk_sales.tank_balance(db, farm_id), 1),
             "tank_at_end_l": _r(milk_sales.tank_balance(db, farm_id, before=hi), 1),
         },

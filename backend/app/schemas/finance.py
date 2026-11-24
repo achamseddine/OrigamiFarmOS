@@ -71,3 +71,17 @@ class MarkPaid(BaseModel):
 
 class CancelWithReason(BaseModel):
     reason: str = ""
+
+
+class PaymentCreate(BaseModel):
+    """POST /finance/payments — one payment for several sales of one buyer
+    (the milk collector's weekly payment)."""
+
+    sale_ids: list[str]
+    amount_received: float
+    currency: str = "USD"
+    exchange_rate: float | None = None
+    paid_at: datetime | None = None
+    reference: str | None = None
+    notes: str | None = None
+    confirm_duplicate: bool = False

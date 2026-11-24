@@ -1524,6 +1524,73 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/payments:
+    get:
+      tags:
+      - finance
+      summary: List Payments
+      description: Payments received for several sales at once, newest first.
+      operationId: list_payments_api_v1_finance_payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 731
+          minimum: 1
+          default: 365
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Payments Api V1 Finance Payments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - finance
+      summary: Receive Payment
+      description: 'One payment for several sales of one buyer — the milk collector''s week.
+
+        Every sale is marked paid; a difference with what they came to is kept.'
+      operationId: receive_payment_api_v1_finance_payments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Receive Payment Api V1 Finance Payments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/finance/expenses:
     get:
       tags:
@@ -9774,6 +9841,117 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-handovers:
+    get:
+      tags:
+      - production
+      summary: List Milk Handovers
+      description: 'Each milking of the last [days] days: milk stored, to the calves, to
+
+        the collector, left; with the farm''s collector, price and milking names.'
+      operationId: list_milk_handovers_api_v1_production_milk_handovers_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 14
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response List Milk Handovers Api V1 Production Milk Handovers Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - production
+      summary: Hand Over Milk
+      description: 'After a milking: litres to the calves and litres the collector took —
+
+        sold to him at the agreed price, to be paid with the week.'
+      operationId: hand_over_milk_api_v1_production_milk_handovers_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkHandoverCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Hand Over Milk Api V1 Production Milk Handovers Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-routine:
+    get:
+      tags:
+      - production
+      summary: Milk Routine
+      operationId: milk_routine_api_v1_production_milk_routine_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Milk Routine Api V1 Production Milk Routine Get
+      security:
+      - HTTPBearer: []
+    put:
+      tags:
+      - production
+      summary: Set Milk Routine
+      description: The collector, his price per litre (USD or LBP) and what the second milking is called.
+      operationId: set_milk_routine_api_v1_production_milk_routine_put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkRoutineUpdate'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Set Milk Routine Api V1 Production Milk Routine Put
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/production/milk-tank/adjustments:
     get:
       tags:
@@ -18290,6 +18468,45 @@ components:
       description: '`POST /production/milk/{id}/correct` — the fields to change (unset
 
         ones keep their value) and why.'
+    MilkHandoverCreate:
+      properties:
+        day:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Day
+        session:
+          type: string
+          title: Session
+        calves_l:
+          type: number
+          title: Calves L
+          default: 0
+        collected_l:
+          type: number
+          title: Collected L
+          default: 0
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        allow_negative:
+          type: boolean
+          title: Allow Negative
+          default: false
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - session
+      title: MilkHandoverCreate
+      description: 'POST /production/milk-handovers — after a milking: litres to the
+
+        calves and litres the collector took (at the farm''s agreed price).'
     MilkRecordCreate:
       properties:
         animal_id:
@@ -18379,6 +18596,31 @@ components:
       - destination
       - recorded_at
       title: MilkRecordOut
+    MilkRoutineUpdate:
+      properties:
+        collector_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Collector Name
+        collector_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Collector Price
+        collector_currency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Collector Currency
+        second_milking:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Second Milking
+      type: object
+      title: MilkRoutineUpdate
+      description: PUT /production/milk-routine — the farm manager's settings.
     MilkSaleCancel:
       properties:
         reason:
@@ -19853,6 +20095,53 @@ components:
       - parent_animal_id
       - relationship_type
       title: ParentIn
+    PaymentCreate:
+      properties:
+        sale_ids:
+          items:
+            type: string
+          type: array
+          title: Sale Ids
+        amount_received:
+          type: number
+          title: Amount Received
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - sale_ids
+      - amount_received
+      title: PaymentCreate
+      description: 'POST /finance/payments — one payment for several sales of one buyer
+
+        (the milk collector''s weekly payment).'
     PermissionSet:
       properties:
         permissions:

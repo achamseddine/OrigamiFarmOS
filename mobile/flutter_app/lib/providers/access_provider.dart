@@ -94,6 +94,19 @@ class AccessProvider extends ChangeNotifier {
   /// Counts the tank and records milk spoiled or used outside a sale.
   bool get canAdjustMilkTank => can(FarmModule.milkProduction, PermissionAction.approve);
 
+  // The milking routine (v0.8.1, backend production.py / finance.py).
+
+  /// Hands a milking over: litres to the calves and to the collector (the
+  /// collector and his price are the manager's settings).
+  bool get canHandOverMilk => canCreate(FarmModule.milkProduction);
+
+  /// Sets the milk collector, his price and what the second milking is called.
+  bool get canSetMilkRoutine =>
+      can(FarmModule.milkProduction, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve) || can(FarmModule.settings, PermissionAction.configure);
+
+  /// Records a buyer's payment for several sales (the collector's week).
+  bool get canReceivePayment => canRecordSale || can(FarmModule.milkProduction, PermissionAction.approve);
+
   // Origami's financials (v0.8.0, backend finance.py).
 
   /// Records a sale of any product and marks a sale paid.

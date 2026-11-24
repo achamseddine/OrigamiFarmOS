@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, field_validator
 
@@ -194,3 +194,29 @@ class MilkTankAdjust(BaseModel):
     counted_level: float | None = None
     occurred_at: datetime | None = None
     notes: str | None = None
+
+
+class MilkHandoverCreate(BaseModel):
+    """POST /production/milk-handovers — after a milking: litres to the
+    calves and litres the collector took (at the farm's agreed price)."""
+
+    day: date | None = None
+    # morning | midday | evening (the farm may call it the afternoon milking)
+    session: str
+    calves_l: float = 0
+    collected_l: float = 0
+    notes: str | None = None
+    # More than the tank holds on record: Milk production approval.
+    allow_negative: bool = False
+    confirm_duplicate: bool = False
+
+
+class MilkRoutineUpdate(BaseModel):
+    """PUT /production/milk-routine — the farm manager's settings."""
+
+    collector_name: str | None = None
+    collector_price: float | None = None
+    # USD | LBP
+    collector_currency: str | None = None
+    # evening | afternoon
+    second_milking: str | None = None

@@ -322,7 +322,7 @@ def sale_dict(db: Session, s: models.Sale, *, customers: dict[str, str] | None =
             "paid_at": s.paid_at, "sold_at": s.sold_at, "customer_id": s.customer_id, "buyer_name": buyer, "reference": s.reference,
             "notes": s.notes, "status": s.status, "cancel_reason": s.cancel_reason, "cancelled_at": s.cancelled_at,
             "reversal_of_id": s.reversal_of_id, "activity": s.activity or ACTIVITY_OF_PRODUCT.get(s.product_type, "general"),
-            "recorded_by": s.recorded_by}
+            "recorded_by": s.recorded_by, "payment_id": s.payment_id}
 
 
 def list_sales(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
@@ -433,6 +433,99 @@ def list_expenses(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
                       .order_by(models.Expense.incurred_at.desc()).limit(1000)).all()
     suppliers = {s.id: s.name for s in db.scalars(select(models.Supplier).where(models.Supplier.farm_id == farm_id))}
     return [expense_dict(e, suppliers) for e in rows]
+
+
+# ------------------------------------------------- payments for many sales
+def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amount_received: float, currency: str | None,
+                    exchange_rate: float | None, paid_at: datetime | None, reference: str | None, notes: str | None,
+                    confirm_duplicate: bool) -> fin.CustomerPayment:
+    """One payment for several sales of one buyer — the milk collector paying
+    for the week. Every sale is marked paid on the payment's day; when the
+    money received differs from what they came to, the difference is kept as
+    its own revenue row (a deduction or a bonus), so revenue is what came in."""
+    ids = list(dict.fromkeys(sale_ids or []))
+    if not ids:
+        raise FinanceError("Choose the sales this payment is for.")
+    if amount_received is None or amount_received < 0:
+        raise FinanceError("The amount received cannot be negative.")
+    sales = [get_sale(db, i, user.farm_id) for i in ids]
+    for s in sales:
+        if s.status != "recorded" or s.amount <= 0:
+            raise FinanceError(f"{s.product_label or s.product_type} of {s.sold_at:%d/%m/%Y} is cancelled and cannot be paid.", 409)
+        if s.payment_status == "paid":
+            raise FinanceError(f"{s.product_label or s.product_type} of {s.sold_at:%d/%m/%Y} is already paid.", 409)
+    customers = {c.id: c.name for c in db.scalars(select(models.Customer).where(models.Customer.farm_id == user.farm_id))}
+
+    def buyer_of(s: models.Sale) -> str:
+        return (s.buyer_name or customers.get(s.customer_id or "", "") or "").strip().lower()
+
+    buyers = {buyer_of(s) for s in sales}
+    if len(buyers) != 1:
+        raise FinanceError("One payment is from one buyer: choose sales of the same buyer.")
+    when = not_in_future(paid_at, "A payment") or now()
+    received, original, original_cur, rate = to_base(db, user.farm_id, amount_received, currency, exchange_rate, when)
+    due = round(sum(s.amount for s in sales), 2)
+    first = sales[0]
+    name = first.buyer_name or customers.get(first.customer_id or "")
+
+    # The same buyer paying the same amount within half an hour.
+    lo, hi = duplicates.near(when)
+    earlier = db.scalar(select(fin.CustomerPayment).where(
+        fin.CustomerPayment.farm_id == user.farm_id, fin.CustomerPayment.amount_received == received,
+        fin.CustomerPayment.buyer_name == name, fin.CustomerPayment.paid_at >= lo, fin.CustomerPayment.paid_at <= hi))
+    match = duplicates.guard(earlier, f"A payment of {received:g} {fin.BASE_CURRENCY} from {name or 'this buyer'} was already recorded "
+                             "within half an hour." if earlier else "", confirm=confirm_duplicate)
+
+    payment = fin.CustomerPayment(
+        id=new_id(), farm_id=user.farm_id, customer_id=first.customer_id, buyer_name=name, paid_at=when, sales_count=len(sales),
+        amount_due=due, amount_received=received, original_amount=original, original_currency=original_cur, exchange_rate=rate,
+        reference=(reference or "").strip()[:120] or None, notes=(notes or "").strip() or None, recorded_by=user.id, created_at=now())
+    db.add(payment)
+    db.flush()
+    for s in sales:
+        module, milk = _linked(db, s)
+        if module == "milk":
+            milk_sales.mark_paid(db, milk, user)
+            milk.paid_at = when
+        s.payment_status, s.paid_at, s.payment_id = "paid", when, payment.id
+    difference = round(received - due, 2)
+    if abs(difference) >= 0.01:
+        types = {s.product_type for s in sales}
+        product_type = types.pop() if len(types) == 1 else "other"
+        diff = models.Sale(
+            id=new_id(), farm_id=user.farm_id, customer_id=first.customer_id, product_type=product_type,
+            product_label="Payment difference"[:100], quantity=None, unit=None, amount=difference, currency=fin.BASE_CURRENCY,
+            payment_status="paid", sold_at=when, buyer_name=name, status="recorded", paid_at=when, payment_id=payment.id,
+            notes=(notes or "").strip() or None, activity=first.activity or ACTIVITY_OF_PRODUCT.get(product_type, "general"),
+            recorded_by=user.id, created_at=now())
+        db.add(diff)
+        db.flush()
+        payment.difference_sale_id = diff.id
+    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id,
+                             match_id=match.id if match else None, what=f"customer_payment:{payment.id}", user_id=user.id)
+    money = f"{original:,.0f} {original_cur} ({received:g} {fin.BASE_CURRENCY})" if original_cur else f"{received:g} {fin.BASE_CURRENCY}"
+    write_audit_log(db, farm_id=user.farm_id, user_id=user.id, action="payment_received", entity_type="customer_payment", entity_id=payment.id,
+                    module_code=perms.SALES, summary=(f"{name or 'A buyer'} paid {money} for {len(sales)} sale(s) of {due:g} {fin.BASE_CURRENCY}"
+                                                      + (f"; difference {difference:+g}" if abs(difference) >= 0.01 else ""))[:500],
+                    changes={"payment_status": {"from": "pending", "to": "paid"}}, metadata={"sale_ids": ids, "difference": difference})
+    write_event(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id, event_type="payment_received",
+                payload={"buyer": name, "sales": ids, "due": due, "received": received, "difference": difference,
+                         "original_amount": original, "original_currency": original_cur, "exchange_rate": rate}, created_by=user.id)
+    return payment
+
+
+def payment_dict(p: fin.CustomerPayment) -> dict:
+    return {"id": p.id, "buyer_name": p.buyer_name, "customer_id": p.customer_id, "paid_at": p.paid_at, "sales_count": p.sales_count,
+            "amount_due": p.amount_due, "amount_received": p.amount_received, "difference": round(p.amount_received - p.amount_due, 2),
+            "original_amount": p.original_amount, "original_currency": p.original_currency, "exchange_rate": p.exchange_rate,
+            "reference": p.reference, "notes": p.notes, "recorded_by": p.recorded_by}
+
+
+def list_payments(db: Session, farm_id: str, *, days: int = 365) -> list[dict]:
+    since = now() - timedelta(days=max(1, min(days, 731)))
+    rows = db.scalars(select(fin.CustomerPayment).where(fin.CustomerPayment.farm_id == farm_id, fin.CustomerPayment.paid_at >= since)
+                      .order_by(fin.CustomerPayment.paid_at.desc()).limit(500)).all()
+    return [payment_dict(p) for p in rows]
 
 
 # ---------------------------------------------------------- who owes what

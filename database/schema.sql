@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 140 tables, 45 secondary indexes.
+-- 141 tables, 46 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -58,6 +58,10 @@ CREATE TABLE farms (
     milk_peak_end_days INTEGER DEFAULT '70' NOT NULL,
     breeding_wait_days INTEGER DEFAULT '50' NOT NULL,
     heat_cycle_days INTEGER DEFAULT '21' NOT NULL,
+    second_milking VARCHAR(10) DEFAULT 'evening' NOT NULL,
+    milk_collector_name VARCHAR(200),
+    milk_collector_price FLOAT,
+    milk_collector_currency VARCHAR(10) DEFAULT 'USD' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     PRIMARY KEY (id)
 );
@@ -367,6 +371,8 @@ CREATE TABLE milk_tank_adjustments (
     notes TEXT,
     recorded_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    session VARCHAR(10),
+    collection_day DATE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id)
 );
@@ -723,6 +729,29 @@ CREATE TABLE crop_plantings (
 );
 CREATE INDEX ix_crop_plantings_field ON crop_plantings (field_id);
 
+CREATE TABLE customer_payments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    customer_id VARCHAR(36),
+    buyer_name VARCHAR(200),
+    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sales_count INTEGER NOT NULL,
+    amount_due FLOAT NOT NULL,
+    amount_received FLOAT NOT NULL,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    difference_sale_id VARCHAR(36),
+    reference VARCHAR(120),
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id)
+);
+CREATE INDEX ix_customer_payments_farm_paid ON customer_payments (farm_id, paid_at);
+
 CREATE TABLE emergency_protocol_versions (
     id VARCHAR(36) NOT NULL,
     emergency_protocol_id VARCHAR(36) NOT NULL,
@@ -1022,6 +1051,7 @@ CREATE TABLE sales (
     activity VARCHAR(20),
     recorded_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE,
+    payment_id VARCHAR(36),
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(customer_id) REFERENCES customers (id)
@@ -1534,6 +1564,8 @@ CREATE TABLE milk_sales (
     reversal_sale_id VARCHAR(36),
     recorded_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    session VARCHAR(10),
+    collection_day DATE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(customer_id) REFERENCES customers (id),

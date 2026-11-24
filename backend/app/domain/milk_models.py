@@ -18,9 +18,9 @@ reversed by a second, negative revenue record — history is never edited.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -65,6 +65,10 @@ class MilkSale(Base):
     reversal_sale_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # v0.8.1 — the milking it was handed over after (morning / midday /
+    # evening of a farm day); null for a sale made at any other time.
+    session: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    collection_day: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
 class MilkTankAdjustment(Base):
@@ -82,3 +86,6 @@ class MilkTankAdjustment(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # v0.8.1 — milk fed to the calves after a milking: which one.
+    session: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    collection_day: Mapped[date | None] = mapped_column(Date, nullable=True)

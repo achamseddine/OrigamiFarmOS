@@ -118,3 +118,70 @@ class MilkTankAdjustment {
         notes: j['notes'] as String?,
       );
 }
+
+/// The farm's milking routine (v0.8.1): what the second milking is called,
+/// and the collector who takes the milk after each milking at an agreed
+/// price and pays once a week.
+class MilkRoutine {
+  const MilkRoutine({this.secondMilking = 'evening', this.collectorName, this.collectorPrice, this.collectorCurrency = 'USD'});
+
+  /// 'evening' or 'afternoon' — the records keep the session code 'evening'.
+  final String secondMilking;
+  final String? collectorName;
+  final double? collectorPrice;
+  final String collectorCurrency;
+
+  bool get afternoon => secondMilking == 'afternoon';
+  bool get hasCollector => (collectorName ?? '').isNotEmpty && (collectorPrice ?? 0) > 0;
+
+  static const empty = MilkRoutine();
+
+  factory MilkRoutine.fromJson(Map<String, dynamic> j) => MilkRoutine(
+        secondMilking: j['second_milking'] as String? ?? 'evening',
+        collectorName: j['collector_name'] as String?,
+        collectorPrice: (j['collector_price'] as num?)?.toDouble(),
+        collectorCurrency: j['collector_currency'] as String? ?? 'USD',
+      );
+}
+
+/// One milking of one day and what became of its milk.
+class MilkingHandover {
+  const MilkingHandover({
+    required this.day,
+    required this.session,
+    this.milkedL = 0,
+    this.calvesL = 0,
+    this.collectedL = 0,
+    this.leftL = 0,
+    this.handedOver = false,
+    this.amount = 0,
+    this.paid = false,
+    this.pending = false,
+  });
+
+  /// The farm day, "2026-11-24".
+  final String day;
+  final String session;
+  final double milkedL;
+  final double calvesL;
+  final double collectedL;
+  final double leftL;
+  final bool handedOver;
+  final double amount;
+  final bool paid;
+
+  /// Handed over on this device, waiting to be sent.
+  final bool pending;
+
+  factory MilkingHandover.fromJson(Map<String, dynamic> j) => MilkingHandover(
+        day: j['day'] as String,
+        session: j['session'] as String,
+        milkedL: (j['milked_l'] as num?)?.toDouble() ?? 0,
+        calvesL: (j['calves_l'] as num?)?.toDouble() ?? 0,
+        collectedL: (j['collected_l'] as num?)?.toDouble() ?? 0,
+        leftL: (j['left_l'] as num?)?.toDouble() ?? 0,
+        handedOver: j['handed_over'] == true,
+        amount: (j['amount'] as num?)?.toDouble() ?? 0,
+        paid: j['paid'] == true,
+      );
+}

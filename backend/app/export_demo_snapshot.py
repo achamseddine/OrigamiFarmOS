@@ -233,6 +233,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     paths += NEW_IN_079
     # Origami's financials and the Sales and Stock reports (v0.8.0).
     paths += NEW_IN_080
+    # The milking routine and payments (v0.8.1).
+    paths += NEW_IN_081
     return paths
 
 
@@ -254,6 +256,14 @@ NEW_IN_080: list[tuple[str, dict | None]] = [
     ("/finance/profit-loss", None),
     ("/reports/sales", None),
     ("/reports/stock", None),
+]
+
+NEW_IN_081: list[tuple[str, dict | None]] = [
+    ("/production/milk-handovers", {"days": 14}),
+    ("/production/milk-routine", None),
+    ("/finance/payments", {"days": 365}),
+    # The milk report now carries the calves' milk and the milkings' names.
+    ("/reports/milk", None),
 ]
 
 

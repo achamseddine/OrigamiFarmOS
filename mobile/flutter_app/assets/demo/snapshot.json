@@ -24382,6 +24382,7 @@
    "total": 4065.0
   }
  },
+ "GET /finance/payments?days=365": [],
  "GET /finance/profit-loss": {
   "by_activity": [
    {
@@ -34025,6 +34026,358 @@
    "waste_qty": 7.0
   }
  ],
+ "GET /production/milk-handovers?days=14": {
+  "collector_currency": "USD",
+  "collector_name": null,
+  "collector_price": null,
+  "milkings": [
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-24",
+    "handed_over": false,
+    "left_l": 74.1,
+    "milked_l": 74.1,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-24",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-23",
+    "handed_over": false,
+    "left_l": 76.1,
+    "milked_l": 76.1,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-23",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-22",
+    "handed_over": false,
+    "left_l": 77.2,
+    "milked_l": 77.2,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-22",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-21",
+    "handed_over": false,
+    "left_l": 76.5,
+    "milked_l": 76.5,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-21",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-20",
+    "handed_over": false,
+    "left_l": 77.6,
+    "milked_l": 77.6,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-20",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-19",
+    "handed_over": false,
+    "left_l": 78.7,
+    "milked_l": 78.7,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-19",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-18",
+    "handed_over": false,
+    "left_l": 78.0,
+    "milked_l": 78.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-18",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-17",
+    "handed_over": false,
+    "left_l": 79.1,
+    "milked_l": 79.1,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-17",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-16",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-16",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-15",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-15",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-14",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-14",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-13",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-13",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-12",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-12",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-11",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "morning"
+   },
+   {
+    "amount": 0,
+    "calves_l": 0.0,
+    "collected_l": 0,
+    "day": "2026-11-11",
+    "handed_over": false,
+    "left_l": 0.0,
+    "milked_l": 0.0,
+    "paid": false,
+    "sale_ids": [],
+    "session": "evening"
+   }
+  ],
+  "second_milking": "evening",
+  "tank_l": 617.3,
+  "today": "2026-11-24"
+ },
+ "GET /production/milk-routine": {
+  "collector_currency": "USD",
+  "collector_name": null,
+  "collector_price": null,
+  "second_milking": "evening"
+ },
  "GET /production/milk-sales?days=90": [],
  "GET /production/milk-tank": {
   "adjusted_l": 0.0,
@@ -35252,15 +35605,7 @@
   "by_buyer": [],
   "by_day": [
    {
-    "date": "2026-10-25",
-    "evening": 0.0,
-    "midday": 0.0,
-    "morning": 0.0,
-    "sold": 0.0,
-    "total": 0.0,
-    "withheld": 0.0
-   },
-   {
+    "calves": 0.0,
     "date": "2026-10-26",
     "evening": 0.0,
     "midday": 0.0,
@@ -35270,6 +35615,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-10-27",
     "evening": 0.0,
     "midday": 0.0,
@@ -35279,6 +35625,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-10-28",
     "evening": 0.0,
     "midday": 0.0,
@@ -35288,6 +35635,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-10-29",
     "evening": 0.0,
     "midday": 0.0,
@@ -35297,6 +35645,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-10-30",
     "evening": 0.0,
     "midday": 0.0,
@@ -35306,6 +35655,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-10-31",
     "evening": 0.0,
     "midday": 0.0,
@@ -35315,6 +35665,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-01",
     "evening": 0.0,
     "midday": 0.0,
@@ -35324,6 +35675,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-02",
     "evening": 0.0,
     "midday": 0.0,
@@ -35333,6 +35685,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-03",
     "evening": 0.0,
     "midday": 0.0,
@@ -35342,6 +35695,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-04",
     "evening": 0.0,
     "midday": 0.0,
@@ -35351,6 +35705,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-05",
     "evening": 0.0,
     "midday": 0.0,
@@ -35360,6 +35715,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-06",
     "evening": 0.0,
     "midday": 0.0,
@@ -35369,6 +35725,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-07",
     "evening": 0.0,
     "midday": 0.0,
@@ -35378,6 +35735,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-08",
     "evening": 0.0,
     "midday": 0.0,
@@ -35387,6 +35745,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-09",
     "evening": 0.0,
     "midday": 0.0,
@@ -35396,6 +35755,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-10",
     "evening": 0.0,
     "midday": 0.0,
@@ -35405,6 +35765,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-11",
     "evening": 0.0,
     "midday": 0.0,
@@ -35414,6 +35775,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-12",
     "evening": 0.0,
     "midday": 0.0,
@@ -35423,6 +35785,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-13",
     "evening": 0.0,
     "midday": 0.0,
@@ -35432,6 +35795,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-14",
     "evening": 0.0,
     "midday": 0.0,
@@ -35441,6 +35805,7 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-15",
     "evening": 0.0,
     "midday": 0.0,
@@ -35450,7 +35815,18 @@
     "withheld": 0.0
    },
    {
+    "calves": 0.0,
     "date": "2026-11-16",
+    "evening": 0.0,
+    "midday": 0.0,
+    "morning": 0.0,
+    "sold": 0.0,
+    "total": 0.0,
+    "withheld": 0.0
+   },
+   {
+    "calves": 0.0,
+    "date": "2026-11-17",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 79.1,
@@ -35459,7 +35835,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-17",
+    "calves": 0.0,
+    "date": "2026-11-18",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 78.0,
@@ -35468,7 +35845,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-18",
+    "calves": 0.0,
+    "date": "2026-11-19",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 78.7,
@@ -35477,7 +35855,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-19",
+    "calves": 0.0,
+    "date": "2026-11-20",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 77.6,
@@ -35486,7 +35865,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-20",
+    "calves": 0.0,
+    "date": "2026-11-21",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 76.5,
@@ -35495,7 +35875,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-21",
+    "calves": 0.0,
+    "date": "2026-11-22",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 77.2,
@@ -35504,7 +35885,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-22",
+    "calves": 0.0,
+    "date": "2026-11-23",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 76.1,
@@ -35513,7 +35895,8 @@
     "withheld": 0.0
    },
    {
-    "date": "2026-11-23",
+    "calves": 0.0,
+    "date": "2026-11-24",
     "evening": 0.0,
     "midday": 0.0,
     "morning": 74.1,
@@ -35530,15 +35913,16 @@
     "liters": 617.3
    }
   ],
-  "end": "2026-11-23",
+  "end": "2026-11-24",
   "farm_name": "Origami Farms",
-  "generated_at": "2026-11-23T06:18:43.162361+00:00",
+  "generated_at": "2026-11-24T13:46:57.596270+00:00",
   "kind": "milk",
   "kpis": {
    "animals_milked": 3,
    "avg_per_animal_day_l": 25.7,
    "avg_per_day_l": 20.6,
    "avg_price_per_liter": null,
+   "calves_l": 0.0,
    "pending_amount": 0.0,
    "revenue": 0.0,
    "sold_l": 0.0,
@@ -35548,7 +35932,8 @@
    "withheld_l": 0.0
   },
   "sales": [],
-  "start": "2026-10-25"
+  "second_milking": "evening",
+  "start": "2026-10-26"
  },
  "GET /reports/sales": {
   "by_activity": [

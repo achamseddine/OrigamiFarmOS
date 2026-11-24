@@ -323,7 +323,9 @@ class ReportView extends StatelessWidget {
             ),
           ]),
         )),
-        if (kind == 'milk') block(_MilkChart(days: [for (final d in (data['by_day'] as List<dynamic>? ?? const [])) (d as Map).cast<String, dynamic>()])),
+        if (kind == 'milk') block(_MilkChart(
+              days: [for (final d in (data['by_day'] as List<dynamic>? ?? const [])) (d as Map).cast<String, dynamic>()],
+              afternoon: data['second_milking'] == 'afternoon')),
         for (final table in doc.tables) block(SectionCard(title: table.title, child: ReportTableView(table: table))),
       ],
     );
@@ -352,8 +354,11 @@ class _Figure extends StatelessWidget {
 /// Litres per day — per week or month for a long period — stacked by
 /// milking session.
 class _MilkChart extends StatelessWidget {
-  const _MilkChart({required this.days});
+  const _MilkChart({required this.days, this.afternoon = false});
   final List<Map<String, dynamic>> days;
+
+  /// The farm calls its second milking the afternoon one.
+  final bool afternoon;
 
   @override
   Widget build(BuildContext context) {
@@ -384,7 +389,7 @@ class _MilkChart extends StatelessWidget {
               Wrap(spacing: FarmSpacing.md, children: [
                 _Legend(color: FarmColors.milkBlue, label: context.t('sessionMorning')),
                 _Legend(color: FarmColors.gold, label: context.t('sessionMidday')),
-                _Legend(color: FarmColors.cedar, label: context.t('sessionEvening')),
+                _Legend(color: FarmColors.cedar, label: context.t(afternoon ? 'sessionAfternoon' : 'sessionEvening')),
               ]),
             ]),
     );

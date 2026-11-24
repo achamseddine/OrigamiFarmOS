@@ -245,6 +245,11 @@ final List<_Rule> _rules = [
   _Rule('POST', '/finance/expenses', (m) => [
         AppendRecord('/finance/expenses', _newRecord(m, extra: {'status': 'recorded', ..._inUsd(m.body, m.body['amount'] as num? ?? 0)})),
       ]),
+  // A buyer's payment for several sales: each one shows paid at once.
+  _Rule('POST', '/finance/payments', (m) => [
+        for (final id in (m.body['sale_ids'] as List<dynamic>? ?? const []))
+          MergeRecord('/finance/sales', '$id', {'payment_status': 'paid', 'paid_at': m.body['paid_at'] ?? _now()}),
+      ]),
   _Rule('POST', '/finance/expenses/$_id/paid', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
   _Rule('POST', '/finance/expenses/$_id/cancel', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
   _Rule('POST', '/production/harvest', (m) => [AppendRecord('/production/harvest', _newRecord(m))]),

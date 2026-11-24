@@ -1,5 +1,15 @@
 # Releases
 
+## v0.8.1 — The milking routine: calves, the collector, the weekly payment
+
+How the farm works: two milkings a day, morning and afternoon; after each, the calves get their milk and the rest goes to the milk collector, who takes it after every milking and pays once a week. On the tablet and the web app:
+- **After each milking** (Milk page): today's and yesterday's milkings, each with the milk that went into the tank, what went to the calves, what the collector took (and its amount), what is left, and whether it is paid. *Hand over* on a milking not handed over yet: the litres to the calves; the collector's litres fill in as the rest (they can be changed). The collector and his price come from the farm's settings, so whoever milks types litres only — an employee who records milk can hand it over, but does not set prices or take payments. The collection is a milk sale to the collector, to be paid with the week; the calves' milk leaves the tank with that reason. The same milking handed over twice is asked (*Already recorded?*); more than the tank holds is refused, except by the manager.
+- **Collector & milkings** (the farm manager): the collector's name, his price per litre in USD or LBP (an LBP price is converted at the farm's rate for each day), and what the second milking is called — **Afternoon** or Evening. The app then says *Afternoon* everywhere the second milking appears: the milk form, quick entry, the cow queue, My Day, an animal's milk, corrections, the milk report.
+- **Collector paid** (once a week): one form lists everything he still owes — each collection with its day and litres — ticked; it shows what is due, takes what he actually paid (USD or LBP, on its date, receipt no.), and marks every collection paid at once. If he paid less (a deduction) or more, the difference is kept on record with the payment, so the books show the money that really came in. The same *Payment from …* is on Sales & Finance → *Who owes what* for any buyer.
+- The milk report shows the calves' milk (per day and in total) and names the second milking as the farm does.
+- Offline: a handover and a payment made without the connection are shown at once and sent when it is back.
+- Server: **migration `a2c4e6f8b0d3`** — farms: `second_milking`, `milk_collector_name`, `milk_collector_price`, `milk_collector_currency`; `milk_sales` / `milk_tank_adjustments`: `session`, `collection_day`; `sales.payment_id`; new table `customer_payments`. `GET /production/milk-handovers`, `POST /production/milk-handovers` (Milk *create*), `GET|PUT /production/milk-routine` (Milk or Finance *approve*), `GET|POST /finance/payments` (Sales or Finance *create*, or Milk *approve*). Tests: backend +7 (`test_milk_handover.py`), app +7 (`test/records/milk_handover_test.dart`); the tablet-size sweep covers the three new forms.
+
 ## v0.8.0 — Origami's financials; Sales and Stock reports; updates from the app
 
 On the tablet and the web app (one codebase), the books kept by the server:
