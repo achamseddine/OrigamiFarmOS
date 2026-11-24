@@ -16,6 +16,7 @@ import '../../core/widgets/status_pill.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/herd_records_provider.dart';
 import '../../providers/tasks_provider.dart';
+import '../../app/update/update_ui.dart';
 
 /// Farm configuration (tech spec §6 nav table: "Users, roles, languages,
 /// currency, thresholds"). Farm-wide sections (Modules, Roster) are
@@ -86,6 +87,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ]),
           ),
+          const SizedBox(height: FarmSpacing.md),
+          // A newer version: check, and update (tablet: the APK; web: reload).
+          const AppUpdateCard(),
           const SizedBox(height: FarmSpacing.md),
           SectionCard(
             title: 'My account',

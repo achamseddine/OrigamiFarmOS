@@ -10,6 +10,7 @@ import '../../features/record/record_sheet.dart';
 import '../../features/sync/sync_pill.dart';
 import '../../providers/access_provider.dart';
 import '../../features/profile/my_profile_sheet.dart';
+import '../../app/update/update_ui.dart';
 
 /// Tablet application shell: content canvas over a bottom tab bar.
 ///
@@ -57,6 +58,8 @@ class AppShell extends StatelessWidget {
             // Only visible while the tablet is out of contact with the
             // farm server; collapses to nothing otherwise.
             const OfflineBanner(),
+            // A newer version of the app is out (Settings → App updates).
+            const AppUpdateBanner(),
             Expanded(
               child: Padding(
                 padding: EdgeInsets.symmetric(

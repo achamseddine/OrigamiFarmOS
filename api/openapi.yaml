@@ -1333,6 +1333,399 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/exchange-rates:
+    get:
+      tags:
+      - finance
+      summary: Exchange Rates
+      description: The rate in force today (LBP per USD) and the rates set before it.
+      operationId: exchange_rates_api_v1_finance_exchange_rates_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Exchange Rates Api V1 Finance Exchange Rates Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - finance
+      summary: Set Exchange Rate
+      description: '1 USD = [rate_per_usd] LBP from [effective_date] (today when left out).
+
+        A new rate is a new row; the earlier ones stay for the days they covered.'
+      operationId: set_exchange_rate_api_v1_finance_exchange_rates_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExchangeRateCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Set Exchange Rate Api V1 Finance Exchange Rates Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/finance/sales:
+    get:
+      tags:
+      - finance
+      summary: List Sales
+      description: 'Every sale of the last [days] days — milk, eggs, produce, animals,
+
+        Mouneh, the farm shop — newest first, cancelled ones and their
+
+        reversals included.'
+      operationId: list_sales_api_v1_finance_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 731
+          minimum: 1
+          default: 90
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Sales Api V1 Finance Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - finance
+      summary: Record Sale
+      operationId: record_sale_api_v1_finance_sales_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Sale Api V1 Finance Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/sales/{sale_id}/paid:
+    post:
+      tags:
+      - finance
+      summary: Mark Sale Paid
+      operationId: mark_sale_paid_api_v1_finance_sales__sale_id__paid_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sale_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sale Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/MarkPaid'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Mark Sale Paid Api V1 Finance Sales  Sale Id  Paid Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/sales/{sale_id}/cancel:
+    post:
+      tags:
+      - finance
+      summary: Cancel Sale
+      operationId: cancel_sale_api_v1_finance_sales__sale_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sale_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sale Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWithReason'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Sale Api V1 Finance Sales  Sale Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/expenses:
+    get:
+      tags:
+      - finance
+      summary: List Expenses
+      operationId: list_expenses_api_v1_finance_expenses_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 731
+          minimum: 1
+          default: 90
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Expenses Api V1 Finance Expenses Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - finance
+      summary: Record Expense
+      operationId: record_expense_api_v1_finance_expenses_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpenseCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Expense Api V1 Finance Expenses Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/expenses/{expense_id}/paid:
+    post:
+      tags:
+      - finance
+      summary: Mark Expense Paid
+      operationId: mark_expense_paid_api_v1_finance_expenses__expense_id__paid_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/MarkPaid'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Mark Expense Paid Api V1 Finance Expenses  Expense Id  Paid Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/expenses/{expense_id}/cancel:
+    post:
+      tags:
+      - finance
+      summary: Cancel Expense
+      operationId: cancel_expense_api_v1_finance_expenses__expense_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWithReason'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Expense Api V1 Finance Expenses  Expense Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/owed:
+    get:
+      tags:
+      - finance
+      summary: Owed
+      description: 'What customers still owe the farm (with Sales / Finance) and what the
+
+        farm still owes its suppliers (with Expenses / Finance).'
+      operationId: owed_api_v1_finance_owed_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Owed Api V1 Finance Owed Get
+      security:
+      - HTTPBearer: []
+  /api/v1/finance/profit-loss:
+    get:
+      tags:
+      - finance
+      summary: Profit Loss
+      description: 'Month by month from [start] to [end] (default the last 12 months):
+
+        revenue by activity, costs by line, profit, cash in and out.'
+      operationId: profit_loss_api_v1_finance_profit_loss_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Profit Loss Api V1 Finance Profit Loss Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/animals:
     get:
       tags:
@@ -9862,6 +10255,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/sales:
+    get:
+      tags:
+      - reports
+      summary: Sales Report
+      description: 'Everything sold in a period: by product, buyer, activity and day; what is still unpaid;
+        every sale.'
+      operationId: sales_report_api_v1_reports_sales_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sales Report Api V1 Reports Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/stock:
+    get:
+      tags:
+      - reports
+      summary: Stock Report
+      description: 'What is in stock now: feed, medicine, Mouneh goods and materials, milk in the tank,
+        other items;
+
+        low and expiring stock; its value at cost (for those who see money).'
+      operationId: stock_report_api_v1_reports_stock_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Stock Report Api V1 Reports Stock Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/modules:
     get:
       tags:
@@ -13891,6 +14374,14 @@ components:
       required:
       - reason
       title: BreedingVoidIn
+    CancelWithReason:
+      properties:
+        reason:
+          type: string
+          title: Reason
+          default: ''
+      type: object
+      title: CancelWithReason
     CapabilityOut:
       properties:
         code:
@@ -15001,6 +15492,104 @@ components:
       - label
       - value
       title: Evidence
+    ExchangeRateCreate:
+      properties:
+        currency:
+          type: string
+          title: Currency
+          default: LBP
+        rate_per_usd:
+          type: number
+          title: Rate Per Usd
+        effective_date:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Effective Date
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - rate_per_usd
+      title: ExchangeRateCreate
+      description: POST /finance/exchange-rates — 1 USD = [rate_per_usd] [currency] from [effective_date].
+    ExpenseCreate:
+      properties:
+        category:
+          type: string
+          title: Category
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        incurred_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Incurred At
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        activity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activity
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - category
+      - amount
+      title: ExpenseCreate
+      description: POST /finance/expenses — an expense paid, or a bill still to pay.
     ExpenseOut:
       properties:
         id:
@@ -15037,6 +15626,61 @@ components:
           type: string
           format: date-time
           title: Incurred At
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        supplier_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Label
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+        status:
+          type: string
+          title: Status
+          default: recorded
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        original_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Original Amount
+        original_currency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Original Currency
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        activity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activity
       type: object
       required:
       - id
@@ -16944,6 +17588,17 @@ components:
       - label_en
       - label_ar
       title: ManagementProfileOut
+    MarkPaid:
+      properties:
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+      type: object
+      title: MarkPaid
+      description: POST …/paid — when it was paid (now when left out).
     MedicationAdministrationIn:
       properties:
         subject_type:
@@ -21666,6 +22321,89 @@ components:
       - required
       - priority
       title: RuleOut
+    SaleCreate:
+      properties:
+        product_type:
+          type: string
+          title: Product Type
+        product_label:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Product Label
+        quantity:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        unit_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Price
+        total:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Total
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        sold_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Sold At
+        customer_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Customer Id
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        activity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activity
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - product_type
+      title: SaleCreate
+      description: 'POST /finance/sales — any product sold (milk: Sell milk; Mouneh: its shop).'
     SaleOut:
       properties:
         id:
@@ -21710,6 +22448,51 @@ components:
           type: string
           format: date-time
           title: Sold At
+        status:
+          type: string
+          title: Status
+          default: recorded
+        unit_price:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Unit Price
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+        original_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Original Amount
+        original_currency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Original Currency
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        activity:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Activity
       type: object
       required:
       - id

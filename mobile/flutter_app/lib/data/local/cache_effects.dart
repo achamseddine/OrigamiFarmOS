@@ -125,6 +125,15 @@ Map<String, dynamic> _newRecord(_Match match, {Map<String, dynamic> extra = cons
       kPendingFlag: true,
     };
 
+/// An amount entered in LBP shown in USD at the rate given (the server
+/// works it out again, at the farm's rate when none was given).
+Map<String, dynamic> _inUsd(Map<String, dynamic> body, num entered) {
+  final currency = '${body['currency'] ?? 'USD'}';
+  final rate = body['exchange_rate'] as num?;
+  if (currency == 'USD' || rate == null || rate <= 0) return {'amount': entered, 'currency': 'USD'};
+  return {'amount': double.parse((entered / rate).toStringAsFixed(2)), 'currency': 'USD', 'original_amount': entered, 'original_currency': currency};
+}
+
 /// One `/…/{id}` segment.
 const String _id = r'([^/]+)';
 
@@ -222,6 +231,22 @@ final List<_Rule> _rules = [
   _Rule('POST', '/production/milk-sales/$_id/paid', (m) => [MergeRecord('/production/milk-sales', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
   _Rule('POST', '/production/milk-sales/$_id/cancel', (m) => [MergeRecord('/production/milk-sales', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
   _Rule('POST', '/production/milk-tank/adjustments', (m) => [AppendRecord('/production/milk-tank/adjustments', _newRecord(m, extra: {'occurred_at': _now()}))]),
+  // Any sale, expenses and bills (v0.8.0): shown at once, flagged as waiting.
+  // The amount in USD is the server's to work out for LBP; until then the
+  // row shows what was entered.
+  _Rule('POST', '/finance/sales', (m) => [
+        AppendRecord('/finance/sales', _newRecord(m, extra: {
+          'status': 'recorded',
+          ..._inUsd(m.body, (m.body['total'] as num?) ?? ((m.body['quantity'] as num? ?? 0) * (m.body['unit_price'] as num? ?? 0))),
+        })),
+      ]),
+  _Rule('POST', '/finance/sales/$_id/paid', (m) => [MergeRecord('/finance/sales', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
+  _Rule('POST', '/finance/sales/$_id/cancel', (m) => [MergeRecord('/finance/sales', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
+  _Rule('POST', '/finance/expenses', (m) => [
+        AppendRecord('/finance/expenses', _newRecord(m, extra: {'status': 'recorded', ..._inUsd(m.body, m.body['amount'] as num? ?? 0)})),
+      ]),
+  _Rule('POST', '/finance/expenses/$_id/paid', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
+  _Rule('POST', '/finance/expenses/$_id/cancel', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
   _Rule('POST', '/production/harvest', (m) => [AppendRecord('/production/harvest', _newRecord(m))]),
 
   // Agriculture: created at /fields, read back at /production/fields.

@@ -16,6 +16,7 @@ import 'package:farmos/features/employees/employees_screen.dart';
 import 'package:farmos/features/feed/feed_workspace_screen.dart';
 import 'package:farmos/features/feed/feeding_event_dialog.dart';
 import 'package:farmos/features/feed/purchase_and_mix_dialogs.dart';
+import 'package:farmos/features/finance/finance_forms.dart';
 import 'package:farmos/features/finance/sales_finance_screen.dart';
 import 'package:farmos/features/health/health_cases.dart';
 import 'package:farmos/features/health/health_intelligence_screen.dart';
@@ -86,6 +87,9 @@ void main() {
     'correct feeding': (c) => showCorrectFeedingDialog(c, c.read<FeedingProvider>().recentEvents.firstWhere((e) => e.status == 'recorded')),
     'sell milk': (c) => showSellMilkDialog(c),
     'count the milk tank': (c) => showMilkTankDialog(c),
+    'record a sale': (c) => showRecordSaleDialog(c),
+    'record an expense': (c) => showRecordExpenseDialog(c, category: 'feed'),
+    'exchange rate': (c) => showExchangeRateDialog(c),
   };
 
   /// Draws [build] at [size] in [locale]; returns what went wrong, one line each.

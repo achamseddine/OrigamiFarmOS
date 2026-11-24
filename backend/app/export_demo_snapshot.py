@@ -231,6 +231,8 @@ def _requests(db: Session) -> list[tuple[str, dict | None]]:
     # (v0.7.9). A report is recorded for its default period, the last 30
     # days; offline, any period the tablet asks for reads that one.
     paths += NEW_IN_079
+    # Origami's financials and the Sales and Stock reports (v0.8.0).
+    paths += NEW_IN_080
     return paths
 
 
@@ -242,6 +244,16 @@ NEW_IN_079: list[tuple[str, dict | None]] = [
     ("/reports/feed", None),
     ("/reports/herd", None),
     ("/reports/finance", None),
+]
+
+NEW_IN_080: list[tuple[str, dict | None]] = [
+    ("/finance/exchange-rates", None),
+    ("/finance/sales", {"days": 365}),
+    ("/finance/expenses", {"days": 365}),
+    ("/finance/owed", None),
+    ("/finance/profit-loss", None),
+    ("/reports/sales", None),
+    ("/reports/stock", None),
 ]
 
 

@@ -14,6 +14,8 @@ import '../features/auth/login_screen.dart';
 import '../providers/access_provider.dart';
 import '../providers/agriculture_provider.dart';
 import '../providers/approvals_provider.dart';
+import '../providers/finance_provider.dart';
+import 'update/app_update_provider.dart';
 import '../providers/milk_sales_provider.dart';
 import '../providers/reports_provider.dart';
 import '../providers/animals_provider.dart';
@@ -138,6 +140,9 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => MilkSalesProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => FinanceProvider(apiClient: api)),
+        // Is there a newer version of the app (checked after sign-in, then every few hours).
+        ChangeNotifierProvider(create: (_) => AppUpdateProvider()..start()),
         ChangeNotifierProvider(create: (_) => ReportsProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => PharmacyProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => EmergencyProvider(apiClient: api)),
@@ -298,6 +303,15 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       if ((access.isModuleAvailable('milk_production') || access.isModuleAvailable(FarmModuleShortcuts.finance) || access.isModuleAvailable('sales')) &&
           touched(const ['milk_production', 'sales', 'finance']))
         quietly(() => context.read<MilkSalesProvider>().load()),
+      // Sales, expenses and bills, who owes what, profit and loss, the rate.
+      if ((access.isModuleAvailable(FarmModuleShortcuts.finance) || access.isModuleAvailable('sales') || access.isModuleAvailable('expenses')) &&
+          touched(const ['sales', 'finance', 'expenses', 'milk_production']) &&
+          context.read<FinanceProvider>().loaded)
+        quietly(() => context.read<FinanceProvider>().load(
+              sales: access.canSeeSales,
+              expenses: access.canSeeExpenses,
+              profitLoss: access.canSeeProfitLoss,
+            )),
       // The farm pharmacy sits between stock and animal health: whoever
       // can see either gets the essential-medicine dashboard.
       if ((access.isModuleAvailable('inventory') || access.isModuleAvailable('animal_health')) && touched(const ['inventory', 'animal_health']))

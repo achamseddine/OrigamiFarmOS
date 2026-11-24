@@ -46,8 +46,19 @@ _REPORT_MODULES = {
     "feed": (perms.FEED_NUTRITION, perms.INVENTORY),
     "herd": (perms.ANIMALS, perms.ANIMAL_HEALTH),
     "finance": (perms.FINANCE, perms.SALES),
+    "sales": (perms.SALES, perms.FINANCE),
+    "stock": (perms.INVENTORY, perms.FEED_NUTRITION, perms.MOUNEH_INVENTORY, perms.ANIMAL_HEALTH, perms.MILK_PRODUCTION),
 }
 _MONEY_MODULES = (perms.REPORTS, perms.FINANCE, perms.SALES)
+# The stock report shows each part to whoever works in that area.
+_STOCK_SECTION_MODULES = {
+    "feed": (perms.FEED_NUTRITION, perms.INVENTORY),
+    "medicine": (perms.ANIMAL_HEALTH, perms.INVENTORY),
+    "mouneh_goods": (perms.MOUNEH_INVENTORY, perms.MOUNEH_PRODUCTION, perms.INVENTORY),
+    "mouneh_materials": (perms.MOUNEH_INVENTORY, perms.MOUNEH_PRODUCTION, perms.INVENTORY),
+    "milk": (perms.MILK_PRODUCTION,),
+    "other": (perms.INVENTORY,),
+}
 
 
 def _farm_report(kind: str, start: date | None, end: date | None, db: Session, user: models.User) -> dict:
@@ -59,7 +70,10 @@ def _farm_report(kind: str, start: date | None, end: date | None, db: Session, u
         names = " or ".join(perms.MODULES_BY_CODE[m].label_en for m in modules)
         raise HTTPException(status.HTTP_403_FORBIDDEN, f"This report needs {names}. Ask a farm manager to grant it.")
     money = any(user_can(db, user, m, perms.VIEW) for m in _MONEY_MODULES)
-    out = farm_reports.build(db, user.farm_id, kind, start, end, with_sales=money)
+    sections = None
+    if kind == "stock" and not user_can(db, user, perms.REPORTS, perms.VIEW):
+        sections = {section for section, areas in _STOCK_SECTION_MODULES.items() if any(user_can(db, user, m, perms.VIEW) for m in areas)}
+    out = farm_reports.build(db, user.farm_id, kind, start, end, with_sales=money, stock_sections=sections)
     db.commit()  # the feed report's cover figures may refresh the forecast snapshot
     return out
 
@@ -93,3 +107,18 @@ def finance_report(start: date | None = Query(None), end: date | None = Query(No
                    user: models.User = Depends(get_current_user)) -> dict:
     """Money for a period: revenue, expenses, margin, cash collected, unpaid; by product, category and day."""
     return _farm_report("finance", start, end, db, user)
+
+
+@router.get("/reports/sales")
+def sales_report(start: date | None = Query(None), end: date | None = Query(None), db: Session = Depends(get_db),
+                 user: models.User = Depends(get_current_user)) -> dict:
+    """Everything sold in a period: by product, buyer, activity and day; what is still unpaid; every sale."""
+    return _farm_report("sales", start, end, db, user)
+
+
+@router.get("/reports/stock")
+def stock_report(start: date | None = Query(None), end: date | None = Query(None), db: Session = Depends(get_db),
+                 user: models.User = Depends(get_current_user)) -> dict:
+    """What is in stock now: feed, medicine, Mouneh goods and materials, milk in the tank, other items;
+    low and expiring stock; its value at cost (for those who see money)."""
+    return _farm_report("stock", start, end, db, user)

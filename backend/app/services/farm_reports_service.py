@@ -1,4 +1,5 @@
-"""The farm's reports for a period (v0.7.9): milk, feed, herd, finance.
+"""The farm's reports for a period (v0.7.9): milk, feed, herd, finance;
+sales and stock (v0.8.0).
 
 Every figure is read from the canonical records — milk records, milk
 sales and the tank, feeding events and their components, delivered lots,
@@ -29,7 +30,7 @@ from app.services import feed_forecast_service as forecast
 from app.services import milk_sales_service as milk_sales
 from app.services.feed_inventory_service import FeedError
 
-KINDS = ("milk", "feed", "herd", "finance")
+KINDS = ("milk", "feed", "herd", "finance", "sales", "stock")
 MAX_DAYS = 366
 
 
@@ -273,7 +274,8 @@ def finance_report(db: Session, farm_id: str, start: date | None, end: date | No
     sales = db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.sold_at >= lo, models.Sale.sold_at < hi)
                        .order_by(models.Sale.sold_at)).all()
     expenses = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.incurred_at >= lo,
-                                                       models.Expense.incurred_at < hi).order_by(models.Expense.incurred_at)).all()
+                                                       models.Expense.incurred_at < hi, models.Expense.status == "recorded")
+                          .order_by(models.Expense.incurred_at)).all()
     by_type: dict[str, float] = defaultdict(float)
     by_label: dict[str, dict] = {}
     by_day = {d: {"date": d, "revenue": 0.0, "expenses": 0.0} for d in _days(start, end)}
@@ -308,7 +310,192 @@ def finance_report(db: Session, farm_id: str, start: date | None, end: date | No
     return out
 
 
-def build(db: Session, farm_id: str, kind: str, start: date | None, end: date | None, *, with_sales: bool = True) -> dict:
+# ----------------------------------------------------------------- sales
+_CANCELLED_SUFFIX = " (cancelled sale)"
+
+
+def sales_report(db: Session, farm_id: str, start: date | None, end: date | None) -> dict:
+    """Everything sold in the period — every product, every module: what,
+    how much, for how much, to whom, paid or still owed. A sale cancelled
+    in the period shows as cancelled and its reversal takes it out of the
+    totals."""
+    start, end, lo, hi, tz = period(db, farm_id, start, end)
+    out = _base(db, farm_id, "sales", start, end)
+    rows = db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.sold_at >= lo, models.Sale.sold_at < hi)
+                      .order_by(models.Sale.sold_at)).all()
+    customers = {c.id: c.name for c in db.scalars(select(models.Customer).where(models.Customer.farm_id == farm_id))}
+    today = datetime.now(timezone.utc).astimezone(tz).date()
+
+    def buyer(s: models.Sale) -> str | None:
+        return s.buyer_name or (customers.get(s.customer_id) if s.customer_id else None)
+
+    def label(s: models.Sale) -> str:
+        lbl = s.product_label or s.product_type
+        return lbl[: -len(_CANCELLED_SUFFIX)] if lbl.endswith(_CANCELLED_SUFFIX) else lbl
+
+    from app.services.finance_service import ACTIVITY_OF_PRODUCT
+
+    by_product: dict[tuple[str, str, str | None], dict] = {}
+    by_buyer: dict[str, dict] = {}
+    by_activity: dict[str, float] = defaultdict(float)
+    by_day = {d: {"date": d, "sales": 0, "amount": 0.0} for d in _days(start, end)}
+    unpaid = []
+    for s in rows:
+        key = (s.product_type, label(s), s.unit)
+        p = by_product.setdefault(key, {"product_type": s.product_type, "product": key[1], "unit": s.unit, "quantity": 0.0, "amount": 0.0, "sales": 0})
+        p["quantity"] += s.quantity or 0.0
+        p["amount"] += s.amount
+        if s.status == "recorded":
+            p["sales"] += 1
+        name = buyer(s) or ""
+        b = by_buyer.setdefault(name.strip().lower(), {"buyer": buyer(s), "sales": 0, "amount": 0.0, "unpaid": 0.0})
+        b["amount"] += s.amount
+        if s.status == "recorded":
+            b["sales"] += 1
+        by_activity[s.activity or ACTIVITY_OF_PRODUCT.get(s.product_type, "general")] += s.amount
+        d = by_day.get(_day(s.sold_at, tz))
+        if d is not None:
+            d["amount"] += s.amount
+            if s.status == "recorded":
+                d["sales"] += 1
+        if s.status == "recorded" and s.payment_status in ("pending", "partial") and s.amount > 0:
+            b["unpaid"] += s.amount
+            unpaid.append({"date": _day(s.sold_at, tz), "product": label(s), "buyer": buyer(s), "amount": _r(s.amount),
+                           "days": (today - ensure_utc(s.sold_at).astimezone(tz).date()).days})
+    revenue = sum(s.amount for s in rows)
+    paid = sum(s.amount for s in rows if s.payment_status == "paid")
+    count = sum(1 for s in rows if s.status == "recorded")
+    out.update({
+        "kpis": {"sales": count, "revenue": _r(revenue), "paid": _r(paid), "unpaid": _r(sum(u["amount"] for u in unpaid)),
+                 "average_sale": _r(revenue / count) if count else 0.0, "cancelled": sum(1 for s in rows if s.status == "cancelled"),
+                 "buyers": len([k for k in by_buyer if k])},
+        "by_product": [{**p, "quantity": _r(p["quantity"], 2), "amount": _r(p["amount"]),
+                        "average_price": _r(p["amount"] / p["quantity"], 3) if p["quantity"] else None}
+                       for p in sorted(by_product.values(), key=lambda p: -p["amount"])],
+        "by_activity": [{"activity": a, "amount": _r(v)} for a, v in sorted(by_activity.items(), key=lambda kv: -kv[1]) if _r(v)],
+        "by_buyer": [{**b, "amount": _r(b["amount"]), "unpaid": _r(b["unpaid"])} for b in sorted(by_buyer.values(), key=lambda b: -b["amount"])],
+        "by_day": [{**d, "amount": _r(d["amount"])} for d in by_day.values()],
+        "unpaid": unpaid,
+        "sales": [{"date": _day(s.sold_at, tz), "product_type": s.product_type, "product": label(s), "quantity": s.quantity, "unit": s.unit,
+                   "unit_price": s.unit_price, "amount": _r(s.amount), "original_amount": s.original_amount, "original_currency": s.original_currency,
+                   "buyer": buyer(s), "payment_status": s.payment_status, "status": s.status} for s in rows],
+    })
+    return out
+
+
+# ----------------------------------------------------------------- stock
+STOCK_SECTIONS = ("feed", "medicine", "mouneh_goods", "mouneh_materials", "milk", "other")
+
+
+def stock_report(db: Session, farm_id: str, start: date | None, end: date | None, *, with_values: bool = True,
+                 sections: set[str] | None = None) -> dict:
+    """What the farm has in stock now: feed, medicine, Mouneh goods and
+    materials, milk in the tank and every other stock item — on hand, what
+    can be used, what runs low or expires, and (for those who see money)
+    what it is worth at its cost. Read from the lots and the ledger."""
+    start, end, lo, hi, tz = period(db, farm_id, start, end)
+    out = _base(db, farm_id, "stock", start, end)
+    today = datetime.now(timezone.utc).astimezone(tz).date()
+    horizon = datetime.now(timezone.utc) + timedelta(days=30)
+    from app.domain import mouneh_models as mo
+    from app.domain import pharmacy_models as pm
+    from app.services import pharmacy_service as pharmacy
+
+    used_items: set[str] = set()
+    # Feed: the stock ledger by lot.
+    feed = []
+    lots_by_product: dict[str, list[fm.FeedLot]] = defaultdict(list)
+    for lot in db.scalars(select(fm.FeedLot).where(fm.FeedLot.farm_id == farm_id, fm.FeedLot.quantity_on_hand > 0.0005)):
+        lots_by_product[lot.feed_product_id].append(lot)
+    for p in db.scalars(select(fm.FeedProduct).where(fm.FeedProduct.farm_id == farm_id)):
+        used_items.add(p.inventory_item_id)
+    for r in forecast.cover_for_products(db, farm_id):
+        value = sum((l.quantity_on_hand or 0) * (l.unit_cost or 0) for l in lots_by_product.get(r["feed_product_id"], []))
+        low = r["status"] in ("below_minimum", "reorder", "stockout_risk") or (r["days_of_cover"] is not None and r["days_of_cover"] < 7)
+        feed.append({"name": r["name"], "unit": r["unit"], "on_hand": _r(r["on_hand"], 1), "available": _r(r["available"], 1),
+                     "reserved": _r(r["reserved"], 1), "unusable": _r(r["unusable"], 1), "days_of_cover": r["days_of_cover"],
+                     "low": low, "value": _r(value) if with_values else None})
+    # Medicine: lots on hand, usable, expiring.
+    medicine = []
+    for prod in db.scalars(select(pm.MedicineProduct).where(pm.MedicineProduct.farm_id == farm_id)):
+        used_items.add(prod.inventory_item_id)
+        item = db.get(models.InventoryItem, prod.inventory_item_id)
+        b = pharmacy.stock_breakdown(db, prod)
+        if b["on_hand"] <= 0.0005 and item is None:
+            continue
+        value = sum((l.quantity_on_hand or 0) * (l.unit_cost or 0) for l in prod.lots if (l.quantity_on_hand or 0) > 0)
+        exp = b["earliest_expiry"]
+        medicine.append({"name": item.name if item else (prod.brand_name or prod.generic_name or "?"), "unit": item.unit if item else None,
+                         "on_hand": _r(b["on_hand"], 2), "usable": _r(b["eligible"], 2), "expired": _r(b["expired"], 2),
+                         "expiring_soon": _r(b["expiring_quantity"], 2), "earliest_expiry": exp.astimezone(tz).date().isoformat() if exp else None,
+                         "low": b["eligible"] <= 0.0005, "value": _r(value) if with_values else None})
+    # Mouneh finished goods, by product.
+    goods: dict[str, dict] = {}
+    names = {p.id: p for p in db.scalars(select(mo.MounehProduct).where(mo.MounehProduct.farm_id == farm_id))}
+    for g in db.scalars(select(mo.FinishedGoodsStock).where(mo.FinishedGoodsStock.farm_id == farm_id)):
+        prod = names.get(g.product_id)
+        row = goods.setdefault(g.product_id, {"name": prod.name if prod else g.product_id,
+                                              "unit": (prod.custom_output_unit_label or prod.output_unit) if prod else None,
+                                              "available": 0.0, "reserved": 0.0, "sold": 0.0, "value": 0.0, "earliest_expiry": None,
+                                              "threshold": prod.low_stock_threshold if prod else None})
+        row["available"] += g.quantity_available or 0
+        row["reserved"] += g.quantity_reserved or 0
+        row["sold"] += g.quantity_sold or 0
+        row["value"] += (g.quantity_available or 0) * (g.unit_cost or 0)
+        if g.expiry_date and (g.quantity_available or 0) > 0:
+            e = ensure_utc(g.expiry_date).astimezone(tz).date().isoformat()
+            row["earliest_expiry"] = e if row["earliest_expiry"] is None or e < row["earliest_expiry"] else row["earliest_expiry"]
+    mouneh_goods = [{"name": g["name"], "unit": g["unit"], "available": _r(g["available"], 1), "reserved": _r(g["reserved"], 1),
+                     "sold": _r(g["sold"], 1), "earliest_expiry": g["earliest_expiry"],
+                     "low": g["threshold"] is not None and g["available"] <= g["threshold"], "value": _r(g["value"]) if with_values else None}
+                    for g in sorted(goods.values(), key=lambda g: g["name"].lower())]
+    # Mouneh materials and packaging.
+    materials = []
+    for m in db.scalars(select(mo.RawMaterial).where(mo.RawMaterial.farm_id == farm_id, mo.RawMaterial.active.is_(True))):
+        if m.inventory_item_id:
+            used_items.add(m.inventory_item_id)
+        if not m.stock_tracking_enabled:
+            continue
+        materials.append({"name": m.name, "unit": m.unit, "category": m.category, "on_hand": _r(m.current_stock, 2),
+                          "low": (m.current_stock or 0) <= 0, "value": _r((m.current_stock or 0) * (m.default_unit_cost or 0)) if with_values else None})
+    # Every other stock item (tools, spare parts, supplies…).
+    other = []
+    for it in db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == farm_id).order_by(models.InventoryItem.name)):
+        if it.id in used_items:
+            continue
+        other.append({"name": it.name, "category": it.category, "unit": it.unit, "on_hand": _r(it.current_qty, 2),
+                      "reorder_level": it.reorder_level, "low": (it.reorder_level or 0) > 0 and (it.current_qty or 0) <= it.reorder_level,
+                      "value": _r((it.current_qty or 0) * (it.unit_cost or 0)) if with_values else None})
+    tank = milk_sales.tank(db, farm_id)
+    milk_value = tank["balance_l"] * tank["last_price_per_liter"] if tank.get("last_price_per_liter") else None
+    # Each section only for whoever works in that area (all with Reports).
+    show = set(STOCK_SECTIONS) if sections is None else sections
+    feed = feed if "feed" in show else []
+    medicine = medicine if "medicine" in show else []
+    mouneh_goods = mouneh_goods if "mouneh_goods" in show else []
+    materials = materials if "mouneh_materials" in show else []
+    other = other if "other" in show else []
+    if "milk" not in show:
+        milk_value = None
+    sections_ = (feed, medicine, mouneh_goods, materials, other)
+    lines = sum(1 for sec in sections_ for r in sec if (r.get("on_hand") or r.get("available") or 0) > 0)
+    expiring = sum(1 for r in medicine if r["expiring_soon"] > 0) + sum(1 for r in mouneh_goods if r["earliest_expiry"] and r["earliest_expiry"] <= horizon.astimezone(tz).date().isoformat())
+    value = sum((r.get("value") or 0) for sec in sections_ for r in sec) + (milk_value or 0)
+    out.update({
+        "as_of": today.isoformat(),
+        "sections": [x for x in STOCK_SECTIONS if x in show],
+        "kpis": {"lines": lines, "low": sum(1 for sec in sections_ for r in sec if r.get("low")), "expiring": expiring,
+                 "milk_in_tank_l": _r(tank["balance_l"], 1) if "milk" in show else None, "value": _r(value) if with_values else None},
+        "feed": feed, "medicine": medicine, "mouneh_goods": mouneh_goods, "mouneh_materials": materials, "other": other,
+        "milk": None if "milk" not in show else {
+            "in_tank_l": _r(tank["balance_l"], 1), "last_price_per_liter": tank.get("last_price_per_liter") if with_values else None,
+            "value": _r(milk_value) if with_values and milk_value is not None else None},
+    })
+    return out
+
+
+def build(db: Session, farm_id: str, kind: str, start: date | None, end: date | None, *, with_sales: bool = True,
+          stock_sections: set[str] | None = None) -> dict:
     if kind == "milk":
         return milk_report(db, farm_id, start, end, with_sales=with_sales)
     if kind == "feed":
@@ -317,4 +504,8 @@ def build(db: Session, farm_id: str, kind: str, start: date | None, end: date | 
         return herd_report(db, farm_id, start, end)
     if kind == "finance":
         return finance_report(db, farm_id, start, end)
+    if kind == "sales":
+        return sales_report(db, farm_id, start, end)
+    if kind == "stock":
+        return stock_report(db, farm_id, start, end, with_values=with_sales, sections=stock_sections)
     raise ReportError(f"kind must be one of {list(KINDS)}", 404)

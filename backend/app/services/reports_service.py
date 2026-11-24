@@ -20,7 +20,10 @@ def build_daily_summary(db: Session, farm_id: str) -> dict:
     """
     start = _today_start()
     sales = db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.sold_at >= start)).all()
-    expenses = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.incurred_at >= start)).all()
+    # A cancelled expense stays on file but is not spent (v0.8.0); a
+    # cancelled sale and its negative reversal cancel each other out.
+    expenses = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.incurred_at >= start,
+                                                       models.Expense.status == "recorded")).all()
 
     revenue = sum(s.amount for s in sales)
     expense_total = sum(e.amount for e in expenses)

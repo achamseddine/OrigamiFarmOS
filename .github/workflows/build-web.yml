@@ -59,7 +59,8 @@ jobs:
       # tablet and of the web app built from the same commit show the same one.
       - run: |
           flutter build web --release --base-href / --no-web-resources-cdn \
-            --dart-define=APP_BUILD="web 0.7.${{ github.run_number }}" \
+            --build-number=${{ github.run_number }} --build-name=0.8.${{ github.run_number }} \
+            --dart-define=APP_BUILD="web 0.8.${{ github.run_number }}" \
             --dart-define=APP_VERSION="$(git rev-parse --short HEAD)" \
             ${{ vars.FARM_API_URL && format('--dart-define=FARMOS_API_BASE_URL={0}', vars.FARM_API_URL) || '' }}
 
@@ -79,13 +80,13 @@ jobs:
       - name: Publish versioned web prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: web-v0.7.9-build-${{ github.run_number }}
+          tag_name: web-v0.8.0-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.7.9 — web app 0.7.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.0 — web app 0.8.${{ github.run_number }}"
           prerelease: true
           files: mobile/flutter_app/origami-farmos-web.zip
           body: |
-            **Web build 0.7.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
+            **Web build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             The tablet app in the browser — every screen, the same rules, Arabic and English — against the same API and database.
@@ -96,7 +97,7 @@ jobs:
 
             **On the farm server (same address as the API):** unzip `origami-farmos-web.zip` into `backend/web_app/` (or set `FARMOS_WEB_DIR` to the folder) and open `https://<farm server>/app/`. No server address to type; nothing else to configure.
 
-            The sign-in screen shows `App 0.7.${{ github.run_number }} · <commit>`. Supported browsers: current Chrome, Edge, Firefox and Safari. The camera QR scan needs HTTPS (or localhost) and permission for the camera.
+            The sign-in screen shows `App web 0.8.${{ github.run_number }} · <commit>`. Supported browsers: current Chrome, Edge, Firefox and Safari. The camera QR scan needs HTTPS (or localhost) and permission for the camera.
 
       - name: Prepare the GitHub Pages copy
         run: |

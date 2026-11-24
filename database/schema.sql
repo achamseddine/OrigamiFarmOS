@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 139 tables, 44 secondary indexes.
+-- 140 tables, 45 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -231,6 +231,20 @@ CREATE TABLE events (
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id)
 );
+
+CREATE TABLE exchange_rates (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    currency VARCHAR(10) NOT NULL,
+    rate_per_usd FLOAT NOT NULL,
+    effective_date DATE NOT NULL,
+    notes TEXT,
+    set_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id)
+);
+CREATE INDEX ix_exchange_rates_farm_currency_date ON exchange_rates (farm_id, currency, effective_date);
 
 CREATE TABLE feed_mix_sequences (
     farm_id VARCHAR(36) NOT NULL,
@@ -744,6 +758,22 @@ CREATE TABLE expenses (
     linked_entity_type VARCHAR(30),
     linked_entity_id VARCHAR(36),
     incurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    description VARCHAR(300),
+    supplier_label VARCHAR(200),
+    payment_status VARCHAR(20) DEFAULT 'paid' NOT NULL,
+    due_date TIMESTAMP WITH TIME ZONE,
+    paid_at TIMESTAMP WITH TIME ZONE,
+    reference VARCHAR(120),
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    activity VARCHAR(20),
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
@@ -977,6 +1007,21 @@ CREATE TABLE sales (
     currency VARCHAR(10) NOT NULL,
     payment_status VARCHAR(20) NOT NULL,
     sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    unit_price FLOAT,
+    buyer_name VARCHAR(200),
+    reference VARCHAR(120),
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    reversal_of_id VARCHAR(36),
+    paid_at TIMESTAMP WITH TIME ZONE,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    activity VARCHAR(20),
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(customer_id) REFERENCES customers (id)
