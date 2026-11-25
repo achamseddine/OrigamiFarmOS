@@ -91,7 +91,9 @@ def create_feed_transaction(
             inv.consume(
                 db, product, payload.quantity, payload.unit, reason=payload.reason or "feeding",
                 linked_entity_type=payload.linked_entity_type or "inventory_item", linked_entity_id=payload.linked_entity_id or item.id,
-                purpose=_purpose_for(db, payload, item.farm_id), allow_negative=payload.allow_negative, user_id=current_user.id,
+                purpose=_purpose_for(db, payload, item.farm_id), user_id=current_user.id,
+                override=inv.Override(reason=payload.override_reason, approved_by=current_user.id, requested_by=current_user.id)
+                if payload.allow_negative else None,
             )
         db.commit()
         db.refresh(item)

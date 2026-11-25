@@ -3866,6 +3866,117 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/feed-inventory/exceptions:
+    get:
+      tags:
+      - feeding
+      summary: List Stock Exceptions
+      description: 'Feed issued with no lot (v0.8.4): every approved shortage override,
+
+        who recorded and approved it, why, and whether it is reconciled.'
+      operationId: list_stock_exceptions_api_v1_feed_inventory_exceptions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: feed_product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StockExceptionOut'
+                title: Response List Stock Exceptions Api V1 Feed Inventory Exceptions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-inventory/exceptions/{exception_id}/resolve:
+    post:
+      tags:
+      - feeding
+      summary: Resolve Stock Exception
+      description: 'The manager reconciles feed issued with no lot: it came from a lot
+
+        recorded later (`assigned_to_lot`), or the stock was there unrecorded
+
+        (`confirmed_unrecorded_stock`). A stock count settles every open one of
+
+        the feed at once. Sending the same reconciliation again is refused
+
+        (409): the exception is no longer open.'
+      operationId: resolve_stock_exception_api_v1_feed_inventory_exceptions__exception_id__resolve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: exception_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Exception Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockExceptionResolve'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StockExceptionOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-inventory/integrity:
+    get:
+      tags:
+      - feeding
+      summary: Stock Integrity
+      description: 'The stock reconciliation (docs/runbooks/FEED-STOCK-RECONCILIATION.md):
+
+        for every feed, the stock line and each lot as stored against the sum of
+
+        their movements, the stock issued with no lot against the open
+
+        exceptions. `consistent: false` names the feeds to look at.'
+      operationId: stock_integrity_api_v1_feed_inventory_integrity_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Stock Integrity Api V1 Feed Inventory Integrity Get
+      security:
+      - HTTPBearer: []
   /api/v1/feed-formulas:
     get:
       tags:
@@ -13475,6 +13586,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
         confirm_duplicate:
           type: boolean
           title: Confirm Duplicate
@@ -13963,6 +14080,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
         operator_id:
           anyOf:
           - type: string
@@ -16000,6 +16123,18 @@ components:
         on_hand:
           type: number
           title: On Hand
+        lot_on_hand:
+          type: number
+          title: Lot On Hand
+          default: 0
+        untraced:
+          type: number
+          title: Untraced
+          default: 0
+        open_exceptions:
+          type: integer
+          title: Open Exceptions
+          default: 0
         unusable:
           type: number
           title: Unusable
@@ -16031,6 +16166,13 @@ components:
       - reserved
       - available
       title: FeedAvailabilityOut
+      description: 'on_hand is the ledger (Σ every movement) = lot_on_hand − untraced;
+
+        untraced is what was issued with no lot and is not yet reconciled
+
+        (open stock exceptions, v0.8.4); available = usable lot stock −
+
+        untraced − reserved for other purposes.'
     FeedLotOut:
       properties:
         id:
@@ -16509,6 +16651,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
       type: object
       required:
       - item_id
@@ -16571,6 +16719,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
       type: object
       title: FeedingCorrectionIn
       description: '`POST /feeding-events/{id}/correct` — undo a feeding; with
@@ -16618,6 +16772,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
         confirm_duplicate:
           type: boolean
           title: Confirm Duplicate
@@ -21717,6 +21877,12 @@ components:
           type: boolean
           title: Allow Negative
           default: false
+        override_reason:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Override Reason
         confirm_duplicate:
           type: boolean
           title: Confirm Duplicate
@@ -23145,6 +23311,179 @@ components:
       - counted_quantity
       title: StockCountCreate
       description: 'What was counted on inspection (v0.8.3): it becomes the stock.'
+    StockExceptionOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        feed_product_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Name
+        kind:
+          type: string
+          title: Kind
+        quantity:
+          type: number
+          title: Quantity
+        resolved_quantity:
+          type: number
+          title: Resolved Quantity
+        open_quantity:
+          type: number
+          title: Open Quantity
+        unit:
+          type: string
+          title: Unit
+        status:
+          type: string
+          title: Status
+        reason:
+          type: string
+          title: Reason
+        requested_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requested By
+        requested_by_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requested By Name
+        approved_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved By
+        approved_by_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approved By Name
+        approval_request_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Approval Request Id
+        source_entity_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Entity Type
+        source_entity_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Entity Id
+        lot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Id
+        lot_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Code
+        occurred_at:
+          type: string
+          format: date-time
+          title: Occurred At
+        created_at:
+          type: string
+          format: date-time
+          title: Created At
+        resolution:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolution
+        resolution_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolution Note
+        resolution_lot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolution Lot Id
+        resolution_lot_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolution Lot Code
+        resolved_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolved By
+        resolved_by_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Resolved By Name
+        resolved_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Resolved At
+        detail:
+          additionalProperties: true
+          type: object
+          title: Detail
+          default: {}
+      type: object
+      required:
+      - id
+      - feed_product_id
+      - kind
+      - quantity
+      - resolved_quantity
+      - open_quantity
+      - unit
+      - status
+      - reason
+      - occurred_at
+      - created_at
+      title: StockExceptionOut
+      description: 'Feed issued with no lot: who recorded it, who approved it, why,
+
+        how much is still open, and how it was reconciled.'
+    StockExceptionResolve:
+      properties:
+        resolution:
+          type: string
+          title: Resolution
+          description: assigned_to_lot | confirmed_unrecorded_stock
+        note:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Note
+        lot_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Id
+        quantity:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Quantity
+      type: object
+      required:
+      - resolution
+      - note
+      title: StockExceptionResolve
+      description: How the manager reconciles feed issued with no lot (v0.8.4).
     SupplierOut:
       properties:
         id:

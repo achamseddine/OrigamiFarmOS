@@ -328,7 +328,7 @@ def complete_batch(
     lot_code: str | None = None,
     expiry_date: datetime | None = None,
     notes: str | None = None,
-    allow_negative: bool = False,
+    override: inv.Override | None = None,
     operator_id: str | None = None,
     mixer_asset_id: str | None = None,
     user_id: str,
@@ -355,6 +355,9 @@ def complete_batch(
         raise FeedError(f"Actual quantities are missing for: {names}. Record zero explicitly if none was used.")
 
     when = not_in_future(produced_at, "A mix") or now()
+    # The ingredients and the output feed are locked up front, in one order
+    # (feed_inventory_service.lock_stock), before any kilo moves.
+    inv.lock_stock(db, *(inv.get_product(db, pid, batch.farm_id) for pid in provided), db.get(fm.FeedProduct, batch.feed_product_id))
     new_components: list[fm.FeedBatchComponent] = []
     total_cost = 0.0
     cost_known = False
@@ -374,7 +377,7 @@ def complete_batch(
             new_components.append(fm.FeedBatchComponent(id=new_id(), feed_product_id=product.id, lot_id=None, target_quantity=target.target_quantity if target else None, actual_quantity=0, unit=unit, unit_cost=None, cost=0))
             continue
         draws = inv.consume(db, product, qty, unit, reason="mixing", linked_entity_type="feed_batch", linked_entity_id=batch.id,
-                            lot_id=a.get("lot_id"), allow_negative=allow_negative, user_id=user_id, occurred_at=when)
+                            lot_id=a.get("lot_id"), override=override, user_id=user_id, occurred_at=when)
         first = True
         for d in draws:
             # Lineage (ingredient lot → batch): a mix cannot contain feed
@@ -736,7 +739,7 @@ def quick_mix(
     produced_at: datetime | None = None,
     intended_species_code: str | None = None,
     notes: str | None = None,
-    allow_negative: bool = False,
+    override: inv.Override | None = None,
     can_approve: bool = False,
     confirm_duplicate: bool = False,
     user_id: str,
@@ -829,7 +832,7 @@ def quick_mix(
     actuals = [{"feed_product_id": c["feed_product_id"], "actual_quantity": float(c["actual_quantity"]), "unit": c.get("unit"), "lot_id": c.get("lot_id")}
                for c in lines]
     actuals += [{"feed_product_id": comp.feed_product_id, "actual_quantity": 0} for comp in batch.components if comp.feed_product_id not in given]
-    complete_batch(db, batch, actuals=actuals, actual_quantity=output, produced_at=when, notes=None, allow_negative=allow_negative, user_id=user_id)
+    complete_batch(db, batch, actuals=actuals, actual_quantity=output, produced_at=when, notes=None, override=override, user_id=user_id)
     duplicates.log_confirmed(db, farm_id=farm_id, entity_type="feed_batch", entity_id=batch.id, match_id=match.id if match else None,
                              what=f"mix:{batch.mix_code}", user_id=user_id)
     return batch

@@ -118,6 +118,65 @@ class FeedLot(Base):
     product: Mapped[FeedProduct] = relationship(back_populates="lots")
 
 
+class FeedStockException(Base):
+    """Feed that left the store with no lot to take it from (v0.8.4). The
+    only way stock goes out untraced is an *approved* shortage override; it
+    is posted as an `out` movement with no lot, tagged with this record, so
+    the gap is never silent: who recorded it, who approved it, why, how much,
+    and for what (the feeding or the mix). It stays `open` — counted against
+    the available stock — until it is reconciled:
+
+        count                       a stock count settled the quantity
+        assigned_to_lot             it came from a lot recorded later
+        confirmed_unrecorded_stock  the stock was there, never recorded
+        reversed                    the feeding or mix was undone
+
+    Each reconciliation posts its own tagged movement; nothing is edited.
+    Quantities are in the product's stock unit.
+        open = quantity − resolved_quantity
+        untraced ledger balance of the product = − Σ open (never positive)
+    """
+
+    __tablename__ = "feed_stock_exceptions"
+    __table_args__ = (Index("ix_feed_stock_exceptions_product_status", "feed_product_id", "status"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    feed_product_id: Mapped[str] = mapped_column(String(36), ForeignKey("feed_products.id"))
+    inventory_item_id: Mapped[str] = mapped_column(String(36), ForeignKey("inventory_items.id"))
+    # untraced_issue (an approved override) | legacy_untraced (found by the
+    # v0.8.4 migration: issued without a lot, or a lot below zero, before
+    # the override was recorded)
+    kind: Mapped[str] = mapped_column(String(30), default="untraced_issue")
+    quantity: Mapped[float] = mapped_column(Float)
+    resolved_quantity: Mapped[float] = mapped_column(Float, default=0)
+    unit: Mapped[str] = mapped_column(String(20), default="kg")
+    # open | resolved | reversed
+    status: Mapped[str] = mapped_column(String(20), default="open")
+    reason: Mapped[str] = mapped_column(Text)
+    # Who recorded the issue, who authorised the override (the same person
+    # when a manager records it; the manager who approved an employee's
+    # request otherwise), and the approval request when there was one.
+    requested_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    approval_request_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # What it was issued for (feeding_event | feed_batch | …) and the lot
+    # that was named but held too little, if one was.
+    source_entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
+    detail: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # count | assigned_to_lot | confirmed_unrecorded_stock | reversed
+    resolution: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolution_lot_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_lots.id"), nullable=True)
+    resolution_reference_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    resolved_by: Mapped[str | None] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 # ------------------------------------------------------------- formulas
 class FeedFormula(Base):
     """The recipe family for one farm-produced product. Versions carry the

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import ORMModel
 
@@ -22,6 +22,9 @@ class FeedTransactionCreate(BaseModel):
     linked_entity_type: str | None = None
     linked_entity_id: str | None = None
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)
 
     @field_validator("direction")
     @classmethod

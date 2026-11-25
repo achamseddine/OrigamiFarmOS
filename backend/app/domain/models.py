@@ -415,6 +415,12 @@ class InventoryTransaction(Base):
     # movements by location — never a location flipped on the lot.
     location_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("locations.id"), nullable=True)
     correlation_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # A feed movement with no lot is an exception, never a silent gap
+    # (v0.8.4): the untraced issue an approved override posted, or the
+    # movement that reconciled it. Null on every ordinary movement.
+    stock_exception_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("feed_stock_exceptions.id"), nullable=True)
+    # Who posted the movement (v0.8.4; null on older rows).
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 

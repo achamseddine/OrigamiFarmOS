@@ -669,7 +669,7 @@ def record_feeding(
     head_count: int | None = None,
     notes: str | None = None,
     program_version_id: str | None = None,
-    allow_negative: bool = False,
+    override: inv.Override | None = None,
     user_id: str,
 ) -> fm.FeedingEvent:
     """§2.6, §16, §33: what was actually put in front of the subject.
@@ -677,7 +677,9 @@ def record_feeding(
     reservations); a consumption estimate or a refusal records a measurement
     against what was already issued and moves nothing. Every component is
     checked against the feed's usage policy and the subject's restrictions
-    before a gram leaves the store."""
+    before a gram leaves the store. More than the stock on record goes out
+    only with an approved [override] (a reason, an approver), and the part
+    no lot covered is an open stock exception linked to this event."""
     if event_type not in catalog.FEEDING_EVENT_TYPES:
         raise FeedError(f"event_type must be one of {list(catalog.FEEDING_EVENT_TYPES)}")
     if subject_type == "animal" and not subject.active:
@@ -705,6 +707,10 @@ def record_feeding(
     db.add(event)
     db.flush()
     moves_stock = event_type in ("offered", "delivered")
+    if moves_stock:
+        # Every feed of this event is locked up front, in one order, so two
+        # feedings of the same feeds never wait on each other in a circle.
+        inv.lock_stock(db, *(inv.get_product(db, line["feed_product_id"], farm_id) for line in components))
     total_cost = 0.0
     for line in components:
         product = inv.get_product(db, line["feed_product_id"], farm_id)
@@ -729,7 +735,7 @@ def record_feeding(
                 purpose=Purpose(species_code=state.species_code, subject_type=subject_type, subject_id=subject.id,
                                 feeding_program_id=assignment.program_version_id and db.get(fm.FeedingProgramVersion, assignment.program_version_id).program_id if assignment else None,
                                 label=state.name),
-                lot_id=lot.id if lot else None, allow_negative=allow_negative, user_id=user_id, occurred_at=when,
+                lot_id=lot.id if lot else None, override=override, user_id=user_id, occurred_at=when,
             )
             share = 1.0
             for d in draws:
@@ -791,7 +797,8 @@ def reverse_feeding(db: Session, event: fm.FeedingEvent, *, reason: str, user_id
     if event.event_type in ("offered", "delivered"):
         for product_id, draws in by_product.items():
             product = db.get(fm.FeedProduct, product_id)
-            inv.restore(db, product, draws, reason="feeding_reversal", linked_entity_type="feeding_event", linked_entity_id=reversal.id, user_id=user_id)
+            inv.restore(db, product, draws, reason="feeding_reversal", linked_entity_type="feeding_event", linked_entity_id=reversal.id, user_id=user_id,
+                        reverses_entity_id=event.id)
     event.status = "reversed"
     write_event(
         db, farm_id=event.farm_id, entity_type=event.subject_type, entity_id=event.subject_id, event_type="feeding_event_reversed",

@@ -163,7 +163,10 @@ def test_only_an_approver_records_more_than_the_stock_on_record(client):
             "components": [{"feed_product_id": ALFALFA, "quantity_offered": 99999}]}
     refused = client.post(f"{API}/feeding-events", json=body, headers=worker)
     assert refused.status_code == 403 and "approval" in refused.json()["detail"], refused.text
-    assert client.post(f"{API}/feeding-events", json=body, headers=manager).status_code == 201
+    # v0.8.4: the manager's override says why; without a reason it is refused.
+    no_reason = client.post(f"{API}/feeding-events", json=body, headers=manager)
+    assert no_reason.status_code == 422 and "override_reason" in no_reason.json()["detail"], no_reason.text
+    assert client.post(f"{API}/feeding-events", json={**body, "override_reason": "Delivery not entered yet"}, headers=manager).status_code == 201
 
     legacy = client.post(f"{API}/feed/transactions", json={"item_id": "inv-alfalfa", "direction": "out", "quantity": 99999, "unit": "kg",
                                                            "allow_negative": True}, headers=worker)

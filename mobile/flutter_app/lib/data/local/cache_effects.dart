@@ -339,6 +339,11 @@ final List<_Rule> _rules = [
     ];
   }),
   _Rule('PATCH', '/feed-lots/$_id/status', (m) => [MergeRecord('/feed-lots', m.ids[0], {'status': m.body['status']})]),
+  // Feed issued with no lot, reconciled by the manager (v0.8.4): it stops
+  // counting as open at once; the stock figures follow the next refresh.
+  _Rule('POST', '/feed-inventory/exceptions/$_id/resolve', (m) => [
+        MergeRecord('/feed-inventory/exceptions', m.ids[0], {'status': 'resolved', 'resolution': m.body['resolution'], 'resolution_note': m.body['note']}),
+      ]),
   // A feed's type and price (v0.8.3): a raw material is not fed, a feed is.
   _Rule('PATCH', '/feed-products/$_id', (m) => [
         MergeRecord('/feed-products', m.ids[0], {

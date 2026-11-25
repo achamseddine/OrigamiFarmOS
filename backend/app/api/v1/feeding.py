@@ -32,7 +32,7 @@ from app.schemas.feeding import (
     LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
-    QuickMixIn, StandardFeedSlotOut, StockCountCreate,
+    QuickMixIn, StandardFeedSlotOut, StockCountCreate, StockExceptionOut, StockExceptionResolve,
 )
 from app.schemas.approvals import FeedingCorrectionIn
 from app.services import approval_service as approvals
@@ -81,11 +81,14 @@ def _can_approve(db: Session, user: models.User) -> bool:
     return user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE)
 
 
-def _require_override(db: Session, user: models.User, allow_negative: bool) -> None:
+def _require_override(db: Session, user: models.User, allow_negative: bool, reason: str | None = None) -> inv.Override | None:
     """Issuing more than the stock on record is an approved exception
     (INVENTORY-SCHEMA: "unless explicit approved override policy exists"):
-    Feed or Inventory approval, never a tick any recorder can give."""
+    Feed or Inventory approval, never a tick any recorder can give. The
+    person sending it is both author and approver; the reason is checked
+    the moment the override is used (feed_inventory_service.consume)."""
     ensure_stock_override(db, user, allow_negative, perms.FEED_NUTRITION)
+    return inv.Override(reason=reason, approved_by=user.id, requested_by=user.id) if allow_negative else None
 
 
 # ------------------------------------------------------------ serialisers
@@ -506,9 +509,10 @@ def trace_lot(lot_id: str, db: Session = Depends(get_db), user: models.User = De
 def post_adjustment(payload: AdjustmentCreate, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
     lot = inv.get_lot(db, payload.lot_id, user.farm_id) if payload.lot_id else None
-    tx = inv.adjust(db, product, lot=lot, delta=payload.delta, reason=payload.reason, explanation=payload.explanation, user_id=user.id)
+    txs = inv.adjust(db, product, lot=lot, delta=payload.delta, reason=payload.reason, explanation=payload.explanation, user_id=user.id)
     db.commit()
-    return {"transaction_id": tx.id, "feed_product_id": product.id, "delta": payload.delta, "unit": product.unit, "availability": inv.availability(db, product).to_dict()}
+    return {"transaction_id": txs[0].id if txs else None, "transaction_ids": [t.id for t in txs], "lot_ids": [t.lot_id for t in txs],
+            "feed_product_id": product.id, "delta": payload.delta, "unit": product.unit, "availability": inv.availability(db, product).to_dict()}
 
 
 def _count_dep(db: Session = Depends(get_db), user: models.User = Depends(require_any_permission(perms.FEED_NUTRITION, perms.INVENTORY))):
@@ -529,6 +533,37 @@ def post_stock_count(payload: StockCountCreate, db: Session = Depends(get_db), u
     db.commit()
     out["availability"] = inv.availability(db, product).to_dict()
     return out
+
+
+# ------------------------------------------------------- stock exceptions
+@router.get("/feed-inventory/exceptions", response_model=list[StockExceptionOut])
+def list_stock_exceptions(exception_status: str | None = Query(None, alias="status"), feed_product_id: str | None = None,
+                          db: Session = Depends(get_db), user: models.User = Depends(_view)) -> list[dict]:
+    """Feed issued with no lot (v0.8.4): every approved shortage override,
+    who recorded and approved it, why, and whether it is reconciled."""
+    return [inv.exception_to_dict(db, e) for e in inv.list_exceptions(db, user.farm_id, status=exception_status, feed_product_id=feed_product_id)]
+
+
+@router.post("/feed-inventory/exceptions/{exception_id}/resolve", response_model=StockExceptionOut)
+def resolve_stock_exception(exception_id: str, payload: StockExceptionResolve, db: Session = Depends(get_db), user: models.User = Depends(_count_dep)) -> dict:
+    """The manager reconciles feed issued with no lot: it came from a lot
+    recorded later (`assigned_to_lot`), or the stock was there unrecorded
+    (`confirmed_unrecorded_stock`). A stock count settles every open one of
+    the feed at once. Sending the same reconciliation again is refused
+    (409): the exception is no longer open."""
+    exc = inv.get_exception(db, exception_id, user.farm_id)
+    inv.resolve_exception(db, exc, resolution=payload.resolution, note=payload.note, user_id=user.id, lot_id=payload.lot_id, quantity=payload.quantity)
+    db.commit()
+    return inv.exception_to_dict(db, exc)
+
+
+@router.get("/feed-inventory/integrity")
+def stock_integrity(db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    """The stock reconciliation (docs/runbooks/FEED-STOCK-RECONCILIATION.md):
+    for every feed, the stock line and each lot as stored against the sum of
+    their movements, the stock issued with no lot against the open
+    exceptions. `consistent: false` names the feeds to look at."""
+    return inv.integrity_report(db, user.farm_id)
 
 
 # --------------------------------------------------------------- formulas
@@ -648,11 +683,11 @@ def record_mix(payload: QuickMixIn, db: Session = Depends(get_db), user: models.
     a numbered mix from the output feed's formula — created from this mix
     when the feed has none — with its ingredient lots drawn and its output
     lot received."""
-    _require_override(db, user, payload.allow_negative)
+    override = _require_override(db, user, payload.allow_negative, payload.override_reason)
     batch = batches.quick_mix(db, user.farm_id, feed_product_id=payload.feed_product_id, new_product_name=payload.new_product_name,
                               components=[c.model_dump() for c in payload.components], output_quantity=payload.output_quantity, unit=payload.unit,
                               produced_at=payload.produced_at, intended_species_code=payload.intended_species_code, notes=payload.notes,
-                              allow_negative=payload.allow_negative, can_approve=_can_approve(db, user),
+                              override=override, can_approve=_can_approve(db, user),
                               confirm_duplicate=payload.confirm_duplicate, user_id=user.id)
     perf.on_batch_completed(db, batch, user_id=user.id)
     _commit(db, batch)
@@ -711,9 +746,9 @@ def batch_usage(batch_id: str, db: Session = Depends(get_db), user: models.User 
 @router.post("/feed-batches/{batch_id}/complete", response_model=BatchOut)
 def complete_batch(batch_id: str, payload: BatchComplete, db: Session = Depends(get_db), user: models.User = Depends(_mix_manager)):
     batch = _batch_or_404(db, batch_id, user.farm_id)
-    _require_override(db, user, payload.allow_negative)
+    override = _require_override(db, user, payload.allow_negative, payload.override_reason)
     batches.complete_batch(db, batch, actuals=[a.model_dump() for a in payload.actuals], actual_quantity=payload.actual_quantity, produced_at=payload.produced_at,
-                           lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, allow_negative=payload.allow_negative,
+                           lot_code=payload.lot_code, expiry_date=payload.expiry_date, notes=payload.notes, override=override,
                            operator_id=payload.operator_id, mixer_asset_id=payload.mixer_asset_id, user_id=user.id)
     # FEED-PERFORMANCE-INTELLIGENCE §12: re-evaluate after FeedBatchCompleted —
     # the formula-compliance check is the first thing a manager should see.
@@ -880,14 +915,14 @@ def feeding_history(subject_id: str, days: int = Query(30, ge=1, le=365), db: Se
 @router.post("/feeding-events", response_model=FeedingEventOut, status_code=status.HTTP_201_CREATED)
 def record_feeding_event(payload: FeedingEventCreate, db: Session = Depends(get_db), user: models.User = Depends(_create)):
     subject = programs.load_subject(db, payload.subject_type, payload.subject_id, user.farm_id)
-    _require_override(db, user, payload.allow_negative)
+    override = _require_override(db, user, payload.allow_negative, payload.override_reason)
     components = [c.model_dump() for c in payload.components]
     earlier = programs.find_duplicate_feeding(db, payload.subject_type, subject.id, event_type=payload.event_type, components=components, at=payload.occurred_at)
     match = duplicates.guard(earlier, f"The same feeding of {getattr(subject, 'name', 'this subject')} was already recorded within half an hour.",
                              confirm=payload.confirm_duplicate)
     event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=components,
                                     event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=payload.notes,
-                                    allow_negative=payload.allow_negative, user_id=user.id)
+                                    override=override, user_id=user.id)
     duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, match_id=match.id if match else None,
                              what=f"feeding:{event.id}", user_id=user.id)
     _commit(db, event)
@@ -925,7 +960,7 @@ def correct_feeding_event(event_id: str, payload: FeedingCorrectionIn, db: Sessi
     if event is None or event.farm_id != user.farm_id:
         raise FeedError("Feeding event not found", 404)
     approvals.ensure_none_pending(db, user.farm_id, event.id)
-    result = approvals.correct_feeding(db, event, payload, user=user, allow_negative=payload.allow_negative)
+    result = approvals.correct_feeding(db, event, payload, user=user, allow_negative=payload.allow_negative, override_reason=payload.override_reason)
     _commit(db, result)
     return programs.event_to_dict(result)
 

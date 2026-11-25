@@ -60,6 +60,50 @@ class StockCountCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=500)
 
 
+class StockExceptionResolve(BaseModel):
+    """How the manager reconciles feed issued with no lot (v0.8.4)."""
+
+    resolution: str = Field(description="assigned_to_lot | confirmed_unrecorded_stock")
+    note: str = Field(min_length=1, max_length=500)
+    lot_id: str | None = None
+    quantity: float | None = Field(default=None, gt=0)
+
+
+class StockExceptionOut(BaseModel):
+    """Feed issued with no lot: who recorded it, who approved it, why,
+    how much is still open, and how it was reconciled."""
+
+    id: str
+    feed_product_id: str
+    feed_product_name: str | None = None
+    kind: str
+    quantity: float
+    resolved_quantity: float
+    open_quantity: float
+    unit: str
+    status: str
+    reason: str
+    requested_by: str | None = None
+    requested_by_name: str | None = None
+    approved_by: str | None = None
+    approved_by_name: str | None = None
+    approval_request_id: str | None = None
+    source_entity_type: str | None = None
+    source_entity_id: str | None = None
+    lot_id: str | None = None
+    lot_code: str | None = None
+    occurred_at: datetime
+    created_at: datetime
+    resolution: str | None = None
+    resolution_note: str | None = None
+    resolution_lot_id: str | None = None
+    resolution_lot_code: str | None = None
+    resolved_by: str | None = None
+    resolved_by_name: str | None = None
+    resolved_at: datetime | None = None
+    detail: dict = {}
+
+
 class FeedLotOut(BaseModel):
     id: str
     feed_product_id: str
@@ -86,9 +130,17 @@ class FeedLotOut(BaseModel):
 
 
 class FeedAvailabilityOut(BaseModel):
+    """on_hand is the ledger (Σ every movement) = lot_on_hand − untraced;
+    untraced is what was issued with no lot and is not yet reconciled
+    (open stock exceptions, v0.8.4); available = usable lot stock −
+    untraced − reserved for other purposes."""
+
     feed_product_id: str
     unit: str
     on_hand: float
+    lot_on_hand: float = 0
+    untraced: float = 0
+    open_exceptions: int = 0
     unusable: float
     unusable_by_status: dict[str, float] = {}
     reserved: float
@@ -349,6 +401,9 @@ class BatchComplete(BaseModel):
     expiry_date: datetime | None = None
     notes: str | None = None
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)
     operator_id: str | None = None
     mixer_asset_id: str | None = None
 
@@ -372,6 +427,9 @@ class QuickMixIn(BaseModel):
     intended_species_code: str | None = None
     notes: str | None = None
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)
     confirm_duplicate: bool = False
 
 
@@ -633,6 +691,9 @@ class FeedingEventCreate(BaseModel):
     # Inventory approval (INVENTORY-SCHEMA: "unless explicit approved
     # override policy exists").
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)
     # The same feeding of the same subject within half an hour is refused as
     # a possible duplicate unless confirmed (app/core/duplicates.py).
     confirm_duplicate: bool = False

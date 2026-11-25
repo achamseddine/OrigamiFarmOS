@@ -22,7 +22,7 @@ import '../../providers/feeding_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import '../feed/feed_workspace_screen.dart' show feedDate, feedNumber;
-import '../feed/feed_stock_dialogs.dart' show FeedingCostLine;
+import '../feed/feed_stock_dialogs.dart' show FeedingCostLine, StockOverrideReasonField;
 import '../feed/feeding_event_dialog.dart';
 import '../health/health_cases.dart' show showSubjectPicker;
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
@@ -112,6 +112,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   // the stock was simply never entered and record it anyway.
   bool _feedStockShort = false;
   bool _feedStockOverride = false;
+  final _feedOverrideReason = TextEditingController();
   bool _loadingPlan = false;
   bool _saving = false;
   bool _autoScan = false;
@@ -143,6 +144,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   void dispose() {
     _code.dispose();
     _milk.dispose();
+    _feedOverrideReason.dispose();
     _scanFocus.dispose();
     for (final row in _feeds) {
       row.dispose();
@@ -350,6 +352,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         if (refused != null) 'quantity_consumed': offered - refused,
       });
     }
+    if (components.isNotEmpty && _feedStockOverride && _feedOverrideReason.text.trim().isEmpty) {
+      setState(() => _error = context.t('feedOverrideReasonNeeded'));
+      return;
+    }
     if (milk == null && components.isEmpty) {
       setState(() => _error = context.t('qrNothingEntered'));
       return;
@@ -390,6 +396,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
           'subject_id': animal.id,
           'event_type': 'offered',
           if (_feedStockOverride) 'allow_negative': true,
+          if (_feedStockOverride) 'override_reason': _feedOverrideReason.text.trim(),
           'components': components,
         });
         if (!mounted) return;
@@ -404,6 +411,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
           return;
         }
         _feedStockOverride = false;
+        _feedOverrideReason.clear();
         for (final row in _feeds) {
           row.offered.clear();
           row.refused.clear();
@@ -745,8 +753,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                     title: Text(context.t('feedRecordAnyway')),
                     onChanged: _saving ? null : (v) => setState(() => _feedStockOverride = v ?? false),
                   ),
-                )
-              else
+                ),
+              if (_feedStockOverride && context.watch<AccessProvider>().canOverrideFeedStock)
+                StockOverrideReasonField(controller: _feedOverrideReason, enabled: !_saving)
+              else if (!context.watch<AccessProvider>().canOverrideFeedStock)
                 Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),
             ],
           ]),

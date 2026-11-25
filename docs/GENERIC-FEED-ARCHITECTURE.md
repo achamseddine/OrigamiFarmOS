@@ -90,14 +90,17 @@ available = on_hand − unusable lots (quarantined | blocked | recalled | expire
   `consume` draws FIFO (or from a chosen lot) and writes one `out` movement
   per lot touched, returning the draws so callers can price them;
   `availability` computes the formula above per product and per purpose.
-- `allow_negative` is a legacy override (`POST /feed/transactions` on a
-  non-lot item) recorded against no lot; nothing in the new endpoints uses
-  it silently. The animal feeding form and the quick-entry screen send it
-  on `POST /feeding-events` only when the worker ticks *"Stock not entered
-  yet — record anyway"*, which they show when an amount exceeds the stock
-  the tablet last saw or the server refuses for lack of stock; the
-  shortfall is then an `out` movement against no lot, visible in the ledger
-  until a delivery is entered.
+- `allow_negative` is the approved stock override (v0.8.4): accepted only
+  from Feed or Inventory *approve* and only with `override_reason`. The
+  forms offer it (*Stock not entered yet — record anyway*, then *Why?*) when
+  an amount exceeds the stock the tablet last saw or the server refuses for
+  lack of stock. What no lot covers is one `out` with no lot, tagged with a
+  `feed_stock_exceptions` row (who recorded, who approved, why, for what);
+  it stays open — subtracted from what is available — until the manager
+  reconciles it (the lot it came from, stock that was there, a count, or the
+  feeding undone). A named lot that holds too little is refused, never made
+  up from another lot. The ledger rules, every path that moves stock and the
+  reconciliation procedure: `docs/runbooks/FEED-STOCK-RECONCILIATION.md`.
 
 ### 3b. Purchases with their quality
 

@@ -76,9 +76,11 @@ backend_tests() {
 step "backend tests (SQLite, incl. OpenAPI + schema artifacts)" backend_tests
 
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
-  # One database for both: serial, not in parallel workers.
+  # One database for all: serial, not in parallel workers. The feed-stock
+  # tests (v0.8.4) prove the migration and two simultaneous last-stock
+  # feedings on a real PostgreSQL, each in a schema of its own.
   step "backend migrations on PostgreSQL" bash -c \
-    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py"
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py tests/test_feed_stock_migration.py tests/test_feed_stock_concurrency_pg.py"
 else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
 fi

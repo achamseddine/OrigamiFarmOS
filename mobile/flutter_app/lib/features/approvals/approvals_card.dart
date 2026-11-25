@@ -134,18 +134,10 @@ class _DecideRowState extends State<_DecideRow> {
     // A mix asked for when the stock on record was short: the manager may
     // record it anyway (their stock override), or leave it waiting.
     if (!result.success && mounted && context.read<AccessProvider>().canOverrideFeedStock && (result.error ?? '').toLowerCase().contains('stock')) {
-      final anyway = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(context.t('feedStockShortTitle')),
-          content: Text(result.error ?? ''),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text(context.t('cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(context.t('apApproveAnyway'))),
-          ],
-        ),
-      );
-      if (anyway == true) result = await approvals.approve(widget.request, allowNegative: true);
+      // v0.8.4: approving past the stock says why; the reason stays on the
+      // stock exception with the employee who asked and the manager.
+      final why = await showDialog<String>(context: context, builder: (_) => _ApproveAnywayDialog(message: result.error ?? ''));
+      if (why != null && why.isNotEmpty) result = await approvals.approve(widget.request, allowNegative: true, overrideReason: why);
     }
     if (!mounted) return;
     setState(() => _busy = false);
@@ -189,6 +181,51 @@ class _DecideRowState extends State<_DecideRow> {
       ],
     );
   }
+}
+
+/// "Approve anyway" for a mix short of stock: the server's arithmetic, and
+/// the reason the manager records it anyway (required).
+class _ApproveAnywayDialog extends StatefulWidget {
+  const _ApproveAnywayDialog({required this.message});
+  final String message;
+
+  @override
+  State<_ApproveAnywayDialog> createState() => _ApproveAnywayDialogState();
+}
+
+class _ApproveAnywayDialogState extends State<_ApproveAnywayDialog> {
+  final _why = TextEditingController();
+
+  @override
+  void dispose() {
+    _why.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(context.t('feedStockShortTitle')),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(widget.message.replaceAll(RegExp(r'\s*Pass allow_negative=true.*$'), '')),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('approve-anyway-reason'),
+            controller: _why,
+            autofocus: true,
+            maxLength: 300,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(labelText: context.t('feedOverrideReason')),
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
+          FilledButton(
+            key: const ValueKey('approve-anyway'),
+            onPressed: _why.text.trim().isEmpty ? null : () => Navigator.pop(context, _why.text.trim()),
+            child: Text(context.t('apApproveAnyway')),
+          ),
+        ],
+      );
 }
 
 class _DecidePurchaseRow extends StatefulWidget {

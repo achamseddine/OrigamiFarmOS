@@ -100,6 +100,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
   bool _saving = false;
   bool _settingUp = false;
   bool _overrideStock = false;
+  final _overrideReason = TextEditingController();
   bool _serverShortfall = false;
   String? _error;
 
@@ -112,6 +113,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
     }
     _head.dispose();
     _notes.dispose();
+    _overrideReason.dispose();
     super.dispose();
   }
 
@@ -158,6 +160,10 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
       setState(() => _error = context.t(canOverride ? 'feedStockShortConfirm' : 'feedOverrideNeedsApproval'));
       return;
     }
+    if (_overrideStock && _overrideReason.text.trim().isEmpty) {
+      setState(() => _error = context.t('feedOverrideReasonNeeded'));
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -169,6 +175,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
       if (_head.text.trim().isNotEmpty) 'head_count': parseLocalizedInt(_head.text),
       if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
       if (_overrideStock) 'allow_negative': true,
+      if (_overrideStock) 'override_reason': _overrideReason.text.trim(),
       'components': components,
     });
     if (!mounted) return;
@@ -307,8 +314,10 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
                   title: Text(context.t('feedRecordAnyway')),
                   onChanged: (v) => setState(() => _overrideStock = v ?? false),
                 ),
-              )
-            else
+              ),
+            if (_overrideStock && context.watch<AccessProvider>().canOverrideFeedStock)
+              StockOverrideReasonField(controller: _overrideReason, enabled: !_saving)
+            else if (!context.watch<AccessProvider>().canOverrideFeedStock)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(context.t('feedOverrideNeedsApproval'), style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk)),

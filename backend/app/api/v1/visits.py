@@ -494,6 +494,16 @@ def record_retail_sale(payload: VisitRetailSaleCreate, db: Session = Depends(get
             item = db.get(core_models.InventoryItem, line.inventory_item_id)
             if item is None or item.farm_id != current_user.farm_id:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, f"Inventory item {line.inventory_item_id} not found")
+            from app.services import feed_inventory_service as feed_inv
+
+            feed_product = feed_inv.product_for_item(db, item.id)
+            if feed_product is not None:
+                # Feed is lot-tracked (v0.8.4): a sale is issued from its lots
+                # FIFO like any other issue, and refused when the stock is not
+                # there — never a bare change to the stock line.
+                feed_inv.consume(db, feed_product, line.quantity, item.unit, reason="visitor_retail_sale", linked_entity_type="sale",
+                                 linked_entity_id=sale.id, user_id=current_user.id)
+                continue
             item.current_qty -= line.quantity
             db.add(core_models.InventoryTransaction(id=new_id(), item_id=item.id, direction="out", quantity=line.quantity, unit_cost=line.unit_price, reason="visitor_retail_sale", linked_entity_type="sale", linked_entity_id=sale.id, created_at=now()))
         else:

@@ -74,9 +74,10 @@ def _new_product(db: Session, farm_id: str, product_id: str, item_id: str, *, co
 
 def _pin_opening_balance(db: Session, product: fm.FeedProduct, target_qty: float) -> None:
     """The seed consumes stock through real batches and feedings; the
-    opening balance is then set so the item ends on the figure the rest of
-    the demo (and the tests) expect. Opening balances are exogenous — they
-    carry no transaction — so this keeps the ledger consistent."""
+    opening balance is then raised so the item ends on the figure the rest
+    of the demo (and the tests) expect — as one more `opening_balance`
+    movement on the opening lot, so the ledger, the lot and the stock line
+    stay one (v0.8.4)."""
     item = db.get(models.InventoryItem, product.inventory_item_id)
     opening = next((l for l in product.lots if l.source_type == "opening_balance"), None)
     if opening is None:
@@ -84,11 +85,11 @@ def _pin_opening_balance(db: Session, product: fm.FeedProduct, target_qty: float
     diff = target_qty - (item.current_qty or 0)
     if abs(diff) < 0.0005:
         return
-    opening.quantity_on_hand += diff
+    inv.lock_stock(db, product)
     opening.received_quantity += diff
     opening.accepted_quantity += diff
-    item.current_qty = target_qty
-    inv.refresh_lot_status(opening)
+    inv._post(db, product, item, lot=opening, direction="in" if diff > 0 else "out", quantity=abs(diff), reason="opening_balance",
+              linked_entity_type="feed_lot", linked_entity_id=opening.id, unit_cost=opening.unit_cost, when=opening.received_at, user_id=SEED_USER)
 
 
 def seed_feed_demo_data(db: Session, farm_id: str) -> None:

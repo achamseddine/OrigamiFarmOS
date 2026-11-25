@@ -31,6 +31,9 @@ class ApprovalDecisionIn(BaseModel):
 
     note: str | None = None
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)
     confirm_duplicate: bool = False
 
 
@@ -55,3 +58,6 @@ class FeedingCorrectionIn(BaseModel):
     components: list[FeedingComponentIn] = Field(default_factory=list)
     reason: str = ""
     allow_negative: bool = False
+    # Why more than the stock on record is issued (v0.8.4): required when
+    # allow_negative is actually used; kept on the stock exception it opens.
+    override_reason: str | None = Field(default=None, max_length=500)

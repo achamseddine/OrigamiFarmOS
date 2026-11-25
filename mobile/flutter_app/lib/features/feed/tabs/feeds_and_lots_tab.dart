@@ -14,6 +14,8 @@ import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../feed_workspace_screen.dart';
 import '../feed_stock_dialogs.dart';
+import '../stock_exceptions_dialog.dart';
+import '../../../core/widgets/ux_blocks.dart';
 import '../../approvals/ask_to_buy_dialog.dart';
 
 /// Feed products and their lots (§2.1, §2.2, §3, §25, §26): what can be
@@ -139,18 +141,45 @@ class _ProductCard extends StatelessWidget {
             if (product.isRestricted) StatusPill(label: context.t('restrictedFeed'), level: FarmStatusLevel.alert, dense: true),
             if (a.reserved > 0) StatusPill(label: '${context.t('reserved')} ${feedNumber(a.reserved)}', level: FarmStatusLevel.watch, dense: true),
             if (a.unusable > 0) StatusPill(label: '${context.t('unusable')} ${feedNumber(a.unusable)}', level: FarmStatusLevel.alert, dense: true),
+            // Fed with no lot and not reconciled yet (v0.8.4): not available.
+            if (a.untraced > 0)
+              StatusPill(
+                key: ValueKey('feed-untraced-pill-${product.id}'),
+                label: context.t('feedUntracedPill').replaceAll('{qty}', '${feedNumber(a.untraced)} ${product.unit}'),
+                level: FarmStatusLevel.alert,
+                dense: true,
+              ),
           ]),
         ),
         children: [
           FeedKeyValue(context.t('onHand'), '${feedNumber(a.onHand)} ${product.unit}'),
+          if (a.untraced > 0) ...[
+            FeedKeyValue(context.t('feedInLots'), '${feedNumber(a.lotOnHand)} ${product.unit}'),
+            FeedKeyValue(context.t('feedUntracedLine'), '− ${feedNumber(a.untraced)} ${product.unit}'),
+          ],
           FeedKeyValue(context.t('reserved'), '${feedNumber(a.reserved)} ${product.unit}'),
           FeedKeyValue(context.t('unusable'), '${feedNumber(a.unusable)} ${product.unit}'),
           FeedKeyValue(context.t('available'), '${feedNumber(a.available)} ${product.unit}', bold: true),
           FeedKeyValue(context.t('feedPrice'), feedPriceLabel(context, product)),
           if (product.policyNames.isNotEmpty) FeedKeyValue(context.t('restrictedFeed'), product.policyNames.join(', ')),
+          if (a.untraced > 0) ...[
+            const SizedBox(height: 6),
+            NoticeBanner(
+              key: ValueKey('feed-untraced-notice-${product.id}'),
+              tone: NoticeTone.caution,
+              text: context.t('feedUntracedNotice').replaceAll('{qty}', '${feedNumber(a.untraced)} ${product.unit}'),
+            ),
+          ],
           if (canEdit || canCount) ...[
             const SizedBox(height: 8),
             Wrap(spacing: 8, runSpacing: 8, children: [
+              if (canCount && a.untraced > 0)
+                FilledButton.tonalIcon(
+                  key: ValueKey('feed-reconcile-${product.id}'),
+                  onPressed: () => showStockExceptionsDialog(context, product),
+                  icon: const Icon(Icons.rule, size: 16),
+                  label: Text(context.t('feedReconcile')),
+                ),
               if (canCount)
                 OutlinedButton.icon(
                   key: ValueKey('feed-count-${product.id}'),

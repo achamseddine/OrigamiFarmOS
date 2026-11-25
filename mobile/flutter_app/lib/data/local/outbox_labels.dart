@@ -54,6 +54,7 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/feed-reconciliations': (labelKey: 'outboxReconciliation', moduleCode: FarmModule.feedNutrition),
   '/feed-inventory': (labelKey: 'outboxFeedAdjustment', moduleCode: FarmModule.feedNutrition),
   '/feed-inventory/counts': (labelKey: 'outboxStockCount', moduleCode: FarmModule.feedNutrition),
+  '/feed-inventory/exceptions': (labelKey: 'outboxStockException', moduleCode: FarmModule.feedNutrition),
   '/feed-reorder-policies': (labelKey: 'outboxReorderPolicy', moduleCode: FarmModule.feedNutrition),
   '/feed-performance': (labelKey: 'outboxFeedPerformance', moduleCode: FarmModule.feedNutrition),
   // The farm pharmacy: stock moves are inventory; a dose given is health.
