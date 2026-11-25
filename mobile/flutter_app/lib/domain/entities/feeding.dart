@@ -1077,6 +1077,7 @@ class FeedingPlan {
     required this.recentEvents,
     required this.feedCost7d,
     required this.fed7d,
+    this.refused7d = const [],
   });
 
   final Map<String, dynamic> subject;
@@ -1093,7 +1094,13 @@ class FeedingPlan {
   final List<ProgramMatch> eligible;
   final List<FeedingEvent> recentEvents;
   final double feedCost7d;
+
+  /// What left the store for this subject in the last 7 farm days — only
+  /// offered / delivered feedings (v0.8.6).
   final List<DailyTarget> fed7d;
+
+  /// Refused in the same days: recorded apart, never counted as fed.
+  final List<DailyTarget> refused7d;
 
   String get subjectType => subject['subject_type'] as String? ?? 'animal';
   String get subjectId => subject['subject_id'] as String? ?? '';
@@ -1116,8 +1123,28 @@ class FeedingPlan {
       recentEvents: [for (final e in _maps(json['recent_events'])) FeedingEvent.fromJson(e)],
       feedCost7d: _d(json['feed_cost_7d']),
       fed7d: [for (final t in _maps(json['fed_7d'])) DailyTarget.fromJson({...t, 'daily_total': t['quantity']})],
+      refused7d: [for (final t in _maps(json['refused_7d'])) DailyTarget.fromJson({...t, 'daily_total': t['quantity']})],
     );
   }
+}
+
+/// A member of a group that the group's own ration does not feed (v0.8.6):
+/// she has her own ration (`own_program`), a more specific group's
+/// (`other_group`), or the group's adjusted for her (`own_override`,
+/// `own_restriction`). She is planned once, elsewhere.
+class ExcludedHead {
+  const ExcludedHead({required this.animalId, required this.name, required this.reason, this.groupName});
+  final String animalId;
+  final String name;
+  final String reason;
+  final String? groupName;
+
+  factory ExcludedHead.fromJson(Map<String, dynamic> json) => ExcludedHead(
+        animalId: json['animal_id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        reason: json['reason'] as String? ?? '',
+        groupName: json['group_name'] as String?,
+      );
 }
 
 /// `GET /feeding-plan/today` — the feed-room list.
@@ -1132,17 +1159,36 @@ class DailyPlanLine {
     required this.dailyTargets,
     required this.warnings,
     required this.reviewRequired,
+    this.memberCount,
+    this.excludedHeads = const [],
+    this.basis,
+    this.fed = const [],
   });
 
   final String subjectType;
   final String subjectId;
   final String name;
   final String species;
+
+  /// The heads this line's ration feeds — for a group, its head count
+  /// less the members planned elsewhere.
   final int headCount;
   final PlanProgram? program;
   final List<DailyTarget> dailyTargets;
   final List<String> warnings;
   final bool reviewRequired;
+
+  /// A group's members (null on an animal's line).
+  final int? memberCount;
+  final List<ExcludedHead> excludedHeads;
+
+  /// An animal's line: `own_program` (her whole ration), `adjusted_group_ration`
+  /// (her group's, adjusted — she is not in its count) or `supplement_only`
+  /// (only what is added on top of her group's ration).
+  final String? basis;
+
+  /// What this subject was fed that farm day (stock-moving feedings only).
+  final List<DailyTarget> fed;
 
   factory DailyPlanLine.fromJson(Map<String, dynamic> json) => DailyPlanLine(
         subjectType: json['subject_type'] as String,
@@ -1154,22 +1200,67 @@ class DailyPlanLine {
         dailyTargets: [for (final t in _maps(json['daily_targets'])) DailyTarget.fromJson(t)],
         warnings: _strings(json['warnings']),
         reviewRequired: json['review_required'] as bool? ?? false,
+        memberCount: (json['member_count'] as num?)?.toInt(),
+        excludedHeads: [for (final e in _maps(json['excluded_heads'])) ExcludedHead.fromJson(e)],
+        basis: json['basis'] as String?,
+        fed: [for (final t in _maps(json['fed'])) DailyTarget.fromJson({...t, 'daily_total': t['quantity']})],
       );
 }
 
 class DailyPlan {
-  const DailyPlan({required this.date, required this.lines, required this.totals});
+  const DailyPlan({required this.date, required this.lines, required this.totals, this.timezone, this.from, this.to});
   final String date;
   final List<DailyPlanLine> lines;
   final List<DailyTarget> totals;
 
+  /// The farm's time zone and the farm day's bounds (UTC instants), from
+  /// the server (v0.8.6). "Today" on the tablet and in the browser is the
+  /// farm's day, whatever the device's own clock zone.
+  final String? timezone;
+  final DateTime? from;
+  final DateTime? to;
+
   static const empty = DailyPlan(date: '', lines: [], totals: []);
+
+  /// Whether [t] falls on this plan's farm day; null when the plan has no
+  /// bounds (an older server, nothing loaded yet).
+  bool? covers(DateTime t) {
+    final lo = from, hi = to;
+    if (lo == null || hi == null) return null;
+    return !t.isBefore(lo) && t.isBefore(hi);
+  }
 
   factory DailyPlan.fromJson(Map<String, dynamic> json) => DailyPlan(
         date: json['date'] as String? ?? '',
         lines: [for (final l in _maps(json['lines'])) DailyPlanLine.fromJson(l)],
         totals: [for (final t in _maps(json['totals'])) DailyTarget.fromJson(t)],
+        timezone: json['timezone'] as String?,
+        from: _dt(json['from']),
+        to: _dt(json['to']),
       );
+}
+
+/// Whether [t] falls on the farm's today (v0.8.6, audit I-6): the farm
+/// day [plan] was loaded for, in the farm's own time zone — a feeding at
+/// 00:30 in Beirut is that Beirut day on a tablet or a browser set to any
+/// zone. Without a plan (nothing loaded yet, an older server) it is the
+/// device's own day.
+bool onFarmToday(DateTime t, DailyPlan? plan, {DateTime? now}) {
+  final at = now ?? DateTime.now();
+  final from = plan?.from, to = plan?.to;
+  if (from == null || to == null || at.isBefore(from)) {
+    final l = t.toLocal(), n = at.toLocal();
+    return l.year == n.year && l.month == n.month && l.day == n.day;
+  }
+  // A plan loaded yesterday on a tablet left on past midnight: the bounds
+  // move on a day at a time until they hold now (the plan reloads long
+  // before a daylight-saving hour could matter).
+  var lo = from, hi = to;
+  while (!at.isBefore(hi)) {
+    lo = hi;
+    hi = hi.add(const Duration(days: 1));
+  }
+  return !t.isBefore(lo) && t.isBefore(hi);
 }
 
 // --------------------------------------------------------------- events
@@ -1236,6 +1327,14 @@ class FeedingEvent {
   final List<FeedingEventComponent> components;
 
   double get totalQuantity => components.fold(0.0, (s, c) => s + c.quantityOffered);
+
+  /// Feed that left the store (v0.8.6): only an offered or delivered
+  /// feeding is fed. A refusal or an intake estimate is a measurement of
+  /// feed already counted, and moves nothing.
+  bool get movesStock => eventType == 'offered' || eventType == 'delivered';
+
+  /// A recorded, stock-moving feeding — what every "fed" count counts.
+  bool get countsAsFed => status == 'recorded' && movesStock;
 
   factory FeedingEvent.fromJson(Map<String, dynamic> json) => FeedingEvent(
         id: json['id'] as String,

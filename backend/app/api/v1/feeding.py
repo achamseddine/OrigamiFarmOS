@@ -9,7 +9,7 @@ farmer can act on; `FeedError` becomes the HTTP answer in `main.py`.
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -966,8 +966,11 @@ def correct_feeding_event(event_id: str, payload: FeedingCorrectionIn, db: Sessi
 
 
 @router.get("/feeding-plan/today")
-def feeding_plan_today(db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
-    return programs.daily_plan(db, user.farm_id)
+def feeding_plan_today(day: date | None = None, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    """The planned feeding of a farm day — today by default, or [day]
+    (yesterday, any past day) — against what was fed that day. Days are
+    the farm's calendar days in its own time zone (v0.8.6)."""
+    return programs.daily_plan(db, user.farm_id, day)
 
 
 # --------------------------------------------------------------- inventory

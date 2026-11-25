@@ -203,8 +203,8 @@ List<FeedRowSeed> feedRowsFromPlan(FeedingPlan? plan) {
   ];
 }
 
-/// The feedings recorded today for one subject (not reversed).
-int feedingsToday(String subjectId, List<FeedingEvent> events, {DateTime? now}) {
-  final today = now ?? DateTime.now();
-  return events.where((e) => e.subjectId == subjectId && e.status == 'recorded' && _sameDay(e.occurredAt, today)).length;
-}
+/// The feedings given today for one subject: recorded, not reversed, and
+/// stock-moving — a refusal or an intake estimate is not a feeding
+/// (v0.8.6). "Today" is the farm's day from [plan] when it has one.
+int feedingsToday(String subjectId, List<FeedingEvent> events, {DateTime? now, DailyPlan? plan}) =>
+    events.where((e) => e.subjectId == subjectId && e.countsAsFed && onFarmToday(e.occurredAt, plan, now: now)).length;

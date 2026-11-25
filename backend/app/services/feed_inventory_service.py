@@ -1634,7 +1634,9 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
     events_out = []
     for comp in feedings:
         event = db.get(fm.FeedingEvent, comp.event_id)
-        if event is None or event.status == "reversed":
+        # Exposure is feed that was given (left the store): a refusal or an
+        # intake estimate naming the lot is not a second exposure (v0.8.6).
+        if event is None or event.status != "recorded" or event.event_type not in ("offered", "delivered"):
             continue
         key = (event.subject_type, event.subject_id)
         entry = exposed.setdefault(key, {"subject_type": event.subject_type, "subject_id": event.subject_id, "quantity": 0.0, "first": event.occurred_at, "last": event.occurred_at, "events": 0})

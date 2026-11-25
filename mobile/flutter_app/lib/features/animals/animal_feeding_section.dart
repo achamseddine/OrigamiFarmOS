@@ -152,6 +152,12 @@ class _PlanBody extends StatelessWidget {
         Text(context.t('noFeedingsYet'), style: FarmTypography.textTheme.bodySmall)
       else
         for (final f in plan.fed7d) FeedKeyValue(f.productName ?? feeding.productName(f.feedProductId, lang), '${feedNumber(f.dailyTotal)} ${f.unit}'),
+      // Refused feed is shown apart: it was recorded, it is not fed (v0.8.6).
+      if (plan.refused7d.isNotEmpty) ...[
+        const SizedBox(height: 4),
+        Text(context.t('fpRefused7d'), key: const ValueKey('feeding-refused-7d'), style: FarmTypography.textTheme.bodySmall),
+        for (final f in plan.refused7d) FeedKeyValue(f.productName ?? feeding.productName(f.feedProductId, lang), '${feedNumber(f.dailyTotal)} ${f.unit}'),
+      ],
       if (plan.feedCost7d > 0) FeedKeyValue(context.t('feedingCost'), feedMoney(plan.feedCost7d), bold: true),
       if (plan.recentEvents.isNotEmpty) ...[
         const SizedBox(height: 6),

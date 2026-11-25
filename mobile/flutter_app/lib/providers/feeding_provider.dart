@@ -166,20 +166,14 @@ class FeedingProvider extends ChangeNotifier {
   Future<void> _fetchRecentEvents() => _fetch('/feeding-events', (j) => recentEvents = [for (final e in j as List<dynamic>) FeedingEvent.fromJson(e as Map<String, dynamic>)],
       query: {'days': 7});
 
-  /// Feedings recorded today (device-local day) for one subject, not
-  /// counting reversed ones or the reversals themselves.
-  List<FeedingEvent> fedToday(String subjectId) {
-    final now = DateTime.now();
-    return [
-      for (final e in recentEvents)
-        if (e.subjectId == subjectId &&
-            e.status == 'recorded' &&
-            e.occurredAt.toLocal().year == now.year &&
-            e.occurredAt.toLocal().month == now.month &&
-            e.occurredAt.toLocal().day == now.day)
-          e,
-    ];
-  }
+  /// Feedings given today for one subject (v0.8.6): recorded, stock-moving
+  /// (offered / delivered — a refusal or an intake estimate is not a
+  /// feeding round), not reversed. "Today" is the farm's day from the
+  /// server's plan; the device's own day only until a plan is loaded.
+  List<FeedingEvent> fedToday(String subjectId) => [
+        for (final e in recentEvents)
+          if (e.subjectId == subjectId && e.countsAsFed && onFarmToday(e.occurredAt, dailyPlan)) e,
+      ];
 
   List<Future<void>> _performanceFetches() => [
         _fetch('/feed-performance/summary', (j) => performance = FeedPerformanceSummary.fromJson(j as Map<String, dynamic>)),

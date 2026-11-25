@@ -145,7 +145,8 @@ class FeedKpiRow extends StatelessWidget {
     final numbered = [for (final b in feeding.batches) if (!b.numberPending) b]..sort((a, b) => b.mixNumber.compareTo(a.mixNumber));
     final mixLots = [for (final l in feeding.lots) if (l.feedBatchId != null && l.quantityOnHand > 0) l];
     final onHand = finishedMixOnHand(feeding.lots);
-    final fed = [for (final e in feeding.recentEvents) if (e.status == 'recorded') e];
+    // Feedings given: stock-moving only — a refusal is not a feeding (v0.8.6).
+    final fed = [for (final e in feeding.recentEvents) if (e.countsAsFed) e];
     final subjects = {for (final e in fed) e.subjectId}.length;
     return EqualGrid(
       minTileWidth: 200,

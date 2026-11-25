@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.5-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.6-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.5 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.6 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.6:** **One feeding plan the reports agree with** — each animal is planned **once**: a herd's line counts only the cows its ration feeds and names any cow on her own ration (*2 of 3 head*); a supplement adds on top; a **refusal is shown apart and never counted as fed**, in the plan, the costs, the reports and the reorder forecast; every *today*, *yesterday* and day-by-day figure is the **farm's day in Beirut** (a feeding at 00:30 is that day), summer time included. No migration.
             - **v0.8.5:** **Milk judged at the time it was milked** — milk entered later for a day inside a withdrawal is only accepted as withheld; milk the records cannot vouch for is **held for review** (Milk page) until a vet or the manager decides; a cow dried off yesterday can still have her earlier milk entered. Only saleable milk reaches the tank and the collector. **The server needs migration `e8a0c2e4b6d9`.**
             - **v0.8.4:** **Feed stock you can trust** — a feeding that names a lot holding too little is refused, never made up from another lot; recording past the stock needs the manager **and a reason**, and what was fed with no lot shows on the feed (*Fed with no lot*) until the manager **reconciles** it (the lot it came from, stock that was there, or a count). Two people feeding the last kilos at once can no longer both take them. **The server needs migration `d6f8a0c2e4b7`.**
             - **v0.8.3:** **Count stock** on inspection (the count becomes the stock, the difference kept as a count correction); only **concentrate, corn silage and hay & straw** are fed — raw materials go into mixes; each feed has a **price per kg** and every feeding shows its **cost**. **The server needs migration `c4e6a8b0d2f5`.**
