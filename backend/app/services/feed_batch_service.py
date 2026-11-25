@@ -777,7 +777,7 @@ def quick_mix(
         if existing is not None and existing.source_type != "farm_produced":
             raise FeedError(f"{existing.name} is a bought-in feed; give the mix another name.", 409)
         product = existing or inv.create_product(db, farm_id, code=None, name=new_product_name.strip(), unit=unit, source_type="farm_produced",
-                                                 is_ingredient=False, is_feedable=True, category="concentrate", created_by=user_id)
+                                                 is_ingredient=False, is_feedable=True, ration_type="concentrate", category="concentrate", created_by=user_id)
     else:
         raise FeedError("Choose the feed this mix makes, or name a new one.")
     for c in lines:

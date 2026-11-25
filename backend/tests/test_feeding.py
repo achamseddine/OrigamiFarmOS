@@ -26,6 +26,7 @@ DAIRY_MIX = "fp-dairy-mix"
 ALFALFA = "fp-alfalfa"
 CONCENTRATE = "fp-dairy-concentrate"
 BARLEY = "fp-barley"
+STRAW = "fp-wheat-straw"
 LAYER_FEED = "fp-layer-feed"
 
 
@@ -371,9 +372,10 @@ class TestFeedingEvents:
         assert costs["batch_cost_total"] > 0
 
     def test_a_feeding_traces_back_to_its_lots_and_forward_to_the_animals(self, client: TestClient):
-        """§12 both ways."""
+        """§12 both ways. (Straw: barley is a raw material since v0.8.3 and
+        reaches the animals only through a mix.)"""
         r = client.post(f"{API}/feeding-events", headers=_h(client), json={
-            "subject_type": "animal", "subject_id": THUNDER, "components": [{"feed_product_id": BARLEY, "quantity_offered": 2}],
+            "subject_type": "animal", "subject_id": THUNDER, "components": [{"feed_product_id": STRAW, "quantity_offered": 2}],
         })
         assert r.status_code == 201, r.text
         lot_id = r.json()["components"][0]["lot_id"]
@@ -384,16 +386,16 @@ class TestFeedingEvents:
         assert trace["lot"]["supplier_label"] == "Bekaa Hay Co."
 
     def test_a_reversal_restores_the_lots_and_keeps_the_original(self, client: TestClient):
-        before = _availability(client, BARLEY)["on_hand"]
+        before = _availability(client, STRAW)["on_hand"]
         r = client.post(f"{API}/feeding-events", headers=_h(client), json={
-            "subject_type": "animal", "subject_id": THUNDER, "components": [{"feed_product_id": BARLEY, "quantity_offered": 3}],
+            "subject_type": "animal", "subject_id": THUNDER, "components": [{"feed_product_id": STRAW, "quantity_offered": 3}],
         })
         event_id = r.json()["id"]
-        assert _availability(client, BARLEY)["on_hand"] == before - 3
+        assert _availability(client, STRAW)["on_hand"] == before - 3
         r = client.post(f"{API}/feeding-events/{event_id}/reverse", json={"reason": "Wrong horse"}, headers=_h(client))
         assert r.status_code == 201, r.text
         assert r.json()["status"] == "reversal" and r.json()["reversal_of_id"] == event_id
-        assert _availability(client, BARLEY)["on_hand"] == before
+        assert _availability(client, STRAW)["on_hand"] == before
         history = client.get(f"{API}/livestock-subjects/{THUNDER}/feeding-history", headers=_h(client)).json()
         assert {e["status"] for e in history if e["id"] == event_id} == {"reversed"}
 

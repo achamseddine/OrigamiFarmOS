@@ -16,6 +16,7 @@ import '../../providers/access_provider.dart';
 import '../../providers/approvals_provider.dart';
 import '../../providers/feeding_provider.dart';
 import '../approvals/ask_to_buy_dialog.dart';
+import 'feed_stock_dialogs.dart';
 
 /// The feed room's three everyday records, each one form (generic feed
 /// architecture §3, §5a):
@@ -29,7 +30,8 @@ import '../approvals/ask_to_buy_dialog.dart';
 ///    to feed. No formula has to be set up first.
 /// 3. **a feeding** — the animal feeding form (feeding_event_dialog.dart).
 
-const _kinds = ['grain', 'forage', 'complete', 'mineral'];
+/// What a raw material is: grain or meal, or minerals and premix.
+const _rawKinds = ['grain', 'mineral'];
 
 /// Buying feed is the farm manager's (v0.7.8): they record any delivery.
 /// Anyone else asks them to buy, and records the delivery of a request the
@@ -54,6 +56,9 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
   static const _newFeed = '__new__';
   late String? _productId = widget.productId;
   final _name = TextEditingController();
+  // What the new feed is (v0.8.3): a raw material for mixes unless it is
+  // the concentrate, corn silage or hay & straw the animals are fed.
+  String _type = feedRawMaterial;
   String _kind = 'grain';
   String _unit = 'kg';
   DateTime _day = DateTime.now();
@@ -96,11 +101,11 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
       'name': name,
       'unit': _unit,
       'source_type': 'purchased',
-      'category': switch (_kind) { 'grain' => 'concentrate', 'forage' => 'forage', 'mineral' => 'mineral', _ => 'complete_feed' },
-      // Grain and minerals go into mixes and can be fed straight; a bought
-      // complete feed is fed as it is.
-      'is_ingredient': _kind != 'complete',
-      'is_feedable': true,
+      'category': categoryForRation(_type, rawCategory: _kind == 'mineral' ? 'mineral' : 'concentrate'),
+      // Grain, meals and minerals go into mixes only; the animals are fed
+      // the concentrate, corn silage and hay & straw (the server holds it).
+      'ration_type': _type,
+      'is_ingredient': true,
     };
   }
 
@@ -210,9 +215,14 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
             const SizedBox(height: 10),
             TextField(controller: _name, decoration: InputDecoration(labelText: context.t('fpNewFeedName'), hintText: context.t('fpNewFeedHint'))),
             const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              for (final k in _kinds) ChoiceChip(label: Text(context.t('fpKind_$k')), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
-            ]),
+            FeedTypeChooser(value: _type, onChanged: (t) => setState(() => _type = t)),
+            if (_type == feedRawMaterial) ...[
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                for (final k in _rawKinds)
+                  ChoiceChip(key: ValueKey('raw-kind-$k'), label: Text(context.t('fpKind_$k')), selected: _kind == k, onSelected: (_) => setState(() => _kind = k)),
+              ]),
+            ],
             const SizedBox(height: 8),
             Wrap(spacing: 8, children: [
               for (final u in const ['kg', 't', 'bale']) ChoiceChip(label: Text(u), selected: _unit == u, onSelected: (_) => setState(() => _unit = u)),
@@ -243,7 +253,7 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
               child: TextField(
                 controller: _cost,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: InputDecoration(labelText: '${context.t('unitCost')} / $unit', hintText: context.t('optional')),
+                decoration: InputDecoration(labelText: context.t('fpPricePaid').replaceAll('{unit}', unit), prefixText: '\$ ', hintText: context.t('optional')),
               ),
             ),
           ]),

@@ -75,6 +75,10 @@ class AccessProvider extends ChangeNotifier {
   /// Changes the feed list, an animal's ration or a reservation.
   bool get canManageFeed => canApproveFeed;
 
+  /// Counts the feed stock on inspection and corrects it to the count
+  /// (v0.8.3, backend POST /feed-inventory/counts: Feed or Inventory approve).
+  bool get canCountFeedStock => canOverrideFeedStock;
+
   /// Corrects a milk record directly; an employee asks for it.
   bool get canCorrectMilk => can(FarmModule.milkProduction, PermissionAction.approve);
 

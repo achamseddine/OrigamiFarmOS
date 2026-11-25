@@ -3832,6 +3832,40 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/feed-inventory/counts:
+    post:
+      tags:
+      - feeding
+      summary: Post Stock Count
+      description: 'What was counted on inspection becomes the stock (v0.8.3): the
+
+        difference with the records is posted as count corrections. Sending the
+
+        same count again finds nothing to correct.'
+      operationId: post_stock_count_api_v1_feed_inventory_counts_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockCountCreate'
+        required: true
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Post Stock Count Api V1 Feed Inventory Counts Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/feed-formulas:
     get:
       tags:
@@ -16261,6 +16295,11 @@ components:
           type: boolean
           title: Is Feedable
           default: false
+        ration_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ration Type
         category:
           anyOf:
           - type: string
@@ -16326,6 +16365,11 @@ components:
         is_feedable:
           type: boolean
           title: Is Feedable
+        ration_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ration Type
         category:
           anyOf:
           - type: string
@@ -16342,6 +16386,11 @@ components:
           - type: number
           - type: 'null'
           title: Default Unit Cost
+        current_unit_cost:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Current Unit Cost
         status:
           type: string
           title: Status
@@ -16403,6 +16452,11 @@ components:
           - type: boolean
           - type: 'null'
           title: Is Feedable
+        ration_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Ration Type
         default_unit_cost:
           anyOf:
           - type: number
@@ -23059,6 +23113,38 @@ components:
           default: true
       type: object
       title: StartRunIn
+    StockCountCreate:
+      properties:
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        counted_quantity:
+          type: number
+          minimum: 0.0
+          title: Counted Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        counted_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Counted At
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 500
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - feed_product_id
+      - counted_quantity
+      title: StockCountCreate
+      description: 'What was counted on inspection (v0.8.3): it becomes the stock.'
     SupplierOut:
       properties:
         id:

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app.domain import feed_models as fm
 from app.domain import models
 from app.feeding import catalog, uom
-from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.repositories.base import ensure_utc, new_id, now, write_audit_log, write_event
 
 
 class FeedError(Exception):
@@ -122,6 +122,43 @@ def unique_code(db: Session, farm_id: str, base: str) -> str:
     return code
 
 
+def resolve_ration(
+    ration_type: str | None,
+    *,
+    is_feedable: bool,
+    is_ingredient: bool,
+    name: str | None,
+    name_ar: str | None = None,
+    category: str | None = None,
+) -> tuple[str | None, bool, bool]:
+    """(ration_type, is_feedable, is_ingredient) for a product (v0.8.3).
+    Only a concentrate, corn silage or hay & straw is fed to the animals;
+    anything else is a raw material for mixes. A form that names the type
+    gets it; an older one that only says "feedable" gets the type its name
+    and category say (catalog.infer_ration_type) — a grain stays a raw
+    material however it was marked."""
+    if ration_type == catalog.RAW_MATERIAL:
+        return None, False, True
+    if ration_type is not None:
+        if ration_type not in catalog.RATION_TYPES:
+            raise FeedError(f"ration_type must be one of {list(catalog.RATION_TYPES) + [catalog.RAW_MATERIAL]}")
+        return ration_type, True, is_ingredient
+    if not is_feedable:
+        return None, False, True
+    inferred = catalog.infer_ration_type(name=name, name_ar=name_ar, category=category, is_ingredient=is_ingredient)
+    if inferred is None:
+        return None, False, True
+    return inferred, True, is_ingredient
+
+
+def current_unit_cost(db: Session, product: fm.FeedProduct) -> float | None:
+    """What a kilo (unit) of this feed costs when it is fed next: the cost
+    of the lot it would be taken from first (FIFO), else the feed's price."""
+    item = db.get(models.InventoryItem, product.inventory_item_id)
+    usable = sorted((l for l in product.lots if lot_usable(l) and l.quantity_on_hand > 0), key=lambda l: l.received_at)
+    return unit_cost_of(usable[0] if usable else None, product, item)
+
+
 def ensure_product_for_item(
     db: Session,
     item: models.InventoryItem,
@@ -137,6 +174,8 @@ def ensure_product_for_item(
     lots agree from the first day."""
     product = product_for_item(db, item.id)
     if product is None:
+        category = category or (item.category or "").lower() or None
+        ration, is_feedable, is_ingredient = resolve_ration(None, is_feedable=is_feedable, is_ingredient=is_ingredient, name=item.name, category=category)
         product = fm.FeedProduct(
             id=new_id(),
             farm_id=item.farm_id,
@@ -145,7 +184,8 @@ def ensure_product_for_item(
             source_type=source_type,
             is_ingredient=is_ingredient,
             is_feedable=is_feedable,
-            category=category or (item.category or "").lower() or None,
+            ration_type=ration,
+            category=category,
             unit=uom.normalise(item.unit),
             inventory_item_id=item.id,
             default_unit_cost=item.unit_cost,
@@ -199,7 +239,8 @@ def ensure_standard_feeds(db: Session, farm_id: str, *, created_by: str | None =
         if slots.get(slot) is None:
             slots[slot] = create_product(
                 db, farm_id, code=code, name=name_en, name_ar=name_ar, unit=unit, source_type=catalog.STANDARD_FEED_SOURCE.get(slot, "purchased"),
-                is_ingredient=True, is_feedable=True, category=category, notes="Standard feed of the animal feeding form.", created_by=created_by,
+                is_ingredient=True, is_feedable=True, ration_type=catalog.SLOT_RATION[slot], category=category,
+                notes="Standard feed of the animal feeding form.", created_by=created_by,
             )
     return slots  # type: ignore[return-value]
 
@@ -248,6 +289,7 @@ def create_product(
     source_type: str = "purchased",
     is_ingredient: bool = True,
     is_feedable: bool = False,
+    ration_type: str | None = None,
     category: str | None = None,
     unit_cost: float | None = None,
     supplier_id: str | None = None,
@@ -259,8 +301,12 @@ def create_product(
 ) -> fm.FeedProduct:
     if source_type not in catalog.PRODUCT_SOURCES:
         raise FeedError(f"source_type must be one of {list(catalog.PRODUCT_SOURCES)}")
-    if not (is_ingredient or is_feedable):
+    if not (is_ingredient or is_feedable or ration_type not in (None, catalog.RAW_MATERIAL)):
         raise FeedError("A feed product must be an ingredient, feedable, or both.")
+    if unit_cost is not None and unit_cost < 0:
+        raise FeedError("A price cannot be negative.")
+    ration_type, is_feedable, is_ingredient = resolve_ration(
+        ration_type, is_feedable=is_feedable, is_ingredient=is_ingredient, name=name, name_ar=name_ar, category=category)
     unit = uom.normalise(unit)
     item = models.InventoryItem(
         id=new_id(),
@@ -285,6 +331,7 @@ def create_product(
         source_type=source_type,
         is_ingredient=is_ingredient,
         is_feedable=is_feedable,
+        ration_type=ration_type,
         category=category,
         unit=unit,
         inventory_item_id=item.id,
@@ -697,6 +744,95 @@ def adjust(
         created_by=user_id,
     )
     return tx
+
+
+# ------------------------------------------------------ stock count (v0.8.3)
+def count_stock(
+    db: Session,
+    product: fm.FeedProduct,
+    *,
+    counted: float,
+    unit: str | None = None,
+    counted_at: datetime | None = None,
+    notes: str | None = None,
+    user: models.User,
+) -> dict:
+    """What the manager counted on inspection becomes the stock. The
+    records are never edited: the difference with what they say is posted
+    as count corrections on the lots — the stock left is the newest (feed is
+    used oldest first), a surplus goes to the newest usable lot (or a lot of
+    its own), and a lot taken below zero by a feeding recorded without stock
+    is brought back to zero. A count that matches changes nothing but is
+    still kept (audit log and event), so the inspection is on file."""
+    if counted is None or counted < 0:
+        raise FeedError("The quantity counted cannot be negative.")
+    unit = uom.normalise(unit or product.unit)
+    counted = round(uom.convert(float(counted), unit, product.unit), 3)
+    when = ensure_utc(counted_at) if counted_at else now()
+    if when > now() + timedelta(minutes=5):
+        raise FeedError("A stock count cannot be in the future.")
+    item = db.get(models.InventoryItem, product.inventory_item_id)
+    if item is not None:
+        reconcile_opening_balance(db, product, item, created_by=user.id)
+    lots = sorted(product.lots, key=lambda l: l.received_at, reverse=True)  # newest first
+    before = round(sum(l.quantity_on_hand for l in lots), 3)
+    count_id = new_id()
+    # The stock that is there now: the newest lots, each up to what it holds.
+    targets: dict[str, float] = {}
+    left = counted
+    for lot in lots:
+        keep = min(max(lot.quantity_on_hand, 0.0), left)
+        targets[lot.id] = keep
+        left -= keep
+    if left > 0.0005:
+        usable = [l for l in lots if lot_usable(l)]
+        if usable:
+            targets[usable[0].id] += left
+        else:
+            lot = fm.FeedLot(
+                id=new_id(), farm_id=product.farm_id, feed_product_id=product.id,
+                lot_code=_unique_lot_code(db, product.farm_id, f"{product.code}-COUNT"), source_type="opening_balance",
+                received_at=when, received_quantity=0, accepted_quantity=0, quantity_on_hand=0, unit=product.unit,
+                unit_cost=unit_cost_of(None, product, item), status="active",
+                notes="Stock found at an inspection count.", created_by=user.id, created_at=now(),
+            )
+            db.add(lot)
+            product.lots.append(lot)
+            db.flush()
+            lots.insert(0, lot)
+            targets[lot.id] = left
+    explanation = f"Stock count: {counted:g} {product.unit} counted on inspection; the records said {before:g} {product.unit}."
+    if notes and notes.strip():
+        explanation += f" {notes.strip()}"
+    changes = []
+    for lot in lots:
+        change = round(targets.get(lot.id, 0.0) - lot.quantity_on_hand, 3)
+        if abs(change) < 0.0005:
+            continue
+        lot.quantity_on_hand = round(lot.quantity_on_hand + change, 3)
+        refresh_lot_status(lot)
+        db.add(models.InventoryTransaction(
+            id=new_id(), item_id=product.inventory_item_id, direction="in" if change > 0 else "out", quantity=abs(change),
+            unit_cost=unit_cost_of(lot, product, item), reason="count_correction", linked_entity_type="feed_stock_count",
+            linked_entity_id=count_id, lot_id=lot.id, created_at=when,
+        ))
+        changes.append({"lot_id": lot.id, "lot_code": lot.lot_code, "change": change})
+    delta = round(counted - before, 3)
+    if item is not None:
+        item.current_qty = counted
+    write_audit_log(
+        db, farm_id=product.farm_id, user_id=user.id, action="feed_stock_counted", entity_type="feed_product", entity_id=product.id,
+        module_code="feed_nutrition", summary=f"{user.name} counted {product.name}: {counted:g} {product.unit} (records {before:g}, {delta:+g})",
+        changes={"on_hand": {"from": before, "to": counted}},
+    )
+    write_event(
+        db, farm_id=product.farm_id, entity_type="feed_product", entity_id=product.id, event_type="feed_stock_counted",
+        payload={"count_id": count_id, "counted": counted, "before": before, "delta": delta, "unit": product.unit,
+                 "counted_at": when.isoformat(), "notes": notes, "lots": changes},
+        created_by=user.id,
+    )
+    return {"count_id": count_id, "feed_product_id": product.id, "unit": product.unit, "before": before, "counted": counted,
+            "delta": delta, "counted_at": when, "lots": changes}
 
 
 # ----------------------------------------------------------- allocation

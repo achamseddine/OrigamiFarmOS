@@ -15,6 +15,10 @@ class FeedProductCreate(BaseModel):
     source_type: str = "purchased"  # purchased | farm_produced
     is_ingredient: bool = True
     is_feedable: bool = False
+    # What the animals are fed it as (v0.8.3): concentrate | silage |
+    # hay_straw | raw_material. Without it, "feedable" is read from the name
+    # and category, and a grain stays a raw material.
+    ration_type: str | None = None
     category: str | None = None
     unit_cost: float | None = None
     supplier_id: str | None = None
@@ -37,9 +41,23 @@ class FeedProductUpdate(BaseModel):
     category: str | None = None
     is_ingredient: bool | None = None
     is_feedable: bool | None = None
+    # concentrate | silage | hay_straw | raw_material (v0.8.3).
+    ration_type: str | None = None
+    # The feed's price per unit, used where a lot carries no cost of its
+    # own (feed grown on the farm, stock found at a count).
     default_unit_cost: float | None = None
     status: str | None = None
     notes: str | None = None
+
+
+class StockCountCreate(BaseModel):
+    """What was counted on inspection (v0.8.3): it becomes the stock."""
+
+    feed_product_id: str
+    counted_quantity: float = Field(ge=0)
+    unit: str | None = None
+    counted_at: datetime | None = None
+    notes: str | None = Field(default=None, max_length=500)
 
 
 class FeedLotOut(BaseModel):
@@ -87,10 +105,13 @@ class FeedProductOut(BaseModel):
     source_type: str
     is_ingredient: bool
     is_feedable: bool
+    ration_type: str | None = None
     category: str | None = None
     unit: str
     inventory_item_id: str
     default_unit_cost: float | None = None
+    # What a unit costs when it is fed next: the first lot's cost, else the price.
+    current_unit_cost: float | None = None
     status: str
     notes: str | None = None
     availability: FeedAvailabilityOut

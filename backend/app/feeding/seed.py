@@ -42,11 +42,14 @@ def _days_ago(n: int, hour: int = 6) -> datetime:
     return min(at, _now() - timedelta(minutes=5))
 
 
-def _product_from_item(db: Session, farm_id: str, product_id: str, item_id: str, *, code: str, source_type: str, is_ingredient: bool, is_feedable: bool, category: str) -> fm.FeedProduct:
+def _product_from_item(db: Session, farm_id: str, product_id: str, item_id: str, *, code: str, source_type: str, is_ingredient: bool,
+                       ration_type: str | None, category: str) -> fm.FeedProduct:
+    """ration_type: what the animals are fed it as (concentrate, silage,
+    hay_straw), or None for a raw material that only goes into mixes."""
     item = db.get(models.InventoryItem, item_id)
     product = fm.FeedProduct(
-        id=product_id, farm_id=farm_id, code=code, name=item.name, source_type=source_type, is_ingredient=is_ingredient,
-        is_feedable=is_feedable, category=category, unit=item.unit, inventory_item_id=item.id, default_unit_cost=item.unit_cost,
+        id=product_id, farm_id=farm_id, code=code, name=item.name, source_type=source_type, is_ingredient=is_ingredient or ration_type is None,
+        is_feedable=ration_type is not None, ration_type=ration_type, category=category, unit=item.unit, inventory_item_id=item.id, default_unit_cost=item.unit_cost,
         status="active", created_at=_now(),
     )
     db.add(product)
@@ -55,13 +58,14 @@ def _product_from_item(db: Session, farm_id: str, product_id: str, item_id: str,
 
 
 def _new_product(db: Session, farm_id: str, product_id: str, item_id: str, *, code: str, name: str, name_ar: str, category: str,
-                 source_type: str, is_ingredient: bool, is_feedable: bool, unit_cost: float, supplier: str, reorder_level: float) -> fm.FeedProduct:
+                 source_type: str, is_ingredient: bool, ration_type: str | None, unit_cost: float, supplier: str, reorder_level: float) -> fm.FeedProduct:
     item = models.InventoryItem(id=item_id, farm_id=farm_id, name=name, category=category.capitalize(), unit="kg", current_qty=0,
                                 reorder_level=reorder_level, supplier_label=supplier, unit_cost=unit_cost, last_purchase=_days_ago(12))
     db.add(item)
     db.flush()
     product = fm.FeedProduct(id=product_id, farm_id=farm_id, code=code, name=name, name_ar=name_ar, source_type=source_type,
-                             is_ingredient=is_ingredient, is_feedable=is_feedable, category=category, unit="kg", inventory_item_id=item.id,
+                             is_ingredient=is_ingredient or ration_type is None, is_feedable=ration_type is not None, ration_type=ration_type,
+                             category=category, unit="kg", inventory_item_id=item.id,
                              default_unit_cost=unit_cost, status="active", created_at=_now())
     db.add(product)
     db.flush()
@@ -99,32 +103,32 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     targets: dict[str, float] = {}
     for item in db.scalars(select(models.InventoryItem).where(models.InventoryItem.farm_id == farm_id)):
         targets[item.id] = item.current_qty or 0
-    dairy_mix = _product_from_item(db, farm_id, "fp-dairy-mix", "feed-dairy-mix", code="DAIRY-MIX-24L", source_type="farm_produced", is_ingredient=False, is_feedable=True, category="complete_feed")
+    dairy_mix = _product_from_item(db, farm_id, "fp-dairy-mix", "feed-dairy-mix", code="DAIRY-MIX-24L", source_type="farm_produced", is_ingredient=False, ration_type="concentrate", category="complete_feed")
     dairy_mix.name, dairy_mix.name_ar = "Dairy Mix 24L", "خلطة الحليب ٢٤ ل"
     db.get(models.InventoryItem, "feed-dairy-mix").name = "Dairy Mix 24L"
-    alfalfa = _product_from_item(db, farm_id, "fp-alfalfa", "feed-alfalfa", code="ALFALFA-HAY", source_type="purchased", is_ingredient=True, is_feedable=True, category="forage")
-    silage = _product_from_item(db, farm_id, "fp-corn-silage", "feed-corn-silage", code="CORN-SILAGE", source_type="farm_produced", is_ingredient=True, is_feedable=True, category="forage")
-    layer = _product_from_item(db, farm_id, "fp-layer-feed", "feed-layer", code="LAYER-FEED", source_type="purchased", is_ingredient=False, is_feedable=True, category="complete_feed")
-    goat = _product_from_item(db, farm_id, "fp-goat-mix", "feed-goat-mix", code="GOAT-MIX", source_type="purchased", is_ingredient=False, is_feedable=True, category="complete_feed")
-    minerals = _product_from_item(db, farm_id, "fp-minerals", "feed-minerals", code="MINERAL-MIX", source_type="purchased", is_ingredient=True, is_feedable=True, category="mineral")
+    alfalfa = _product_from_item(db, farm_id, "fp-alfalfa", "feed-alfalfa", code="ALFALFA-HAY", source_type="purchased", is_ingredient=True, ration_type="hay_straw", category="forage")
+    silage = _product_from_item(db, farm_id, "fp-corn-silage", "feed-corn-silage", code="CORN-SILAGE", source_type="farm_produced", is_ingredient=True, ration_type="silage", category="forage")
+    layer = _product_from_item(db, farm_id, "fp-layer-feed", "feed-layer", code="LAYER-FEED", source_type="purchased", is_ingredient=False, ration_type="concentrate", category="complete_feed")
+    goat = _product_from_item(db, farm_id, "fp-goat-mix", "feed-goat-mix", code="GOAT-MIX", source_type="purchased", is_ingredient=False, ration_type="concentrate", category="complete_feed")
+    minerals = _product_from_item(db, farm_id, "fp-minerals", "feed-minerals", code="MINERAL-MIX", source_type="purchased", is_ingredient=True, ration_type=None, category="mineral")
     for p in (dairy_mix, alfalfa, silage, layer, goat, minerals):
         inv.reconcile_opening_balance(db, p, db.get(models.InventoryItem, p.inventory_item_id), created_by=u)
 
     barley = _new_product(db, farm_id, "fp-barley", "feed-barley", code="BARLEY", name="Barley", name_ar="شعير", category="concentrate",
-                          source_type="purchased", is_ingredient=True, is_feedable=True, unit_cost=0.36, supplier="Bekaa Hay Co.", reorder_level=400)
+                          source_type="purchased", is_ingredient=True, ration_type=None, unit_cost=0.36, supplier="Bekaa Hay Co.", reorder_level=400)
     concentrate = _new_product(db, farm_id, "fp-dairy-concentrate", "feed-dairy-concentrate", code="DAIRY-CONC-18", name="Dairy Concentrate 18",
-                               name_ar="مركّز حليب ١٨٪", category="concentrate", source_type="purchased", is_ingredient=True, is_feedable=True,
+                               name_ar="مركّز حليب ١٨٪", category="concentrate", source_type="purchased", is_ingredient=True, ration_type="concentrate",
                                unit_cost=0.52, supplier="Al Mashreq", reorder_level=800)
     premix = _new_product(db, farm_id, "fp-dairy-premix", "feed-dairy-premix", code="CATTLE-DAIRY-PREMIX", name="Cattle Dairy Premix",
-                          name_ar="بريمكس أبقار حليب", category="premix", source_type="purchased", is_ingredient=True, is_feedable=False,
+                          name_ar="بريمكس أبقار حليب", category="premix", source_type="purchased", is_ingredient=True, ration_type=None,
                           unit_cost=2.40, supplier="NutriPlus", reorder_level=100)
     broiler = _new_product(db, farm_id, "fp-broiler-grower", "feed-broiler-grower", code="BROILER-GROWER", name="Broiler Grower",
-                           name_ar="علف تسمين", category="complete_feed", source_type="purchased", is_ingredient=False, is_feedable=True,
+                           name_ar="علف تسمين", category="complete_feed", source_type="purchased", is_ingredient=False, ration_type="concentrate",
                            unit_cost=0.47, supplier="Al Mashreq", reorder_level=300)
     # The third default row of the animal feeding form (concentrate and corn
     # silage are already above): the long straw the cows get at noon.
     straw = _new_product(db, farm_id, "fp-wheat-straw", "feed-wheat-straw", code="WHEAT-STRAW", name="Wheat straw", name_ar="تبن القمح",
-                         category="forage", source_type="purchased", is_ingredient=True, is_feedable=True, unit_cost=0.12,
+                         category="forage", source_type="purchased", is_ingredient=True, ration_type="hay_straw", unit_cost=0.12,
                          supplier="Bekaa Hay Co.", reorder_level=500)
     targets.update({"feed-barley": 1200, "feed-dairy-concentrate": 2000, "feed-dairy-premix": 500, "feed-broiler-grower": 800,
                     "feed-wheat-straw": 1800})
@@ -240,14 +244,13 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
             [{"species_code": "cow", "sex": "F", "life_stage": "adult", "management_profile": "dairy", "lactation_state": "lactating", "priority": 0}],
             description="Falls back when a lactating cow has no milk records yet.")
     program("prog-dry-cow", "DRY-COW", "Dry cow", "بقرة جافة", "dairy",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": silage.id, "quantity_per_head": 8},
-             {"feed_product_id": minerals.id, "quantity_per_head": 0.1}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": silage.id, "quantity_per_head": 8}],
             [{"species_code": "cow", "sex": "F", "life_stage": "adult", "lactation_state": "dry", "priority": 5}])
     program("prog-calf-starter", "CALF-STARTER", "Calf starter", "علف عجول", "growth",
             [{"feed_product_id": concentrate.id, "quantity_per_head": 1.5}, {"feed_product_id": alfalfa.id, "quantity_per_head": 1}],
             [{"species_code": "cow", "life_stage": "young", "priority": 5}])
     program("prog-breeding-bull", "BREEDING-BULL", "Breeding bull maintenance", "ثور تربية", "breeding",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 12}, {"feed_product_id": barley.id, "quantity_per_head": 2}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 12}, {"feed_product_id": concentrate.id, "quantity_per_head": 2}],
             [{"species_code": "cow", "sex": "M", "life_stage": "adult", "priority": 5}])
     program("prog-goat-dairy", "GOAT-DAIRY", "Lactating dairy goat", "ماعز حلوب", "dairy",
             [{"feed_product_id": goat.id, "quantity_per_head": 1.2}, {"feed_product_id": alfalfa.id, "quantity_per_head": 2}],
@@ -256,22 +259,22 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
             [{"feed_product_id": alfalfa.id, "quantity_per_head": 2.5}],
             [{"species_code": "goat", "sex": "F", "lactation_state": "dry", "priority": 5}])
     program("prog-ewe-gestation", "EWE-GESTATION", "Pregnant ewe", "نعجة حامل", "reproduction",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 2}, {"feed_product_id": barley.id, "quantity_per_head": 0.4}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 2}, {"feed_product_id": concentrate.id, "quantity_per_head": 0.4}],
             [{"species_code": "sheep", "sex": "F", "reproductive_state": "pregnant", "priority": 5}])
     program("prog-ewe-lactation", "EWE-LACTATION", "Lactating ewe", "نعجة مرضعة", "dairy",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 2.5}, {"feed_product_id": barley.id, "quantity_per_head": 0.8}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 2.5}, {"feed_product_id": concentrate.id, "quantity_per_head": 0.8}],
             [{"species_code": "sheep", "sex": "F", "lactation_state": "lactating", "priority": 6}])
     program("prog-mare-pregnant", "MARE-PREGNANT", "Pregnant mare", "فرس حامل", "reproduction",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": barley.id, "quantity_per_head": 2}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": concentrate.id, "quantity_per_head": 2}],
             [{"species_code": "horse", "sex": "F", "reproductive_state": "pregnant", "priority": 6}])
     program("prog-mare-lactating", "MARE-LACTATING", "Lactating mare", "فرس مرضعة", "dairy",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 12}, {"feed_product_id": barley.id, "quantity_per_head": 3}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 12}, {"feed_product_id": concentrate.id, "quantity_per_head": 3}],
             [{"species_code": "horse", "sex": "F", "lactation_state": "lactating", "priority": 7}])
     program("prog-horse-growth", "HORSE-GROWTH", "Foal / yearling growth", "مهر — نمو", "growth",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 6}, {"feed_product_id": barley.id, "quantity_per_head": 1.5}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 6}, {"feed_product_id": concentrate.id, "quantity_per_head": 1.5}],
             [{"species_code": "horse", "life_stage": "young", "priority": 5}])
     program("prog-horse-maintenance", "HORSE-MAINTENANCE", "Horse maintenance", "حصان — صيانة", "maintenance",
-            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": barley.id, "quantity_per_head": 1}],
+            [{"feed_product_id": alfalfa.id, "quantity_per_head": 10}, {"feed_product_id": concentrate.id, "quantity_per_head": 1}],
             [{"species_code": "horse", "priority": 0}])
     layer_prog = program("prog-layer", "LAYER", "Layer ration", "علف بيّاض", "eggs",
                          [{"feed_product_id": layer.id, "quantity_per_head": 0.12}],

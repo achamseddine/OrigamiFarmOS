@@ -253,13 +253,47 @@ def feed_report(db: Session, farm_id: str, start: date | None, end: date | None)
                       "available": _r(r["available"], 1), "daily_demand": _r(r["daily_demand"], 1) if r["daily_demand"] is not None else None,
                       "days_of_cover": r["days_of_cover"]})
 
+    # What feeding cost, animal by animal and group by group, and day by day
+    # (v0.8.3): what was given times what it cost (the lot's cost, else the
+    # feed's price). Feed given with neither is counted apart, so a missing
+    # price shows instead of a cost that looks lower than it is.
+    fed: dict[tuple[str, str], dict] = {}
+    cost_days = {d: 0.0 for d in _days(start, end)}
+    unpriced_kg = 0.0
+    for e in events:
+        if e.event_type not in ("offered", "delivered"):
+            continue
+        f = fed.setdefault((e.subject_type, e.subject_id), {"subject_type": e.subject_type, "subject_id": e.subject_id, "feedings": 0,
+                                                            "quantity_kg": 0.0, "cost": 0.0})
+        f["feedings"] += 1
+        day = _day(e.occurred_at, tz)
+        for c in e.components:
+            if c.unit == "kg":
+                f["quantity_kg"] += c.quantity_offered
+            if c.cost is None:
+                unpriced_kg += c.quantity_offered if c.unit == "kg" else 0
+            else:
+                f["cost"] += c.cost
+                if day in cost_days:
+                    cost_days[day] += c.cost
+    by_subject = []
+    for (stype, sid), f in fed.items():
+        row = db.get(models.Animal, sid) if stype == "animal" else db.get(models.Flock, sid)
+        by_subject.append({**f, "name": getattr(row, "name", None) or sid, "tag": getattr(row, "tag", None) if stype == "animal" else None,
+                           "quantity_kg": _r(f["quantity_kg"], 1), "cost": _r(f["cost"]), "cost_per_day": _r(f["cost"] / out["days"])})
+    by_subject.sort(key=lambda r: -r["cost"])
     kg_used = sum(u["quantity"] for u in used.values() if u["unit"] == "kg")
+    feed_cost = sum(u["cost"] for u in used.values())
     out.update({
+        "by_subject": by_subject,
+        "cost_by_day": [{"date": d, "cost": _r(v)} for d, v in cost_days.items()],
         "kpis": {
             "feedings": sum(1 for e in events if e.event_type in ("offered", "delivered")),
             "subjects_fed": len(subjects),
             "feed_used_kg": _r(kg_used, 1),
-            "feed_cost": _r(sum(u["cost"] for u in used.values())),
+            "feed_cost": _r(feed_cost),
+            "feed_cost_per_day": _r(feed_cost / out["days"]),
+            "unpriced_kg": _r(unpriced_kg, 1),
             "deliveries": len(deliveries),
             "delivered_kg": _r(sum(d["quantity"] for d in deliveries if d["unit"] == "kg"), 1),
             "delivered_cost": _r(sum(d["cost"] or 0 for d in deliveries)),

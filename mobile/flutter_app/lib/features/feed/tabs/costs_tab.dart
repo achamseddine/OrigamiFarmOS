@@ -8,8 +8,11 @@ import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/data_table_card.dart';
 import '../../../core/widgets/kpi_card.dart';
 import '../../../core/widgets/section_card.dart';
+import '../../../domain/entities/feeding.dart';
+import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../../../providers/livestock_provider.dart';
+import '../feed_stock_dialogs.dart';
 import '../feed_workspace_screen.dart';
 
 /// Feed cost (§10, §23): what the last thirty days of feeding cost, by
@@ -25,8 +28,30 @@ class CostsTab extends StatelessWidget {
     final livestock = context.watch<LivestockProvider>();
     final lang = Localizations.localeOf(context).languageCode;
     final costs = feeding.costs;
+    final canEdit = context.watch<AccessProvider>().canManageFeed;
+    // The prices every feeding is costed at (v0.8.3): the feeds first, then
+    // the raw materials the mixes are costed from.
+    final priced = [for (final p in feeding.products) if (p.status == 'active') p]
+      ..sort((a, b) => a.isFeedable == b.isFeedable ? a.label(lang).compareTo(b.label(lang)) : (a.isFeedable ? -1 : 1));
+    final missing = [for (final p in priced) if (p.isFeedable && p.currentUnitCost == null) p];
 
     return FeedTabScaffold(children: [
+      SectionCard(
+        key: const ValueKey('feed-prices'),
+        title: context.t('feedPrices'),
+        subtitle: context.t('feedPricesSubtitle'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (missing.isNotEmpty) ...[
+            Text(
+              context.t('feedPricesMissing').replaceAll('{feeds}', missing.map((p) => p.label(lang)).join(', ')),
+              key: const ValueKey('feed-prices-missing'),
+              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: FarmColors.warningInk),
+            ),
+            const SizedBox(height: 8),
+          ],
+          for (final p in priced) _PriceRow(product: p, lang: lang, canEdit: canEdit),
+        ]),
+      ),
       LayoutBuilder(builder: (context, c) {
         final perRow = c.maxWidth > 700 ? 3 : 2;
         final w = (c.maxWidth - FarmSpacing.md * (perRow - 1)) / perRow;
@@ -43,8 +68,8 @@ class CostsTab extends StatelessWidget {
         child: costs.bySubject.isEmpty
             ? const FeedEmpty('noFeedingCostYet')
             : FarmDataTable(
-                columns: [context.t('animalOrGroup'), context.t('species'), context.t('quantity'), context.t('cost'), context.t('costPerLiter')],
-                columnFlex: const [3, 2, 2, 2, 2],
+                columns: [context.t('animalOrGroup'), context.t('species'), context.t('quantity'), context.t('cost'), context.t('costPerDay'), context.t('costPerLiter')],
+                columnFlex: const [3, 2, 2, 2, 2, 2],
                 rows: [
                   for (final row in costs.bySubject)
                     [
@@ -52,6 +77,7 @@ class CostsTab extends StatelessWidget {
                       Text(livestock.speciesName(row['species'] as String? ?? '', lang), style: FarmTypography.textTheme.bodySmall),
                       Text('${feedNumber(_num(row['quantity']))} kg'),
                       Text(feedMoney(_num(row['cost'])), style: FarmTypography.textTheme.titleSmall),
+                      Text(feedMoney(_num(row['cost']) / (costs.days < 1 ? 1 : costs.days)), style: FarmTypography.textTheme.bodySmall),
                       Text(row['cost_per_liter'] == null ? '—' : '\$${_num(row['cost_per_liter']).toStringAsFixed(3)}', style: FarmTypography.textTheme.bodySmall),
                     ],
                 ],
@@ -121,6 +147,44 @@ class _ShareRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(value: share.clamp(0, 1), minHeight: 6, backgroundColor: FarmColors.mist, color: FarmColors.gold),
         ),
+      ]),
+    );
+  }
+}
+
+
+/// One feed's price: what a unit costs when it is fed next, and its type.
+class _PriceRow extends StatelessWidget {
+  const _PriceRow({required this.product, required this.lang, required this.canEdit});
+  final FeedProduct product;
+  final String lang;
+  final bool canEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final noPrice = product.currentUnitCost == null;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(product.label(lang), style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis),
+            Text(rationTypeLabel(context, product.rationType), style: FarmTypography.textTheme.bodySmall),
+          ]),
+        ),
+        Text(
+          feedPriceLabel(context, product),
+          key: ValueKey('feed-price-${product.id}'),
+          style: noPrice && product.isFeedable
+              ? const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: FarmColors.warningInk)
+              : FarmTypography.textTheme.titleSmall,
+        ),
+        if (canEdit)
+          TextButton(
+            key: ValueKey('feed-set-price-${product.id}'),
+            onPressed: () => showFeedTypeAndPriceDialog(context, product),
+            child: Text(context.t('setPrice')),
+          ),
       ]),
     );
   }

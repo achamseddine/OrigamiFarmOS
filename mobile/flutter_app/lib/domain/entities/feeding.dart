@@ -135,10 +135,12 @@ class FeedProduct {
     required this.sourceType,
     required this.isIngredient,
     required this.isFeedable,
+    this.rationType,
     this.category,
     required this.unit,
     required this.inventoryItemId,
     this.defaultUnitCost,
+    this.currentUnitCost,
     required this.status,
     required this.availability,
     this.policyNames = const [],
@@ -154,10 +156,19 @@ class FeedProduct {
   final String sourceType;
   final bool isIngredient;
   final bool isFeedable;
+
+  /// What the animals are fed it as (v0.8.3): concentrate | silage |
+  /// hay_straw; null for a raw material that only goes into mixes.
+  final String? rationType;
   final String? category;
   final String unit;
   final String inventoryItemId;
+
+  /// The feed's price per unit, for feed with no cost of its own.
   final double? defaultUnitCost;
+
+  /// What a unit costs when it is fed next (the first lot's cost, else the price).
+  final double? currentUnitCost;
   final String status;
   final FeedAvailability availability;
   final List<String> policyNames;
@@ -167,6 +178,9 @@ class FeedProduct {
   bool get isFarmProduced => sourceType == 'farm_produced';
   bool get isRestricted => policyNames.isNotEmpty;
 
+  /// A raw material: it reaches the animals only through a mix.
+  bool get isRawMaterial => !isFeedable;
+
   factory FeedProduct.fromJson(Map<String, dynamic> json) => FeedProduct(
         id: json['id'] as String,
         code: json['code'] as String,
@@ -175,10 +189,13 @@ class FeedProduct {
         sourceType: json['source_type'] as String? ?? 'purchased',
         isIngredient: json['is_ingredient'] as bool? ?? true,
         isFeedable: json['is_feedable'] as bool? ?? false,
+        rationType: json['ration_type'] as String?,
         category: json['category'] as String?,
         unit: json['unit'] as String? ?? 'kg',
         inventoryItemId: json['inventory_item_id'] as String? ?? '',
         defaultUnitCost: _dn(json['default_unit_cost']),
+        // An older server does not say it: the price is the best it knows.
+        currentUnitCost: json.containsKey('current_unit_cost') ? _dn(json['current_unit_cost']) : _dn(json['default_unit_cost']),
         status: json['status'] as String? ?? 'active',
         availability: json['availability'] is Map<String, dynamic>
             ? FeedAvailability.fromJson({...json['availability'] as Map<String, dynamic>, 'feed_product_id': json['id']})

@@ -1375,6 +1375,7 @@ CREATE TABLE feed_products (
     source_type VARCHAR(20) NOT NULL,
     is_ingredient BOOLEAN NOT NULL,
     is_feedable BOOLEAN NOT NULL,
+    ration_type VARCHAR(20),
     category VARCHAR(40),
     unit VARCHAR(20) NOT NULL,
     inventory_item_id VARCHAR(36) NOT NULL,

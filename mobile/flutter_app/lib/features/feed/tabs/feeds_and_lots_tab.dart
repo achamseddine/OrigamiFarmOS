@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/i18n/strings.dart';
+import '../../../core/util/number_input.dart';
 import '../../../core/theme/colors.dart';
 import '../../../core/theme/spacing.dart';
 import '../../../core/theme/typography.dart';
@@ -12,6 +13,7 @@ import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../feed_workspace_screen.dart';
+import '../feed_stock_dialogs.dart';
 import '../../approvals/ask_to_buy_dialog.dart';
 
 /// Feed products and their lots (§2.1, §2.2, §3, §25, §26): what can be
@@ -56,7 +58,7 @@ class FeedsAndLotsTab extends StatelessWidget {
             if (feeding.products.isEmpty) const FeedEmpty('noFeedItems'),
             for (final p in feeding.products) ...[
               const SizedBox(height: 10),
-              _ProductCard(product: p, lang: lang, canApprove: canApprove),
+              _ProductCard(product: p, lang: lang, canApprove: canApprove, canEdit: access.canManageFeed, canCount: access.canCountFeedStock),
             ],
           ],
         ),
@@ -98,10 +100,12 @@ class FeedsAndLotsTab extends StatelessWidget {
 }
 
 class _ProductCard extends StatelessWidget {
-  const _ProductCard({required this.product, required this.lang, required this.canApprove});
+  const _ProductCard({required this.product, required this.lang, required this.canApprove, this.canEdit = false, this.canCount = false});
   final FeedProduct product;
   final String lang;
   final bool canApprove;
+  final bool canEdit;
+  final bool canCount;
 
   @override
   Widget build(BuildContext context) {
@@ -123,9 +127,15 @@ class _ProductCard extends StatelessWidget {
         subtitle: Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Wrap(spacing: 6, runSpacing: 4, children: [
+            // What the animals are fed, or a raw material for mixes (v0.8.3).
+            StatusPill(
+              key: ValueKey('feed-type-pill-${product.id}'),
+              label: rationTypeLabel(context, product.rationType),
+              level: product.isFeedable ? FarmStatusLevel.good : FarmStatusLevel.info,
+              dense: true,
+            ),
             StatusPill(label: context.t(product.isFarmProduced ? 'farmProducedFeed' : 'purchasedFeed'), level: FarmStatusLevel.neutral, dense: true),
-            if (product.isIngredient) StatusPill(label: context.t('ingredient'), level: FarmStatusLevel.info, dense: true),
-            if (product.isFeedable) StatusPill(label: context.t('feedable'), level: FarmStatusLevel.good, dense: true),
+            StatusPill(label: feedPriceLabel(context, product), level: product.currentUnitCost == null ? FarmStatusLevel.watch : FarmStatusLevel.neutral, dense: true),
             if (product.isRestricted) StatusPill(label: context.t('restrictedFeed'), level: FarmStatusLevel.alert, dense: true),
             if (a.reserved > 0) StatusPill(label: '${context.t('reserved')} ${feedNumber(a.reserved)}', level: FarmStatusLevel.watch, dense: true),
             if (a.unusable > 0) StatusPill(label: '${context.t('unusable')} ${feedNumber(a.unusable)}', level: FarmStatusLevel.alert, dense: true),
@@ -136,7 +146,27 @@ class _ProductCard extends StatelessWidget {
           FeedKeyValue(context.t('reserved'), '${feedNumber(a.reserved)} ${product.unit}'),
           FeedKeyValue(context.t('unusable'), '${feedNumber(a.unusable)} ${product.unit}'),
           FeedKeyValue(context.t('available'), '${feedNumber(a.available)} ${product.unit}', bold: true),
+          FeedKeyValue(context.t('feedPrice'), feedPriceLabel(context, product)),
           if (product.policyNames.isNotEmpty) FeedKeyValue(context.t('restrictedFeed'), product.policyNames.join(', ')),
+          if (canEdit || canCount) ...[
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (canCount)
+                OutlinedButton.icon(
+                  key: ValueKey('feed-count-${product.id}'),
+                  onPressed: () => showStockCountDialog(context, productId: product.id),
+                  icon: const Icon(Icons.fact_check_outlined, size: 16),
+                  label: Text(context.t('countStock')),
+                ),
+              if (canEdit)
+                OutlinedButton.icon(
+                  key: ValueKey('feed-edit-${product.id}'),
+                  onPressed: () => showFeedTypeAndPriceDialog(context, product),
+                  icon: const Icon(Icons.sell_outlined, size: 16),
+                  label: Text(context.t('feedEdit')),
+                ),
+            ]),
+          ],
           const SizedBox(height: 8),
           Text(context.t('lots'), style: const TextStyle(fontSize: 11, color: FarmColors.muted, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
           if (lots.isEmpty) const FeedEmpty('noLotsYet'),
@@ -223,12 +253,12 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
   String _unit = 'kg';
   String _source = 'purchased';
   String _category = 'concentrate';
-  bool _ingredient = true;
-  bool _feedable = true;
+  String _type = feedRawMaterial;
   bool _saving = false;
   String? _error;
 
-  static const _categories = ['forage', 'concentrate', 'premix', 'mineral', 'complete_feed', 'byproduct', 'other'];
+  // What a raw material is (a feed's category follows its type).
+  static const _categories = ['concentrate', 'premix', 'mineral', 'byproduct', 'other'];
 
   @override
   void dispose() {
@@ -252,11 +282,12 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
       if (_nameAr.text.trim().isNotEmpty) 'name_ar': _nameAr.text.trim(),
       'unit': _unit,
       'source_type': _source,
-      'is_ingredient': _ingredient,
-      'is_feedable': _feedable,
-      'category': _category,
-      'unit_cost': double.tryParse(_cost.text),
-      'opening_quantity': double.tryParse(_opening.text) ?? 0,
+      // Fed as concentrate, corn silage or hay & straw — or a raw material.
+      'ration_type': _type,
+      'is_ingredient': _type == feedRawMaterial || _type != 'concentrate' || _source == 'purchased',
+      'category': categoryForRation(_type, rawCategory: _category),
+      'unit_cost': parseLocalizedDouble(_cost.text),
+      'opening_quantity': parseLocalizedDouble(_opening.text) ?? 0,
       if (_supplier.text.trim().isNotEmpty) 'supplier_label': _supplier.text.trim(),
     });
     if (!mounted) return;
@@ -294,16 +325,18 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
                 onChanged: (v) => setState(() => _source = v ?? _source),
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                value: _category,
-                decoration: InputDecoration(labelText: context.t('category')),
-                items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(context.t('feedCategory_$c')))],
-                onChanged: (v) => setState(() => _category = v ?? _category),
+            if (_type == feedRawMaterial) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  isExpanded: true,
+                  value: _category,
+                  decoration: InputDecoration(labelText: context.t('category')),
+                  items: [for (final c in _categories) DropdownMenuItem(value: c, child: Text(context.t('feedCategory_$c')))],
+                  onChanged: (v) => setState(() => _category = v ?? _category),
+                ),
               ),
-            ),
+            ],
             const SizedBox(width: 10),
             SizedBox(
               width: 90,
@@ -321,18 +354,17 @@ class _NewFeedDialogState extends State<_NewFeedDialog> {
               ),
             ),
           ]),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
-            value: _ingredient, title: Text(context.t('ingredient')), subtitle: Text(context.t('ingredientHint')),
-            onChanged: (v) => setState(() => _ingredient = v ?? false),
-          ),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading,
-            value: _feedable, title: Text(context.t('feedable')), subtitle: Text(context.t('feedableHint')),
-            onChanged: (v) => setState(() => _feedable = v ?? false),
-          ),
+          const SizedBox(height: 12),
+          FeedTypeChooser(value: _type, onChanged: (t) => setState(() => _type = t)),
+          const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextField(controller: _cost, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('unitCost')))),
+            Expanded(
+              child: TextField(
+                controller: _cost,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(labelText: context.t('feedPricePerUnit').replaceAll('{unit}', _unit), prefixText: '\$ '),
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(child: TextField(controller: _opening, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: context.t('openingQuantity')))),
           ]),

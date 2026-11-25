@@ -9,6 +9,7 @@ import '../../core/widgets/form_dialog.dart';
 import '../../domain/entities/feeding.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
+import 'feed_stock_dialogs.dart';
 
 /// One feed line being entered: a product and how much. A line that comes
 /// from one of the standard rows carries its [slot] (concentrate, corn
@@ -276,6 +277,13 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(context.t('feedAskManagerStandard'), style: FarmTypography.textTheme.bodySmall),
             ),
+          // What this feeding costs at today's prices (v0.8.3).
+          FeedingCostLine(lines: [
+            for (final l in _lines)
+              if (l.productId != null && feeding.productById(l.productId!) != null)
+                (feeding.productById(l.productId!)!, parseLocalizedDouble(l.quantity.text) ?? 0),
+          ]),
+          const SizedBox(height: 8),
           TextField(controller: _notes, decoration: InputDecoration(labelText: context.t('notes'))),
           if (shortfalls.isNotEmpty || _serverShortfall) ...[
             const SizedBox(height: 12),

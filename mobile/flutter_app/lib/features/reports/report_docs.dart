@@ -158,6 +158,9 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
           (t('rpSubjectsFed'), n(kpis['subjects_fed'])),
           (t('rpFeedUsed'), '${n(kpis['feed_used_kg'])} kg'),
           (t('rpFeedCost'), m(kpis['feed_cost'])),
+          // What feeding costs a day, and feed given with no price (v0.8.3).
+          if (kpis.containsKey('feed_cost_per_day')) (t('rpFeedCostPerDay'), m(kpis['feed_cost_per_day'])),
+          if (((kpis['unpriced_kg'] as num?) ?? 0) > 0) (t('rpFedNoPrice'), '${n(kpis['unpriced_kg'])} kg'),
           (t('rpDeliveries'), '${n(kpis['deliveries'])} · ${n(kpis['delivered_kg'])} kg'),
           (t('rpDeliveredCost'), m(kpis['delivered_cost'])),
           (t('rpMixes'), '${n(kpis['mixes'])} · ${n(kpis['mixed_kg'])} kg'),
@@ -170,6 +173,24 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
             flex: const [3, 1, 1, 1, 1],
             rows: [for (final u in rows('used')) ['${u['name']}', n(u['quantity']), '${u['unit']}', n(u['feedings']), m(u['cost'])]],
           ),
+          // What feeding cost, animal by animal and group by group (v0.8.3).
+          if (data['by_subject'] is List)
+            ReportTable(
+              title: t('rpFeedBySubject'),
+              columns: [t('animalOrGroup'), t('rpFeedings'), t('rpFeedUsed'), t('rpCost'), t('costPerDay')],
+              numeric: {1, 2, 3, 4},
+              flex: const [3, 1, 1, 1, 1],
+              rows: [
+                for (final r in rows('by_subject'))
+                  [
+                    [if ((r['tag'] as String?)?.isNotEmpty ?? false) r['tag'], r['name'] ?? r['subject_id']].join(' · '),
+                    n(r['feedings']),
+                    '${n(r['quantity_kg'])} kg',
+                    m(r['cost']),
+                    m(r['cost_per_day']),
+                  ],
+              ],
+            ),
           ReportTable(
             title: t('rpDeliveriesTable'),
             columns: [t('rpDate'), t('rpFeed'), t('quantity'), t('supplier'), t('rpCost')],
