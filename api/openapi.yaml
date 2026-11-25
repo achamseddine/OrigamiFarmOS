@@ -5174,18 +5174,39 @@ paths:
       tags:
       - feeding
       summary: Feeding Plan Today
+      description: 'The planned feeding of a farm day — today by default, or [day]
+
+        (yesterday, any past day) — against what was fed that day. Days are
+
+        the farm''s calendar days in its own time zone (v0.8.6).'
       operationId: feeding_plan_today_api_v1_feeding_plan_today_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: day
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Day
       responses:
         '200':
           description: Successful Response
           content:
             application/json:
               schema:
-                additionalProperties: true
                 type: object
+                additionalProperties: true
                 title: Response Feeding Plan Today Api V1 Feeding Plan Today Get
-      security:
-      - HTTPBearer: []
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed-inventory/availability:
     get:
       tags:

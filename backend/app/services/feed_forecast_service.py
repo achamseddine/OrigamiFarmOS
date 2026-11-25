@@ -23,6 +23,7 @@ from app.domain import feed_models as fm
 from app.domain import models
 from app.feeding import uom
 from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.services import farm_time
 from app.services import feed_inventory_service as inv
 from app.services import feed_policy_service as policy
 from app.services import feeding_program_service as programs
@@ -32,15 +33,34 @@ HISTORY_DAYS = 14
 
 
 def _historic_daily_usage(db: Session, item_id: str, days: int = HISTORY_DAYS) -> float | None:
-    since = now() - timedelta(days=days)
+    """Average daily issue over the last [days] whole farm days (yesterday
+    and back, the farm's calendar — v0.8.6): what left the store for
+    feeding and mixing, from the ledger, so a refusal never counts. A
+    feeding counts on the farm day it was given, not the day it was typed
+    in: a backdated feeding moves its day, not today's."""
+    item = db.get(models.InventoryItem, item_id)
+    if item is not None:
+        _s, _e, since, until = farm_time.complete_days(db, item.farm_id, days)
+    else:
+        since, until = now() - timedelta(days=days), now()
+    # A movement is entered at or after the time it happened, so nothing
+    # entered before [since] can have happened after it.
     rows = db.scalars(select(models.InventoryTransaction).where(
         models.InventoryTransaction.item_id == item_id, models.InventoryTransaction.direction == "out",
         models.InventoryTransaction.created_at >= since,
         models.InventoryTransaction.reason.in_(["feeding", "daily_feeding", "supplemental_feeding", "mixing"]),
     )).all()
-    if not rows:
+    events = {e.id: e for e in db.scalars(select(fm.FeedingEvent).where(fm.FeedingEvent.id.in_(
+        {r.linked_entity_id for r in rows if r.linked_entity_type == "feeding_event" and r.linked_entity_id})))} if rows else {}
+
+    def happened(r) -> datetime:
+        e = events.get(r.linked_entity_id) if r.linked_entity_type == "feeding_event" else None
+        return ensure_utc(e.occurred_at if e is not None else r.created_at)
+
+    used = [r for r in rows if since <= happened(r) < until]
+    if not used:
         return None
-    return sum(r.quantity for r in rows) / days
+    return sum(r.quantity for r in used) / days
 
 
 def _policy_for(db: Session, product_id: str) -> fm.FeedReorderPolicy | None:
@@ -373,8 +393,13 @@ def variance_signals(db: Session, farm_id: str) -> list:
 def cost_summary(db: Session, farm_id: str, *, days: int = 30) -> dict:
     """Feed cost by subject and by product from the actual feeding events,
     batch costs, and cost per litre of milk where the animal is milked."""
-    since = now() - timedelta(days=days)
-    events = db.scalars(select(fm.FeedingEvent).where(fm.FeedingEvent.farm_id == farm_id, fm.FeedingEvent.occurred_at >= since, fm.FeedingEvent.status == "recorded")).all()
+    # The last [days] farm days, today included; only what left the store
+    # is feed used and costed (v0.8.6: a refusal or an intake estimate
+    # moved nothing).
+    _first, _last, since, until = farm_time.last_days(db, farm_id, days)
+    events = db.scalars(select(fm.FeedingEvent).where(
+        fm.FeedingEvent.farm_id == farm_id, fm.FeedingEvent.occurred_at >= since, fm.FeedingEvent.occurred_at < until,
+        fm.FeedingEvent.status == "recorded", fm.FeedingEvent.event_type.in_(programs.STOCK_MOVING))).all()
     by_subject: dict[tuple[str, str], dict] = {}
     by_product: dict[str, dict] = {}
     total = 0.0

@@ -19,7 +19,7 @@ and a task — and never rewrites the assignment by itself (§10).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -33,6 +33,7 @@ from app.feeding import catalog, uom
 from app.core.record_time import not_in_future
 from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.services import feed_inventory_service as inv
+from app.services import farm_time
 from app.services import feed_policy_service as policy
 from app.services.feed_inventory_service import FeedError, Purpose
 
@@ -208,13 +209,13 @@ def group_for_animal(db: Session, animal: models.Animal) -> models.Flock | None:
     ))
 
 
-def animals_in_group(db: Session, group: models.Flock) -> list[models.Animal]:
-    """The group's current members, plus any same-named animal that has
-    no membership history at all (registered before memberships existed)."""
+def animals_in_group(db: Session, group: models.Flock, at: datetime | None = None) -> list[models.Animal]:
+    """The group's members at [at] (now), plus any same-named animal that
+    has no membership history at all (registered before memberships existed)."""
     from app.domain import livestock_models as lm
     from app.services import group_service
 
-    members = [a for _m, a in group_service.current_members(db, group) if a.active]
+    members = [a for _m, a in group_service.current_members(db, group, at) if a.active]
     seen = {a.id for a in members}
     legacy = db.scalars(select(models.Animal).where(
         models.Animal.farm_id == group.farm_id, models.Animal.active.is_(True), models.Animal.species == group.species,
@@ -347,12 +348,21 @@ def resolve_state(db: Session, state: SubjectState, *, current_program_id: str |
 
 
 # ------------------------------------------------------------ assignments
-def _active(rows):
-    t = now()
+# An assignment that was ended or replaced was still in force until then:
+# a past day is read with it (v0.8.6).
+_ENDED = ("ended", "superseded")
+
+
+def _active(rows, at: datetime | None = None):
+    """The assignments in force at [at] — now by default: active ones in
+    their validity. For a past time, also those ended or superseded since
+    (in force from valid_from until they ended)."""
+    t = ensure_utc(at) if at is not None else now()
     out = []
     for r in rows:
         if r.status != "active":
-            continue
+            if at is None or r.status not in _ENDED or r.ended_at is None or ensure_utc(r.ended_at) <= t:
+                continue
         if r.valid_from and ensure_utc(r.valid_from) > t:
             continue
         if r.valid_to and ensure_utc(r.valid_to) < t:
@@ -361,14 +371,15 @@ def _active(rows):
     return out
 
 
-def active_assignments(db: Session, subject_type: str, subject_id: str) -> list[fm.FeedingAssignment]:
+def active_assignments(db: Session, subject_type: str, subject_id: str, at: datetime | None = None) -> list[fm.FeedingAssignment]:
+    """The subject's assignments in force at [at] (now)."""
     prefetched = read_cache.peek(db, ("assignments",))
     if prefetched is not None and subject_id in prefetched["subjects"]:
-        return _active(prefetched["rows"].get((subject_type, subject_id), []))
+        return _active(prefetched["rows"].get((subject_type, subject_id), []), at)
     rows = db.scalars(select(fm.FeedingAssignment).where(
         fm.FeedingAssignment.subject_type == subject_type, fm.FeedingAssignment.subject_id == subject_id,
     ).order_by(fm.FeedingAssignment.created_at)).all()
-    return _active(rows)
+    return _active(rows, at)
 
 
 def prefetch_farm(db: Session, farm_id: str, *, days: int = 7) -> None:
@@ -397,25 +408,81 @@ def prefetch_farm(db: Session, farm_id: str, *, days: int = 7) -> None:
     read_cache.put(db, ("milk_per_day", days), milk)
 
 
-def explicit_program(db: Session, subject_type: str, subject_id: str) -> fm.FeedingAssignment | None:
-    for a in active_assignments(db, subject_type, subject_id):
+def explicit_program(db: Session, subject_type: str, subject_id: str, at: datetime | None = None) -> fm.FeedingAssignment | None:
+    for a in active_assignments(db, subject_type, subject_id, at):
         if a.assignment_type == "explicit" and a.program_version_id:
             return a
     return None
 
 
-def effective_program(db: Session, subject_type: str, subject) -> tuple[fm.FeedingAssignment | None, str | None, models.Flock | None]:
+@dataclass
+class BaseRation:
+    """Where a head's one base ration comes from (v0.8.6, audit I-4)."""
+
+    assignment: fm.FeedingAssignment | None
+    source: str | None            # explicit | inherited | None
+    group: models.Flock | None    # the group it is inherited from
+    ignored: list[models.Flock]   # other groups of hers with a program — not her base
+
+
+def base_ration(db: Session, animal: models.Animal, at: datetime | None = None) -> BaseRation:
+    """Each head gets exactly one base ration, the most specific one in
+    force at [at] (now):
+
+        1. its own explicit program;
+        2. the program of a status group it is in (pregnant, not pregnant,
+           in milk, dry — groups that follow the herd records);
+        3. the program of its herd / pen (its exclusive group);
+        4. the program of any other group it is in.
+
+    Ties at one level go to the group named first; the others are listed
+    in `ignored`, so the plan can say a ration was not applied."""
+    own = explicit_program(db, "animal", animal.id, at)
+    if own is not None:
+        return BaseRation(own, "explicit", None, [])
+    groups = groups_of_animal(db, animal, at)
+    ranked = []
+    for g in groups:
+        level = 0 if g.membership_rule else (1 if _is_exclusive(db, g) else 2)
+        program = explicit_program(db, "group", g.id, at)
+        if program is not None:
+            ranked.append((level, (g.name or "").lower(), g.id, g, program))
+    if not ranked:
+        return BaseRation(None, None, None, [])
+    ranked.sort(key=lambda r: r[:3])
+    _lvl, _n, _id, group, program = ranked[0]
+    return BaseRation(program, "inherited", group, [r[3] for r in ranked[1:]])
+
+
+def _is_exclusive(db: Session, group: models.Flock) -> bool:
+    from app.services import group_service
+
+    return bool(group_service.policy(db, group.group_type).exclusive_membership)
+
+
+def groups_of_animal(db: Session, animal: models.Animal, at: datetime | None = None) -> list[models.Flock]:
+    """The groups the animal is in at [at] (now): her membership history,
+    or — registered before memberships existed — the group her record names."""
+    from app.domain import livestock_models as lm
+
+    t = ensure_utc(at) if at is not None else now()
+    rows = list(db.scalars(select(lm.AnimalGroupMembership).where(lm.AnimalGroupMembership.animal_id == animal.id)))
+    if rows:
+        ids = [m.animal_group_id for m in rows if ensure_utc(m.valid_from) <= t and (m.valid_to is None or t < ensure_utc(m.valid_to))]
+        return [g for g in (db.get(models.Flock, i) for i in dict.fromkeys(ids)) if g is not None and g.status not in ("closed", "archived")]
+    legacy = group_for_animal(db, animal)
+    return [legacy] if legacy is not None else []
+
+
+def effective_program(db: Session, subject_type: str, subject, at: datetime | None = None) -> tuple[fm.FeedingAssignment | None, str | None, models.Flock | None]:
     """The program a subject is on and where it came from: `explicit` for
-    its own assignment, `inherited` for its group's."""
-    own = explicit_program(db, subject_type, subject.id)
+    its own assignment, `inherited` for its group's ([base_ration])."""
+    if subject_type == "animal":
+        base = base_ration(db, subject, at)
+        return base.assignment, base.source, base.group
+    own = explicit_program(db, subject_type, subject.id, at)
     if own is not None:
         return own, "explicit", None
-    if subject_type == "animal":
-        group = group_for_animal(db, subject)
-        if group is not None:
-            inherited = explicit_program(db, "group", group.id)
-            if inherited is not None:
-                return inherited, "inherited", group
     return None, None, None
 
 
@@ -425,25 +492,105 @@ def _daily_per_head(component: fm.FeedingProgramComponent, feedings_per_day: int
     return component.quantity_per_head
 
 
-def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool = True) -> dict:
+@dataclass
+class GroupHeads:
+    """The heads a group's own program feeds (v0.8.6, audit I-4)."""
+
+    heads: int
+    members: int
+    excluded: list[dict]
+
+
+def _planned_alone(db: Session, animal: models.Animal, at: datetime | None) -> str | None:
+    """Why an animal is planned on her own rather than in her group's
+    head count: her own adjustment of the ration (an override replaces a
+    quantity, a restriction removes a feed). None when the group's ration
+    is hers as it is (a supplement only adds, so she stays in the group)."""
+    own = active_assignments(db, "animal", animal.id, at)
+    if any(a.assignment_type == "override" for a in own):
+        return "own_override"
+    if any(a.assignment_type == "restriction" for a in own):
+        return "own_restriction"
+    return None
+
+
+def group_heads(db: Session, group: models.Flock, at: datetime | None = None) -> GroupHeads:
+    """How many heads the group's own program feeds: its head count less
+    each member whose base ration comes from elsewhere — her own program,
+    a more specific group, another group she is in — or who is planned on
+    her own because her ration is adjusted. Each head is counted once, in
+    exactly one place, so no base ration is planned twice."""
+    from app.services import group_service
+
+    members = animals_in_group(db, group, at)
+    # The group's heads at [at]: its members at that time when the head
+    # count is its membership; its counted total (never less than the
+    # members registered) when it is a counted flock (group_service).
+    if group.tracking_mode == group_service.MEMBERSHIP_DERIVED:
+        state_count = len(members)
+    else:
+        state_count = max(group.count or 0, len(members))
+    if explicit_program(db, "group", group.id, at) is None:
+        # No ration of its own: it feeds nobody on a program, and there is
+        # nothing to take its members out of.
+        return GroupHeads(heads=state_count, members=len(members), excluded=[])
+    excluded = []
+    for a in members:
+        base = base_ration(db, a, at)
+        if base.source == "explicit":
+            excluded.append({"animal_id": a.id, "name": a.name, "reason": "own_program"})
+        elif base.group is None or base.group.id != group.id:
+            excluded.append({"animal_id": a.id, "name": a.name, "reason": "other_group",
+                             "group_id": base.group.id if base.group else None, "group_name": base.group.name if base.group else None})
+        else:
+            why = _planned_alone(db, a, at)
+            if why:
+                excluded.append({"animal_id": a.id, "name": a.name, "reason": why})
+    return GroupHeads(heads=max(state_count - len(excluded), 0), members=len(members), excluded=excluded)
+
+
+def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool = True, at: datetime | None = None,
+                   head_count: int | None = None) -> dict:
     """What this subject should be getting today, and what it did get:
     the program (own or inherited), its components per head and in total
     for the head count, supplements added, overrides applied, restricted
     products removed, the resolver's view, the last feedings and their cost.
-    This is the animal-profile feeding section of §17 as data."""
+    This is the animal-profile feeding section of §17 as data.
+
+    The policy (v0.8.6, audit I-4), one for the plan, the reports and the
+    forecast:
+      base         one ration per head ([base_ration])
+      override     replaces one product's quantity per head — the group's
+                   own overrides apply to the heads it feeds, an animal's
+                   apply to her on top of them
+      supplement   adds per head on top of the base — the group's to the
+                   heads it feeds, an animal's to her
+      restriction  removes a product — the group's bind all its members
+    A group's plan is for the heads its program feeds ([group_heads]),
+    unless [head_count] says otherwise."""
     state = subject_state(db, subject_type, subject)
-    assignment, source, group = effective_program(db, subject_type, subject)
-    own = active_assignments(db, subject_type, subject.id)
+    assignment, source, group = effective_program(db, subject_type, subject, at)
+    own = active_assignments(db, subject_type, subject.id, at)
+    from_group = active_assignments(db, "group", group.id, at) if subject_type == "animal" and group is not None else []
     supplements = [a for a in own if a.assignment_type == "supplement"]
     overrides = [a for a in own if a.assignment_type == "override"]
     restrictions = [a for a in own if a.assignment_type == "restriction"]
-    if subject_type == "animal" and group is not None:
-        # A group's restriction (a quarantined feed for the whole pen) binds
-        # its animals too; its supplements are per head as well.
-        for a in active_assignments(db, "group", group.id):
-            if a.assignment_type == "restriction":
-                restrictions.append(a)
-    head = max(state.head_count, 1) if subject_type == "group" else 1
+    if subject_type == "animal":
+        # Her base group's supplements and overrides are hers too (she is fed
+        # its ration); a restriction of any group she is in binds her.
+        supplements = [a for a in from_group if a.assignment_type == "supplement"] + supplements
+        overrides = [a for a in from_group if a.assignment_type == "override"] + overrides
+        for g in groups_of_animal(db, subject, at):
+            restrictions += [a for a in active_assignments(db, "group", g.id, at) if a.assignment_type == "restriction"]
+    heads_info = None
+    if subject_type == "group":
+        if head_count is None:
+            heads_info = group_heads(db, subject, at)
+            head = heads_info.heads
+        else:
+            head = head_count
+    else:
+        head = 1
 
     components: list[dict] = []
     warnings: list[str] = []
@@ -454,7 +601,7 @@ def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool
             product = db.get(fm.FeedProduct, c.feed_product_id)
             per_head = _daily_per_head(c, version.feedings_per_day)
             note = None
-            for o in overrides:
+            for o in overrides:  # the group's first, then her own: the most specific wins
                 if o.feed_product_id == c.feed_product_id and o.quantity_per_head is not None:
                     per_head = uom.convert(o.quantity_per_head, o.unit or c.unit, c.unit)
                     note = f"override: {o.reason or 'individual quantity'}"
@@ -466,6 +613,16 @@ def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool
                 "quantity_per_head": round(c.quantity_per_head, 3), "unit": c.unit, "frequency": c.frequency, "timing": c.timing,
                 "daily_per_head": round(per_head, 3), "daily_total": round(per_head * head, 3), "note": note,
             })
+        in_ration = {c.feed_product_id for c in version.components}
+        for o in overrides:
+            if o.feed_product_id and o.feed_product_id not in in_ration:
+                product = db.get(fm.FeedProduct, o.feed_product_id)
+                warnings.append(f"The override of {product.name if product else o.feed_product_id} changes nothing: it is not in the ration. "
+                                "A feed given on top is a supplement.")
+    if subject_type == "animal" and source == "inherited":
+        base = base_ration(db, subject, at)
+        for g in base.ignored:
+            warnings.append(f"{state.name} is also in {g.name}, which has its own ration; she is fed {group.name}'s (one base ration per head).")
     supplement_lines = []
     for s in supplements:
         if s.feed_product_id in restricted_products or s.feed_product_id is None or s.quantity_per_head is None:
@@ -475,6 +632,7 @@ def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool
             "assignment_id": s.id, "feed_product_id": s.feed_product_id, "product_name": product.name if product else None,
             "daily_per_head": round(s.quantity_per_head, 3), "unit": s.unit or (product.unit if product else "kg"),
             "daily_total": round(s.quantity_per_head * head, 3), "reason": s.reason, "valid_to": s.valid_to,
+            "from_group": s.subject_type == "group" and subject_type == "animal",
         })
     targets: dict[str, dict] = {}
     for line in components + supplement_lines:
@@ -492,9 +650,12 @@ def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool
             "since": assignment.valid_from,
         },
         "head_count": head,
+        "member_count": heads_info.members if heads_info else None,
+        "excluded_heads": heads_info.excluded if heads_info else [],
         "components": components,
         "supplements": supplement_lines,
-        "overrides": [{"assignment_id": o.id, "feed_product_id": o.feed_product_id, "quantity_per_head": o.quantity_per_head, "unit": o.unit, "reason": o.reason, "valid_to": o.valid_to} for o in overrides],
+        "overrides": [{"assignment_id": o.id, "feed_product_id": o.feed_product_id, "quantity_per_head": o.quantity_per_head, "unit": o.unit,
+                       "reason": o.reason, "valid_to": o.valid_to, "subject_type": o.subject_type} for o in overrides],
         "restrictions": [{"assignment_id": r.id, "feed_product_id": r.feed_product_id, "reason": r.reason, "valid_to": r.valid_to, "subject_type": r.subject_type} for r in restrictions],
         "daily_targets": list(targets.values()),
         "review": {"required": resolution["requires_review"], "recommended": resolution["best"], "warnings": resolution["warnings"] + warnings},
@@ -502,21 +663,55 @@ def effective_plan(db: Session, subject_type: str, subject, *, with_events: bool
     }
     if with_events:
         events = feeding_history(db, subject_type, subject.id, days=7)
+        recorded = [e for e in events if e.status == "recorded"]
         plan["recent_events"] = [event_to_dict(e) for e in events[:5]]
-        plan["feed_cost_7d"] = round(sum(e.total_cost or 0 for e in events if e.status == "recorded"), 2)
-        plan["fed_7d"] = _fed_totals(events)
+        plan["feed_cost_7d"] = round(sum(e.total_cost or 0 for e in recorded if e.event_type in STOCK_MOVING), 2)
+        summary = summarize_events(recorded)
+        plan["fed_7d"] = summary["fed"]
+        plan["refused_7d"] = summary["refused"]
+        plan["consumed_7d"] = summary["consumed"]
     return plan
 
 
-def _fed_totals(events: list[fm.FeedingEvent]) -> list[dict]:
-    totals: dict[str, dict] = {}
+# What a feeding event means (v0.8.6, audit I-5), for the plan, the
+# reports, the forecast, the costing and the stock alike:
+#   offered / delivered   feed left the store: the quantity is FED (and was
+#                         issued from the lots). A measured quantity_consumed
+#                         is what was eaten of it; the rest was left.
+#   refusal               a record of feed refused — of feed already counted
+#                         when it was offered. Moves nothing; never fed.
+#   consumed_estimate     an estimate of intake. Moves nothing; never fed.
+STOCK_MOVING = ("offered", "delivered")
+
+
+def summarize_events(events: list[fm.FeedingEvent]) -> dict[str, list[dict]]:
+    """Per product: `fed` (stock-moving quantities only), `consumed`
+    (measured or estimated intake) and `refused`. Reversed events and their
+    reversals are left out (status `recorded` only)."""
+    out: dict[str, dict[str, dict]] = {"fed": {}, "consumed": {}, "refused": {}}
+
+    def add(kind: str, c: fm.FeedingEventComponent, qty: float) -> None:
+        entry = out[kind].setdefault(c.feed_product_id, {"feed_product_id": c.feed_product_id, "quantity": 0.0, "unit": c.unit})
+        entry["quantity"] = round(entry["quantity"] + uom.convert(qty, c.unit, entry["unit"]), 3)
+
     for e in events:
         if e.status != "recorded":
             continue
         for c in e.components:
-            entry = totals.setdefault(c.feed_product_id, {"feed_product_id": c.feed_product_id, "quantity": 0.0, "unit": c.unit})
-            entry["quantity"] = round(entry["quantity"] + uom.convert(c.quantity_offered, c.unit, entry["unit"]), 3)
-    return list(totals.values())
+            if e.event_type in STOCK_MOVING:
+                add("fed", c, c.quantity_offered)
+                if c.quantity_consumed is not None:
+                    add("consumed", c, c.quantity_consumed)
+            elif e.event_type == "refusal":
+                add("refused", c, c.quantity_offered)
+            elif e.event_type == "consumed_estimate":
+                add("consumed", c, c.quantity_consumed if c.quantity_consumed is not None else c.quantity_offered)
+    return {k: list(v.values()) for k, v in out.items()}
+
+
+def _fed_totals(events: list[fm.FeedingEvent]) -> list[dict]:
+    """What was fed — stock-moving events only ([summarize_events])."""
+    return summarize_events(events)["fed"]
 
 
 def assign(
@@ -692,8 +887,11 @@ def record_feeding(
     state = subject_state(db, subject_type, subject)
     assignment, _, group = effective_program(db, subject_type, subject)
     restricted = {a.feed_product_id for a in active_assignments(db, subject_type, subject.id) if a.assignment_type == "restriction"}
-    if subject_type == "animal" and group is not None:
-        restricted |= {a.feed_product_id for a in active_assignments(db, "group", group.id) if a.assignment_type == "restriction"}
+    if subject_type == "animal":
+        # A restriction of any group she is in binds her (a quarantined feed
+        # for the pen, a vet's restriction for the dry cows) — v0.8.6.
+        for g in groups_of_animal(db, subject):
+            restricted |= {a.feed_product_id for a in active_assignments(db, "group", g.id) if a.assignment_type == "restriction"}
     when = not_in_future(occurred_at, "A feeding") or now()
     event = fm.FeedingEvent(
         id=new_id(), farm_id=farm_id, subject_type=subject_type, subject_id=subject.id,
@@ -701,7 +899,11 @@ def record_feeding(
         # FEED-SCHEMA §20: every issue names the assignment in force —
         # the subject's own or the group's it inherits from.
         assignment_id=assignment.id if assignment else None,
-        occurred_at=when, event_type=event_type, head_count=head_count if head_count is not None else (state.head_count if subject_type == "group" else 1),
+        # A group's feeding is for the heads its ration feeds (members fed
+        # on their own are not in it — group_heads), unless the feeder says
+        # how many heads were actually fed (a partial feeding).
+        occurred_at=when, event_type=event_type,
+        head_count=head_count if head_count is not None else (group_heads(db, subject, when).heads if subject_type == "group" else 1),
         recorded_by=user_id, notes=notes, status="recorded", created_at=now(),
     )
     db.add(event)
@@ -807,8 +1009,16 @@ def reverse_feeding(db: Session, event: fm.FeedingEvent, *, reason: str, user_id
     return reversal
 
 
-def feeding_history(db: Session, subject_type: str, subject_id: str, *, days: int = 30) -> list[fm.FeedingEvent]:
-    since = now() - timedelta(days=days)
+def feeding_history(db: Session, subject_type: str, subject_id: str, *, days: int = 30, farm_id: str | None = None) -> list[fm.FeedingEvent]:
+    """The subject's feedings over its last [days] farm days, today
+    included (the farm's calendar, not 24-hour slices — farm_time)."""
+    if farm_id is None:
+        subject = db.get(models.Animal, subject_id) if subject_type == "animal" else db.get(models.Flock, subject_id)
+        farm_id = getattr(subject, "farm_id", None)
+    if farm_id is not None:
+        _start, _end, since, _hi = farm_time.last_days(db, farm_id, days)
+    else:
+        since = now() - timedelta(days=days)
     return list(db.scalars(select(fm.FeedingEvent).where(
         fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id == subject_id, fm.FeedingEvent.occurred_at >= since,
     ).order_by(fm.FeedingEvent.occurred_at.desc())))
@@ -1027,46 +1237,92 @@ def review_after_milk(db: Session, animal: models.Animal, *, user_id: str) -> No
 
 
 # --------------------------------------------------------------- planning
-def daily_plan(db: Session, farm_id: str) -> dict:
-    """Today's planned feeding for the whole farm (§17 Daily Feeding):
-    every group with an assignment, every individually assigned animal,
-    with per-product totals — the list a feed-room worker ticks off."""
+def daily_plan(db: Session, farm_id: str, day: date | None = None) -> dict:
+    """The planned feeding of one farm day (§17 Daily Feeding) — today by
+    default — and what was fed that day: every group whose program feeds
+    heads, every animal planned on her own, per-product totals.
+
+    Each head is planned once (v0.8.6, audit I-4): a group line counts only
+    the heads its own program feeds ([group_heads]); an animal with her own
+    program, or whose base ration is adjusted (an override, a restriction),
+    has her own full line and is not in her group's count; an animal fed
+    her group's ration as it is adds only her own supplements. A day is the
+    farm's calendar day ([farm_time], audit I-6); fed is what left the store
+    (stock-moving events, audit I-5). For a past day the programs, the
+    memberships and the assignments are those in force at the end of it."""
+    tz = farm_time.farm_tz(db, farm_id)
+    day = day or farm_time.local_day(tz)
+    lo, hi = farm_time.day_bounds(tz, day)
+    at = None if day >= farm_time.local_day(tz) else hi - timedelta(microseconds=1)
     prefetch_farm(db, farm_id)
     lines: list[dict] = []
     totals: dict[str, dict] = {}
-    groups = db.scalars(select(models.Flock).where(models.Flock.farm_id == farm_id)).all()
-    covered_animals: set[str] = set()
+    groups = db.scalars(select(models.Flock).where(models.Flock.farm_id == farm_id, models.Flock.status.notin_(("closed", "archived")))).all()
     for group in groups:
-        if explicit_program(db, "group", group.id) is None:
+        if explicit_program(db, "group", group.id, at) is None:
             continue
-        plan = effective_plan(db, "group", group, with_events=False)
-        members = animals_in_group(db, group)
-        covered_animals |= {a.id for a in members if explicit_program(db, "animal", a.id) is None}
+        plan = effective_plan(db, "group", group, with_events=False, at=at)
         lines.append({"subject_type": "group", "subject_id": group.id, "name": group.name, "species": group.species,
-                      "head_count": plan["head_count"], "program": plan["program"], "daily_targets": plan["daily_targets"],
+                      "head_count": plan["head_count"], "member_count": plan["member_count"], "excluded_heads": plan["excluded_heads"],
+                      "program": plan["program"], "daily_targets": plan["daily_targets"],
                       "warnings": plan["review"]["warnings"], "review_required": plan["review"]["required"]})
         for t in plan["daily_targets"]:
             _add_total(totals, t)
     animals = db.scalars(select(models.Animal).where(models.Animal.farm_id == farm_id, models.Animal.active.is_(True))).all()
     for animal in animals:
-        own = explicit_program(db, "animal", animal.id)
-        supplements = [a for a in active_assignments(db, "animal", animal.id) if a.assignment_type in ("supplement", "override")]
-        if own is None and not supplements:
+        base = base_ration(db, animal, at)
+        own = active_assignments(db, "animal", animal.id, at)
+        own_supplements = [a for a in own if a.assignment_type == "supplement"]
+        alone = base.source == "explicit" or (base.source == "inherited" and _planned_alone(db, animal, at) is not None)
+        if not alone and not own_supplements:
             continue
-        plan = effective_plan(db, "animal", animal, with_events=False)
-        # An animal inheriting the group program is already in the group's
-        # total; only its own supplement/override is added here.
-        targets = plan["daily_targets"] if own is not None else plan["supplements"]
+        plan = effective_plan(db, "animal", animal, with_events=False, at=at)
+        if alone:
+            # Her whole ration: her own program, or her group's as adjusted
+            # for her (she is not in the group's head count).
+            targets = plan["daily_targets"]
+            basis = "own_program" if base.source == "explicit" else "adjusted_group_ration"
+        else:
+            # Fed her group's ration as it is (counted there): only what is
+            # added for her on top.
+            ids = {a.id for a in own_supplements}
+            targets = [{"feed_product_id": s["feed_product_id"], "product_name": s["product_name"], "unit": s["unit"], "daily_total": s["daily_total"]}
+                       for s in plan["supplements"] if s["assignment_id"] in ids]
+            basis = "supplement_only"
+            if not targets:
+                continue
         lines.append({"subject_type": "animal", "subject_id": animal.id, "name": animal.name, "species": animal.species,
-                      "head_count": 1, "program": plan["program"], "daily_targets": targets,
+                      "head_count": 1, "basis": basis, "program": plan["program"], "daily_targets": targets,
                       "warnings": plan["review"]["warnings"], "review_required": plan["review"]["required"]})
         for t in targets:
             _add_total(totals, t)
-    fed_today = _fed_today(db, farm_id)
+    fed, fed_by_subject = _fed_between(db, farm_id, lo, hi)
+    planned = set()
+    for line in lines:
+        key = (line["subject_type"], line["subject_id"])
+        planned.add(key)
+        line["fed"] = [{"feed_product_id": pid, "quantity": round(q, 3)} for pid, q in fed_by_subject.get(key, {}).items()]
+    # Subjects fed that day that no line plans (fed with their group's
+    # ration but on their own, a one-off feed, a past day before their
+    # program): still listed, so what left the store is never unaccounted.
+    unplanned = []
+    for (stype, sid), mine in fed_by_subject.items():
+        if (stype, sid) in planned:
+            continue
+        row = db.get(models.Animal, sid) if stype == "animal" else db.get(models.Flock, sid)
+        unplanned.append({"subject_type": stype, "subject_id": sid, "name": getattr(row, "name", None), "species": getattr(row, "species", None),
+                          "fed": [{"feed_product_id": pid, "quantity": round(q, 3)} for pid, q in mine.items()]})
     for pid, entry in totals.items():
-        entry["fed_today"] = round(fed_today.get(pid, 0.0), 3)
+        entry["fed_today"] = round(fed.get(pid, 0.0), 3)
         entry["remaining_today"] = round(max(entry["daily_total"] - entry["fed_today"], 0), 3)
-    return {"date": now().date().isoformat(), "lines": lines, "totals": list(totals.values())}
+    # Fed products no line plans (a one-off feeding) still show what left.
+    for pid, q in fed.items():
+        if pid not in totals:
+            product = db.get(fm.FeedProduct, pid)
+            totals[pid] = {"feed_product_id": pid, "product_name": product.name if product else None, "unit": product.unit if product else "kg",
+                           "daily_total": 0.0, "fed_today": round(q, 3), "remaining_today": 0.0}
+    return {"date": day.isoformat(), "timezone": str(tz), "from": lo, "to": hi, "lines": lines, "totals": list(totals.values()),
+            "unplanned_fed": sorted(unplanned, key=lambda u: (u["subject_type"], u["name"] or ""))}
 
 
 def _add_total(totals: dict, t: dict) -> None:
@@ -1074,16 +1330,30 @@ def _add_total(totals: dict, t: dict) -> None:
     entry["daily_total"] = round(entry["daily_total"] + uom.convert(t["daily_total"], t["unit"], entry["unit"]), 3)
 
 
-def _fed_today(db: Session, farm_id: str) -> dict[str, float]:
-    start = now().replace(hour=0, minute=0, second=0, microsecond=0)
-    events = db.scalars(select(fm.FeedingEvent).where(fm.FeedingEvent.farm_id == farm_id, fm.FeedingEvent.occurred_at >= start, fm.FeedingEvent.status == "recorded")).all()
+def _fed_between(db: Session, farm_id: str, lo, hi) -> tuple[dict[str, float], dict[tuple[str, str], dict[str, float]]]:
+    """What left the store in [lo, hi), per product and per subject:
+    stock-moving events only. A group's feeding stays the group's — it is
+    never spread over its heads."""
+    events = db.scalars(select(fm.FeedingEvent).where(
+        fm.FeedingEvent.farm_id == farm_id, fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at < hi,
+        fm.FeedingEvent.status == "recorded", fm.FeedingEvent.event_type.in_(STOCK_MOVING),
+    )).all()
     out: dict[str, float] = {}
+    by_subject: dict[tuple[str, str], dict[str, float]] = {}
     for e in events:
-        if e.event_type not in ("offered", "delivered"):
-            continue
+        mine = by_subject.setdefault((e.subject_type, e.subject_id), {})
         for c in e.components:
-            out[c.feed_product_id] = out.get(c.feed_product_id, 0.0) + c.quantity_offered
-    return out
+            product = db.get(fm.FeedProduct, c.feed_product_id)
+            qty = uom.convert(c.quantity_offered, c.unit, product.unit) if product else c.quantity_offered
+            out[c.feed_product_id] = out.get(c.feed_product_id, 0.0) + qty
+            mine[c.feed_product_id] = mine.get(c.feed_product_id, 0.0) + qty
+    return out, by_subject
+
+
+def _fed_today(db: Session, farm_id: str) -> dict[str, float]:
+    """What left the store today — the farm's today."""
+    _day, lo, hi = farm_time.farm_day(db, farm_id)
+    return _fed_between(db, farm_id, lo, hi)[0]
 
 
 def demand_by_product(db: Session, farm_id: str) -> dict[str, dict]:

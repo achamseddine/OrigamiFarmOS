@@ -47,6 +47,7 @@ from app.domain import health_models as hm
 from app.domain import models
 from app.feeding import uom
 from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.services import farm_time
 from app.services import feed_batch_service as batches
 from app.services import feed_inventory_service as inv
 from app.services import feeding_program_service as programs
@@ -1319,8 +1320,10 @@ def effective_feed_value(db: Session, farm_id: str, *, days: int = 7) -> dict:
                                                       fm.FeedingEvent.event_type.in_(("offered", "delivered")), fm.FeedingEvent.occurred_at >= start, fm.FeedingEvent.occurred_at < end)).all()
     cost = round(sum(e.total_cost or 0 for e in events), 4)
     head_days: dict[tuple, int] = {}
+    tz = farm_time.farm_tz(db, farm_id)
     for e in events:
-        key = (ensure_utc(e.occurred_at).date(), e.subject_type, e.subject_id)
+        # A head-day is a day of the farm's calendar (v0.8.6), not of UTC.
+        key = (farm_time.local_day(tz, e.occurred_at), e.subject_type, e.subject_id)
         head_days[key] = max(head_days.get(key, 0), e.head_count or 1)
     hd = sum(head_days.values())
     animal_ids = db.scalars(select(models.Animal.id).where(models.Animal.farm_id == farm_id)).all()

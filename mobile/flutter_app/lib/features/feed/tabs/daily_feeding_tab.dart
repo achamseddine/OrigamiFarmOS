@@ -127,7 +127,7 @@ class _PlanLineCard extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(line.name, style: FarmTypography.textTheme.titleSmall),
               Text(
-                [speciesName, if (line.subjectType == 'group') '${line.headCount} ${context.t('headCount').toLowerCase()}', if (program != null) program.label(lang)].join(' · '),
+                [speciesName, if (line.subjectType == 'group') _heads(context, line), if (program != null) program.label(lang)].join(' · '),
                 style: FarmTypography.textTheme.bodySmall,
               ),
             ]),
@@ -137,6 +137,22 @@ class _PlanLineCard extends StatelessWidget {
           if (program != null && program.isInherited) StatusPill(label: context.t('inherited'), level: FarmStatusLevel.info, dense: true),
           if (line.reviewRequired) ...[const SizedBox(width: 6), StatusPill(label: context.t('reviewRequired'), level: FarmStatusLevel.watch, dense: true)],
         ]),
+        // Each head is planned once (v0.8.6): members fed on their own line
+        // are named, so the group's count is never read as the whole herd.
+        if (line.excludedHeads.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              context.t('fpPlannedElsewhere').replaceAll('{names}', [for (final e in line.excludedHeads) '${e.name} (${_excludedWhy(context, e)})'].join(', ')),
+              key: ValueKey('plan-excluded-${line.subjectId}'),
+              style: FarmTypography.textTheme.bodySmall,
+            ),
+          ),
+        if (line.basis == 'supplement_only' || line.basis == 'adjusted_group_ration')
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(context.t(line.basis == 'supplement_only' ? 'fpBasisSupplement' : 'fpBasisAdjusted'), style: FarmTypography.textTheme.bodySmall),
+          ),
         const SizedBox(height: 8),
         for (final t in line.dailyTargets) FeedKeyValue(t.productName ?? t.feedProductId, '${feedNumber(t.dailyTotal)} ${t.unit}'),
         for (final w in line.warnings) Padding(padding: const EdgeInsets.only(top: 4), child: Text(w, style: const TextStyle(fontSize: 12, color: FarmColors.warningInk))),
@@ -167,6 +183,21 @@ class _PlanLineCard extends StatelessWidget {
     );
   }
 }
+
+/// "2 of 3 head" when members are fed on their own line, else "3 head".
+String _heads(BuildContext context, DailyPlanLine line) {
+  final members = line.memberCount;
+  if (members != null && members != line.headCount) {
+    return context.t('fpHeadsOfMembers').replaceAll('{heads}', '${line.headCount}').replaceAll('{members}', '$members');
+  }
+  return '${line.headCount} ${context.t('headCount').toLowerCase()}';
+}
+
+String _excludedWhy(BuildContext context, ExcludedHead e) => switch (e.reason) {
+      'own_program' => context.t('fpExcludedOwnProgram'),
+      'other_group' => context.t('fpExcludedOtherGroup').replaceAll('{group}', e.groupName ?? '—'),
+      _ => context.t('fpExcludedAdjusted'),
+    };
 
 /// "1 of 2 rounds today" — the feedings recorded for this line today,
 /// the same count the Morning routine ticks off.

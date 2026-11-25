@@ -1,5 +1,15 @@
 # Releases
 
+## v0.8.6 — One feeding plan the reports agree with: one ration per head, fed means it left the store, the farm's own days
+
+Audit 2026-11-25 (I-4, I-5, I-6). On the tablet and the web app, decided by the server (architecture/ADR-006):
+- **Each animal is planned once.** A herd's line counts only the cows its ration feeds. A cow on her own ration, or in a status group with its own ration (*Pregnant cows*), is fed there and named on the herd's line: *Dairy Herd · 2 of 3 head — Planned on their own line, not in this count: Clover (on her own ration)*. Before, she was planned twice: on the demo farm, putting Clover on her own ration planned 76 kg of dairy mix for three cows that eat 56.
+- **What each adjustment does:** a *supplement* adds on top of her ration (she stays in her group's count); an *override* replaces one feed's quantity (she gets her own line — her group's ration as adjusted for her); a *restriction* takes a feed away, and a group's restriction binds every cow in it, also when she is fed on her own.
+- **Fed means it left the store.** Only an offered or delivered feeding is fed. A refusal (or an intake estimate) is kept and shown apart — *Refused (recorded, not fed)* on the animal or group — and never counted as fed or costed, in the plan, *last 7 days*, the costs, the reports, the reorder forecast or a lot's trace. It is not a feeding round either (*1/2 today*, My Day, the quick entry).
+- **The farm's day, in Beirut.** Every *today*, *yesterday* and day-by-day figure is the farm's calendar day: a feeding at 00:30 is that day, not the evening before as UTC has it; the days the clocks change are 23 and 25 hours long. The daily plan can be read for any past day (`?day=`), with the rations and groups as they were then; a feeding entered late counts on the day it was given, also in the forecast. The tablet and the browser take *today* from the farm, whatever zone the device is set to.
+- Group feedings default to the heads the group's ration feeds; a partial feeding (*2 head*, one at the vet) stays the group's and is never split over the cows.
+- Server: **no migration.** `GET /feeding-plan/today?day=YYYY-MM-DD`; the plan adds `timezone`, `from`, `to`, `unplanned_fed`, and per line `member_count`, `excluded_heads`, `basis` (animal lines) and `fed`; a subject plan adds `refused_7d` and `consumed_7d` (`fed_7d` and `feed_cost_7d` are stock-moving only); `feeding-history?days=N` and `feed-costs?days=N` are N farm days. Tests: backend +23 (`test_feeding_plan_policy.py`) and the same 23 on PostgreSQL 16 (`test_feeding_plan_policy_pg.py`), app +9 (`test/records/feeding_plan_policy_test.dart`).
+
 ## v0.8.5 — Milk judged at the time it was milked: withdrawals and lactations from the history
 
 Audit 2026-11-25 (I-3, I-15). On the tablet and the web app, enforced by the server for every way milk arrives — the form, the cow queue, the quick entry, a correction, an offline tablet catching up:

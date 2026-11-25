@@ -256,18 +256,25 @@ side, newest first.
 ## 9. Groups, inheritance and individual exceptions
 
 A subject is an `animal` or a `group` (the animal model's
-`LivestockSubject`). A program assigned to a group applies to every animal
-in it; an animal's effective program is:
+`LivestockSubject`). A program assigned to a group applies to the animals
+it feeds; each head gets **exactly one base ration** (v0.8.6,
+architecture/ADR-006), the most specific in force:
 
 1. its own explicit assignment, if any;
-2. otherwise the program of the group it is in (`group_name`, same species)
-   — **computed at read time, never copied onto the animal**.
+2. otherwise the program of a status group it is in (pregnant, open, in
+   milk, dry — a group that follows the herd records);
+3. otherwise the program of its herd / flock / pen (its exclusive group);
+4. otherwise the program of any other group it is in —
+   **computed at read time, never copied onto the animal**.
 
 On top of that an animal may carry individual assignments of type
-`supplement` (an extra quantity of a product), `override` (a different
-quantity for a product the program already gives) or `restriction` (a
-product it must never get, which the feeding endpoint refuses). The plan
-shows each with its reason and validity.
+`supplement` (an extra quantity of a product — **adds**), `override` (a
+different quantity for a product the program already gives — **replaces**)
+or `restriction` (a product it must never get, which the feeding endpoint
+refuses — **removes**; a group's restriction binds every member). The plan
+shows each with its reason and validity. A group's line counts only the
+heads its ration feeds and names the members planned elsewhere (their own
+ration, a more specific group's, or the group's adjusted for them).
 
 A group's own state for the resolver is aggregated from its members:
 lactation state by majority, milk by average, life stage and profile from
@@ -298,7 +305,7 @@ only), `api/v1/production.py` (after a milk record) and
 (product, quantity offered, optional quantity consumed, optional lot). Each
 component is drawn from stock (FIFO or the named lot), the lot is written on
 the component, and the event is **priced from the lots it drew**. A
-refusal or a consumption estimate moves no stock. Events are reversed, not
+refusal or a consumption estimate moves no stock, and **is never counted as fed** — not in the plan, the costs, the reports, the forecast or the lot trace (v0.8.6, ADR-006: only `offered` / `delivered` is fed). Every *today*, *yesterday* and day-by-day figure is the farm's calendar day in its own time zone. Events are reversed, not
 deleted: `POST /feeding-events/{id}/reverse` writes a compensating
 `reversal` event and returns the stock to the lots.
 

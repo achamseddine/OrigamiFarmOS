@@ -101,7 +101,10 @@ class _MyDutiesCardState extends State<MyDutiesCard> {
             ),
           if (feedingDuty && r.scopeType == 'group')
             OutlinedButton.icon(
-              onPressed: () => showFeedingEventDialog(context, subjectType: 'group', subjectId: r.scopeId, subjectName: r.scopeName, headCount: r.animals.length),
+              // The heads the group's ration feeds — members on a line of
+              // their own are fed there, not in this feeding (v0.8.6).
+              onPressed: () => showFeedingEventDialog(context, subjectType: 'group', subjectId: r.scopeId, subjectName: r.scopeName,
+                  headCount: _planHeads(feeding, r.scopeId) ?? r.animals.length),
               icon: const Icon(Icons.grass, size: 16),
               label: Text(context.t('mdFeedGroup')),
             ),
@@ -121,4 +124,12 @@ class _MyDutiesCardState extends State<MyDutiesCard> {
       ]),
     );
   }
+}
+
+/// The heads the farm's daily plan gives a group's ration, when it has one.
+int? _planHeads(FeedingProvider feeding, String groupId) {
+  for (final l in feeding.dailyPlan.lines) {
+    if (l.subjectType == 'group' && l.subjectId == groupId) return l.headCount;
+  }
+  return null;
 }

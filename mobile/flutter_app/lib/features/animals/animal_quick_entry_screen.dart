@@ -569,7 +569,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
     final canWeigh = caps.has(Cap.weightTracking) && (access.canEdit(FarmModule.animals) || canCare);
     final milked = milkToday(animal.id, production.milkRecords);
     final duplicate = sameSessionOn(animal.id, _session, _milkDay, production.milkRecords);
-    final fedCount = feedingsToday(animal.id, feeding.recentEvents);
+    final fedCount = feedingsToday(animal.id, feeding.recentEvents, plan: feeding.dailyPlan);
     final rounds = feeding.cachedPlan(animal.id)?.program?.feedingsPerDay;
     final outsideRound = status != null && !status.contains(animal.id);
 
@@ -917,7 +917,7 @@ class _GroupEntry extends StatelessWidget {
       if (l.subjectId == group.id) line = l;
     }
     final rounds = line?.program?.feedingsPerDay;
-    final fed = feedingsToday(group.id, feeding.recentEvents);
+    final fed = feedingsToday(group.id, feeding.recentEvents, plan: feeding.dailyPlan);
     final canFeed = access.canCreate(FarmModule.feedNutrition);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
