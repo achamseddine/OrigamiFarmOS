@@ -230,6 +230,20 @@ def prescribe_plan(db: Session, case: hm.HealthCase, *, instructions: str | None
     return p
 
 
+def _members_at(db: Session, group: models.Flock, at) -> list[models.Animal]:
+    """The animals in [group] at [at] (its membership history; the group's
+    current members when it has none)."""
+    from app.domain import livestock_models as lm
+    from app.services import feeding_program_service as programs
+
+    at = ensure_utc(at)
+    rows = db.execute(select(lm.AnimalGroupMembership, models.Animal).join(models.Animal, models.Animal.id == lm.AnimalGroupMembership.animal_id)
+                      .where(lm.AnimalGroupMembership.animal_group_id == group.id)).all()
+    if not rows:
+        return programs.animals_in_group(db, group)
+    return [a for m, a in rows if ensure_utc(m.valid_from) <= at and (m.valid_to is None or at < ensure_utc(m.valid_to))]
+
+
 def record_treatment(db: Session, farm_id: str, *, entity_type: str, entity_id: str, medication: str, dose: str, route: str, responsible_user_id: str,
                      diagnosis: str | None = None, medicine_product_id: str | None = None, health_case_id: str | None = None, treatment_plan_id: str | None = None,
                      start_at: datetime | None = None, end_at: datetime | None = None, withdrawal_until: datetime | None = None, vet_id: str | None = None,
@@ -272,10 +286,23 @@ def record_treatment(db: Session, farm_id: str, *, entity_type: str, entity_id: 
     db.add(t)
     if entity_type == "animal":
         if withdrawal_until is not None:
-            subject.withdrawal_until = withdrawal_until
-            subject.withdrawal_reason = "Medication"
+            # Overlapping medicines: a shorter withdrawal never cuts a longer
+            # one already in force (v0.8.5).
+            current = ensure_utc(subject.withdrawal_until) if subject.withdrawal_until else None
+            if current is None or ensure_utc(withdrawal_until) > current:
+                subject.withdrawal_until = withdrawal_until
+                subject.withdrawal_reason = "Medication"
         subject.status = "under_treatment"
     db.flush()
+    if withdrawal_until is not None:
+        # A treatment dated in the past reaches milk already recorded as
+        # saleable: that milk is held for review (milk_safety_service).
+        from app.services import milk_safety_service as milk_safety  # local: milk safety reads treatments
+
+        members = [subject] if entity_type == "animal" else _members_at(db, subject, t.start_at)
+        for a in members:
+            milk_safety.hold_after_new_withdrawal(db, a, starts_at=t.start_at, until=withdrawal_until,
+                                                  source=f"the treatment {medication} from {ensure_utc(t.start_at).date().isoformat()}", user_id=user.id)
     write_event(db, farm_id=farm_id, entity_type=entity_type, entity_id=entity_id, event_type="treatment_recorded",
                 payload={"treatment_id": t.id, "medication": medication, "medicine_product_id": medicine_product_id, "health_case_id": t.health_case_id,
                          "withdrawal_until": withdrawal_until.isoformat() if withdrawal_until else None}, created_by=user.id)

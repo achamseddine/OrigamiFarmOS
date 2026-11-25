@@ -1176,6 +1176,14 @@ def administer(db: Session, farm_id: str, *, subject_type: str, subject_id: str,
                 a.withdrawal_reason = f"Medication: {item.name}"
             if a.status == "healthy":
                 a.status = "under_treatment"
+    if milk is not None and at < now():
+        # A dose entered after the fact reaches milk already recorded as
+        # saleable: that milk is held for review (v0.8.5).
+        from app.services import milk_safety_service as milk_safety  # local: milk safety reads administrations
+
+        db.flush()
+        for a in animals:
+            milk_safety.hold_after_new_withdrawal(db, a, starts_at=at, until=milk, source=f"{item.name} given {at.date().isoformat()}", user_id=user_id)
     write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject_id, event_type="medication_administered",
                 payload={"administration_id": adm.id, "medicine": item.name, "inventory_item_id": item.id, "lot_id": lot.id, "lot_code": lot.lot_code,
                          "dose": dose_quantity, "dose_unit": dose_unit, "route": route_code, "head_count": heads, "quantity_consumed": quantity_consumed,

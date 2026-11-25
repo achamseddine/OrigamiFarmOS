@@ -22,6 +22,7 @@ from app.core.record_time import not_in_future
 from app.domain import milk_models as mm
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_audit_log, write_event
+from app.services import milk_safety_service as milk_safety
 from app.services.feed_inventory_service import FeedError
 
 PRODUCT_LABEL = "Raw milk"
@@ -34,7 +35,10 @@ class MilkSaleError(FeedError):
 def _stored(db: Session, farm_id: str, *, before: datetime | None = None) -> float:
     stmt = (select(func.coalesce(func.sum(models.MilkRecord.liters), 0.0))
             .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
-            .where(models.Animal.farm_id == farm_id, models.MilkRecord.destination == "stored"))
+            .where(models.Animal.farm_id == farm_id, models.MilkRecord.destination == "stored",
+                   # Only milk that may be sold is in the tank (v0.8.5): held milk
+                   # and milk under withdrawal never reach it.
+                   models.MilkRecord.release_status.in_(milk_safety.TANK_STATUSES)))
     if before is not None:
         stmt = stmt.where(models.MilkRecord.recorded_at < before)
     return float(db.scalar(stmt) or 0.0)

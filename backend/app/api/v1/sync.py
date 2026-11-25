@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import ensure_own_farm, get_current_user, require_farm_access
 from app.db.base import get_db
 from app.domain import models
+from app.core.record_time import not_in_future
 from app.repositories.base import new_id, write_event
 from app.schemas.sync import SyncItemResult, SyncPullResponse, SyncPushRequest, SyncPushResponse
 
@@ -96,19 +97,31 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
         # not a milk-record id — each push item is a new, immutable milk
         # entry, so it always gets a fresh row. Duplicate delivery of the
         # same batch is already handled by the idempotency_key check above.
-        if _own(db, models.Animal, item.entity_id, farm_id) is None:
+        # A replay is judged exactly like a live entry, at the milking's own
+        # time (v0.8.5): the lactation that covers it, and a withdrawal the
+        # dated history puts on it — refused here means rejected back to
+        # the device, never stored as saleable.
+        from app.schemas.production import ALLOWED_MILK_DESTINATIONS, MAX_LITERS_PER_MILKING, MILK_SESSIONS
+        from app.services import milk_service
+
+        animal = _own(db, models.Animal, item.entity_id, farm_id)
+        if animal is None:
             raise ValueError("Animal not found on this farm")
-        db.add(
-            models.MilkRecord(
-                id=new_id(),
-                animal_id=item.entity_id,
-                session=payload["session"],
-                liters=payload["liters"],
-                destination=payload["destination"],
-                recorded_at=item.client_created_at,
-                recorded_by=created_by,
-            )
+        session, destination = payload["session"], payload["destination"]
+        liters = float(payload["liters"])
+        if session not in MILK_SESSIONS or destination not in ALLOWED_MILK_DESTINATIONS or not 0 <= liters <= MAX_LITERS_PER_MILKING:
+            raise ValueError("Milk entry has an unknown session or destination, or an impossible amount")
+        at = not_in_future(item.client_created_at, "Milk")
+        try:
+            check = milk_service.check_milk(db, animal, at, destination)
+        except milk_service.MilkError as exc:
+            raise ValueError(exc.message) from exc
+        record = models.MilkRecord(
+            id=new_id(), animal_id=animal.id, session=session, liters=liters, destination=destination,
+            recorded_at=at, recorded_by=created_by,
         )
+        milk_service.apply_check(record, check, animal)
+        db.add(record)
         return
 
     if item.entity_type == "inventory_item" and {"direction", "quantity"} <= payload.keys():

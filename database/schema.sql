@@ -650,6 +650,7 @@ CREATE TABLE animals (
     lactating BOOLEAN NOT NULL,
     lactation_cycle INTEGER,
     withdrawal_until TIMESTAMP WITH TIME ZONE,
+    withdrawal_known_since TIMESTAMP WITH TIME ZONE,
     withdrawal_reason VARCHAR(200),
     weight_kg FLOAT,
     lactation_started_at TIMESTAMP WITH TIME ZONE,
@@ -1530,19 +1531,6 @@ CREATE TABLE medicine_products (
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(strength_uom) REFERENCES units_of_measure (code),
     FOREIGN KEY(pack_uom) REFERENCES units_of_measure (code)
-);
-
-CREATE TABLE milk_records (
-    id VARCHAR(36) NOT NULL,
-    animal_id VARCHAR(36) NOT NULL,
-    session VARCHAR(10) NOT NULL,
-    liters FLOAT NOT NULL,
-    quality_status VARCHAR(20) NOT NULL,
-    destination VARCHAR(20) NOT NULL,
-    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    recorded_by VARCHAR(36),
-    PRIMARY KEY (id),
-    FOREIGN KEY(animal_id) REFERENCES animals (id)
 );
 
 CREATE TABLE milk_sales (
@@ -2634,6 +2622,28 @@ CREATE TABLE feed_performance_alerts (
     FOREIGN KEY(feed_product_id) REFERENCES feed_products (id)
 );
 CREATE INDEX ix_feed_perf_alert_status ON feed_performance_alerts (farm_id, status);
+
+CREATE TABLE milk_records (
+    id VARCHAR(36) NOT NULL,
+    animal_id VARCHAR(36) NOT NULL,
+    session VARCHAR(10) NOT NULL,
+    liters FLOAT NOT NULL,
+    quality_status VARCHAR(20) NOT NULL,
+    destination VARCHAR(20) NOT NULL,
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    recorded_by VARCHAR(36),
+    withdrawal_check VARCHAR(20) DEFAULT 'unchecked' NOT NULL,
+    release_status VARCHAR(20) DEFAULT 'saleable' NOT NULL,
+    safety_note TEXT,
+    checked_at TIMESTAMP WITH TIME ZONE,
+    reviewed_by VARCHAR(36),
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    review_note TEXT,
+    lactation_episode_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(animal_id) REFERENCES animals (id),
+    FOREIGN KEY(lactation_episode_id) REFERENCES lactation_episodes (id)
+);
 
 CREATE TABLE protocol_run_steps (
     id VARCHAR(36) NOT NULL,

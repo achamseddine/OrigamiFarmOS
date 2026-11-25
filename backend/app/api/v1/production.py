@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.livestock.catalog import Cap
 from app.services import approval_service, capability_service, feed_performance_service, feeding_program_service, livestock_state_service, milk_service
 from app.services import milk_handover_service as handover
+from app.services import milk_safety_service as milk_safety
 from app.services import milk_sales_service as milk_sales
 from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission, require_farm_access, user_can
 from app.core import permissions as perms
@@ -16,10 +17,10 @@ from app.db.base import get_db
 from app.domain import models
 from app.core import duplicates
 from app.core.record_time import not_in_future
-from app.repositories.base import new_id, now, write_event
+from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.schemas.approvals import MilkCorrectionIn
-from app.schemas.production import (EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, MilkRecordCreate, MilkRecordOut,
-                                    MilkSaleCancel, MilkSaleCreate, MilkTankAdjust, MilkHandoverCreate, MilkRoutineUpdate)
+from app.schemas.production import (EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, HeldMilkOut, MilkRecordCreate,
+                                    MilkRecordOut, MilkReviewIn, MilkSaleCancel, MilkSaleCreate, MilkTankAdjust, MilkHandoverCreate, MilkRoutineUpdate)
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -37,6 +38,9 @@ _MILK_CREATE = require_any_permission(perms.MILK_PRODUCTION, action=perms.CREATE
 _MILK_APPROVE = require_any_permission(perms.MILK_PRODUCTION, action=perms.APPROVE)
 _EGGS_CREATE = require_any_permission(perms.EGG_PRODUCTION, action=perms.CREATE)
 _HARVEST_CREATE = require_any_permission(perms.PRODUCE_HARVEST, perms.AGRICULTURE, action=perms.CREATE)
+# Milk safety (v0.8.5): read by whoever sees milk or animal health; the
+# release of held milk is checked against the reviewer's role in the service.
+_MILK_SAFETY_READ = require_any_permission(perms.MILK_PRODUCTION, perms.PRODUCE_HARVEST, perms.ANIMAL_HEALTH, action=perms.VIEW)
 
 
 @router.get("/fields", response_model=list[FieldOut])
@@ -91,10 +95,12 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
     livestock_state_service.ensure_on_farm(animal, "milk")
     recorded_at = not_in_future(payload.recorded_at, "Milk")
-    # On the farm, able to give milk, in milk, within her lactation, and
-    # withheld while under withdrawal (milk_service — the same checks a
-    # correction passes).
-    under_withdrawal = milk_service.ensure_milk_allowed(db, animal, recorded_at, payload.destination)
+    # On the farm, able to give milk, within a lactation that covers the
+    # milking, and withheld if a recorded withdrawal covers it — judged at
+    # the milking's own time, so a late entry or an offline replay gets the
+    # same answer as at the parlour (milk_service — the same checks a
+    # correction passes; v0.8.5).
+    check = milk_service.check_milk(db, animal, recorded_at, payload.destination)
 
     # The same cow, the same session, the same farm day: two people (or one
     # person twice) recording one milking. A second milking is confirmed.
@@ -120,6 +126,7 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         recorded_at=at,
         recorded_by=payload.recorded_by or current_user.id,
     )
+    milk_service.apply_check(record, check, animal)
     db.add(record)
     db.flush()
     duplicates.log_confirmed(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, match_id=match.id if match else None,
@@ -134,11 +141,17 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         entity_type="animal",
         entity_id=animal.id,
         event_type="milk_recorded",
-        payload={"session": payload.session, "liters": payload.liters, "destination": payload.destination},
+        payload={"session": payload.session, "liters": payload.liters, "destination": payload.destination,
+                 "withdrawal_check": record.withdrawal_check, "release_status": record.release_status},
         created_by=current_user.id,
     )
+    if record.release_status == milk_safety.HELD:
+        milk_safety._notify_reviewers(db, animal, f"{record.liters:g} L of {animal.name}'s milk held for review", record.safety_note or "",
+                                      key=f"held:{record.id}")
     db.commit()
-    return {"id": record.id, "animal_id": record.animal_id, "liters": record.liters, "under_withdrawal_warning": under_withdrawal}
+    return {"id": record.id, "animal_id": record.animal_id, "liters": record.liters, "under_withdrawal_warning": check.under_withdrawal,
+            "withdrawal_check": record.withdrawal_check, "release_status": record.release_status, "safety_note": record.safety_note,
+            "lactation_episode_id": record.lactation_episode_id}
 
 
 @router.post("/milk/{record_id}/correct", response_model=MilkRecordOut)
@@ -152,6 +165,47 @@ def correct_milk_record(record_id: str, payload: MilkCorrectionIn, db: Session =
     milk_service.apply_correction(db, record, payload.model_dump(exclude={"reason"}, exclude_none=True), reason=payload.reason, user=current_user)
     db.commit()
     return record
+
+
+@router.get("/milk-held", response_model=list[HeldMilkOut])
+def list_held_milk(db: Session = Depends(get_db), user: models.User = Depends(_MILK_SAFETY_READ)) -> list[dict]:
+    """Milk kept but not saleable until a veterinarian or the farm manager
+    reviews it (v0.8.5): its withdrawal at the milking time cannot be
+    confirmed from the records, or a withdrawal was recorded after it."""
+    return [{**MilkRecordOut.model_validate(r).model_dump(), "animal_name": a.name} for r, a in milk_service.held_records(db, user.farm_id)]
+
+
+@router.post("/milk/{record_id}/review", response_model=MilkRecordOut)
+def review_held_milk(record_id: str, payload: MilkReviewIn, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SAFETY_READ)):
+    """Release held milk (it may be sold) or withhold it, saying why — a
+    veterinarian or the farm manager. Milk a recorded withdrawal covers is
+    never released here (409)."""
+    record, _ = milk_service.get_record(db, record_id, user.farm_id)
+    milk_service.review(db, record, decision=payload.decision, note=payload.note, user=user)
+    db.commit()
+    return record
+
+
+@router.get("/milk-safety")
+def milk_safety_at(animal_id: str, at: datetime | None = None, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SAFETY_READ)) -> dict:
+    """What the server would say about a milking of [animal_id] at [at]
+    (now by default): its withdrawal status from the dated history, and the
+    lactation it would belong to — so a form can choose *withheld* before
+    saving. The save itself checks again."""
+    animal = owned_or_404(db, models.Animal, animal_id, user, "Animal")
+    when = ensure_utc(at) if at else now()
+    out = milk_safety.assess(db, animal, when).to_dict(animal.name)
+    lac = milk_safety.lactation_at(db, animal, when)
+    out.update({"animal_id": animal.id, "lactation_episode_id": lac.episode.id if lac.episode else None, "lactation_problem": lac.problem})
+    return out
+
+
+@router.get("/milk-safety/review")
+def milk_safety_legacy_review(days: int = 365, db: Session = Depends(get_db), user: models.User = Depends(_MILK_SAFETY_READ)) -> dict:
+    """Milk recorded before v0.8.5 that the dated veterinary history now says
+    was under withdrawal (or cannot confirm). Read only — nothing is
+    changed; docs/runbooks/MILK-SAFETY-REVIEW.md says what to do."""
+    return milk_service.legacy_review(db, user.farm_id, days=days)
 
 
 # ------------------------------------------------------------ selling milk

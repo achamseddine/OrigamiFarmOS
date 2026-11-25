@@ -9868,6 +9868,150 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-held:
+    get:
+      tags:
+      - production
+      summary: List Held Milk
+      description: 'Milk kept but not saleable until a veterinarian or the farm manager
+
+        reviews it (v0.8.5): its withdrawal at the milking time cannot be
+
+        confirmed from the records, or a withdrawal was recorded after it.'
+      operationId: list_held_milk_api_v1_production_milk_held_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/HeldMilkOut'
+                type: array
+                title: Response List Held Milk Api V1 Production Milk Held Get
+      security:
+      - HTTPBearer: []
+  /api/v1/production/milk/{record_id}/review:
+    post:
+      tags:
+      - production
+      summary: Review Held Milk
+      description: 'Release held milk (it may be sold) or withhold it, saying why — a
+
+        veterinarian or the farm manager. Milk a recorded withdrawal covers is
+
+        never released here (409).'
+      operationId: review_held_milk_api_v1_production_milk__record_id__review_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: record_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Record Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MilkReviewIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MilkRecordOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-safety:
+    get:
+      tags:
+      - production
+      summary: Milk Safety At
+      description: 'What the server would say about a milking of [animal_id] at [at]
+
+        (now by default): its withdrawal status from the dated history, and the
+
+        lactation it would belong to — so a form can choose *withheld* before
+
+        saving. The save itself checks again.'
+      operationId: milk_safety_at_api_v1_production_milk_safety_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: animal_id
+        in: query
+        required: true
+        schema:
+          type: string
+          title: Animal Id
+      - name: at
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: At
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Milk Safety At Api V1 Production Milk Safety Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/production/milk-safety/review:
+    get:
+      tags:
+      - production
+      summary: Milk Safety Legacy Review
+      description: 'Milk recorded before v0.8.5 that the dated veterinary history now says
+
+        was under withdrawal (or cannot confirm). Read only — nothing is
+
+        changed; docs/runbooks/MILK-SAFETY-REVIEW.md says what to do.'
+      operationId: milk_safety_legacy_review_api_v1_production_milk_safety_review_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 365
+          title: Days
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Milk Safety Legacy Review Api V1 Production Milk Safety Review Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/production/milk-tank:
     get:
       tags:
@@ -17539,6 +17683,79 @@ components:
           title: Notes
       type: object
       title: HealthCasePatch
+    HeldMilkOut:
+      properties:
+        id:
+          type: string
+          title: Id
+        animal_id:
+          type: string
+          title: Animal Id
+        session:
+          type: string
+          title: Session
+        liters:
+          type: number
+          title: Liters
+        quality_status:
+          type: string
+          title: Quality Status
+        destination:
+          type: string
+          title: Destination
+        recorded_at:
+          type: string
+          format: date-time
+          title: Recorded At
+        recorded_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Recorded By
+        withdrawal_check:
+          type: string
+          title: Withdrawal Check
+          default: unchecked
+        release_status:
+          type: string
+          title: Release Status
+          default: saleable
+        safety_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Safety Note
+        reviewed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Reviewed At
+        review_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Review Note
+        lactation_episode_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lactation Episode Id
+        animal_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Animal Name
+      type: object
+      required:
+      - id
+      - animal_id
+      - session
+      - liters
+      - quality_status
+      - destination
+      - recorded_at
+      title: HeldMilkOut
     IdentifierIn:
       properties:
         identifier_type:
@@ -18845,6 +19062,35 @@ components:
           - type: string
           - type: 'null'
           title: Recorded By
+        withdrawal_check:
+          type: string
+          title: Withdrawal Check
+          default: unchecked
+        release_status:
+          type: string
+          title: Release Status
+          default: saleable
+        safety_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Safety Note
+        reviewed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Reviewed At
+        review_note:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Review Note
+        lactation_episode_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lactation Episode Id
       type: object
       required:
       - id
@@ -18855,6 +19101,25 @@ components:
       - destination
       - recorded_at
       title: MilkRecordOut
+    MilkReviewIn:
+      properties:
+        decision:
+          type: string
+          title: Decision
+          description: release | withhold
+        note:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Note
+      type: object
+      required:
+      - decision
+      - note
+      title: MilkReviewIn
+      description: 'POST /production/milk/{id}/review — a veterinarian or the farm
+
+        manager releases held milk or withholds it, saying why.'
     MilkRoutineUpdate:
       properties:
         collector_name:

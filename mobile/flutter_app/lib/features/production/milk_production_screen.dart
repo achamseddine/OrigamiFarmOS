@@ -26,6 +26,7 @@ import '../../domain/entities/production_records.dart';
 import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
+import 'held_milk_card.dart';
 
 bool _isToday(DateTime d) {
   final now = DateTime.now();
@@ -156,6 +157,8 @@ class MilkProductionScreen extends StatelessWidget {
           const SizedBox(height: FarmSpacing.md),
           // Milk corrections waiting for the manager, or the answers to one's own.
           const ApprovalsCard(modules: {FarmModule.milkProduction}),
+          // Milk kept but not saleable until reviewed (v0.8.5).
+          const HeldMilkCard(),
           // After each milking: the calves, then the collector (v0.8.1).
           const MilkHandoverCard(),
           const SizedBox(height: FarmSpacing.md),

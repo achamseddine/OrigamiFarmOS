@@ -3,13 +3,36 @@
 /// [ProductionProvider]/[HealthProvider] for trend charts and history
 /// tables instead of a static demo dataset.
 class MilkRecord {
-  const MilkRecord({required this.id, required this.animalId, required this.session, required this.liters, required this.destination, required this.recordedAt});
+  const MilkRecord({
+    required this.id,
+    required this.animalId,
+    required this.session,
+    required this.liters,
+    required this.destination,
+    required this.recordedAt,
+    this.withdrawalCheck = 'unchecked',
+    this.releaseStatus = 'saleable',
+    this.safetyNote,
+    this.animalName,
+  });
   final String id;
   final String animalId;
   final String session;
   final double liters;
   final String destination;
   final DateTime recordedAt;
+
+  /// The server's judgement at the milking time (v0.8.5): clear |
+  /// withdrawal | uncertain | unchecked (recorded before v0.8.5).
+  final String withdrawalCheck;
+
+  /// saleable | held (kept, not sold until reviewed) | released |
+  /// not_for_sale (withheld).
+  final String releaseStatus;
+  final String? safetyNote;
+  final String? animalName;
+
+  bool get isHeld => releaseStatus == 'held';
 
   factory MilkRecord.fromJson(Map<String, dynamic> json) => MilkRecord(
         id: json['id'] as String,
@@ -18,6 +41,31 @@ class MilkRecord {
         liters: (json['liters'] as num).toDouble(),
         destination: json['destination'] as String,
         recordedAt: DateTime.parse(json['recorded_at'] as String),
+        withdrawalCheck: json['withdrawal_check'] as String? ?? 'unchecked',
+        releaseStatus: json['release_status'] as String? ?? 'saleable',
+        safetyNote: json['safety_note'] as String?,
+        animalName: json['animal_name'] as String?,
+      );
+}
+
+/// What the server says about a milking of an animal at a time, before it
+/// is saved (`GET /production/milk-safety`, v0.8.5): whether a withdrawal
+/// covered it, and whether a lactation did.
+class MilkSafety {
+  const MilkSafety({required this.withdrawalCheck, this.note, this.until, this.lactationProblem});
+  final String withdrawalCheck;
+  final String? note;
+  final DateTime? until;
+  final String? lactationProblem;
+
+  bool get isWithdrawal => withdrawalCheck == 'withdrawal';
+  bool get isUncertain => withdrawalCheck == 'uncertain';
+
+  factory MilkSafety.fromJson(Map<String, dynamic> json) => MilkSafety(
+        withdrawalCheck: json['withdrawal_check'] as String? ?? 'clear',
+        note: json['note'] as String?,
+        until: json['until'] == null ? null : DateTime.tryParse(json['until'] as String),
+        lactationProblem: json['lactation_problem'] as String?,
       );
 }
 

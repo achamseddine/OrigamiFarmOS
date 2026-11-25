@@ -85,6 +85,41 @@ class ProductionProvider extends ChangeNotifier {
     return result;
   }
 
+  /// The server's answer for a milking of [animalId] at [at] before it is
+  /// saved (v0.8.5) — null offline or on any error: the save checks again.
+  Future<MilkSafety?> milkSafetyAt(String animalId, DateTime at) async {
+    try {
+      final json = await _api.get('/production/milk-safety', query: {'animal_id': animalId, 'at': at.toUtc().toIso8601String()});
+      return MilkSafety.fromJson(json as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Milk kept but not saleable until a veterinarian or the farm manager
+  /// reviews it (v0.8.5).
+  List<MilkRecord> heldMilk = [];
+
+  Future<void> loadHeldMilk() async {
+    try {
+      final json = await _api.get('/production/milk-held') as List<dynamic>;
+      heldMilk = [for (final e in json) MilkRecord.fromJson(e as Map<String, dynamic>)];
+    } catch (_) {
+      return;
+    }
+    notifyListeners();
+  }
+
+  /// Release held milk (it may be sold) or withhold it, saying why.
+  Future<WriteResult> reviewMilk(String recordId, {required String decision, required String note}) async {
+    final result = await _api.write(() => _api.post('/production/milk/$recordId/review', body: {'decision': decision, 'note': note.trim()}));
+    if (result.success) {
+      heldMilk = [for (final r in heldMilk) if (r.id != recordId) r];
+      notifyListeners();
+    }
+    return result;
+  }
+
   Future<WriteResult> recordEggs({required String flockId, required int totalEggs, int sellableEggs = 0, int brokenEggs = 0, int consumed = 0, int hatched = 0, int wasted = 0}) async {
     final result = await _api.write(() => _api.post('/production/eggs', body: {
           'flock_id': flockId,
