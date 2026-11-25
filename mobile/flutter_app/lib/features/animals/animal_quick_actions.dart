@@ -8,7 +8,10 @@ import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/observation.dart';
+import '../../domain/entities/production_records.dart' show MilkSafety;
 import '../../providers/animals_provider.dart';
+import '../../providers/production_provider.dart';
+import '../../core/widgets/ux_blocks.dart';
 import '../feed/feeding_event_dialog.dart';
 import 'reproduction_forms.dart' show confirmLactationChange;
 import '../production/milk_sessions.dart';
@@ -223,6 +226,23 @@ class _MilkDialogState extends State<_MilkDialog> {
   final _liters = TextEditingController();
   bool _saving = false;
   String? _error;
+  // What the server says about this milking's own time (v0.8.5): a
+  // withdrawal then, a record that cannot vouch for it, or a lactation
+  // that did not cover it. Null offline — the save is checked anyway.
+  MilkSafety? _safety;
+  int _check = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkSafety());
+  }
+
+  Future<void> _checkSafety() async {
+    final seq = ++_check;
+    final answer = await context.read<ProductionProvider>().milkSafetyAt(widget.animal.id, milkingInstant(_day, _session));
+    if (mounted && seq == _check) setState(() => _safety = answer);
+  }
 
   @override
   void dispose() {
@@ -230,9 +250,14 @@ class _MilkDialogState extends State<_MilkDialog> {
     super.dispose();
   }
 
+  /// Withheld when the server says a withdrawal covered this milking; when
+  /// it cannot be asked (offline), when she is under withdrawal now.
+  bool get _mustWithhold => _safety?.isWithdrawal ?? widget.animal.isUnderWithdrawal;
+
   @override
   Widget build(BuildContext context) {
-    final isUnderWithdrawal = widget.animal.isUnderWithdrawal;
+    final isUnderWithdrawal = _mustWithhold;
+    final safety = _safety;
     final queue = widget.queue;
     return AlertDialog(
       title: Text('${context.t('milk')} — ${widget.animal.name} #${widget.animal.primaryId}'),
@@ -270,9 +295,27 @@ class _MilkDialogState extends State<_MilkDialog> {
                   children: [
                     const Icon(Icons.error, color: FarmColors.danger, size: 18),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(context.t('cannotBeSoldToday'), style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))),
+                    Expanded(
+                      child: Text(
+                        safety != null && safety.isWithdrawal
+                            ? context.t('milkWithdrawalThen').replaceAll('{date}', safety.until == null ? '' : dayLabel(safety.until!.toLocal()))
+                            : context.t('cannotBeSoldToday'),
+                        key: const ValueKey('milk-safety-withdrawal'),
+                        style: const TextStyle(color: FarmColors.danger, fontSize: 12.5),
+                      ),
+                    ),
                   ],
                 ),
+              ),
+            if (safety != null && safety.isUncertain)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: NoticeBanner(key: const ValueKey('milk-safety-uncertain'), text: context.t('milkWillBeHeld')),
+              ),
+            if (safety?.lactationProblem != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: NoticeBanner(key: const ValueKey('milk-safety-lactation'), tone: NoticeTone.danger, text: safety!.lactationProblem!),
               ),
             DropdownButtonFormField<String>(
               isExpanded: true,
@@ -282,10 +325,16 @@ class _MilkDialogState extends State<_MilkDialog> {
                 DropdownMenuItem(value: 'morning', child: Text(context.t('sessionMorning'))),
                 DropdownMenuItem(value: 'evening', child: Text(milkSessionLabel(context, 'evening'))),
               ],
-              onChanged: (v) => setState(() => _session = v ?? _session),
+              onChanged: (v) {
+                setState(() => _session = v ?? _session);
+                _checkSafety();
+              },
             ),
             const SizedBox(height: 12),
-            MilkDayField(day: _day, onPicked: (d) => setState(() => _day = d)),
+            MilkDayField(day: _day, onPicked: (d) {
+              setState(() => _day = d);
+              _checkSafety();
+            }),
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('milk-dialog-liters'),
@@ -362,13 +411,18 @@ class _MilkDialogState extends State<_MilkDialog> {
           animalId: widget.animal.id,
           session: _session,
           liters: liters,
-          destination: widget.animal.isUnderWithdrawal ? 'withheld' : _destination,
+          destination: _mustWithhold ? 'withheld' : _destination,
           recordedAt: milkingInstant(_day, _session),
         );
     if (!mounted) return;
     if (result.success) {
+      // Kept but held for review: the server could not confirm it was clear.
+      final held = result.data is Map && (result.data! as Map)['release_status'] == 'held';
       Navigator.pop(context, MilkEntryOutcome(saved: true, session: _session, day: _day));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.animal.name} — ${context.t('saved')}'), duration: const Duration(seconds: 2)));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${widget.animal.name} — ${context.t(held ? 'milkHeldSaved' : 'saved')}'),
+        duration: Duration(seconds: held ? 4 : 2),
+      ));
     } else {
       setState(() {
         _saving = false;

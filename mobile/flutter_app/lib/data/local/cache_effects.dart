@@ -302,6 +302,14 @@ final List<_Rule> _rules = [
   // A feeding corrected by the manager: the original is undone; what was
   // really fed arrives with the server's answer after sync.
   _Rule('POST', '/feeding-events/$_id/correct', (m) => [MergeRecord('/feeding-events', m.ids[0], const {'status': 'reversed'})]),
+  // Held milk reviewed (v0.8.5): released milk may be sold, withheld milk not.
+  _Rule('POST', '/production/milk/$_id/review', (m) => [
+        MergeRecord('/production/milk', m.ids[0], {
+          'release_status': m.body['decision'] == 'release' ? 'released' : 'not_for_sale',
+          if (m.body['decision'] == 'withhold') 'destination': 'withheld',
+          'review_note': m.body['note'],
+        }),
+      ]),
   // A milk record corrected by the manager reads its new values at once.
   _Rule('POST', '/production/milk/$_id/correct', (m) => [
         MergeRecord('/production/milk', m.ids[0], {for (final e in m.body.entries) if (e.key != 'reason') e.key: e.value}),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.common import ORMModel
 
@@ -121,6 +121,27 @@ class MilkRecordOut(ORMModel):
     destination: str
     recorded_at: datetime
     recorded_by: str | None = None
+    # v0.8.5 (ADR-005): the server's judgement at the milking time.
+    # withdrawal_check: clear | withdrawal | uncertain | unchecked (older);
+    # release_status: saleable | held | released | not_for_sale.
+    withdrawal_check: str = "unchecked"
+    release_status: str = "saleable"
+    safety_note: str | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+    lactation_episode_id: str | None = None
+
+
+class HeldMilkOut(MilkRecordOut):
+    animal_name: str | None = None
+
+
+class MilkReviewIn(BaseModel):
+    """POST /production/milk/{id}/review — a veterinarian or the farm
+    manager releases held milk or withholds it, saying why."""
+
+    decision: str = Field(description="release | withhold")
+    note: str = Field(min_length=1, max_length=500)
 
 
 class EggRecordOut(ORMModel):

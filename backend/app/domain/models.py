@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -268,6 +268,10 @@ class Animal(Base):
     lactating: Mapped[bool] = mapped_column(Boolean, default=False)
     lactation_cycle: Mapped[int | None] = mapped_column(Integer, nullable=True)
     withdrawal_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # When the server first held this withdrawal_until (v0.8.5): the
+    # withdrawal began no later than this. Lets milk dated after it be
+    # judged even when no dated treatment explains the withdrawal.
+    withdrawal_known_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     withdrawal_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
     # The latest weight, denormalised from `animal_weight_records` (the
     # dated history a per-weight dose and a growth metric read).
@@ -525,9 +529,28 @@ class MilkRecord(Base):
     session: Mapped[str] = mapped_column(String(10))
     liters: Mapped[float] = mapped_column(Float)
     quality_status: Mapped[str] = mapped_column(String(20), default="normal")
+    # Where the milk went (stored = the tank, sold, processed, consumed,
+    # withheld). Production and its disposition are both recorded; whether
+    # it may be sold is `release_status`, never the destination alone.
     destination: Mapped[str] = mapped_column(String(20))
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # Milk safety at the milking time (v0.8.5, ADR-005), set by the server
+    # from the animal's dated veterinary history — never by the client:
+    #   withdrawal_check  clear | withdrawal | uncertain | unchecked (before v0.8.5)
+    #   release_status    saleable | held | released | not_for_sale
+    # Only stored milk that is saleable or released counts in the tank.
+    withdrawal_check: Mapped[str] = mapped_column(String(20), default="unchecked", server_default="unchecked")
+    release_status: Mapped[str] = mapped_column(String(20), default="saleable", server_default="saleable")
+    safety_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # A held record's review: who released or withheld it, when, and why.
+    reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The lactation the milking belongs to (PRODUCTION-SCHEMA §8); null for
+    # an animal milked before lactations were recorded.
+    lactation_episode_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("lactation_episodes.id"), nullable=True)
 
 
 class EggRecord(Base):
@@ -743,3 +766,13 @@ class IdempotencyRecord(Base):
     status_code: Mapped[int] = mapped_column(Integer)
     response_body: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+@event.listens_for(Animal.withdrawal_until, "set")
+def _withdrawal_known_since(target: Animal, value, oldvalue, _initiator) -> None:
+    """Every path that sets an animal's withdrawal — a treatment, a dose,
+    the registration form, the demo seed — dates when the server first held
+    it (v0.8.5, milk_safety_service): the withdrawal began no later than
+    that, which is what lets milk dated afterwards be judged."""
+    if value is not None and value != oldvalue:
+        target.withdrawal_known_since = datetime.now(timezone.utc)

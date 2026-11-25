@@ -1,5 +1,16 @@
 # Releases
 
+## v0.8.5 — Milk judged at the time it was milked: withdrawals and lactations from the history
+
+Audit 2026-11-25 (I-3, I-15). On the tablet and the web app, enforced by the server for every way milk arrives — the form, the cow queue, the quick entry, a correction, an offline tablet catching up:
+- **A withdrawal is judged at the milking, not today.** Milk entered today for a day inside a withdrawal that has since ended is refused as stored or sold and accepted only as *withheld* — before, it went into the tank. The withdrawal comes from the dated doses and treatments (overlapping medicines each count; a group's treatment covers the animals that were in the group then); a shorter treatment no longer cuts a longer withdrawal on the animal.
+- **Milk the records cannot vouch for is held, not sold.** When only the animal's withdrawal date is known (no dated treatment), or a dose was reversed, the milk is kept but **held for review** — not in the tank, not sold — until a veterinarian or the farm manager releases it (saying why) or withholds it: Milk page → *Milk held for review*. Milk a recorded withdrawal covers cannot be released. A dose or treatment entered late puts the milk it covers on hold and tells the manager; no sale is changed.
+- **The milk form asks before saving.** Choosing a day and a milking, the form shows *Under withdrawal at this milking — recorded as withheld*, or *It will be held for review*, or that she was dry then.
+- **A cow dried off yesterday** can still have her milk from three days ago entered (it belongs to the lactation that has ended); milk after the dry-off or before the lactation began stays refused. Each milk record now names its lactation.
+- **The tank and the collector see only milk that may be sold** (stored and saleable or released); the milk report adds *held*.
+- Older records are not reclassified: the tank, handovers and sales read as before. `GET /production/milk-safety/review` lists older milk the history now places inside a withdrawal, for the manager and the vet to decide — docs/runbooks/MILK-SAFETY-REVIEW.md.
+- Server: **migration `e8a0c2e4b6d9`** — `milk_records.withdrawal_check`, `release_status`, `safety_note`, `checked_at`, `reviewed_by/at`, `review_note`, `lactation_episode_id`; `animals.withdrawal_known_since`. `GET /production/milk-safety`, `GET /production/milk-held`, `POST /production/milk/{id}/review`, `GET /production/milk-safety/review`; `POST /sync/push` milk is checked like a live entry. Decision record: architecture/ADR-005 (amends PRODUCTION-SCHEMA §8 and §10). Tests: backend +21 (`test_milk_safety.py`), app +11 (`test/records/milk_safety_test.dart`).
+
 ## v0.8.4 — Feed stock you can trust: one ledger, approved exceptions, no double issue
 
 Audit 2026-11-25 (I-1, I-2, I-13). On the tablet and the web app (one codebase), enforced by the server:

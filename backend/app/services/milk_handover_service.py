@@ -31,6 +31,7 @@ from app.domain import milk_models as mm
 from app.domain import models
 from app.repositories.base import ensure_utc, new_id, now, write_audit_log, write_event
 from app.services import finance_service as finance
+from app.services import milk_safety_service as milk_safety
 from app.services import milk_sales_service as milk_sales
 
 SESSIONS = ("morning", "midday", "evening")
@@ -114,6 +115,7 @@ def handovers(db: Session, farm_id: str, *, days: int = 14) -> dict:
     rows = db.execute(select(models.MilkRecord.session, models.MilkRecord.liters, models.MilkRecord.recorded_at)
                       .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
                       .where(models.Animal.farm_id == farm_id, models.MilkRecord.destination == "stored",
+                             models.MilkRecord.release_status.in_(milk_safety.TANK_STATUSES),
                              models.MilkRecord.recorded_at >= lo, models.MilkRecord.recorded_at < hi))
     for session, liters, at in rows:
         milked[(ensure_utc(at).astimezone(tz).date().isoformat(), session)] += liters or 0

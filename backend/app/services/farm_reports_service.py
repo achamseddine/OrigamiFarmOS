@@ -114,8 +114,9 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
         .join(models.Animal, models.Animal.id == models.MilkRecord.animal_id)
         .where(models.Animal.farm_id == farm_id, models.MilkRecord.recorded_at >= lo, models.MilkRecord.recorded_at < hi)
     ).all()
-    days = {d: {"date": d, "morning": 0.0, "midday": 0.0, "evening": 0.0, "total": 0.0, "withheld": 0.0, "calves": 0.0, "sold": 0.0}
+    days = {d: {"date": d, "morning": 0.0, "midday": 0.0, "evening": 0.0, "total": 0.0, "withheld": 0.0, "held": 0.0, "calves": 0.0, "sold": 0.0}
             for d in _days(start, end)}
+    held_l = 0.0
     by_dest: dict[str, float] = defaultdict(float)
     animals: dict[str, dict] = {}
     for rec, animal in rows:
@@ -126,6 +127,11 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
         d["total"] += rec.liters
         if rec.destination == "withheld":
             d["withheld"] += rec.liters
+        elif rec.release_status == "held":
+            # Kept but not saleable until reviewed (v0.8.5): counted as milk
+            # given, never as milk in the tank.
+            d["held"] += rec.liters
+            held_l += rec.liters
         by_dest[rec.destination] += rec.liters
         a = animals.setdefault(animal.id, {"animal": animal, "milkings": 0, "total_l": 0.0, "days": set(),
                                            "_by_day": defaultdict(float), "_sessions": defaultdict(float),
@@ -183,6 +189,7 @@ def milk_report(db: Session, farm_id: str, start: date | None, end: date | None,
             "animals_milked": len(animals),
             "avg_per_animal_day_l": _r(sum(r["avg_per_day_l"] for r in animal_rows) / len(animal_rows), 1) if animal_rows else 0.0,
             "withheld_l": _r(by_dest.get("withheld", 0), 1),
+            "held_l": _r(held_l, 1),
             "calves_l": _r(calves_l, 1),
             "tank_now_l": _r(milk_sales.tank_balance(db, farm_id), 1),
             "tank_at_end_l": _r(milk_sales.tank_balance(db, farm_id, before=hi), 1),
