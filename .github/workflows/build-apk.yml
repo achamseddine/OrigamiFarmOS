@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.3-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.4-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.3 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.4 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.4:** **Feed stock you can trust** — a feeding that names a lot holding too little is refused, never made up from another lot; recording past the stock needs the manager **and a reason**, and what was fed with no lot shows on the feed (*Fed with no lot*) until the manager **reconciles** it (the lot it came from, stock that was there, or a count). Two people feeding the last kilos at once can no longer both take them. **The server needs migration `d6f8a0c2e4b7`.**
             - **v0.8.3:** **Count stock** on inspection (the count becomes the stock, the difference kept as a count correction); only **concentrate, corn silage and hay & straw** are fed — raw materials go into mixes; each feed has a **price per kg** and every feeding shows its **cost**. **The server needs migration `c4e6a8b0d2f5`.**
             - **v0.8.2:** **Queue numbers** — the manager gives each cow her number in the milking line; the cow queue and **Record milk** follow it, the next cow opening by herself after each save (Skip, Stop), and a number typed in opens her cow. The **milk report** shows each cow's **morning and afternoon** and a **day-by-day sheet** of every cow; periods *Today* and *Yesterday*. **The server needs migration `b3d5f7a9c1e4`.**
             - **v0.8.1:** **After each milking** on the Milk page: litres to the calves, the rest to the collector at his agreed price (workers type litres only); **Collector paid** settles the whole week at once (USD or LBP, a deduction kept on record); the second milking is called **Afternoon** if the farm says so. **The server needs migration `a2c4e6f8b0d3`.**

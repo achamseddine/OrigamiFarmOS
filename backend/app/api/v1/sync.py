@@ -114,6 +114,13 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
     if item.entity_type == "inventory_item" and {"direction", "quantity"} <= payload.keys():
         target = _own(db, models.InventoryItem, item.entity_id, farm_id)
         if target is not None:
+            from app.services import feed_inventory_service as feed_inv
+
+            if feed_inv.product_for_item(db, target.id) is not None:
+                # Feed stock moves only through its lot ledger (v0.8.4): a bare
+                # quantity from the device would change the stock line with no
+                # movement and no lot. Rejected, so the device keeps it to show.
+                raise ValueError("Feed stock is recorded as a feeding, a delivery or a count, not as a bare quantity.")
             delta = -payload["quantity"] if payload["direction"] == "out" else payload["quantity"]
             target.current_qty = max(target.current_qty + delta, 0)
         return

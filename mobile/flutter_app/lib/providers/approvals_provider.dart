@@ -121,8 +121,11 @@ class ApprovalsProvider extends ChangeNotifier {
   Future<WriteResult> withdraw(ApprovalRequest r) => _write(() => _api.post('/approval-requests/${r.id}/cancel'));
 
   // ---------------------------------------------------------- deciding
-  Future<WriteResult> approve(ApprovalRequest r, {bool allowNegative = false}) =>
-      _write(() => _api.post('/approval-requests/${r.id}/approve', body: {'allow_negative': allowNegative}));
+  /// Approve [r]. A mix that is now more than the stock on record is the
+  /// manager's override: [allowNegative] with the reason it is recorded
+  /// anyway ([overrideReason], kept on the stock exception — v0.8.4).
+  Future<WriteResult> approve(ApprovalRequest r, {bool allowNegative = false, String? overrideReason}) =>
+      _write(() => _api.post('/approval-requests/${r.id}/approve', body: {'allow_negative': allowNegative, 'override_reason': ?overrideReason}));
 
   Future<WriteResult> reject(ApprovalRequest r, String why) => _write(() => _api.post('/approval-requests/${r.id}/reject', body: {'note': why}));
 

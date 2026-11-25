@@ -65,6 +65,30 @@ class FeedTypeChooser extends StatelessWidget {
   }
 }
 
+// ------------------------------------------------------- stock override
+/// Why feed is recorded beyond the stock on record (v0.8.4): the manager's
+/// override says so, and the server keeps it on the stock exception the
+/// shortfall opens. Shown under "Record anyway" once it is ticked.
+class StockOverrideReasonField extends StatelessWidget {
+  const StockOverrideReasonField({super.key, required this.controller, this.enabled = true, this.onChanged});
+  final TextEditingController controller;
+  final bool enabled;
+  final ValueChanged<String>? onChanged;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 4, bottom: 4),
+        child: TextField(
+          key: const ValueKey('stock-override-reason'),
+          controller: controller,
+          enabled: enabled,
+          maxLength: 300,
+          onChanged: onChanged,
+          decoration: InputDecoration(labelText: context.t('feedOverrideReason'), isDense: true),
+        ),
+      );
+}
+
 // ---------------------------------------------------------- stock count
 /// Count the stock on inspection (v0.8.3): what was counted becomes the
 /// stock; the server posts the difference with the records as a count
@@ -163,6 +187,15 @@ class _StockCountDialogState extends State<_StockCountDialog> {
             key: const ValueKey('count-on-records'),
             style: FarmTypography.textTheme.titleSmall,
           ),
+          // v0.8.4: a count settles what was fed with no lot.
+          if (product.availability.untraced > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              context.t('countSettles').replaceAll('{qty}', '${feedNumber(product.availability.untraced)} ${product.unit}'),
+              key: const ValueKey('count-settles'),
+              style: const TextStyle(fontSize: 12.5, color: FarmColors.warningInk),
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('count-quantity'),

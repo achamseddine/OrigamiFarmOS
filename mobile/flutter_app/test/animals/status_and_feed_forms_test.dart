@@ -70,9 +70,12 @@ void main() {
       expect(farm.api.writes.where((w) => w.$2 == '/feeding-events'), isEmpty, reason: 'not without the explicit override');
       await tester.tap(find.text('Stock not entered yet — record anyway'));
       await tester.pump();
+      // v0.8.4: the override says why.
+      await tester.enterText(find.byKey(const ValueKey('stock-override-reason')), 'Delivery not entered yet');
       await tester.tap(find.text('Save'));
       await settle(tester);
       expect(writeTo(farm, 'POST', '/feeding-events')['allow_negative'], isTrue);
+      expect(writeTo(farm, 'POST', '/feeding-events')['override_reason'], 'Delivery not entered yet');
     });
   });
 

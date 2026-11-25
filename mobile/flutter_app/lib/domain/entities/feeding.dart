@@ -100,8 +100,13 @@ class FeedAvailability {
     required this.unit,
     this.unusableByStatus = const {},
     this.lots = const [],
-  });
+    double? lotOnHand,
+    this.untraced = 0,
+    this.openExceptions = 0,
+  }) : lotOnHand = lotOnHand ?? onHand;
 
+  /// The stock on record: the sum of every movement (v0.8.4) =
+  /// [lotOnHand] − [untraced].
   final double onHand;
   final double unusable;
   final double reserved;
@@ -110,10 +115,22 @@ class FeedAvailability {
   final Map<String, double> unusableByStatus;
   final List<FeedLot> lots;
 
+  /// What the lots hold.
+  final double lotOnHand;
+
+  /// Fed with no lot and not reconciled yet — open stock exceptions the
+  /// manager settles (a count, the lot it came from, or stock that was
+  /// there unrecorded). Not available until then.
+  final double untraced;
+  final int openExceptions;
+
   static const empty = FeedAvailability(onHand: 0, unusable: 0, reserved: 0, available: 0, unit: 'kg');
 
   factory FeedAvailability.fromJson(Map<String, dynamic> json) => FeedAvailability(
         onHand: _d(json['on_hand']),
+        lotOnHand: json.containsKey('lot_on_hand') ? _d(json['lot_on_hand']) : null,
+        untraced: _d(json['untraced']),
+        openExceptions: _i(json['open_exceptions']),
         unusable: _d(json['unusable']),
         reserved: _d(json['reserved']),
         available: _d(json['available']),
@@ -123,6 +140,81 @@ class FeedAvailability {
           for (final l in _maps(json['lots']))
             FeedLot.fromJson({...l, 'feed_product_id': json['feed_product_id'] ?? l['feed_product_id'] ?? ''}),
         ],
+      );
+}
+
+/// Feed that left the store with no lot (v0.8.4): an approved shortage
+/// override — who recorded it, who approved it, why — open until the
+/// manager reconciles it (`GET /feed-inventory/exceptions`).
+class FeedStockException {
+  const FeedStockException({
+    required this.id,
+    required this.feedProductId,
+    required this.quantity,
+    required this.openQuantity,
+    required this.unit,
+    required this.status,
+    required this.reason,
+    required this.occurredAt,
+    this.kind = 'untraced_issue',
+    this.feedProductName,
+    this.requestedByName,
+    this.approvedByName,
+    this.sourceEntityType,
+    this.sourceEntityId,
+    this.lotCode,
+    this.resolution,
+    this.resolutionNote,
+    this.resolutionLotCode,
+    this.resolvedByName,
+    this.resolvedAt,
+  });
+
+  final String id;
+  final String feedProductId;
+  final String? feedProductName;
+  final String kind;
+  final double quantity;
+  final double openQuantity;
+  final String unit;
+  final String status;
+  final String reason;
+  final DateTime occurredAt;
+  final String? requestedByName;
+  final String? approvedByName;
+  final String? sourceEntityType;
+  final String? sourceEntityId;
+  final String? lotCode;
+  final String? resolution;
+  final String? resolutionNote;
+  final String? resolutionLotCode;
+  final String? resolvedByName;
+  final DateTime? resolvedAt;
+
+  bool get isOpen => status == 'open';
+  bool get isLegacy => kind == 'legacy_untraced';
+
+  factory FeedStockException.fromJson(Map<String, dynamic> json) => FeedStockException(
+        id: json['id'] as String,
+        feedProductId: json['feed_product_id'] as String? ?? '',
+        feedProductName: json['feed_product_name'] as String?,
+        kind: json['kind'] as String? ?? 'untraced_issue',
+        quantity: _d(json['quantity']),
+        openQuantity: _d(json['open_quantity']),
+        unit: json['unit'] as String? ?? 'kg',
+        status: json['status'] as String? ?? 'open',
+        reason: json['reason'] as String? ?? '',
+        occurredAt: _dt(json['occurred_at']) ?? DateTime.now(),
+        requestedByName: json['requested_by_name'] as String?,
+        approvedByName: json['approved_by_name'] as String?,
+        sourceEntityType: json['source_entity_type'] as String?,
+        sourceEntityId: json['source_entity_id'] as String?,
+        lotCode: json['lot_code'] as String?,
+        resolution: json['resolution'] as String?,
+        resolutionNote: json['resolution_note'] as String?,
+        resolutionLotCode: json['resolution_lot_code'] as String?,
+        resolvedByName: json['resolved_by_name'] as String?,
+        resolvedAt: _dt(json['resolved_at']),
       );
 }
 

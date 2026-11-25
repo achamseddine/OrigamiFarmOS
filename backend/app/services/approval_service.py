@@ -30,6 +30,7 @@ from app.repositories.base import ensure_utc, new_id, now, write_event
 from app.schemas.approvals import FeedingCorrectionIn, MilkCorrectionIn
 from app.schemas.feeding import QuickMixIn
 from app.services import feed_batch_service as batches
+from app.services import feed_inventory_service as inv
 from app.services import feed_performance_service as perf
 from app.services import feeding_program_service as programs
 from app.services import milk_service
@@ -190,18 +191,22 @@ def _feeding_event(db: Session, event_id: str, farm_id: str) -> fm.FeedingEvent:
 
 # ------------------------------------------------------------------ decide
 def approve(db: Session, req: am.ApprovalRequest, user: models.User, *, note: str | None = None,
-            allow_negative: bool = False, confirm_duplicate: bool = False) -> am.ApprovalRequest:
+            allow_negative: bool = False, override_reason: str | None = None, confirm_duplicate: bool = False) -> am.ApprovalRequest:
     _ensure_decidable(db, req, user)
     if req.kind == "feed_mix":
         mix = QuickMixIn.model_validate(req.payload)
         override = allow_negative or mix.allow_negative
         ensure_stock_override(db, user, override, perms.FEED_NUTRITION)
+        # The employee asked, the manager authorises the shortage: both are
+        # named on the stock exception, with the manager's reason.
+        stock_override = inv.Override(reason=_first_text(override_reason, mix.override_reason, note, req.reason), approved_by=user.id,
+                                      requested_by=req.requested_by, approval_request_id=req.id) if override else None
         # The mix is the employee's work: they are its operator. Approving
         # it also approves the recipe a first mix of a feed creates.
         batch = batches.quick_mix(db, req.farm_id, feed_product_id=mix.feed_product_id, new_product_name=mix.new_product_name,
                                   components=[c.model_dump() for c in mix.components], output_quantity=mix.output_quantity, unit=mix.unit,
                                   produced_at=mix.produced_at, intended_species_code=mix.intended_species_code, notes=mix.notes,
-                                  allow_negative=override, can_approve=True, confirm_duplicate=confirm_duplicate or mix.confirm_duplicate,
+                                  override=stock_override, can_approve=True, confirm_duplicate=confirm_duplicate or mix.confirm_duplicate,
                                   user_id=req.requested_by)
         perf.on_batch_completed(db, batch, user_id=user.id)
         req.result_type, req.result_id = "feed_batch", batch.id
@@ -214,7 +219,7 @@ def approve(db: Session, req: am.ApprovalRequest, user: models.User, *, note: st
         event = _feeding_event(db, req.target_id, req.farm_id)
         body = FeedingCorrectionIn.model_validate({**req.payload, "reason": req.reason or ""})
         result = correct_feeding(db, event, body, user=user, requested_by=req.requested_by, allow_negative=allow_negative or body.allow_negative,
-                                 approval_request_id=req.id)
+                                 override_reason=_first_text(override_reason, body.override_reason, note, req.reason), approval_request_id=req.id)
         req.result_type, req.result_id = "feeding_event", result.id
     return _decided(db, req, user, "approved", note)
 
@@ -263,8 +268,12 @@ def _decided(db: Session, req: am.ApprovalRequest, user: models.User, decision: 
 
 
 # -------------------------------------------------------- feeding correction
+def _first_text(*texts: str | None) -> str | None:
+    return next((t.strip() for t in texts if t and t.strip()), None)
+
+
 def correct_feeding(db: Session, event: fm.FeedingEvent, body: FeedingCorrectionIn, *, user: models.User, requested_by: str | None = None,
-                    allow_negative: bool = False, approval_request_id: str | None = None) -> fm.FeedingEvent:
+                    allow_negative: bool = False, override_reason: str | None = None, approval_request_id: str | None = None) -> fm.FeedingEvent:
     """Undoes [event] (its stock returns to its lots) and, when [body]
     names what was really fed, records that in its place — same subject,
     time and kind of feeding. Returns the replacement, or the reversal."""
@@ -280,7 +289,10 @@ def correct_feeding(db: Session, event: fm.FeedingEvent, body: FeedingCorrection
         result = programs.record_feeding(db, event.farm_id, subject_type=event.subject_type, subject=subject,
                                          components=[c.model_dump() for c in body.components], event_type=event.event_type,
                                          occurred_at=event.occurred_at, head_count=event.head_count,
-                                         notes=f"Correction of {event.id}: {reason}", allow_negative=allow_negative,
+                                         notes=f"Correction of {event.id}: {reason}",
+                                         override=inv.Override(reason=_first_text(override_reason, body.override_reason), approved_by=user.id,
+                                                               requested_by=requested_by or user.id, approval_request_id=approval_request_id)
+                                         if allow_negative else None,
                                          user_id=requested_by or user.id)
     write_event(db, farm_id=event.farm_id, entity_type=event.subject_type, entity_id=event.subject_id, event_type="feeding_corrected",
                 payload={"feeding_event_id": event.id, "reversal_id": reversal.id, "replacement_id": result.id if result is not reversal else None,

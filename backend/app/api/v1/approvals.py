@@ -60,7 +60,7 @@ def approve_request(request_id: str, payload: ApprovalDecisionIn | None = None, 
                     user: models.User = Depends(get_current_user)) -> dict:
     body = payload or ApprovalDecisionIn()
     req = approvals.approve(db, approvals.get(db, request_id, user.farm_id), user, note=body.note, allow_negative=body.allow_negative,
-                            confirm_duplicate=body.confirm_duplicate)
+                            override_reason=body.override_reason, confirm_duplicate=body.confirm_duplicate)
     db.commit()
     return approvals.to_dict(db, req)
 

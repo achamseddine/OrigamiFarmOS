@@ -180,6 +180,9 @@ def test_feeding_beyond_entered_stock_needs_the_explicit_override(client):
             "components": [{"feed_product_id": straw["id"], "quantity_offered": 6}]}
     refused = client.post(f"{API}/feeding-events", json=body, headers=h)
     assert refused.status_code == 422 and refused.json()["detail"].startswith("Not enough")
-    ok = client.post(f"{API}/feeding-events", json={**body, "allow_negative": True}, headers=h)
+    ok = client.post(f"{API}/feeding-events", json={**body, "allow_negative": True, "override_reason": "Straw bales not entered yet"}, headers=h)
     assert ok.status_code == 201, ok.text
-    assert ok.json()["components"][0]["lot_id"] is None  # the shortfall is against no lot
+    assert ok.json()["components"][0]["lot_id"] is None  # the shortfall is against no lot…
+    # …and is an open stock exception naming why (v0.8.4).
+    [exc] = client.get(f"{API}/feed-inventory/exceptions", params={"feed_product_id": straw["id"]}, headers=h).json()
+    assert exc["status"] == "open" and exc["quantity"] == 6 and exc["reason"] == "Straw bales not entered yet"

@@ -326,6 +326,7 @@ class _MixDialogState extends State<_MixDialog> {
   final _outputQty = TextEditingController();
   bool _outputEdited = false;
   bool _overrideStock = false;
+  final _overrideReason = TextEditingController();
   bool _saving = false;
   String? _error;
 
@@ -350,6 +351,7 @@ class _MixDialogState extends State<_MixDialog> {
   void dispose() {
     _newName.dispose();
     _outputQty.dispose();
+    _overrideReason.dispose();
     for (final l in _lines) {
       l.qty.dispose();
     }
@@ -424,6 +426,10 @@ class _MixDialogState extends State<_MixDialog> {
       setState(() => _error = context.t(canOverride ? 'feedStockShortConfirm' : 'feedOverrideNeedsApproval'));
       return;
     }
+    if (direct && _overrideStock && _overrideReason.text.trim().isEmpty) {
+      setState(() => _error = context.t('feedOverrideReasonNeeded'));
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -435,6 +441,7 @@ class _MixDialogState extends State<_MixDialog> {
       'output_quantity': ?output,
       'produced_at': recordedInstant(_day).toUtc().toIso8601String(),
       if (_overrideStock) 'allow_negative': true,
+      if (_overrideStock) 'override_reason': _overrideReason.text.trim(),
     };
     final result = direct ? await feeding.recordMix(body) : await context.read<ApprovalsProvider>().sendMix(body);
     if (!mounted) return;
@@ -578,8 +585,10 @@ class _MixDialogState extends State<_MixDialog> {
                   title: Text(context.t('feedRecordAnyway')),
                   onChanged: (v) => setState(() => _overrideStock = v ?? false),
                 ),
-              )
-            else
+              ),
+            if (direct && access.canOverrideFeedStock && _overrideStock)
+              StockOverrideReasonField(controller: _overrideReason, enabled: !_saving)
+            else if (!(direct && access.canOverrideFeedStock))
               Padding(
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(context.t(direct ? 'feedOverrideNeedsApproval' : 'fmShortManagerDecides'),

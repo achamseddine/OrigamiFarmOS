@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 141 tables, 46 secondary indexes.
+-- 142 tables, 47 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -2754,6 +2754,44 @@ CREATE TABLE feed_reconciliations (
     FOREIGN KEY(lot_id) REFERENCES feed_lots (id)
 );
 
+CREATE TABLE feed_stock_exceptions (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    feed_product_id VARCHAR(36) NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    kind VARCHAR(30) NOT NULL,
+    quantity FLOAT NOT NULL,
+    resolved_quantity FLOAT NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    reason TEXT NOT NULL,
+    requested_by VARCHAR(36),
+    approved_by VARCHAR(36),
+    approval_request_id VARCHAR(36),
+    source_entity_type VARCHAR(50),
+    source_entity_id VARCHAR(36),
+    lot_id VARCHAR(36),
+    detail JSON NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    resolution VARCHAR(40),
+    resolution_note TEXT,
+    resolution_lot_id VARCHAR(36),
+    resolution_reference_id VARCHAR(36),
+    resolved_by VARCHAR(36),
+    resolved_at TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(feed_product_id) REFERENCES feed_products (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(requested_by) REFERENCES users (id),
+    FOREIGN KEY(approved_by) REFERENCES users (id),
+    FOREIGN KEY(lot_id) REFERENCES feed_lots (id),
+    FOREIGN KEY(resolution_lot_id) REFERENCES feed_lots (id),
+    FOREIGN KEY(resolved_by) REFERENCES users (id)
+);
+CREATE INDEX ix_feed_stock_exceptions_product_status ON feed_stock_exceptions (feed_product_id, status);
+
 CREATE TABLE feed_usage_policies (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -2791,27 +2829,6 @@ CREATE TABLE feeding_event_components (
     FOREIGN KEY(batch_id) REFERENCES feed_batches (id)
 );
 
-CREATE TABLE inventory_transactions (
-    id VARCHAR(36) NOT NULL,
-    item_id VARCHAR(36) NOT NULL,
-    direction VARCHAR(10) NOT NULL,
-    quantity FLOAT NOT NULL,
-    unit_cost FLOAT,
-    reason VARCHAR(100),
-    linked_entity_type VARCHAR(50),
-    linked_entity_id VARCHAR(36),
-    lot_id VARCHAR(36),
-    inventory_lot_id VARCHAR(36),
-    location_id VARCHAR(36),
-    correlation_id VARCHAR(36),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(item_id) REFERENCES inventory_items (id),
-    FOREIGN KEY(lot_id) REFERENCES feed_lots (id),
-    FOREIGN KEY(inventory_lot_id) REFERENCES inventory_lots (id),
-    FOREIGN KEY(location_id) REFERENCES locations (id)
-);
-
 CREATE TABLE feed_usage_policy_rules (
     id VARCHAR(36) NOT NULL,
     policy_id VARCHAR(36) NOT NULL,
@@ -2827,4 +2844,28 @@ CREATE TABLE feed_usage_policy_rules (
     PRIMARY KEY (id),
     FOREIGN KEY(policy_id) REFERENCES feed_usage_policies (id),
     FOREIGN KEY(species_code) REFERENCES species (code)
+);
+
+CREATE TABLE inventory_transactions (
+    id VARCHAR(36) NOT NULL,
+    item_id VARCHAR(36) NOT NULL,
+    direction VARCHAR(10) NOT NULL,
+    quantity FLOAT NOT NULL,
+    unit_cost FLOAT,
+    reason VARCHAR(100),
+    linked_entity_type VARCHAR(50),
+    linked_entity_id VARCHAR(36),
+    lot_id VARCHAR(36),
+    inventory_lot_id VARCHAR(36),
+    location_id VARCHAR(36),
+    correlation_id VARCHAR(36),
+    stock_exception_id VARCHAR(36),
+    actor_user_id VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(lot_id) REFERENCES feed_lots (id),
+    FOREIGN KEY(inventory_lot_id) REFERENCES inventory_lots (id),
+    FOREIGN KEY(location_id) REFERENCES locations (id),
+    FOREIGN KEY(stock_exception_id) REFERENCES feed_stock_exceptions (id)
 );

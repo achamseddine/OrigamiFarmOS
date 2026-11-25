@@ -329,6 +329,35 @@ class FeedingProvider extends ChangeNotifier {
         then: refreshStock,
       );
 
+  /// Feed issued with no lot (v0.8.4) — the approved shortage overrides of
+  /// [productId] (all feeds when null), open first. Read when the manager
+  /// opens the reconciliation; not part of the start-up load.
+  Future<List<FeedStockException>> loadStockExceptions({String? productId, String? status}) async {
+    try {
+      final json = await _api.get('/feed-inventory/exceptions', query: {
+        'feed_product_id': ?productId,
+        'status': ?status,
+      }) as List<dynamic>;
+      return [for (final e in json) FeedStockException.fromJson(e as Map<String, dynamic>)];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// The manager reconciles feed issued with no lot: it came from [lotId]
+  /// (`assigned_to_lot`) or the stock was there unrecorded
+  /// (`confirmed_unrecorded_stock`). A count settles them all at once.
+  Future<WriteResult> resolveStockException(String exceptionId, {required String resolution, required String note, String? lotId, double? quantity}) =>
+      _write(
+        () => _api.post('/feed-inventory/exceptions/$exceptionId/resolve', body: {
+          'resolution': resolution,
+          'note': note.trim(),
+          'lot_id': ?lotId,
+          'quantity': ?quantity,
+        }),
+        then: refreshStock,
+      );
+
   /// A feed's type (concentrate, corn silage, hay & straw, raw material)
   /// and its price per unit (`PATCH /feed-products/{id}`).
   Future<WriteResult> updateProduct(String productId, Map<String, dynamic> changes) =>
