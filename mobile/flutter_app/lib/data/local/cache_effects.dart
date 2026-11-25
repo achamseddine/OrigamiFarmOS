@@ -339,6 +339,17 @@ final List<_Rule> _rules = [
     ];
   }),
   _Rule('PATCH', '/feed-lots/$_id/status', (m) => [MergeRecord('/feed-lots', m.ids[0], {'status': m.body['status']})]),
+  // A feed's type and price (v0.8.3): a raw material is not fed, a feed is.
+  _Rule('PATCH', '/feed-products/$_id', (m) => [
+        MergeRecord('/feed-products', m.ids[0], {
+          for (final e in m.body.entries)
+            if (e.key != 'ration_type') e.key: e.value,
+          if (m.body['ration_type'] != null) ...{
+            'ration_type': m.body['ration_type'] == 'raw_material' ? null : m.body['ration_type'],
+            'is_feedable': m.body['ration_type'] != 'raw_material',
+          },
+        }),
+      ]),
   ..._crud('/feed-products'),
   _Rule('POST', '/feed-formulas', (m) => [AppendRecord('/feed-formulas', _newRecord(m, extra: {'status': 'active'}))]),
   // A mix started offline has no number yet: the farm-wide sequence is the

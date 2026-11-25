@@ -58,6 +58,10 @@ class FeedProduct(Base):
     source_type: Mapped[str] = mapped_column(String(20), default="purchased")
     is_ingredient: Mapped[bool] = mapped_column(Boolean, default=True)
     is_feedable: Mapped[bool] = mapped_column(Boolean, default=False)
+    # What the animals are fed it as (v0.8.3): concentrate | silage |
+    # hay_straw; null for a raw material that only goes into mixes.
+    # `is_feedable` is true exactly when this is set (catalog.RATION_TYPES).
+    ration_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # forage | concentrate | premix | mineral | complete_feed | byproduct | other
     category: Mapped[str | None] = mapped_column(String(40), nullable=True)
     unit: Mapped[str] = mapped_column(String(20), default="kg")

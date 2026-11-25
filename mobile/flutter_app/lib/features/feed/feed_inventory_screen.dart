@@ -12,11 +12,13 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../domain/entities/access.dart';
+import '../../domain/entities/feeding.dart';
 import '../../domain/entities/inventory.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/feeding_provider.dart';
 import 'feed_movement_dialog.dart';
+import 'feed_stock_dialogs.dart';
 import '../approvals/ask_to_buy_dialog.dart';
 import '../reports/reports_screen.dart' show openReport;
 
@@ -64,6 +66,9 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
     final access = context.watch<AccessProvider>();
     final items = feed.items;
     final canRecord = access.canCreate(FarmModule.feedNutrition) || access.canCreate(FarmModule.inventory);
+    final canCount = access.canCountFeedStock;
+    final feeding = context.watch<FeedingProvider>();
+    FeedProduct? productOf(InventoryItem item) => feeding.products.where((p) => p.inventoryItemId == item.id).firstOrNull;
     final canExport = access.can(FarmModule.feedNutrition, PermissionAction.export) && access.canReadReport('feed');
 
     final totalStockMT = items.fold<double>(0, (sum, i) => sum + (i.unit == 'kg' ? i.currentQty : 0)) / 1000;
@@ -125,6 +130,19 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
             return Wrap(spacing: FarmSpacing.md, runSpacing: FarmSpacing.md, children: [for (final c2 in cards) SizedBox(width: w, child: c2)]);
           }),
           const SizedBox(height: FarmSpacing.md),
+          if (canCount) ...[
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.icon(
+                key: const ValueKey('stock-count'),
+                onPressed: () => showStockCountDialog(context),
+                icon: const Icon(Icons.fact_check_outlined, size: 18),
+                label: Text(context.t('countStock')),
+              ),
+            ]),
+            const SizedBox(height: 6),
+            Text(context.t('countStockHint'), style: FarmTypography.textTheme.bodySmall),
+            const SizedBox(height: FarmSpacing.md),
+          ],
           _SearchRow(
             controller: _search,
             categories: categories,
@@ -145,23 +163,32 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
                           columns: [
                             context.t('feedItem'),
                             context.t('quantity'),
+                            context.t('feedPrice'),
                             context.t('reorderLevel'),
-                            context.t('supplier'),
                             context.t('status'),
-                            if (canRecord) '',
+                            if (canRecord || canCount) '',
                           ],
-                          columnFlex: [3, 2, 2, 2, 2, if (canRecord) 1],
+                          columnFlex: [3, 2, 2, 2, 2, if (canRecord || canCount) 1],
                           rows: [
                             for (final item in visible)
                               [
                                 Row(children: [
                                   AppIcon(FarmIconMap.feedCategory(item.category), size: 16, color: FarmColors.cedar),
                                   const SizedBox(width: 8),
-                                  Flexible(child: Text(item.name, style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis)),
+                                  Flexible(
+                                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(item.name, style: FarmTypography.textTheme.titleSmall, overflow: TextOverflow.ellipsis),
+                                      // Fed to the animals, or a raw material for mixes (v0.8.3).
+                                      if (productOf(item) != null)
+                                        Text(rationTypeLabel(context, productOf(item)!.rationType),
+                                            style: FarmTypography.textTheme.bodySmall, overflow: TextOverflow.ellipsis),
+                                    ]),
+                                  ),
                                 ]),
                                 Text('${item.currentQty.toStringAsFixed(0)} ${item.unit}'),
+                                Text(productOf(item) == null ? '—' : feedPriceLabel(context, productOf(item)!),
+                                    style: FarmTypography.textTheme.bodySmall, overflow: TextOverflow.ellipsis),
                                 Text('${item.reorderLevel.toStringAsFixed(0)} ${item.unit}'),
-                                Text(item.supplier, style: FarmTypography.textTheme.bodySmall, overflow: TextOverflow.ellipsis),
                                 StatusPill(
                                   label: item.status == StockStatus.good ? context.t('statusGood') : context.t('statusLow'),
                                   level: switch (item.status) {
@@ -171,7 +198,7 @@ class _FeedInventoryScreenState extends State<FeedInventoryScreen> {
                                   },
                                   dense: true,
                                 ),
-                                if (canRecord) _RowMenu(item: item),
+                                if (canRecord || canCount) _RowMenu(item: item, product: productOf(item), canRecord: canRecord, canCount: canCount),
                               ],
                           ],
                         ),
@@ -286,44 +313,54 @@ class _Chip extends StatelessWidget {
   }
 }
 
-/// The two things that can happen to a row: more of it arrived, or some
-/// of it was used. Both open the same dialog with this item chosen.
+/// What can happen to a stock line: more of it arrived, some of it was
+/// used (a feed — a raw material is used by the mixes), it was counted on
+/// inspection, or the manager sets what it is and its price (v0.8.3).
+enum _RowAction { buy, use, count, typeAndPrice }
+
 class _RowMenu extends StatelessWidget {
-  const _RowMenu({required this.item});
+  const _RowMenu({required this.item, required this.product, required this.canRecord, required this.canCount});
   final InventoryItem item;
+  final FeedProduct? product;
+  final bool canRecord;
+  final bool canCount;
 
   @override
   Widget build(BuildContext context) {
     // Stock coming in is a purchase — the manager's (v0.7.8); anyone else
     // gets "Ask to buy" instead.
-    final buys = context.watch<AccessProvider>().canBuyFeed;
-    return PopupMenuButton<FeedMovementDirection>(
+    final access = context.watch<AccessProvider>();
+    final buys = access.canBuyFeed;
+    final product = this.product;
+    Widget entry(FarmIcon icon, String label) => Row(children: [
+          AppIcon(icon, size: 16, color: FarmColors.cedar),
+          const SizedBox(width: 10),
+          Flexible(child: Text(label)),
+        ]);
+    return PopupMenuButton<_RowAction>(
+      key: ValueKey('stock-row-menu-${item.id}'),
       tooltip: item.name,
       icon: const Icon(Icons.more_vert, color: FarmColors.muted),
-      onSelected: (direction) {
-        if (direction == FeedMovementDirection.inbound && !buys) {
-          _askToBuy(context, item);
-        } else {
-          showFeedMovementDialog(context, direction: direction, itemId: item.id);
+      onSelected: (action) {
+        switch (action) {
+          case _RowAction.buy:
+            buys ? showFeedMovementDialog(context, direction: FeedMovementDirection.inbound, itemId: item.id) : _askToBuy(context, item);
+          case _RowAction.use:
+            showFeedMovementDialog(context, direction: FeedMovementDirection.outbound, itemId: item.id);
+          case _RowAction.count:
+            showStockCountDialog(context, productId: product?.id);
+          case _RowAction.typeAndPrice:
+            if (product != null) showFeedTypeAndPriceDialog(context, product);
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: FeedMovementDirection.inbound,
-          child: Row(children: [
-            const AppIcon(FarmIcon.plus, size: 16, color: FarmColors.cedar),
-            const SizedBox(width: 10),
-            Text(context.t(buys ? 'recordPurchase' : 'prAskToBuy')),
-          ]),
-        ),
-        PopupMenuItem(
-          value: FeedMovementDirection.outbound,
-          child: Row(children: [
-            const AppIcon(FarmIcon.feedBag, size: 16, color: FarmColors.cedar),
-            const SizedBox(width: 10),
-            Text(context.t('recordDistribution')),
-          ]),
-        ),
+        if (canRecord) PopupMenuItem(value: _RowAction.buy, child: entry(FarmIcon.plus, context.t(buys ? 'recordPurchase' : 'prAskToBuy'))),
+        if (canRecord && (product == null || product.isFeedable))
+          PopupMenuItem(value: _RowAction.use, child: entry(FarmIcon.feedBag, context.t('recordDistribution'))),
+        if (canCount && product != null)
+          PopupMenuItem(key: ValueKey('stock-count-${item.id}'), value: _RowAction.count, child: entry(FarmIcon.inventory, context.t('countStock'))),
+        if (access.canManageFeed && product != null)
+          PopupMenuItem(key: ValueKey('stock-type-${item.id}'), value: _RowAction.typeAndPrice, child: entry(FarmIcon.coins, context.t('feedEdit'))),
       ],
     );
   }

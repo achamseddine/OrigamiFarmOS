@@ -70,6 +70,39 @@ STANDARD_FEED_SLOTS = tuple(row[0] for row in STANDARD_FEEDS)
 # Bought-in concentrate is still received into it as purchased lots.
 STANDARD_FEED_SOURCE = {"concentrate": "farm_produced"}
 
+# What the animals are actually fed (v0.8.3): the farm's concentrate (its
+# own mix or a bought one), corn silage, and hay & straw. Everything else —
+# grain, soybean meal, minerals, premix — is a raw material that reaches the
+# animals only through the mix it goes into. A feed product's `ration_type`
+# is one of these, or null for a raw material; `is_feedable` follows it.
+RATION_TYPES = ("concentrate", "silage", "hay_straw")
+RAW_MATERIAL = "raw_material"
+# The standard rows of the feeding form, by the ration type they hold.
+SLOT_RATION = {"concentrate": "concentrate", "corn_silage": "silage", "wheat_straw": "hay_straw"}
+_RATION_WORDS = (
+    ("silage", ("silage", "سيلاج", "سيلج")),
+    ("hay_straw", ("straw", "hay", "alfalfa", "تبن", "قش", "دريس", "فصة", "برسيم")),
+    ("concentrate", ("concentrate", "مركز", "مركّز")),
+)
+
+
+def infer_ration_type(*, name: str | None, name_ar: str | None, category: str | None, is_ingredient: bool) -> str | None:
+    """What an older form meant by "feedable", for a product created or
+    changed without a ration type: a name that says silage, hay or straw,
+    or concentrate; any other forage is hay & straw; a feed that goes into
+    no mix (a complete feed, a farm's own mix) is a concentrate. Anything
+    else — a grain, a meal, a mineral — is a raw material (None)."""
+    names = f"{name or ''} {name_ar or ''}".lower()
+    for ration, words in _RATION_WORDS:
+        if any(w in names for w in words):
+            return ration
+    if (category or "").lower() == "forage":
+        return "hay_straw"
+    if not is_ingredient:
+        return "concentrate"
+    return None
+
+
 # The grade a farm gives a delivery at receipt (FEED-SCHEMA §26). A rejected
 # share is recorded as rejected quantity; a grade is what was accepted.
 LOT_QUALITY_GRADES = ("good", "fair", "poor")

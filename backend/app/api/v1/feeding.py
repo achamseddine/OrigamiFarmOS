@@ -15,15 +15,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import ensure_stock_override, get_current_user, require_permission, user_can
+from app.api.deps import ensure_stock_override, get_current_user, require_any_permission, require_permission, user_can
 from app.core import duplicates
 from app.core.record_time import not_in_future
 from app.core import permissions as perms
+from app.feeding import catalog as feed_catalog
 from app.feeding import uom
 from app.db.base import get_db
 from app.domain import feed_models as fm
 from app.domain import models
-from app.repositories.base import ensure_utc, now
+from app.repositories.base import ensure_utc, now, write_audit_log, write_event
 from app.schemas.feeding import (
     AdjustmentCreate, AllocationCreate, AllocationOut, AllocationTransfer, AssignmentCreate, AssignmentOut, BatchComplete,
     BatchOut, BatchQuarantine, BatchStart, FeedAvailabilityOut, FeedingEventCreate, FeedingEventOut, FeedingEventReverse, FeedProductCreate,
@@ -31,7 +32,7 @@ from app.schemas.feeding import (
     LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
-    QuickMixIn, StandardFeedSlotOut,
+    QuickMixIn, StandardFeedSlotOut, StockCountCreate,
 )
 from app.schemas.approvals import FeedingCorrectionIn
 from app.services import approval_service as approvals
@@ -108,8 +109,10 @@ def _product_out(db: Session, product: fm.FeedProduct) -> dict:
     return {
         "id": product.id, "farm_id": product.farm_id, "code": product.code, "name": product.name, "name_ar": product.name_ar,
         "source_type": product.source_type, "is_ingredient": product.is_ingredient, "is_feedable": product.is_feedable,
+        "ration_type": product.ration_type,
         "category": product.category, "unit": product.unit, "inventory_item_id": product.inventory_item_id,
-        "default_unit_cost": product.default_unit_cost, "status": product.status, "notes": product.notes,
+        "default_unit_cost": product.default_unit_cost, "current_unit_cost": inv.current_unit_cost(db, product),
+        "status": product.status, "notes": product.notes,
         "availability": avail.to_dict(), "policy_names": [p.name for p in policy.policies_for(db, product)], "has_active_formula": has_formula,
     }
 
@@ -317,14 +320,52 @@ def update_feed_product(product_id: str, payload: FeedProductUpdate, db: Session
     if "is_ingredient" in changes or "is_feedable" in changes:
         if not (changes.get("is_ingredient", product.is_ingredient) or changes.get("is_feedable", product.is_feedable)):
             raise FeedError("A feed product must be an ingredient, feedable, or both.")
+    if changes.get("default_unit_cost") is not None and changes["default_unit_cost"] < 0:
+        raise FeedError("A price cannot be negative.")
+    before = {"ration_type": product.ration_type, "is_feedable": product.is_feedable, "default_unit_cost": product.default_unit_cost}
+    # What the animals are fed it as (v0.8.3): the type decides whether it is
+    # fed at all; "feedable" alone is read as older forms meant it.
+    if "ration_type" in changes or "is_feedable" in changes:
+        wanted = changes.pop("ration_type", None)
+        feedable_flag = changes.pop("is_feedable", None)
+        ingredient = changes.pop("is_ingredient", product.is_ingredient)
+        if wanted is None:
+            if feedable_flag is True:
+                wanted = product.ration_type  # still a feed; None: read it from the name
+            else:
+                wanted = feed_catalog.RAW_MATERIAL
+        ration, feedable, ingredient = inv.resolve_ration(
+            wanted, is_feedable=True, is_ingredient=ingredient, name=changes.get("name", product.name),
+            name_ar=changes.get("name_ar", product.name_ar), category=changes.get("category", product.category))
+        if feedable_flag is True and not feedable:
+            raise FeedError(f"{product.name} is a raw material. Say what it is fed as — concentrate, corn silage or hay & straw.")
+        if not feedable and product.is_feedable:
+            in_use = db.scalar(select(fm.FeedingProgram.name).join(fm.FeedingProgramVersion, fm.FeedingProgramVersion.program_id == fm.FeedingProgram.id)
+                               .join(fm.FeedingProgramComponent, fm.FeedingProgramComponent.version_id == fm.FeedingProgramVersion.id)
+                               .where(fm.FeedingProgram.farm_id == user.farm_id, fm.FeedingProgramVersion.status == "active",
+                                      fm.FeedingProgramComponent.feed_product_id == product.id).limit(1))
+            if in_use is not None:
+                raise FeedError(f"{product.name} is fed in the program {in_use}. Change that program first, then make it a raw material.", 409)
+        product.ration_type, product.is_feedable, product.is_ingredient = ration, feedable, ingredient
     for k, v in changes.items():
         setattr(product, k, v)
-    if "name" in changes:
-        item = db.get(models.InventoryItem, product.inventory_item_id)
-        if item is not None:
+    item = db.get(models.InventoryItem, product.inventory_item_id)
+    if item is not None:
+        if "name" in changes:
             item.name = product.name
+        # The price is the fallback of every lot without a cost of its own.
+        if "default_unit_cost" in changes:
+            item.unit_cost = product.default_unit_cost
+    after = {"ration_type": product.ration_type, "is_feedable": product.is_feedable, "default_unit_cost": product.default_unit_cost}
+    diff = {k: {"from": before[k], "to": after[k]} for k in before if before[k] != after[k]}
+    if diff:
+        write_audit_log(db, farm_id=product.farm_id, user_id=user.id, action="feed_product_updated", entity_type="feed_product",
+                        entity_id=product.id, module_code=perms.FEED_NUTRITION, summary=f"{user.name} changed {product.name}", changes=diff)
+        write_event(db, farm_id=product.farm_id, entity_type="feed_product", entity_id=product.id, event_type="feed_product_updated",
+                    payload=diff, created_by=user.id)
     _commit(db, product)
     return _product_out(db, product)
+
 
 
 @router.get("/feed-products/{product_id}/usage-policy", response_model=list[PolicyOut])
@@ -468,6 +509,26 @@ def post_adjustment(payload: AdjustmentCreate, db: Session = Depends(get_db), us
     tx = inv.adjust(db, product, lot=lot, delta=payload.delta, reason=payload.reason, explanation=payload.explanation, user_id=user.id)
     db.commit()
     return {"transaction_id": tx.id, "feed_product_id": product.id, "delta": payload.delta, "unit": product.unit, "availability": inv.availability(db, product).to_dict()}
+
+
+def _count_dep(db: Session = Depends(get_db), user: models.User = Depends(require_any_permission(perms.FEED_NUTRITION, perms.INVENTORY))):
+    """A stock count is the manager's: Feed or Inventory approve."""
+    if not (user_can(db, user, perms.FEED_NUTRITION, perms.APPROVE) or user_can(db, user, perms.INVENTORY, perms.APPROVE)):
+        raise FeedError("The stock is counted and corrected by the farm manager.", 403)
+    return user
+
+
+@router.post("/feed-inventory/counts", status_code=status.HTTP_201_CREATED)
+def post_stock_count(payload: StockCountCreate, db: Session = Depends(get_db), user: models.User = Depends(_count_dep)) -> dict:
+    """What was counted on inspection becomes the stock (v0.8.3): the
+    difference with the records is posted as count corrections. Sending the
+    same count again finds nothing to correct."""
+    product = inv.get_product(db, payload.feed_product_id, user.farm_id)
+    out = inv.count_stock(db, product, counted=payload.counted_quantity, unit=payload.unit, counted_at=payload.counted_at,
+                          notes=payload.notes, user=user)
+    db.commit()
+    out["availability"] = inv.availability(db, product).to_dict()
+    return out
 
 
 # --------------------------------------------------------------- formulas

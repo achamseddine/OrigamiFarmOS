@@ -314,6 +314,29 @@ class FeedingProvider extends ChangeNotifier {
       _write(() => _api.patch('/feed-lots/$lotId/status', body: {'status': status, 'reason': reason}), then: refreshStock);
   Future<WriteResult> adjust(Map<String, dynamic> body) => _write(() => _api.post('/feed-inventory/adjustments', body: body), then: refreshStock);
 
+  /// What was counted on inspection becomes the stock (v0.8.3,
+  /// `POST /feed-inventory/counts`); the server posts the difference as
+  /// count corrections.
+  Future<WriteResult> countStock({required String productId, required double counted, String? unit, DateTime? countedAt, String? notes}) =>
+      _write(
+        () => _api.post('/feed-inventory/counts', body: {
+          'feed_product_id': productId,
+          'counted_quantity': counted,
+          'unit': ?unit,
+          if (countedAt != null) 'counted_at': countedAt.toUtc().toIso8601String(),
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        }),
+        then: refreshStock,
+      );
+
+  /// A feed's type (concentrate, corn silage, hay & straw, raw material)
+  /// and its price per unit (`PATCH /feed-products/{id}`).
+  Future<WriteResult> updateProduct(String productId, Map<String, dynamic> changes) =>
+      _write(() => _api.patch('/feed-products/$productId', body: changes), then: () async {
+        await Future.wait([refreshStock(), _fetchStandardSlots()]);
+        notifyListeners();
+      });
+
   Future<WriteResult> createFormula(Map<String, dynamic> body) => _write(() => _api.post('/feed-formulas', body: body), then: _reloadFormulas);
   Future<WriteResult> addFormulaVersion(String formulaId, Map<String, dynamic> body) =>
       _write(() => _api.post('/feed-formulas/$formulaId/versions', body: body), then: _reloadFormulas);

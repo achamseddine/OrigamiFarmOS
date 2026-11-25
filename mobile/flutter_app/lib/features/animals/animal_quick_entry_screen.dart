@@ -22,6 +22,7 @@ import '../../providers/feeding_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import '../feed/feed_workspace_screen.dart' show feedDate, feedNumber;
+import '../feed/feed_stock_dialogs.dart' show FeedingCostLine;
 import '../feed/feeding_event_dialog.dart';
 import '../health/health_cases.dart' show showSubjectPicker;
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
@@ -725,6 +726,12 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
                 label: Text(context.t('qrAddFeed')),
               ),
             ),
+            // What this feeding costs at today's prices (v0.8.3).
+            FeedingCostLine(lines: [
+              for (final row in _feeds)
+                if (row.productId != null && feeding.productById(row.productId!) != null)
+                  (feeding.productById(row.productId!)!, parseLocalizedDouble(row.offered.text) ?? 0),
+            ]),
             if (_feedStockShort) ...[
               NoticeBanner(title: context.t('feedStockShortTitle'), text: context.t('feedStockShortBody')),
               if (context.watch<AccessProvider>().canOverrideFeedStock)
@@ -826,6 +833,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
             child: TextField(
               controller: row.offered,
               enabled: !_saving,
+              onChanged: (_) => setState(() {}),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(labelText: '${context.t('qrOffered')} (${row.unit})', isDense: true),
             ),
