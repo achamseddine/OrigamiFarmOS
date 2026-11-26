@@ -326,7 +326,11 @@ class LocalStore {
   /// A queued entry the server refused as a possible duplicate, sent again
   /// with `confirm_duplicate: true` because the farmer says it is a second
   /// one (the sync panel's "Record anyway").
-  Future<void> confirmOutboxDuplicate(int id) async {
+  ///
+  /// [extra] goes into the body as well — a queued feeding the server took
+  /// for a second feeding of the round is confirmed with the reason it is
+  /// extra (`confirm_additional_feeding`, `additional_feeding_reason`).
+  Future<void> confirmOutboxDuplicate(int id, {Map<String, dynamic> extra = const {}}) async {
     final db = _db;
     if (db == null) return;
     final rows = await db.query('outbox', columns: ['body'], where: 'id = ?', whereArgs: [id], limit: 1);
@@ -337,7 +341,7 @@ class LocalStore {
     await db.update(
       'outbox',
       {
-        'body': jsonEncode({...body, 'confirm_duplicate': true}),
+        'body': jsonEncode({...body, 'confirm_duplicate': true, ...extra}),
         'status': OutboxStatus.pending.name,
         'last_error': null,
       },

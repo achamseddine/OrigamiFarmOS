@@ -877,6 +877,57 @@ def check_consumption(db: Session, components: list[dict]) -> None:
                             "What was eaten cannot be more than what was given — check both amounts.")
 
 
+def check_against_days_offer(db: Session, farm_id: str, subject_type: str, subject, event_type: str, components: list[dict],
+                             when: datetime) -> None:
+    """A refusal or an intake estimate recorded on its own measures feed
+    already offered: it moves no stock and is never fed (v0.8.6), and it
+    cannot be more than what this subject was offered that farm day, up to
+    its time — in the stock unit, so grams cannot slip past kilograms.
+    Refusals of a day add up; each estimate stands alone. A feed with no
+    offer of its own on record that day (an animal fed from her group's
+    bunk, a round not entered) cannot be judged and is accepted."""
+    tz = farm_time.farm_tz(db, farm_id)
+    lo, _hi = farm_time.day_bounds(tz, farm_time.local_day(tz, when))
+    same_day = list(db.scalars(select(fm.FeedingEvent).where(
+        fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id == subject.id, fm.FeedingEvent.status == "recorded",
+        fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= when,
+    )))
+    covering_groups = []
+    if subject_type == "animal":
+        covering_groups = [g for g in groups_of_animal(db, subject, when) if subject.id in group_heads(db, g, when).covered]
+    for line in components:
+        product = db.get(fm.FeedProduct, line.get("feed_product_id"))
+        if product is None:
+            continue
+        unit = uom.normalise(line.get("unit") or product.unit)
+        offered = sum(uom.convert(c.quantity_offered, c.unit, product.unit) for e in same_day if e.event_type in STOCK_MOVING
+                      for c in e.components if c.feed_product_id == product.id)
+        if offered <= 0:
+            continue
+        if any(c.feed_product_id == product.id for g in covering_groups for e in _stock_moving_since(db, g.id, lo, when) for c in e.components):
+            continue  # she ate from her group's feeding too: her own offer is not all she had
+        if event_type == "refusal":
+            measured = uom.convert(float(line.get("quantity_offered") or 0), unit, product.unit) + sum(
+                uom.convert(c.quantity_offered, c.unit, product.unit) for e in same_day if e.event_type == "refusal"
+                for c in e.components if c.feed_product_id == product.id)
+            what = "refused today"
+        else:
+            raw = line.get("quantity_consumed") if line.get("quantity_consumed") is not None else line.get("quantity_offered")
+            measured = uom.convert(float(raw or 0), unit, product.unit)
+            what = "estimated eaten"
+        if measured > offered + 1e-6:
+            name = getattr(subject, "name", subject.id)
+            raise FeedError(f"{product.name}: {measured:g} {product.unit} {what} is more than the {offered:g} {product.unit} offered to {name} "
+                            "that day. What was eaten or left cannot be more than what was given — check the amounts.")
+
+
+def _stock_moving_since(db: Session, group_id: str, lo: datetime, hi: datetime) -> list[fm.FeedingEvent]:
+    return list(db.scalars(select(fm.FeedingEvent).where(
+        fm.FeedingEvent.subject_type == "group", fm.FeedingEvent.subject_id == group_id, fm.FeedingEvent.status == "recorded",
+        fm.FeedingEvent.event_type.in_(STOCK_MOVING), fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= hi,
+    )))
+
+
 @dataclass
 class Overlap:
     """Feed one round may have counted twice (audit I-12): [event] is the
@@ -1039,6 +1090,10 @@ def record_feeding(
         for g in groups_of_animal(db, subject):
             restricted |= {a.feed_product_id for a in active_assignments(db, "group", g.id) if a.assignment_type == "restriction"}
     when = not_in_future(occurred_at, "A feeding") or now()
+    if event_type in ("consumed_estimate", "refusal"):
+        # A measurement made on its own, later: never a second issue, and
+        # never more than was offered that farm day (Session 01, I-7).
+        check_against_days_offer(db, farm_id, subject_type, subject, event_type, components, when)
     event = fm.FeedingEvent(
         id=new_id(), farm_id=farm_id, subject_type=subject_type, subject_id=subject.id,
         program_version_id=program_version_id or (assignment.program_version_id if assignment else None),

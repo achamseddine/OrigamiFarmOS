@@ -929,14 +929,22 @@ def record_feeding_event(payload: FeedingEventCreate, db: Session = Depends(get_
     confirmed_with = "confirm_additional_feeding" if payload.confirm_additional_feeding else ("confirm_duplicate" if payload.confirm_duplicate else None)
     if overlaps and confirmed_with is None:
         raise duplicates.PossibleDuplicate(programs.overlap_message(db, user.farm_id, payload.subject_type, subject, overlaps, at=payload.occurred_at))
+    extra_reason = (payload.additional_feeding_reason or "").strip()
+    notes = payload.notes
+    if overlaps:
+        # A confirmed extra feeding says why — by whoever records it, worker
+        # or manager — and the feeding carries it where the manager reads it.
+        if not extra_reason:
+            raise FeedError("Say why this is extra feed on top of the round already recorded (additional_feeding_reason); the record keeps it.")
+        notes = f"{notes.strip()} · Additional feeding: {extra_reason}" if notes and notes.strip() else f"Additional feeding: {extra_reason}"
     event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=components,
-                                    event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=payload.notes,
+                                    event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=notes,
                                     override=override, user_id=user.id)
     duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, match_id=match.id if match else None,
                              what=f"feeding:{event.id}", user_id=user.id)
     if overlaps:
         write_event(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, event_type="feeding_additional_confirmed",
-                    payload={"feeding_event_id": event.id, "confirmed_with": confirmed_with, "overlaps": [
+                    payload={"feeding_event_id": event.id, "confirmed_with": confirmed_with, "reason": extra_reason, "overlaps": [
                         {"feeding_event_id": o.event.id, "subject_type": o.event.subject_type, "subject_id": o.event.subject_id, "group_id": o.group.id,
                          "animal_ids": [a.id for a in o.animals], "feed_product_ids": o.product_ids,
                          "minutes_apart": round(abs((ensure_utc(event.occurred_at) - ensure_utc(o.event.occurred_at)).total_seconds()) / 60)}

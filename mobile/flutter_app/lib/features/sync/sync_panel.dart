@@ -9,6 +9,8 @@ import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../data/local/local_store.dart';
+import '../../domain/entities/feeding_overlap.dart';
+import '../feed/additional_feeding_question.dart';
 import '../../providers/access_provider.dart';
 import '../../sync/sync_controller.dart';
 
@@ -265,8 +267,18 @@ class _QueuedRow extends StatelessWidget {
               // is a second one. Retrying unchanged would only be refused again.
               if ((item.lastError ?? '').startsWith(kPossibleDuplicate))
                 OutlinedButton(
+                  key: ValueKey('sync-record-anyway-${item.id}'),
                   onPressed: () async {
-                    await sync.recordAnyway(item.id);
+                    // A queued feeding the server took for a second feeding
+                    // of the round: recorded only with the reason it is extra.
+                    var extra = const <String, dynamic>{};
+                    if (item.path == '/feeding-events' && isAdditionalFeedingRefusal(item.lastError)) {
+                      final reason = await askAdditionalFeedingReason(context,
+                          serverDetail: (item.lastError ?? '').replaceFirst(kPossibleDuplicate, '').trim());
+                      if (reason == null) return;
+                      extra = {'confirm_additional_feeding': true, 'additional_feeding_reason': reason};
+                    }
+                    await sync.recordAnyway(item.id, extra: extra);
                     onChanged();
                   },
                   child: Text(context.t('syncRecordAnyway')),

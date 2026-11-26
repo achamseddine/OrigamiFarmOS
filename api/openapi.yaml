@@ -16951,6 +16951,12 @@ components:
           type: boolean
           title: Confirm Additional Feeding
           default: false
+        additional_feeding_reason:
+          anyOf:
+          - type: string
+            maxLength: 300
+          - type: 'null'
+          title: Additional Feeding Reason
       type: object
       required:
       - subject_type

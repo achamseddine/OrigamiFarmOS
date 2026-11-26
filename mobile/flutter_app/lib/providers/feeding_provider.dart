@@ -443,32 +443,58 @@ class FeedingProvider extends ChangeNotifier {
 
   /// Asks whether a feeding that overlaps another of the same round (a
   /// head fed with her group and on her own, the same feed — v0.8.7, audit
-  /// I-12) is extra feed. Installed once by the app shell
-  /// (core/widgets/duplicate_confirmation.dart); returns whether to record
-  /// it, and the sentence to show when not.
-  /// Null when it could not ask (no screen): the feeding is sent as it is and the server asks.
-  static Future<({bool confirmed, String message})?> Function(FeedingOverlap overlap)? confirmAdditionalFeeding;
+  /// I-12) is extra feed, and why. Installed once by the app shell
+  /// (features/feed/additional_feeding_question.dart). [overlap] is what
+  /// this device found; [serverDetail] the server's sentence when only the
+  /// server could see it (another tablet's feeding). Null when it could
+  /// not ask (no screen): the feeding is sent as it is and the server asks.
+  static Future<({bool confirmed, String reason, String message})?> Function({FeedingOverlap? overlap, String? serverDetail})?
+      confirmAdditionalFeeding;
 
-  /// Records a feeding. When it overlaps a feeding of the same round this
-  /// device knows of, the person is asked first ([confirmAdditionalFeeding]);
-  /// a real extra feeding goes with `confirm_additional_feeding: true`, and
-  /// nothing is sent when it was not one. Online or queued offline alike.
+  /// Records a feeding. When it overlaps a feeding of the same round, the
+  /// person is asked first — from what this device knows, or from what the
+  /// server answers — and a real extra feeding goes with
+  /// `confirm_additional_feeding: true` and the reason given; nothing is
+  /// sent when it was not one. Offline, the device's own check runs before
+  /// it is queued; the server checks again when it syncs.
   Future<WriteResult> recordFeeding(Map<String, dynamic> body) async {
-    var send = body;
     final ask = confirmAdditionalFeeding;
+    var send = body;
+    Map<String, dynamic> confirmed(String reason) => {...send, 'confirm_additional_feeding': true, 'additional_feeding_reason': reason};
     final overlap = ask == null ? null : findFeedingOverlap(body, plan: dailyPlan, events: recentEvents);
     if (ask != null && overlap != null) {
-      final answer = await ask(overlap);
+      final answer = await ask(overlap: overlap);
       if (answer != null && !answer.confirmed) return WriteResult.fail(answer.message, statusCode: 409);
-      if (answer != null) send = {...body, 'confirm_additional_feeding': true};
+      if (answer != null) send = confirmed(answer.reason);
     }
-    return _write(() => _api.post('/feeding-events', body: send), then: () async {
+    var result = await _api.write(() => _api.post('/feeding-events', body: send, askIfDuplicate: ask == null));
+    // What only the server could see: the same question, with its sentence
+    // (at most twice — a same-feeding duplicate, then the round's overlap).
+    for (var turn = 0; ask != null && turn < 2 && !result.success && !result.queued; turn++) {
+      final error = result.error ?? '';
+      if (isAdditionalFeedingRefusal(error) || (result.statusCode == 422 && needsAdditionalFeedingReason(error))) {
+        final answer = await ask(serverDetail: error.replaceFirst(kPossibleDuplicate, '').trim());
+        if (answer == null) break;
+        if (!answer.confirmed) return WriteResult.fail(answer.message, statusCode: 409);
+        send = confirmed(answer.reason);
+      } else if (result.isPossibleDuplicate) {
+        final generic = ApiClient.confirmPossibleDuplicate;
+        if (generic == null || !await generic(error.replaceFirst(kPossibleDuplicate, '').trim())) break;
+        send = {...send, 'confirm_duplicate': true};
+      } else {
+        break;
+      }
+      result = await _api.write(() => _api.post('/feeding-events', body: send, askIfDuplicate: false));
+    }
+    if (result.success) {
       final subjectId = body['subject_id'] as String?;
       if (subjectId != null) await planFor(subjectId, force: true);
       await _fetchRecentEvents();
       await refreshStock();
-    });
+    }
+    return result;
   }
+
   /// After a feeding was corrected — by the manager directly or by
   /// approving an employee's request: the plan, recent feedings and stock.
   Future<void> afterFeedingCorrected(String? subjectId) async {

@@ -216,8 +216,8 @@ class SyncController extends ChangeNotifier {
 
   /// "Record anyway" for a queued entry the server took for one already
   /// on record: resent confirmed, so it is kept as a confirmed repeat.
-  Future<void> recordAnyway(int id) async {
-    await _store?.confirmOutboxDuplicate(id);
+  Future<void> recordAnyway(int id, {Map<String, dynamic> extra = const {}}) async {
+    await _store?.confirmOutboxDuplicate(id, extra: extra);
     await refreshCounts();
     await syncNow();
   }

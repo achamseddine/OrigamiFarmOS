@@ -74,7 +74,12 @@ class SnapshotApi extends ApiClient {
   Future<dynamic> send(String method, String path, {Object? body, Map<String, dynamic>? query, String? idempotencyKey}) async {
     if (method == 'GET') return get(path, query: query);
     final refusal = possibleDuplicates[path];
-    if (refusal != null && !(body is Map && body['confirm_duplicate'] == true)) {
+    // A feeding confirmed as an additional one, with its reason, is
+    // accepted like a confirmed duplicate (backend api/v1/feeding.py).
+    final confirmed = body is Map &&
+        (body['confirm_duplicate'] == true ||
+            (body['confirm_additional_feeding'] == true && '${body['additional_feeding_reason'] ?? ''}'.trim().isNotEmpty));
+    if (refusal != null && !confirmed) {
       writes.add(('REFUSED $method', path, body));
       throw ApiException(409, '$kPossibleDuplicate $refusal');
     }

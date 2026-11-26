@@ -121,3 +121,13 @@ FeedingOverlap? findFeedingOverlap(Map<String, dynamic> body, {required DailyPla
 /// 5 kg offered. …") — recognised so the form can say it in the person's
 /// language.
 bool isConsumedOverOffered(String? message) => message != null && message.contains(' consumed is more than the ');
+
+/// The server's I-12 refusal ("Possible duplicate: … confirm it as an
+/// additional feeding …", feeding_program_service.overlap_message): an
+/// overlap this device could not see, asked with the same question.
+bool isAdditionalFeedingRefusal(String? message) =>
+    message != null && message.startsWith('Possible duplicate:') && message.contains('as an additional feeding');
+
+/// The server's refusal of a confirmed overlap without a reason (Session 01:
+/// an extra feeding says why).
+bool needsAdditionalFeedingReason(String? message) => message != null && message.contains('additional_feeding_reason');

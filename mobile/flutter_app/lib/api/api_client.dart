@@ -378,8 +378,11 @@ class ApiClient {
   // Writes
   // ------------------------------------------------------------------
 
-  Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query}) =>
-      _write('POST', path, body: body, query: query);
+  /// [askIfDuplicate] false: a "Possible duplicate:" refusal comes back to
+  /// the caller instead of the generic question — for a form that asks its
+  /// own, more specific one (the feeding's "Fed already this round?").
+  Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query, bool askIfDuplicate = true}) =>
+      _write('POST', path, body: body, query: query, ask: askIfDuplicate);
   Future<dynamic> patch(String path, {Object? body}) => _write('PATCH', path, body: body);
   Future<dynamic> put(String path, {Object? body}) => _write('PUT', path, body: body);
   Future<dynamic> delete(String path) => _write('DELETE', path);
@@ -389,10 +392,12 @@ class ApiClient {
   /// the "internet required the first time" rule.
   Future<dynamic> authenticate(String path, {Object? body}) => send('POST', path, body: body);
 
-  Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query}) async {
+  Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query, bool ask = true}) async {
     final store = _store;
+    Future<dynamic> attempt(String key) =>
+        ask ? _sendAsking(method, path, body: body, query: query, idempotencyKey: key) : send(method, path, body: body, query: query, idempotencyKey: key);
     if (store == null || !store.available) {
-      return _sendAsking(method, path, body: body, query: query, idempotencyKey: newIdempotencyKey());
+      return attempt(newIdempotencyKey());
     }
 
     if (standalone) return _writeLocal(store, method, path, body);
@@ -403,7 +408,7 @@ class ApiClient {
 
     if (monitor.online) {
       try {
-        return await _sendAsking(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
+        return await attempt(idempotencyKey);
       } on ApiException catch (e) {
         if (!e.isOffline) rethrow;
         // Fall through: the tablet lost the server mid-write.

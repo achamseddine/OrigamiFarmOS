@@ -11,7 +11,8 @@ import '../support/snapshot_farm.dart';
 /// tablet and the web:
 ///   - a head fed with her group and on her own in the same round, the same
 ///     feed, is asked about in the person's language — *Record as
-///     additional feeding* sends `confirm_additional_feeding`, *Don't
+///     additional feeding* sends `confirm_additional_feeding` with the
+///     reason given (required), *Don't
 ///     record* sends nothing; a supplement, another feed, a refusal or a
 ///     partial group feeding is not asked; it works from what the device
 ///     holds, so offline too;
@@ -132,15 +133,50 @@ void main() {
       expect(find.text('Not recorded: already fed in this round.'), findsOneWidget);
     });
 
-    testWidgets('Record as additional feeding sends it confirmed', (tester) async {
+    testWidgets('Record as additional feeding needs the reason, and sends it', (tester) async {
       final farm = await openForLuna(tester);
       await tester.tap(find.text('Save'));
       await settle(tester);
-      await tester.tap(find.text('Record as additional feeding'));
+      final record = find.widgetWithText(FilledButton, 'Record as additional feeding');
+      expect(tester.widget<FilledButton>(record).onPressed, isNull, reason: 'not without saying why');
+      await tester.enterText(find.byKey(const ValueKey('additional-feeding-reason')), 'Still hungry after the round');
+      await settle(tester);
+      await tester.tap(record);
       await settle(tester);
       final sent = feedings(farm).single as Map;
       expect(sent['confirm_additional_feeding'], isTrue);
+      expect(sent['additional_feeding_reason'], 'Still hungry after the round');
       expect(sent['subject_id'], 'cow-214');
+    });
+
+    testWidgets('an overlap only the server could see (another tablet) gets the same question', (tester) async {
+      tester.view.physicalSize = const Size(1200, 2600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final farm = await SnapshotFarm.open();
+      farm.api.snapshot['GET /feeding-events?days=7'] = <dynamic>[]; // this tablet has not seen the herd's round
+      farm.api.possibleDuplicates['/feeding-events'] =
+          "Luna is one of the 3 head Dairy Herd's ration feeds, and Dairy Herd was fed Corn Silage at 06:00 (5 min before). "
+          "Record this only if it is extra feed on top of the group's ration — confirm it as an additional feeding.";
+      await tester.pumpWidget(farm.app(Scaffold(body: Builder(builder: (c) => Center(child: TextButton(
+        onPressed: () => showFeedingEventDialog(c, subjectType: 'animal', subjectId: 'cow-214', subjectName: 'Luna'),
+        child: const Text('open'),
+      ))))));
+      await settle(tester);
+      await tester.tap(find.text('open'));
+      await settle(tester);
+      await tester.enterText(find.byType(TextField).at(1), '20');
+      await tester.tap(find.text('Save'));
+      await settle(tester);
+      expect(find.text('Fed already this round?'), findsOneWidget, reason: 'the feeding question, not the generic one');
+      expect(find.textContaining('Dairy Herd was fed Corn Silage at 06:00'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey('additional-feeding-reason')), 'Fed apart at the vet stall');
+      await settle(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Record as additional feeding'));
+      await settle(tester);
+      final writes = [for (final w in farm.api.writes) if (w.$2 == '/feeding-events') w];
+      expect(writes.map((w) => w.$1), ['REFUSED POST', 'POST']);
+      expect((writes.last.$3 as Map)['additional_feeding_reason'], 'Fed apart at the vet stall');
     });
 
     testWidgets('the same question in Arabic', (tester) async {
@@ -174,6 +210,15 @@ void main() {
     await settle(tester);
     expect(find.textContaining('what was left (9 kg) cannot be more than what was given (5 kg)'), findsOneWidget);
     expect(farm.api.writes.where((w) => w.$2 == '/feeding-events'), isEmpty, reason: 'nothing is sent');
+  });
+
+  test("the server's I-12 sentences are recognised, also in the sync panel", () {
+    const asked = "Possible duplicate: Bella is one of the 3 head Dairy Herd's ration feeds, and Dairy Herd was fed Dairy Mix 24L at 06:00 "
+        "(5 min before). Record this only if it is extra feed on top of the group's ration — confirm it as an additional feeding.";
+    expect(isAdditionalFeedingRefusal(asked), isTrue);
+    expect(isAdditionalFeedingRefusal('Possible duplicate: The same feeding of Bella was already recorded within half an hour.'), isFalse);
+    expect(needsAdditionalFeedingReason('Say why this is extra feed on top of the round already recorded (additional_feeding_reason); the record keeps it.'),
+        isTrue);
   });
 
   test("I-7: the server's refusal is recognised for the person's language", () {
