@@ -1,5 +1,13 @@
 # Releases
 
+## v0.8.7 — Feeding records you can trust: eaten never exceeds given, one round counted once
+
+Audit 2026-11-25 (I-7, I-12). On the tablet and the web app, enforced by the server:
+- **What was eaten cannot be more than what was given.** A feeding with 9 kg consumed of 5 kg offered is refused before any stock moves — new feedings, corrections, an employee's correction request (*What was eaten cannot be more than what was given. Check both amounts.*; the quick entry also refuses more left over than was given). Amounts in grams are converted before comparing, and what was eaten is stored in the feed's stock unit (before, 4000 g eaten of a feed kept in kg was stored as 4000 kg).
+- **One feeding round is not counted twice.** A cow fed with her group at 06:00 and on her own at 06:05 (or the other way round), the same feed, within an hour, is asked about: *Fed already this round? Luna is fed with Dairy Herd's ration, and Dairy Herd was given Corn Silage at 06:00.* — *Record as additional feeding* or *Don't record*. Not asked for a feed she has a supplement of, a cow on her own ration, another feed, a refusal, the next round, or when the group's head count already leaves her out. Asked in English or Arabic from what the tablet holds (offline too); the server checks again, and a feeding that waited offline is asked about in the sync panel. Who confirmed an extra feeding is kept on the record.
+- One ration per head (v0.8.6), refusals apart from fed, the farm's own days and the v0.8.4 stock ledger are unchanged; a confirmed extra feeding is the animal's own feeding and moves its own stock.
+- Server: **no migration.** `POST /feeding-events` takes `confirm_additional_feeding` (`confirm_duplicate` also confirms) and answers an overlap with 409 *Possible duplicate: …*; a confirmed one writes `feeding_additional_confirmed` (the feedings it overlaps, the feeds, who confirmed). The daily plan's group lines add `covered_animal_ids`. The demo farm's +2 kg supplement for Bella now starts three days back, like the feedings of it. Tests: backend +19 (`test_feeding_event_integrity.py`) and the same 19 on PostgreSQL 16 (`test_feeding_event_integrity_pg.py`), app +8 (`test/records/feeding_event_integrity_test.dart`).
+
 ## v0.8.6 — One feeding plan the reports agree with: one ration per head, fed means it left the store, the farm's own days
 
 Audit 2026-11-25 (I-4, I-5, I-6). On the tablet and the web app, decided by the server (architecture/ADR-006):

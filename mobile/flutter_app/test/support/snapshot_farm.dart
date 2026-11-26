@@ -9,6 +9,7 @@ import 'package:farmos/app/app_navigator.dart';
 import 'package:farmos/auth/session_controller.dart';
 import 'package:farmos/core/theme/theme.dart';
 import 'package:farmos/core/widgets/duplicate_confirmation.dart';
+import 'package:farmos/features/feed/additional_feeding_question.dart';
 import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
@@ -87,6 +88,8 @@ class SnapshotFarm {
   SnapshotFarm._(this.api, this.session) {
     // The app's "Already recorded?" question, asked over this test's app.
     installDuplicateConfirmation(navigatorKey);
+    // The "Fed already this round?" question (v0.8.7), asked over this test's app.
+    installAdditionalFeedingQuestion(navigatorKey);
   }
   final SnapshotApi api;
   final SessionController session;

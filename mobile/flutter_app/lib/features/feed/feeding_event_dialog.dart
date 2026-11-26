@@ -7,6 +7,7 @@ import '../../core/util/number_input.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../core/widgets/form_dialog.dart';
 import '../../domain/entities/feeding.dart';
+import '../../domain/entities/feeding_overlap.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/feeding_provider.dart';
 import 'feed_stock_dialogs.dart';
@@ -189,8 +190,11 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
     setState(() {
       _saving = false;
       _serverShortfall = _serverShortfall || short;
-      // The server's sentence, without the developer's hint at its end.
-      _error = short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
+      // The server's sentence, without the developer's hint at its end;
+      // consumption over the offer (I-7) in the person's language.
+      _error = isConsumedOverOffered(message)
+          ? context.t('feedConsumedMoreThanOffered')
+          : short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
     });
   }
 

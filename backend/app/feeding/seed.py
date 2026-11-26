@@ -298,7 +298,10 @@ def seed_feed_demo_data(db: Session, farm_id: str) -> None:
     bella = db.get(models.Animal, "cow-744")
     if bella is not None:
         programs.assign(db, farm_id, "animal", bella, assignment_type="supplement", feed_product_id=concentrate.id, quantity_per_head=2, unit="kg",
-                        reason="Vet: recovering, +2 kg concentrate for 10 days", valid_to=_now() + timedelta(days=7), user_id=u)
+                        reason="Vet: recovering, +2 kg concentrate for 10 days",
+                        # Started three days ago, like the feedings of it seeded
+                        # below (v0.8.7: a feeding is read with what was in force).
+                        valid_from=_days_ago(3, hour=0), valid_to=_now() + timedelta(days=7), user_id=u)
     layer_flock = db.get(models.Flock, "flock-layer")
     if layer_flock is not None:
         programs.assign(db, farm_id, "group", layer_flock, assignment_type="explicit", program_id=layer_prog.id, user_id=u)

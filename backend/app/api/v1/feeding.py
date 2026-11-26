@@ -917,14 +917,31 @@ def record_feeding_event(payload: FeedingEventCreate, db: Session = Depends(get_
     subject = programs.load_subject(db, payload.subject_type, payload.subject_id, user.farm_id)
     override = _require_override(db, user, payload.allow_negative, payload.override_reason)
     components = [c.model_dump() for c in payload.components]
+    programs.check_consumption(db, components)  # audit I-7, before any duplicate question
     earlier = programs.find_duplicate_feeding(db, payload.subject_type, subject.id, event_type=payload.event_type, components=components, at=payload.occurred_at)
     match = duplicates.guard(earlier, f"The same feeding of {getattr(subject, 'name', 'this subject')} was already recorded within half an hour.",
                              confirm=payload.confirm_duplicate)
+    # Audit I-12: the same round of feed given to a head through her group
+    # and on her own. Asked, never silently refused: a real extra feeding is
+    # recorded once the person confirms it, and the confirmation is audited.
+    overlaps = programs.find_overlapping_feedings(db, payload.subject_type, subject, event_type=payload.event_type, components=components,
+                                                  at=payload.occurred_at, head_count=payload.head_count)
+    confirmed_with = "confirm_additional_feeding" if payload.confirm_additional_feeding else ("confirm_duplicate" if payload.confirm_duplicate else None)
+    if overlaps and confirmed_with is None:
+        raise duplicates.PossibleDuplicate(programs.overlap_message(db, user.farm_id, payload.subject_type, subject, overlaps, at=payload.occurred_at))
     event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=components,
                                     event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=payload.notes,
                                     override=override, user_id=user.id)
     duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, match_id=match.id if match else None,
                              what=f"feeding:{event.id}", user_id=user.id)
+    if overlaps:
+        write_event(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, event_type="feeding_additional_confirmed",
+                    payload={"feeding_event_id": event.id, "confirmed_with": confirmed_with, "overlaps": [
+                        {"feeding_event_id": o.event.id, "subject_type": o.event.subject_type, "subject_id": o.event.subject_id, "group_id": o.group.id,
+                         "animal_ids": [a.id for a in o.animals], "feed_product_ids": o.product_ids,
+                         "minutes_apart": round(abs((ensure_utc(event.occurred_at) - ensure_utc(o.event.occurred_at)).total_seconds()) / 60)}
+                        for o in overlaps]},
+                    created_by=user.id)
     _commit(db, event)
     return programs.event_to_dict(event)
 

@@ -169,6 +169,8 @@ def _check_feeding(db: Session, user: models.User, target_id: str | None, payloa
         p = db.get(fm.FeedProduct, c.feed_product_id)
         if p is None or p.farm_id != user.farm_id:
             raise ApprovalError("Feed not found", 404)
+    # Refused when asked, not when the manager approves (audit I-7).
+    programs.check_consumption(db, [c.model_dump() for c in body.components])
     before = ", ".join(f"{c.quantity_offered:g} {c.unit}" for c in event.components) or "—"
     when = ensure_utc(event.occurred_at).date().isoformat()
     name = getattr(subject, "name", event.subject_id)
@@ -280,6 +282,7 @@ def correct_feeding(db: Session, event: fm.FeedingEvent, body: FeedingCorrection
     reason = (body.reason or "").strip()
     if not reason:
         raise ApprovalError("Say why the feeding is corrected.")
+    programs.check_consumption(db, [c.model_dump() for c in body.components])  # audit I-7, before undoing anything
     ensure_stock_override(db, user, allow_negative, perms.FEED_NUTRITION)
     asked = db.get(models.User, requested_by) if requested_by else None
     reversal = programs.reverse_feeding(db, event, reason=reason + (f" (asked by {asked.name}, approved by {user.name})" if asked else ""), user_id=user.id)

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
 import '../domain/entities/feed_performance.dart';
 import '../domain/entities/feeding.dart';
+import '../domain/entities/feeding_overlap.dart';
 
 /// The feed workspace's data (generic feed architecture): products and
 /// lots, formulas, batches, programs, today's plan, stock cover and
@@ -440,13 +441,34 @@ class FeedingProvider extends ChangeNotifier {
   Future<WriteResult> endAssignment(String subjectId, String assignmentId) =>
       _write(() => _api.delete('/livestock-subjects/$subjectId/feeding-assignments/$assignmentId'), then: () => planFor(subjectId, force: true));
 
-  Future<WriteResult> recordFeeding(Map<String, dynamic> body) =>
-      _write(() => _api.post('/feeding-events', body: body), then: () async {
-        final subjectId = body['subject_id'] as String?;
-        if (subjectId != null) await planFor(subjectId, force: true);
-        await _fetchRecentEvents();
-        await refreshStock();
-      });
+  /// Asks whether a feeding that overlaps another of the same round (a
+  /// head fed with her group and on her own, the same feed — v0.8.7, audit
+  /// I-12) is extra feed. Installed once by the app shell
+  /// (core/widgets/duplicate_confirmation.dart); returns whether to record
+  /// it, and the sentence to show when not.
+  /// Null when it could not ask (no screen): the feeding is sent as it is and the server asks.
+  static Future<({bool confirmed, String message})?> Function(FeedingOverlap overlap)? confirmAdditionalFeeding;
+
+  /// Records a feeding. When it overlaps a feeding of the same round this
+  /// device knows of, the person is asked first ([confirmAdditionalFeeding]);
+  /// a real extra feeding goes with `confirm_additional_feeding: true`, and
+  /// nothing is sent when it was not one. Online or queued offline alike.
+  Future<WriteResult> recordFeeding(Map<String, dynamic> body) async {
+    var send = body;
+    final ask = confirmAdditionalFeeding;
+    final overlap = ask == null ? null : findFeedingOverlap(body, plan: dailyPlan, events: recentEvents);
+    if (ask != null && overlap != null) {
+      final answer = await ask(overlap);
+      if (answer != null && !answer.confirmed) return WriteResult.fail(answer.message, statusCode: 409);
+      if (answer != null) send = {...body, 'confirm_additional_feeding': true};
+    }
+    return _write(() => _api.post('/feeding-events', body: send), then: () async {
+      final subjectId = body['subject_id'] as String?;
+      if (subjectId != null) await planFor(subjectId, force: true);
+      await _fetchRecentEvents();
+      await refreshStock();
+    });
+  }
   /// After a feeding was corrected — by the manager directly or by
   /// approving an employee's request: the plan, recent feedings and stock.
   Future<void> afterFeedingCorrected(String? subjectId) async {

@@ -36,6 +36,10 @@ PREFIX = "Possible duplicate:"
 WINDOW = timedelta(minutes=30)
 # A dose of the same medicine to the same animal this close is checked.
 DOSE_WINDOW = timedelta(hours=12)
+# A group's feeding and one of its heads' own feedings of the same feed
+# this close are one feeding round (audit I-12, feeding_program_service.
+# find_overlapping_feedings): the feed may be counted twice.
+ROUND_WINDOW = timedelta(hours=1)
 
 
 class PossibleDuplicate(HTTPException):

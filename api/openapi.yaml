@@ -16947,6 +16947,10 @@ components:
           type: boolean
           title: Confirm Duplicate
           default: false
+        confirm_additional_feeding:
+          type: boolean
+          title: Confirm Additional Feeding
+          default: false
       type: object
       required:
       - subject_type

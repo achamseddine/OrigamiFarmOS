@@ -1163,6 +1163,7 @@ class DailyPlanLine {
     this.excludedHeads = const [],
     this.basis,
     this.fed = const [],
+    this.coveredAnimalIds = const [],
   });
 
   final String subjectType;
@@ -1190,6 +1191,10 @@ class DailyPlanLine {
   /// What this subject was fed that farm day (stock-moving feedings only).
   final List<DailyTarget> fed;
 
+  /// A group's line: the tracked animals its ration feeds — the heads a
+  /// feeding of the group also feeds (v0.8.7, audit I-12).
+  final List<String> coveredAnimalIds;
+
   factory DailyPlanLine.fromJson(Map<String, dynamic> json) => DailyPlanLine(
         subjectType: json['subject_type'] as String,
         subjectId: json['subject_id'] as String,
@@ -1204,6 +1209,7 @@ class DailyPlanLine {
         excludedHeads: [for (final e in _maps(json['excluded_heads'])) ExcludedHead.fromJson(e)],
         basis: json['basis'] as String?,
         fed: [for (final t in _maps(json['fed'])) DailyTarget.fromJson({...t, 'daily_total': t['quantity']})],
+        coveredAnimalIds: _strings(json['covered_animal_ids']),
       );
 }
 
