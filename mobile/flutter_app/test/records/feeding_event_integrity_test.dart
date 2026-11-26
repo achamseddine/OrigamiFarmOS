@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:farmos/api/api_client.dart';
 import 'package:farmos/domain/entities/feeding.dart';
 import 'package:farmos/domain/entities/feeding_overlap.dart';
 import 'package:farmos/features/animals/animal_quick_entry_screen.dart';
@@ -15,12 +16,11 @@ import '../support/snapshot_farm.dart';
 ///     reason given (required), *Don't
 ///     record* sends nothing; a supplement, another feed, a refusal or a
 ///     partial group feeding is not asked; it works from what the device
-///     holds, so offline too;
-///   - what was eaten cannot be more than what was given (server refusal
-///     shown in the person's language).
+///     holds, so offline too; what only the server can see is asked by the
+///     same question, from the field names its 409 gives;
+///   - what was eaten or left over cannot be more than what was given (the
+///     server's `more_than_given`, shown in the person's language).
 void main() {
-  final now = DateTime.utc(2026, 11, 26, 6, 10);
-
   DailyPlan plan({List<String> covered = const ['cow-744', 'cow-214', 'cow-clover'], int heads = 3}) => DailyPlan.fromJson({
         'date': '2026-11-26',
         'lines': [
@@ -51,7 +51,7 @@ void main() {
     final herd0600 = event('herd', 'group', 'grp-dairy-herd', DateTime.utc(2026, 11, 26, 4, 0), ['fp-dairy-mix', 'fp-dairy-concentrate'], heads: 3);
 
     test('a cow fed with her group at 06:00 and on her own at 06:05 is asked', () {
-      final o = findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: DateTime.utc(2026, 11, 26, 4, 5)), plan: plan(), events: [herd0600], now: now);
+      final o = findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: DateTime.utc(2026, 11, 26, 4, 5)), plan: plan(), events: [herd0600]);
       expect(o, isNotNull);
       expect((o!.kind, o.groupName, o.other.id, o.heads), (FeedingOverlapKind.animalAfterGroup, 'Dairy Herd', 'herd', 3));
       expect(o.animalIds, ['cow-214']);
@@ -61,48 +61,53 @@ void main() {
     test('the group after a cow fed alone is asked, unless its head count leaves her out', () {
       final luna = event('luna', 'animal', 'cow-214', DateTime.utc(2026, 11, 26, 4, 0), ['fp-dairy-mix'], kind: 'offered');
       final asked = findFeedingOverlap(body('group', 'grp-dairy-herd', ['fp-dairy-mix'], kind: 'delivered', at: DateTime.utc(2026, 11, 26, 4, 5)),
-          plan: plan(), events: [luna], now: now);
+          plan: plan(), events: [luna]);
       expect(asked?.kind, FeedingOverlapKind.groupAfterAnimal);
       expect(asked?.animalIds, ['cow-214']);
       expect(findFeedingOverlap(body('group', 'grp-dairy-herd', ['fp-dairy-mix'], kind: 'delivered', at: DateTime.utc(2026, 11, 26, 4, 5), heads: 2),
-          plan: plan(), events: [luna], now: now), isNull, reason: '2 head: the feeding was for the other two');
+          plan: plan(), events: [luna]), isNull, reason: '2 head: the feeding was for the other two');
     });
 
     test('a supplement, another feed, a refusal, another round, a cow on her own ration, a confirmed one: not asked', () {
       final at = DateTime.utc(2026, 11, 26, 4, 5);
-      expect(findFeedingOverlap(body('animal', 'cow-744', ['fp-dairy-concentrate'], at: at), plan: plan(), events: [herd0600], now: now), isNull,
+      expect(findFeedingOverlap(body('animal', 'cow-744', ['fp-dairy-concentrate'], at: at), plan: plan(), events: [herd0600]), isNull,
           reason: "Bella's concentrate is her supplement");
-      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-wheat-straw'], at: at), plan: plan(), events: [herd0600], now: now), isNull);
-      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], kind: 'refusal', at: at), plan: plan(), events: [herd0600], now: now), isNull);
-      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: DateTime.utc(2026, 11, 26, 5, 30)), plan: plan(), events: [herd0600], now: now),
+      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-wheat-straw'], at: at), plan: plan(), events: [herd0600]), isNull);
+      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], kind: 'refusal', at: at), plan: plan(), events: [herd0600]), isNull);
+      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: DateTime.utc(2026, 11, 26, 5, 30)), plan: plan(), events: [herd0600]),
           isNull, reason: '90 minutes later is the next round');
       expect(findFeedingOverlap(body('animal', 'cow-clover', ['fp-dairy-mix'], at: at), plan: plan(covered: ['cow-744', 'cow-214'], heads: 2),
-          events: [herd0600], now: now), isNull, reason: 'Clover is fed on her own ration, not with the herd');
-      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: at, confirm: true), plan: plan(), events: [herd0600], now: now), isNull);
+          events: [herd0600]), isNull, reason: 'Clover is fed on her own ration, not with the herd');
+      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: at, confirm: true), plan: plan(), events: [herd0600]), isNull);
       final refusedRound = event('r', 'group', 'grp-dairy-herd', DateTime.utc(2026, 11, 26, 4, 0), ['fp-dairy-mix'], kind: 'refusal');
       final undone = event('u', 'group', 'grp-dairy-herd', DateTime.utc(2026, 11, 26, 4, 0), ['fp-dairy-mix'], status: 'reversed');
-      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: at), plan: plan(), events: [refusedRound, undone], now: now), isNull,
+      expect(findFeedingOverlap(body('animal', 'cow-214', ['fp-dairy-mix'], at: at), plan: plan(), events: [refusedRound, undone]), isNull,
           reason: 'a refusal or an undone feeding fed nobody');
     });
   });
 
   group('the question on the feeding form', () {
-    Future<SnapshotFarm> openForLuna(WidgetTester tester, {Locale locale = const Locale('en')}) async {
+    /// Luna's feeding form with 20 kg of corn silage typed in. By default
+    /// this tablet has seen the herd's silage round five minutes ago; with
+    /// [seenRound] false it has not, and the server asks ([serverAsks]).
+    Future<SnapshotFarm> openForLuna(WidgetTester tester, {Locale locale = const Locale('en'), bool seenRound = true, String? serverAsks}) async {
       tester.view.physicalSize = const Size(1200, 2600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final farm = await SnapshotFarm.open();
       final fiveMinutesAgo = DateTime.now().toUtc().subtract(const Duration(minutes: 5));
       farm.api.snapshot['GET /feeding-events?days=7'] = [
-        {'id': 'herd-round', 'subject_type': 'group', 'subject_id': 'grp-dairy-herd', 'event_type': 'delivered', 'status': 'recorded', 'head_count': 3,
-         'occurred_at': fiveMinutesAgo.toIso8601String(),
-         'components': [{'id': 'c1', 'feed_product_id': 'fp-corn-silage', 'quantity_offered': 60, 'unit': 'kg'}]},
+        if (seenRound)
+          {'id': 'herd-round', 'subject_type': 'group', 'subject_id': 'grp-dairy-herd', 'event_type': 'delivered', 'status': 'recorded', 'head_count': 3,
+           'occurred_at': fiveMinutesAgo.toIso8601String(),
+           'components': [{'id': 'c1', 'feed_product_id': 'fp-corn-silage', 'quantity_offered': 60, 'unit': 'kg'}]},
       ];
       final today = farm.api.snapshot['GET /feeding-plan/today'] as Map<String, dynamic>;
       for (final l in today['lines'] as List<dynamic>) {
         final m = l as Map<String, dynamic>;
         if (m['subject_id'] == 'grp-dairy-herd') m['covered_animal_ids'] = ['cow-744', 'cow-214', 'cow-clover'];
       }
+      if (serverAsks != null) farm.api.feedingOverlaps['/feeding-events'] = serverAsks;
       await tester.pumpWidget(farm.app(
         Scaffold(body: Builder(builder: (c) => Center(child: TextButton(
           onPressed: () => showFeedingEventDialog(c, subjectType: 'animal', subjectId: 'cow-214', subjectName: 'Luna'),
@@ -125,7 +130,7 @@ void main() {
       await tester.tap(find.text('Save'));
       await settle(tester);
       expect(find.text('Fed already this round?'), findsOneWidget);
-      expect(find.byKey(const ValueKey('additional-feeding-detail')), findsOneWidget);
+      expect(find.byKey(const ValueKey('confirmation-detail')), findsOneWidget);
       expect(find.textContaining("is fed with Dairy Herd's ration, and Dairy Herd was given Corn Silage at"), findsOneWidget);
       await tester.tap(find.text("Don't record"));
       await settle(tester);
@@ -139,7 +144,7 @@ void main() {
       await settle(tester);
       final record = find.widgetWithText(FilledButton, 'Record as additional feeding');
       expect(tester.widget<FilledButton>(record).onPressed, isNull, reason: 'not without saying why');
-      await tester.enterText(find.byKey(const ValueKey('additional-feeding-reason')), 'Still hungry after the round');
+      await tester.enterText(find.byKey(const ValueKey('confirmation-reason')), 'Still hungry after the round');
       await settle(tester);
       await tester.tap(record);
       await settle(tester);
@@ -150,32 +155,20 @@ void main() {
     });
 
     testWidgets('an overlap only the server could see (another tablet) gets the same question', (tester) async {
-      tester.view.physicalSize = const Size(1200, 2600);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final farm = await SnapshotFarm.open();
-      farm.api.snapshot['GET /feeding-events?days=7'] = <dynamic>[]; // this tablet has not seen the herd's round
-      farm.api.possibleDuplicates['/feeding-events'] =
-          "Luna is one of the 3 head Dairy Herd's ration feeds, and Dairy Herd was fed Corn Silage at 06:00 (5 min before). "
-          "Record this only if it is extra feed on top of the group's ration — confirm it as an additional feeding.";
-      await tester.pumpWidget(farm.app(Scaffold(body: Builder(builder: (c) => Center(child: TextButton(
-        onPressed: () => showFeedingEventDialog(c, subjectType: 'animal', subjectId: 'cow-214', subjectName: 'Luna'),
-        child: const Text('open'),
-      ))))));
-      await settle(tester);
-      await tester.tap(find.text('open'));
-      await settle(tester);
-      await tester.enterText(find.byType(TextField).at(1), '20');
+      final farm = await openForLuna(tester, seenRound: false,
+          serverAsks: "Luna is one of the 3 head Dairy Herd's ration feeds, and Dairy Herd was fed Corn Silage at 06:00 (5 min before). "
+              "Record this only if it is extra feed on top of the group's ration — confirm it as an additional feeding and say why.");
       await tester.tap(find.text('Save'));
       await settle(tester);
-      expect(find.text('Fed already this round?'), findsOneWidget, reason: 'the feeding question, not the generic one');
+      expect(find.text('Fed already this round?'), findsOneWidget, reason: 'the feeding question, chosen by the code of the 409');
       expect(find.textContaining('Dairy Herd was fed Corn Silage at 06:00'), findsOneWidget);
-      await tester.enterText(find.byKey(const ValueKey('additional-feeding-reason')), 'Fed apart at the vet stall');
+      await tester.enterText(find.byKey(const ValueKey('confirmation-reason')), 'Fed apart at the vet stall');
       await settle(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Record as additional feeding'));
       await settle(tester);
       final writes = [for (final w in farm.api.writes) if (w.$2 == '/feeding-events') w];
       expect(writes.map((w) => w.$1), ['REFUSED POST', 'POST']);
+      expect((writes.last.$3 as Map)['confirm_additional_feeding'], isTrue, reason: 'the field the server named');
       expect((writes.last.$3 as Map)['additional_feeding_reason'], 'Fed apart at the vet stall');
     });
 
@@ -212,19 +205,31 @@ void main() {
     expect(farm.api.writes.where((w) => w.$2 == '/feeding-events'), isEmpty, reason: 'nothing is sent');
   });
 
-  test("the server's I-12 sentences are recognised, also in the sync panel", () {
-    const asked = "Possible duplicate: Bella is one of the 3 head Dairy Herd's ration feeds, and Dairy Herd was fed Dairy Mix 24L at 06:00 "
-        "(5 min before). Record this only if it is extra feed on top of the group's ration — confirm it as an additional feeding.";
-    expect(isAdditionalFeedingRefusal(asked), isTrue);
-    expect(isAdditionalFeedingRefusal('Possible duplicate: The same feeding of Bella was already recorded within half an hour.'), isFalse);
-    expect(needsAdditionalFeedingReason('Say why this is extra feed on top of the round already recorded (additional_feeding_reason); the record keeps it.'),
-        isTrue);
+  test('a refusal says which field confirms it, and is kept that way for the sync panel', () {
+    final asked = ApiException(409, 'Possible duplicate: Bella is one of the 3 head …',
+        code: 'feeding_overlap', confirmField: 'confirm_additional_feeding', reasonField: 'additional_feeding_reason');
+    expect(asked.confirmation('Still hungry'), {'confirm_additional_feeding': true, 'additional_feeding_reason': 'Still hungry'});
+    expect(asked.isConfirmedBy({'confirm_additional_feeding': true}), isFalse, reason: 'not without the reason');
+    expect(asked.isConfirmedBy({'confirm_additional_feeding': true, 'additional_feeding_reason': 'Still hungry'}), isTrue);
+    final kept = ApiException.fromRefusal(asked.message, asked.toRefusal());
+    expect((kept.code, kept.confirmField, kept.reasonField), (asked.code, asked.confirmField, asked.reasonField));
+    expect(ApiException(409, 'Possible duplicate: The same feeding …').confirmation(), {'confirm_duplicate': true});
   });
 
-  test("I-7: the server's refusal is recognised for the person's language", () {
-    expect(isConsumedOverOffered('Alfalfa Hay: 9 kg consumed is more than the 5 kg offered. What was eaten cannot be more than what was given — check both amounts.'), isTrue);
-    expect(isConsumedOverOffered('Not enough Alfalfa Hay in stock'), isFalse);
-    expect(isConsumedOverOffered(null), isFalse);
+  testWidgets("I-7: the server's more_than_given is said in the person's language", (tester) async {
+    late String english, arabic;
+    for (final (locale, set) in [(const Locale('en'), (String v) => english = v), (const Locale('ar'), (String v) => arabic = v)]) {
+      await tester.pumpWidget(Localizations(
+        locale: locale,
+        delegates: const [DefaultWidgetsLocalizations.delegate, DefaultMaterialLocalizations.delegate],
+        child: Builder(builder: (c) {
+          set(feedingErrorText(c, const WriteResult.fail('Alfalfa Hay: 9 kg consumed is more than the 5 kg offered. …', statusCode: 422, code: 'more_than_given')));
+          return const SizedBox();
+        }),
+      ));
+    }
+    expect(english, 'What was eaten or left over cannot be more than what was given that day. Check the amounts.');
+    expect(arabic, startsWith('لا يمكن أن يكون ما أُكل'));
   });
 }
 

@@ -282,7 +282,6 @@ def correct_feeding(db: Session, event: fm.FeedingEvent, body: FeedingCorrection
     reason = (body.reason or "").strip()
     if not reason:
         raise ApprovalError("Say why the feeding is corrected.")
-    programs.check_consumption(db, [c.model_dump() for c in body.components])  # audit I-7, before undoing anything
     ensure_stock_override(db, user, allow_negative, perms.FEED_NUTRITION)
     asked = db.get(models.User, requested_by) if requested_by else None
     reversal = programs.reverse_feeding(db, event, reason=reason + (f" (asked by {asked.name}, approved by {user.name})" if asked else ""), user_id=user.id)

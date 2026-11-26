@@ -165,9 +165,9 @@ void main() {
 
     test('resends one refused write confirmed when the person says so', () async {
       final api = _Refusing();
-      ApiClient.confirmPossibleDuplicate = (detail) async {
-        expect(detail, bellaMorning);
-        return true;
+      ApiClient.confirmPossibleDuplicate = (refusal) async {
+        expect(refusal.duplicateDetail, bellaMorning);
+        return refusal.confirmation();
       };
       final result = await api.write(() => api.post('/production/milk', body: {'animal_id': 'cow-744', 'liters': 3}));
       expect(result.success, isTrue);
@@ -178,7 +178,7 @@ void main() {
 
     test('leaves it unrecorded, with the reason, when the person says no', () async {
       final api = _Refusing();
-      ApiClient.confirmPossibleDuplicate = (_) async => false;
+      ApiClient.confirmPossibleDuplicate = (_) async => null;
       final result = await api.write(() => api.post('/production/milk', body: {'animal_id': 'cow-744', 'liters': 3}));
       expect(result.success, isFalse);
       expect(result.isPossibleDuplicate, isTrue);

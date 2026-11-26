@@ -302,12 +302,15 @@ class LocalStore {
     await _db?.delete('outbox', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<void> markOutboxFailed(int id, String error, {required bool permanent}) async {
+  /// [refusal]: what confirms a "Possible duplicate:" refusal
+  /// ([ApiException.toRefusal]), kept beside the sentence so the sync panel
+  /// can ask the same question the form would have.
+  Future<void> markOutboxFailed(int id, String error, {required bool permanent, Map<String, dynamic>? refusal}) async {
     final db = _db;
     if (db == null) return;
     await db.rawUpdate(
       'UPDATE outbox SET attempts = attempts + 1, last_error = ?, status = ? WHERE id = ?',
-      [error, permanent ? OutboxStatus.failed.name : OutboxStatus.pending.name, id],
+      [refusal == null ? error : jsonEncode({'message': error, 'refusal': refusal}), permanent ? OutboxStatus.failed.name : OutboxStatus.pending.name, id],
     );
   }
 
@@ -324,13 +327,10 @@ class LocalStore {
   }
 
   /// A queued entry the server refused as a possible duplicate, sent again
-  /// with `confirm_duplicate: true` because the farmer says it is a second
-  /// one (the sync panel's "Record anyway").
-  ///
-  /// [extra] goes into the body as well — a queued feeding the server took
-  /// for a second feeding of the round is confirmed with the reason it is
-  /// extra (`confirm_additional_feeding`, `additional_feeding_reason`).
-  Future<void> confirmOutboxDuplicate(int id, {Map<String, dynamic> extra = const {}}) async {
+  /// with [confirmation] added to its body because the farmer says it is a
+  /// second one — `confirm_duplicate: true`, or what the server named
+  /// (the sync panel's "Record anyway").
+  Future<void> confirmOutboxDuplicate(int id, {Map<String, dynamic> confirmation = const {'confirm_duplicate': true}}) async {
     final db = _db;
     if (db == null) return;
     final rows = await db.query('outbox', columns: ['body'], where: 'id = ?', whereArgs: [id], limit: 1);
@@ -341,7 +341,7 @@ class LocalStore {
     await db.update(
       'outbox',
       {
-        'body': jsonEncode({...body, 'confirm_duplicate': true, ...extra}),
+        'body': jsonEncode({...body, ...confirmation}),
         'status': OutboxStatus.pending.name,
         'last_error': null,
       },
@@ -450,6 +450,7 @@ class OutboxItem {
     required this.attempts,
     required this.lastError,
     required this.status,
+    this.refusal,
   });
 
   final int id;
@@ -478,6 +479,10 @@ class OutboxItem {
   final String? lastError;
   final OutboxStatus status;
 
+  /// What confirms a "Possible duplicate:" refusal, as the server named it
+  /// ([LocalStore.markOutboxFailed]); null for any other failure.
+  final Map<String, dynamic>? refusal;
+
   Map<String, dynamic>? get bodyMap => body is Map<String, dynamic> ? body as Map<String, dynamic> : null;
 
   OutboxItem copyWith({int? id, int? attempts, String? lastError, OutboxStatus? status}) => OutboxItem(
@@ -494,6 +499,7 @@ class OutboxItem {
         attempts: attempts ?? this.attempts,
         lastError: lastError ?? this.lastError,
         status: status ?? this.status,
+        refusal: refusal,
       );
 
   factory OutboxItem.fromRow(Map<String, Object?> row) {
@@ -507,6 +513,11 @@ class OutboxItem {
     }
 
     final query = decode(row['query']);
+    // A refusal kept with what confirms it is stored as JSON; any other
+    // error, and every one stored before, as its sentence.
+    final error = row['last_error'] as String?;
+    final kept = error != null && error.startsWith('{') ? decode(error) : null;
+    final refused = kept is Map<String, dynamic> && kept['message'] is String ? kept : null;
     return OutboxItem(
       id: row['id'] as int,
       method: row['method'] as String,
@@ -519,8 +530,9 @@ class OutboxItem {
       moduleCode: row['module_code'] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
       attempts: (row['attempts'] as int?) ?? 0,
-      lastError: row['last_error'] as String?,
+      lastError: refused == null ? error : refused['message'] as String,
       status: (row['status'] as String?) == OutboxStatus.failed.name ? OutboxStatus.failed : OutboxStatus.pending,
+      refusal: refused?['refusal'] is Map<String, dynamic> ? refused!['refusal'] as Map<String, dynamic> : null,
     );
   }
 }

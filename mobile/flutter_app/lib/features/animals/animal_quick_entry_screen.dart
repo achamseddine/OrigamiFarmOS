@@ -15,7 +15,6 @@ import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/access.dart';
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/feeding.dart';
-import '../../domain/entities/feeding_overlap.dart';
 import '../../domain/entities/livestock.dart';
 import '../../providers/access_provider.dart';
 import '../../providers/animals_provider.dart';
@@ -340,7 +339,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       if (refused != null && refused > offered) {
         // What was eaten (given less left) cannot be below nothing — the
         // server refuses it too (v0.8.7, audit I-7).
-        final name = row.productId == null ? '' : (context.read<FeedingProvider>().productById(row.productId!)?.name ?? '');
+        final name = row.productId == null ? '' : context.read<FeedingProvider>().productName(row.productId!, Localizations.localeOf(context).languageCode);
         setState(() => _error = context
             .t('feedLeftOverMoreThanGiven')
             .replaceAll('{feed}', name)
@@ -413,11 +412,8 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         });
         if (!mounted) return;
         if (!result.success) {
-          final message = result.error ?? context.t('couldNotSave');
-          final short = message.startsWith('Not enough');
-          final shown = isConsumedOverOffered(message)
-              ? context.t('feedConsumedMoreThanOffered')
-              : short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
+          final short = (result.error ?? '').startsWith('Not enough');
+          final shown = feedingErrorText(context, result);
           setState(() {
             _feedStockShort = _feedStockShort || short;
             _error = milkSaved ? '${context.t('qrMilkSavedPartial')} $shown' : shown;

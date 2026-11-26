@@ -13,7 +13,8 @@ import 'feeding.dart';
 /// feedings, including ones recorded here offline — so it works without a
 /// connection. The server checks again and remains the authority: what
 /// this device cannot see (another tablet's feeding not synced yet) comes
-/// back as "Possible duplicate: …", asked by the generic question.
+/// back as its "Possible duplicate: …" (`feeding_overlap`) and is asked by
+/// the app's one confirmation question.
 const feedingRoundWindow = Duration(hours: 1);
 
 enum FeedingOverlapKind { animalAfterGroup, groupAfterAnimal }
@@ -21,7 +22,6 @@ enum FeedingOverlapKind { animalAfterGroup, groupAfterAnimal }
 class FeedingOverlap {
   const FeedingOverlap({
     required this.kind,
-    required this.groupId,
     required this.groupName,
     required this.animalIds,
     required this.productIds,
@@ -30,7 +30,6 @@ class FeedingOverlap {
   });
 
   final FeedingOverlapKind kind;
-  final String groupId;
   final String groupName;
 
   /// The heads both feedings feed.
@@ -48,14 +47,14 @@ class FeedingOverlap {
 
 /// The overlap the feeding [body] (as sent to `POST /feeding-events`)
 /// would make with what is already recorded, or null.
-FeedingOverlap? findFeedingOverlap(Map<String, dynamic> body, {required DailyPlan plan, required List<FeedingEvent> events, DateTime? now}) {
+FeedingOverlap? findFeedingOverlap(Map<String, dynamic> body, {required DailyPlan plan, required List<FeedingEvent> events}) {
   if (body['confirm_additional_feeding'] == true || body['confirm_duplicate'] == true) return null;
   final type = body['event_type'] as String? ?? 'offered';
   if (type != 'offered' && type != 'delivered') return null;
   final subjectType = body['subject_type'] as String?;
   final subjectId = body['subject_id'] as String?;
   if (subjectType == null || subjectId == null) return null;
-  final at = DateTime.tryParse(body['occurred_at'] as String? ?? '') ?? now ?? DateTime.now();
+  final at = DateTime.tryParse(body['occurred_at'] as String? ?? '') ?? DateTime.now();
   final products = {
     for (final c in body['components'] as List<dynamic>? ?? const [])
       if (c is Map && c['feed_product_id'] is String) c['feed_product_id'] as String,
@@ -97,7 +96,7 @@ FeedingOverlap? findFeedingOverlap(Map<String, dynamic> body, {required DailyPla
         final head = e.headCount;
         if (head != null && head + others + 1 <= line.headCount) continue; // a partial feeding left her out
         return FeedingOverlap(
-          kind: FeedingOverlapKind.animalAfterGroup, groupId: line.subjectId, groupName: line.name, animalIds: [subjectId],
+          kind: FeedingOverlapKind.animalAfterGroup, groupName: line.name, animalIds: [subjectId],
           productIds: shared.toList()..sort(), other: e, heads: line.headCount,
         );
       }
@@ -108,26 +107,11 @@ FeedingOverlap? findFeedingOverlap(Map<String, dynamic> body, {required DailyPla
   if (line == null) return null;
   final alone = fedAlone(line.coveredAnimalIds, products, at);
   if (alone.isEmpty) return null;
-  final asked = body['head_count'] is num ? (body['head_count'] as num).toInt() : line.headCount;
-  if (asked + alone.length <= line.headCount) return null; // the head count already leaves them out
+  final asked = body['head_count'];
+  if (asked is num && asked.toInt() + alone.length <= line.headCount) return null; // the head count already leaves them out
   final first = alone.values.reduce((a, b) => a.$1.occurredAt.isBefore(b.$1.occurredAt) ? a : b);
   return FeedingOverlap(
-    kind: FeedingOverlapKind.groupAfterAnimal, groupId: line.subjectId, groupName: line.name, animalIds: alone.keys.toList(),
+    kind: FeedingOverlapKind.groupAfterAnimal, groupName: line.name, animalIds: alone.keys.toList(),
     productIds: {for (final v in alone.values) ...v.$2}.toList()..sort(), other: first.$1, heads: line.headCount,
   );
 }
-
-/// The server's I-7 refusal ("Dairy Mix: 9 kg consumed is more than the
-/// 5 kg offered. …") — recognised so the form can say it in the person's
-/// language.
-bool isConsumedOverOffered(String? message) => message != null && message.contains(' consumed is more than the ');
-
-/// The server's I-12 refusal ("Possible duplicate: … confirm it as an
-/// additional feeding …", feeding_program_service.overlap_message): an
-/// overlap this device could not see, asked with the same question.
-bool isAdditionalFeedingRefusal(String? message) =>
-    message != null && message.startsWith('Possible duplicate:') && message.contains('as an additional feeding');
-
-/// The server's refusal of a confirmed overlap without a reason (Session 01:
-/// an extra feeding says why).
-bool needsAdditionalFeedingReason(String? message) => message != null && message.contains('additional_feeding_reason');

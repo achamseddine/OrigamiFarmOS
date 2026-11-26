@@ -43,8 +43,17 @@ ROUND_WINDOW = timedelta(hours=1)
 
 
 class PossibleDuplicate(HTTPException):
-    def __init__(self, message: str):
+    """409 "Possible duplicate: …". Besides `detail`, the body names what
+    confirms it (app/main.py): `confirm`, the field the client resends as
+    true, and `reason`, the field that must carry why, when one is needed —
+    so every client asks the same way, whatever the question (v0.8.7)."""
+
+    def __init__(self, message: str, *, code: str = "possible_duplicate", confirm: str = "confirm_duplicate", reason: str | None = None):
         super().__init__(status.HTTP_409_CONFLICT, detail=f"{PREFIX} {message}")
+        self.code, self.confirm, self.reason = code, confirm, reason
+
+    def body(self) -> dict:
+        return {"detail": self.detail, "code": self.code, "confirm": self.confirm, "reason": self.reason}
 
 
 def guard(match, message: str, *, confirm: bool):

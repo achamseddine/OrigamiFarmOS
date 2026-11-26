@@ -702,7 +702,8 @@ class FeedingEventCreate(BaseModel):
     # feed on top of the group's ration. `confirm_duplicate` confirms it too.
     confirm_additional_feeding: bool = False
     # Why it is extra (Session 01): required whenever an overlap is
-    # confirmed; kept on the audit record and the feeding's notes.
+    # confirmed (asked again, 409, without it); kept on the audit record
+    # and the feeding's notes.
     additional_feeding_reason: str | None = Field(default=None, max_length=300)
 
 

@@ -9,8 +9,6 @@ import '../../core/theme/typography.dart';
 import '../../core/widgets/app_icon.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../data/local/local_store.dart';
-import '../../domain/entities/feeding_overlap.dart';
-import '../feed/additional_feeding_question.dart';
 import '../../providers/access_provider.dart';
 import '../../sync/sync_controller.dart';
 
@@ -269,16 +267,16 @@ class _QueuedRow extends StatelessWidget {
                 OutlinedButton(
                   key: ValueKey('sync-record-anyway-${item.id}'),
                   onPressed: () async {
-                    // A queued feeding the server took for a second feeding
-                    // of the round: recorded only with the reason it is extra.
-                    var extra = const <String, dynamic>{};
-                    if (item.path == '/feeding-events' && isAdditionalFeedingRefusal(item.lastError)) {
-                      final reason = await askAdditionalFeedingReason(context,
-                          serverDetail: (item.lastError ?? '').replaceFirst(kPossibleDuplicate, '').trim());
-                      if (reason == null) return;
-                      extra = {'confirm_additional_feeding': true, 'additional_feeding_reason': reason};
+                    // The button confirms it; a refusal that wants to know
+                    // why (a head fed twice in one round) asks the reason,
+                    // as the form would have.
+                    final refusal = item.refusal == null ? null : ApiException.fromRefusal(item.lastError ?? '', item.refusal!);
+                    var confirmation = refusal?.confirmation();
+                    if (refusal?.reasonField != null) {
+                      confirmation = await ApiClient.confirmPossibleDuplicate?.call(refusal!);
+                      if (confirmation == null) return;
                     }
-                    await sync.recordAnyway(item.id, extra: extra);
+                    await sync.recordAnyway(item.id, confirmation: confirmation ?? const {'confirm_duplicate': true});
                     onChanged();
                   },
                   child: Text(context.t('syncRecordAnyway')),

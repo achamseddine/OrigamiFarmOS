@@ -24,6 +24,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core import duplicates
 from app.core import permissions as perms
 from app.core import read_cache
 from app.domain import feed_models as fm
@@ -836,8 +837,6 @@ def find_duplicate_feeding(db: Session, subject_type: str, subject_id: str, *, e
     """A recorded feeding of the same subject, of the same kind, with the
     same feeds in the same quantities, within half an hour of [at] — the
     same round entered twice (app/core/duplicates.py)."""
-    from app.core import duplicates
-
     wanted: dict[str, float] = {}
     for c in components:
         product = db.get(fm.FeedProduct, c["feed_product_id"])
@@ -858,6 +857,11 @@ def find_duplicate_feeding(db: Session, subject_type: str, subject_id: str, *, e
     return None
 
 
+# What a client may name a refusal by (FeedError.code, PossibleDuplicate.code).
+MORE_THAN_GIVEN = "more_than_given"     # eaten or left over is more than was given (I-7)
+FEEDING_OVERLAP = "feeding_overlap"     # a head fed twice in one round (I-12)
+
+
 def check_consumption(db: Session, components: list[dict]) -> None:
     """What was eaten cannot be more than what was put in front of the
     animals (audit I-7). A component's `quantity_consumed` is in its own
@@ -874,7 +878,22 @@ def check_consumption(db: Session, components: list[dict]) -> None:
             unit = uom.normalise(line.get("unit") or (product.unit if product else "kg"))
             name = product.name if product else line.get("feed_product_id")
             raise FeedError(f"{name}: {float(consumed):g} {unit} consumed is more than the {offered:g} {unit} offered. "
-                            "What was eaten cannot be more than what was given — check both amounts.")
+                            "What was eaten cannot be more than what was given — check both amounts.", code=MORE_THAN_GIVEN)
+
+
+def _feedings(db: Session, subject_type: str, subject_ids: list[str], lo: datetime, hi: datetime, *,
+              stock_moving: bool = True) -> list[fm.FeedingEvent]:
+    """The recorded feedings of [subject_ids] from [lo] to [hi] — only those
+    that moved stock unless [stock_moving] is false — oldest first."""
+    if not subject_ids:
+        return []
+    q = select(fm.FeedingEvent).where(
+        fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id.in_(subject_ids), fm.FeedingEvent.status == "recorded",
+        fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= hi,
+    )
+    if stock_moving:
+        q = q.where(fm.FeedingEvent.event_type.in_(STOCK_MOVING))
+    return list(db.scalars(q.order_by(fm.FeedingEvent.occurred_at)))
 
 
 def check_against_days_offer(db: Session, farm_id: str, subject_type: str, subject, event_type: str, components: list[dict],
@@ -888,28 +907,28 @@ def check_against_days_offer(db: Session, farm_id: str, subject_type: str, subje
     bunk, a round not entered) cannot be judged and is accepted."""
     tz = farm_time.farm_tz(db, farm_id)
     lo, _hi = farm_time.day_bounds(tz, farm_time.local_day(tz, when))
-    same_day = list(db.scalars(select(fm.FeedingEvent).where(
-        fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id == subject.id, fm.FeedingEvent.status == "recorded",
-        fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= when,
-    )))
-    covering_groups = []
-    if subject_type == "animal":
-        covering_groups = [g for g in groups_of_animal(db, subject, when) if subject.id in group_heads(db, g, when).covered]
+    day = summarize_events(_feedings(db, subject_type, [subject.id], lo, when, stock_moving=False))
+
+    def total(kind: str, product: fm.FeedProduct) -> float:
+        return sum(uom.convert(t["quantity"], t["unit"], product.unit) for t in day[kind] if t["feed_product_id"] == product.id)
+
+    group_fed: set[str] | None = None  # the feeds her groups' feedings gave her that day, read once when needed
     for line in components:
         product = db.get(fm.FeedProduct, line.get("feed_product_id"))
         if product is None:
             continue
-        unit = uom.normalise(line.get("unit") or product.unit)
-        offered = sum(uom.convert(c.quantity_offered, c.unit, product.unit) for e in same_day if e.event_type in STOCK_MOVING
-                      for c in e.components if c.feed_product_id == product.id)
+        offered = total("fed", product)
         if offered <= 0:
             continue
-        if any(c.feed_product_id == product.id for g in covering_groups for e in _stock_moving_since(db, g.id, lo, when) for c in e.components):
-            continue  # she ate from her group's feeding too: her own offer is not all she had
+        if subject_type == "animal":
+            if group_fed is None:
+                groups = [g.id for g in groups_of_animal(db, subject, when) if _covered_by(db, subject, g, when)]
+                group_fed = {c.feed_product_id for e in _feedings(db, "group", groups, lo, when) for c in e.components}
+            if product.id in group_fed:
+                continue  # she ate from her group's feeding too: her own offer is not all she had
+        unit = uom.normalise(line.get("unit") or product.unit)
         if event_type == "refusal":
-            measured = uom.convert(float(line.get("quantity_offered") or 0), unit, product.unit) + sum(
-                uom.convert(c.quantity_offered, c.unit, product.unit) for e in same_day if e.event_type == "refusal"
-                for c in e.components if c.feed_product_id == product.id)
+            measured = uom.convert(float(line.get("quantity_offered") or 0), unit, product.unit) + total("refused", product)
             what = "refused today"
         else:
             raw = line.get("quantity_consumed") if line.get("quantity_consumed") is not None else line.get("quantity_offered")
@@ -918,56 +937,53 @@ def check_against_days_offer(db: Session, farm_id: str, subject_type: str, subje
         if measured > offered + 1e-6:
             name = getattr(subject, "name", subject.id)
             raise FeedError(f"{product.name}: {measured:g} {product.unit} {what} is more than the {offered:g} {product.unit} offered to {name} "
-                            "that day. What was eaten or left cannot be more than what was given — check the amounts.")
-
-
-def _stock_moving_since(db: Session, group_id: str, lo: datetime, hi: datetime) -> list[fm.FeedingEvent]:
-    return list(db.scalars(select(fm.FeedingEvent).where(
-        fm.FeedingEvent.subject_type == "group", fm.FeedingEvent.subject_id == group_id, fm.FeedingEvent.status == "recorded",
-        fm.FeedingEvent.event_type.in_(STOCK_MOVING), fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= hi,
-    )))
+                            "that day. What was eaten or left cannot be more than what was given — check the amounts.", code=MORE_THAN_GIVEN)
 
 
 @dataclass
 class Overlap:
     """Feed one round may have counted twice (audit I-12): [event] is the
-    other feeding — the group's, or an animal's own — and [animals] are the
-    heads both feed, with the feeds both name."""
+    other feeding — the group's, or the animal's own — [animal] the head
+    both feed, [product_ids] the feeds both name, [minutes] between them."""
 
     event: fm.FeedingEvent
     group: models.Flock
-    animals: list[models.Animal]
+    animal: models.Animal
     product_ids: list[str]
     heads: int
+    minutes: int
+    before: bool  # the other feeding came first
+
+    @classmethod
+    def of(cls, event: fm.FeedingEvent, group: models.Flock, animal: models.Animal, shared: set[str], heads: int, when: datetime) -> Overlap:
+        t = ensure_utc(event.occurred_at)
+        return cls(event, group, animal, sorted(shared), heads, round(abs((when - t).total_seconds()) / 60), t <= when)
 
 
-def _supplement_products(db: Session, animal: models.Animal, at: datetime) -> set[str]:
-    return {a.feed_product_id for a in active_assignments(db, "animal", animal.id, at) if a.assignment_type == "supplement" and a.feed_product_id}
+def _supplement_products(db: Session, animal_id: str, at: datetime) -> set[str]:
+    return {a.feed_product_id for a in active_assignments(db, "animal", animal_id, at) if a.assignment_type == "supplement" and a.feed_product_id}
 
 
-def _stock_moving_near(db: Session, subject_type: str, subject_ids: list[str], at: datetime) -> list[fm.FeedingEvent]:
-    from app.core import duplicates
-
-    if not subject_ids:
-        return []
-    lo, hi = duplicates.near(at, duplicates.ROUND_WINDOW)
-    return list(db.scalars(select(fm.FeedingEvent).where(
-        fm.FeedingEvent.subject_type == subject_type, fm.FeedingEvent.subject_id.in_(subject_ids), fm.FeedingEvent.status == "recorded",
-        fm.FeedingEvent.event_type.in_(STOCK_MOVING), fm.FeedingEvent.occurred_at >= lo, fm.FeedingEvent.occurred_at <= hi,
-    ).order_by(fm.FeedingEvent.occurred_at)))
+def _covered_by(db: Session, animal: models.Animal, group: models.Flock, at: datetime) -> bool:
+    """Whether a feeding of [group], a group she is in, feeds [animal] — the
+    one-animal form of group_heads(...).covered: the group's ration is her
+    base ration as it is, or the group has no ration that would exclude her."""
+    if explicit_program(db, "group", group.id, at) is None:
+        return True
+    base = base_ration(db, animal, at)
+    return base.source == "inherited" and base.group is not None and base.group.id == group.id and _planned_alone(db, animal, at) is None
 
 
-def _fed_alone(db: Session, animal_ids: list[str], products: set[str], at: datetime) -> dict[str, list[tuple[fm.FeedingEvent, set[str]]]]:
-    """The animals of [animal_ids] fed on their own, in the round around
-    [at], with one of [products] that is not a supplement of theirs."""
+def _alone(db: Session, events: list[fm.FeedingEvent], products: set[str]) -> dict[str, list[tuple[fm.FeedingEvent, set[str]]]]:
+    """Of animals' own [events], those naming one of [products] that is not
+    a supplement of theirs: animal id → the feedings with the feeds shared."""
     out: dict[str, list[tuple[fm.FeedingEvent, set[str]]]] = {}
-    for e in _stock_moving_near(db, "animal", animal_ids, at):
-        animal = db.get(models.Animal, e.subject_id)
-        if animal is None:
-            continue
-        shared = (products & {c.feed_product_id for c in e.components}) - _supplement_products(db, animal, ensure_utc(e.occurred_at))
+    for e in events:
+        shared = products & {c.feed_product_id for c in e.components}
         if shared:
-            out.setdefault(animal.id, []).append((e, shared))
+            shared -= _supplement_products(db, e.subject_id, ensure_utc(e.occurred_at))
+        if shared:
+            out.setdefault(e.subject_id, []).append((e, shared))
     return out
 
 
@@ -985,66 +1001,120 @@ def find_overlapping_feedings(db: Session, subject_type: str, subject, *, event_
     if event_type not in STOCK_MOVING:
         return []
     when = ensure_utc(at) if at is not None else now()
+    window = duplicates.near(when, duplicates.ROUND_WINDOW)
     products = {c["feed_product_id"] for c in components if c.get("feed_product_id")}
-    out: list[Overlap] = []
+    # The per-member work of group_heads is done last, once a feeding that
+    # can overlap has been found: the usual feeding costs a few queries.
     if subject_type == "animal":
-        wanted = products - _supplement_products(db, subject, when)
-        if not wanted:
-            return []
-        for g in groups_of_animal(db, subject, when):
-            for e in _stock_moving_near(db, "group", [g.id], when):
+        wanted = products - _supplement_products(db, subject.id, when)
+        out: list[Overlap] = []
+        for g in groups_of_animal(db, subject, when) if wanted else []:
+            for e in _feedings(db, "group", [g.id], *window):
                 shared = wanted & {c.feed_product_id for c in e.components}
-                if not shared:
+                t = ensure_utc(e.occurred_at)
+                if not shared or not _covered_by(db, subject, g, t):
                     continue
-                gh = group_heads(db, g, ensure_utc(e.occurred_at))
-                if subject.id not in gh.covered:
-                    continue
-                others = set(_fed_alone(db, [a for a in gh.covered if a != subject.id], shared, ensure_utc(e.occurred_at)))
+                gh = group_heads(db, g, t)
+                others = _alone(db, _feedings(db, "animal", [a for a in gh.covered if a != subject.id], *duplicates.near(t, duplicates.ROUND_WINDOW)),
+                                shared)
                 if e.head_count is not None and e.head_count + len(others) + 1 <= gh.heads:
                     continue  # the group's feeding was for fewer heads: hers was not in it
-                out.append(Overlap(e, g, [subject], sorted(shared), gh.heads))
+                out.append(Overlap.of(e, g, subject, shared, gh.heads, when))
         return out
-    gh = group_heads(db, subject, when)
-    alone = _fed_alone(db, gh.covered, products, when)
+    alone = _alone(db, _feedings(db, "animal", [a.id for a in animals_in_group(db, subject, when)], *window), products)
     if not alone:
         return []
-    heads = head_count if head_count is not None else gh.heads
-    if heads + len(alone) <= gh.heads:
+    gh = group_heads(db, subject, when)
+    alone = {a: items for a, items in alone.items() if a in gh.covered}
+    if head_count is not None and head_count + len(alone) <= gh.heads:
         return []  # the head count given already leaves them out
-    for animal_id, items in alone.items():
-        animal = db.get(models.Animal, animal_id)
-        for e, shared in items:
-            out.append(Overlap(e, subject, [animal], sorted(shared), gh.heads))
-    return out
+    return [Overlap.of(e, subject, db.get(models.Animal, a), shared, gh.heads, when) for a, items in alone.items() for e, shared in items]
 
 
 def overlap_message(db: Session, farm_id: str, subject_type: str, subject, overlaps: list[Overlap], *, at=None) -> str:
     """The sentence after "Possible duplicate:" (app/core/duplicates.py)."""
     tz = farm_time.farm_tz(db, farm_id)
-    when = ensure_utc(at) if at is not None else now()
+    today = (ensure_utc(at) if at is not None else now()).astimezone(tz).date()
+    names = {pid: (p.name if (p := db.get(fm.FeedProduct, pid)) else pid) for o in overlaps for pid in o.product_ids}
 
-    def names(ids) -> str:
-        return ", ".join((db.get(fm.FeedProduct, i).name if db.get(fm.FeedProduct, i) else i) for i in ids)
+    def feeds(o: Overlap) -> str:
+        return ", ".join(names[pid] for pid in o.product_ids)
 
-    def clock(t) -> str:
-        local = ensure_utc(t).astimezone(tz)
-        same_day = local.date() == when.astimezone(tz).date()
-        return local.strftime("%H:%M") if same_day else local.strftime("%Y-%m-%d %H:%M")
-
-    def apart(t) -> str:
-        minutes = round(abs((when - ensure_utc(t)).total_seconds()) / 60)
-        return f"{minutes} min {'before' if ensure_utc(t) <= when else 'after'}"
+    def clock(o: Overlap) -> str:
+        local = ensure_utc(o.event.occurred_at).astimezone(tz)
+        return local.strftime("%H:%M" if local.date() == today else "%Y-%m-%d %H:%M")
 
     if subject_type == "animal":
         o = overlaps[0]
-        return (f"{subject.name} is one of the {o.heads} head {o.group.name}'s ration feeds, and {o.group.name} was fed "
-                f"{names(o.product_ids)} at {clock(o.event.occurred_at)} ({apart(o.event.occurred_at)}). Record this only if it is extra feed "
-                "on top of the group's ration — confirm it as an additional feeding.")
-    parts = [f"{o.animals[0].name} ({names(o.product_ids)} at {clock(o.event.occurred_at)})" for o in overlaps]
-    count = len({o.animals[0].id for o in overlaps})
-    return (f"Fed individually in this round and counted in {subject.name}'s {overlaps[0].heads} head: {'; '.join(parts)}. "
-            "If this feeding is still for every head, confirm it as an additional feeding; "
-            f"if not, give the head count actually fed ({max(overlaps[0].heads - count, 0)}).")
+        return (f"{subject.name} is one of the {o.heads} head {o.group.name}'s ration feeds, and {o.group.name} was fed {feeds(o)} at {clock(o)} "
+                f"({o.minutes} min {'before' if o.before else 'after'}). Record this only if it is extra feed on top of the group's ration — "
+                "confirm it as an additional feeding and say why.")
+    fed_alone = len({o.animal.id for o in overlaps})
+    parts = "; ".join(f"{o.animal.name} ({feeds(o)} at {clock(o)})" for o in overlaps)
+    return (f"Fed individually in this round and counted in {subject.name}'s {overlaps[0].heads} head: {parts}. "
+            "If this feeding is still for every head, confirm it as an additional feeding and say why; "
+            f"if not, give the head count actually fed ({max(overlaps[0].heads - fed_alone, 0)}).")
+
+
+@dataclass
+class FeedingScreen:
+    """What a new feeding was checked against before it is written, and
+    what the person confirmed ([screen_feeding])."""
+
+    duplicate_of: fm.FeedingEvent | None
+    overlaps: list[Overlap]
+    confirmed_with: str | None
+    reason: str
+
+    def notes(self, notes: str | None) -> str | None:
+        """The feeding's notes, carrying the reason of a confirmed extra
+        feeding where the manager reads it."""
+        if not self.overlaps:
+            return notes
+        extra = f"Additional feeding: {self.reason}"
+        return f"{notes.strip()} · {extra}" if notes and notes.strip() else extra
+
+
+def screen_feeding(db: Session, farm_id: str, subject_type: str, subject, *, event_type: str, components: list[dict], at=None,
+                   head_count: int | None = None, confirm_duplicate: bool = False, confirm_additional_feeding: bool = False,
+                   reason: str | None = None) -> FeedingScreen:
+    """Before a new feeding is written: what was eaten is not more than what
+    was given (I-7), it is not the same feeding entered twice, and it does
+    not give a head a second ration of the round (I-12) — unless the person
+    confirms it. An extra feeding of the round is never silently refused:
+    it is recorded once it is confirmed with the reason it is extra, by a
+    worker or a manager alike. Each question is a 409 "Possible duplicate:
+    …" naming the field that confirms it (app/core/duplicates.py)."""
+    check_consumption(db, components)
+    # Every assignment of the farm in one read, for the checks below and the
+    # head count record_feeding works out next (dropped on the first write).
+    prefetch_farm(db, farm_id)
+    earlier = find_duplicate_feeding(db, subject_type, subject.id, event_type=event_type, components=components, at=at)
+    duplicates.guard(earlier, f"The same feeding of {getattr(subject, 'name', 'this subject')} was already recorded within half an hour.",
+                     confirm=confirm_duplicate)
+    overlaps = find_overlapping_feedings(db, subject_type, subject, event_type=event_type, components=components, at=at, head_count=head_count)
+    reason = (reason or "").strip()
+    confirmed_with = "confirm_additional_feeding" if confirm_additional_feeding else ("confirm_duplicate" if confirm_duplicate else None)
+    if overlaps and (confirmed_with is None or not reason):
+        raise duplicates.PossibleDuplicate(overlap_message(db, farm_id, subject_type, subject, overlaps, at=at), code=FEEDING_OVERLAP,
+                                           confirm="confirm_additional_feeding", reason="additional_feeding_reason")
+    return FeedingScreen(earlier, overlaps, confirmed_with if overlaps else None, reason)
+
+
+def log_confirmations(db: Session, farm_id: str, subject_type: str, subject, event: fm.FeedingEvent, screen: FeedingScreen, *,
+                      user_id: str) -> None:
+    """What the person confirmed, on the record: a repeat of the same
+    feeding (duplicate_confirmed) and an extra feeding of the round with its
+    reason (feeding_additional_confirmed)."""
+    duplicates.log_confirmed(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject.id,
+                             match_id=screen.duplicate_of.id if screen.duplicate_of else None, what=f"feeding:{event.id}", user_id=user_id)
+    if screen.overlaps:
+        write_event(db, farm_id=farm_id, entity_type=subject_type, entity_id=subject.id, event_type="feeding_additional_confirmed",
+                    payload={"feeding_event_id": event.id, "confirmed_with": screen.confirmed_with, "reason": screen.reason, "overlaps": [
+                        {"feeding_event_id": o.event.id, "subject_type": o.event.subject_type, "subject_id": o.event.subject_id,
+                         "group_id": o.group.id, "animal_id": o.animal.id, "feed_product_ids": o.product_ids, "minutes_apart": o.minutes}
+                        for o in screen.overlaps]},
+                    created_by=user_id)
 
 
 def record_feeding(

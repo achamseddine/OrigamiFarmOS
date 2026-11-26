@@ -77,6 +77,13 @@ def _post(client, body, headers=None):
     return client.post(f"{API}/feeding-events", json=body, headers=headers or _h(client))
 
 
+def _herd_round(client, hour=6, minute=0, *, pid=MIX, qty=30, headers=None, **extra) -> dict:
+    """The herd's delivery at [hour]:[minute] of the test's farm day."""
+    r = _post(client, _body("group", HERD, pid, qty, at=_at(hour, minute), event_type="delivered", **extra), headers)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
 def _on_hand(client, pid) -> float:
     return client.get(f"{API}/feed-products/{pid}", headers=_h(client)).json()["availability"]["on_hand"]
 
@@ -104,6 +111,7 @@ class TestConsumedNeverExceedsOffered:
         r = _post(client, _body("animal", THUNDER, ALFALFA, 5, consumed=9))
         assert r.status_code == 422, r.text
         assert "9" in r.json()["detail"] and "5" in r.json()["detail"] and "consumed" in r.json()["detail"].lower()
+        assert r.json()["code"] == "more_than_given", "a client names the rule without reading the sentence"
         assert _on_hand(client, ALFALFA) == before, "a refused feeding moves no stock"
         assert not [e for e in _events(session, THUNDER) if any(c.quantity_consumed == 9 for c in e.components)]
 
@@ -155,7 +163,7 @@ class TestConsumedNeverExceedsOffered:
         assert round(before - after_offer, 3) == 5
         for qty, unit in ((9, None), (9000, "g")):
             r = _post(client, _body("animal", THUNDER, ALFALFA, qty, unit=unit, at=_at(17, 0), event_type="consumed_estimate"))
-            assert r.status_code == 422 and "offered" in r.json()["detail"], (qty, unit, r.text)
+            assert r.status_code == 422 and "offered" in r.json()["detail"] and r.json()["code"] == "more_than_given", (qty, unit, r.text)
         ok = _post(client, _body("animal", THUNDER, ALFALFA, 4000, unit="g", at=_at(17, 0), event_type="consumed_estimate"))
         assert ok.status_code == 201, ok.text
         assert ok.json()["components"][0]["quantity_offered"] == 4 and ok.json()["components"][0]["unit"] == "kg"
@@ -168,7 +176,7 @@ class TestConsumedNeverExceedsOffered:
         assert second.status_code == 422 and "refused today" in second.json()["detail"], "5.5 kg refused of 5 kg offered"
         assert _post(client, _body("animal", THUNDER, ALFALFA, 2, at=_at(18, 0), event_type="refusal")).status_code == 201, "5 of 5 is possible"
         # A day with nothing offered on record cannot be judged: the estimate stands.
-        assert _post(client, _body("animal", THUNDER, ALFALFA, 2, at=_at(13, 0, next_day=True) - timedelta(days=2),
+        assert _post(client, _body("animal", THUNDER, ALFALFA, 2, at=_at(13, 0) - timedelta(days=1),
                                    event_type="consumed_estimate")).status_code == 201
 
     def test_an_intake_estimate_cannot_exceed_its_offer_either(self, client: TestClient):
@@ -216,35 +224,36 @@ def herd_on_ration(client):
 class TestOneRoundIsNotCountedTwice:
     def test_I12_a_cow_fed_with_her_group_at_0600_then_alone_at_0605(self, client: TestClient, db_session):
         session, _ = db_session
-        group = _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered"))
-        assert group.status_code == 201, group.text
-        before = _on_hand(client, MIX)
+        group = _herd_round(client)
+        before, bellas = _on_hand(client, MIX), len(_events(session, BELLA))
         alone = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5)))
         assert _is_possible_duplicate(alone), alone.text
-        detail = alone.json()["detail"]
-        assert "Bella" in detail and "Dairy Herd" in detail and "06:00" in detail
-        assert _on_hand(client, MIX) == before, "nothing left the store"
-        assert not _events(session, BELLA) or all(ensure_minutes(e) != (6, 5) for e in _events(session, BELLA))
+        asked = alone.json()
+        assert "Bella" in asked["detail"] and "Dairy Herd" in asked["detail"] and "06:00" in asked["detail"]
+        assert (asked["code"], asked["confirm"], asked["reason"]) == ("feeding_overlap", "confirm_additional_feeding", "additional_feeding_reason"), \
+            "the 409 names what confirms it"
+        assert _on_hand(client, MIX) == before and len(_events(session, BELLA)) == bellas, "nothing recorded, nothing left the store"
 
         confirmed = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5), confirm_additional_feeding=True, additional_feeding_reason=REASON))
         assert confirmed.status_code == 201, confirmed.text
         assert round(before - _on_hand(client, MIX), 3) == 10
         audit = _confirmations(session, BELLA)
-        assert len(audit) == 1 and audit[0].payload_json["overlaps"][0]["feeding_event_id"] == group.json()["id"]
+        assert len(audit) == 1 and audit[0].payload_json["overlaps"][0]["feeding_event_id"] == group["id"]
         assert audit[0].payload_json["feeding_event_id"] == confirmed.json()["id"] and audit[0].created_by == "user-rami"
 
     def test_a_confirmation_says_why_and_the_reason_is_kept(self, client: TestClient, db_session):
-        """Session 01: an extra feeding is confirmed with a reason — refused
-        (422, nothing issued) without one; kept on the audit record and on
-        the feeding itself, so the manager reads why."""
+        """Session 01: an extra feeding is confirmed with a reason — without
+        one it is asked again (the same 409, nothing issued); the reason is
+        kept on the audit record and on the feeding, where the manager reads it."""
         session, _ = db_session
-        assert _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered")).status_code == 201
+        _herd_round(client)
         before = _on_hand(client, MIX)
         for flag in ("confirm_additional_feeding", "confirm_duplicate"):
             for reason in (None, "   "):
                 extra = {flag: True, **({"additional_feeding_reason": reason} if reason is not None else {})}
                 r = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5), **extra))
-                assert r.status_code == 422 and "why" in r.json()["detail"].lower(), (flag, reason, r.text)
+                assert _is_possible_duplicate(r) and r.json()["reason"] == "additional_feeding_reason" and "why" in r.json()["detail"], \
+                    (flag, reason, r.text)
         assert _on_hand(client, MIX) == before, "nothing left the store"
         r = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5), confirm_additional_feeding=True, additional_feeding_reason=REASON))
         assert r.status_code == 201, r.text
@@ -267,21 +276,21 @@ class TestOneRoundIsNotCountedTwice:
 
     def test_the_generic_duplicate_confirmation_also_records_it(self, client: TestClient, db_session):
         session, _ = db_session
-        assert _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered")).status_code == 201
+        _herd_round(client)
         r = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5), confirm_duplicate=True, additional_feeding_reason=REASON))
         assert r.status_code == 201, r.text
         assert _confirmations(session, BELLA)[0].payload_json["confirmed_with"] == "confirm_duplicate"
 
     def test_a_supplement_is_not_asked(self, client: TestClient):
         """Bella's +2 kg concentrate is on top of the herd's ration."""
-        assert _post(client, _body("group", HERD, CONC, 9, at=_at(6, 0), event_type="delivered")).status_code == 201
+        _herd_round(client, pid=CONC, qty=9)
         assert _post(client, _body("animal", BELLA, CONC, 2, at=_at(6, 5))).status_code == 201
         assert _is_possible_duplicate(_post(client, _body("animal", LUNA, CONC, 2, at=_at(6, 6)))), \
             "Luna has no supplement: her concentrate came with the herd"
 
     def test_a_cow_on_her_own_ration_is_not_in_the_groups_feeding(self, client: TestClient):
         _assign(client, CLOVER, program_id="prog-dairy-medium", valid_from=_since(4))
-        assert _post(client, _body("group", HERD, MIX, 20, at=_at(6, 0), event_type="delivered")).status_code == 201
+        _herd_round(client, qty=20)
         assert _post(client, _body("animal", CLOVER, MIX, 8, at=_at(6, 5))).status_code == 201
 
     def test_another_feed_a_refusal_or_another_round_is_not_asked(self, client: TestClient):
@@ -322,7 +331,7 @@ class TestWhoConfirmsAndReplays:
     def test_a_worker_is_asked_and_confirms_her_own_round(self, client: TestClient, db_session):
         session, _ = db_session
         worker = _h(client, WORKER)
-        assert _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered"), headers=worker).status_code == 201
+        _herd_round(client, headers=worker)
         asked = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5)), headers=worker)
         assert _is_possible_duplicate(asked), asked.text
         done = _post(client, _body("animal", BELLA, MIX, 10, at=_at(6, 5), confirm_additional_feeding=True, additional_feeding_reason=REASON), headers=worker)
@@ -340,13 +349,14 @@ class TestWhoConfirmsAndReplays:
         same key is answered from the stored response."""
         session, _ = db_session
         h = _h(client)
-        assert _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered")).status_code == 201
+        _herd_round(client)
         key = {**h, HEADER: "outbox-feeding-bella-0605"}
         body = _body("animal", BELLA, MIX, 10, at=_at(6, 5))
-        assert _is_possible_duplicate(client.post(f"{API}/feeding-events", json=body, headers=key))
-        first = client.post(f"{API}/feeding-events", json={**body, "confirm_additional_feeding": True, "additional_feeding_reason": REASON}, headers=key)
+        confirmed = {**body, "confirm_additional_feeding": True, "additional_feeding_reason": REASON}
+        assert _is_possible_duplicate(_post(client, body, key))
+        first = _post(client, confirmed, key)
         assert first.status_code == 201, first.text
-        again = client.post(f"{API}/feeding-events", json={**body, "confirm_additional_feeding": True, "additional_feeding_reason": REASON}, headers=key)
+        again = _post(client, confirmed, key)
         assert again.headers.get(REPLAYED_HEADER) == "true" and again.json()["id"] == first.json()["id"]
         assert len([e for e in _events(session, BELLA) if e.id == first.json()["id"]]) == 1
         assert len(_confirmations(session, BELLA)) == 1
@@ -356,16 +366,10 @@ class TestWhoConfirmsAndReplays:
         feeding reached the server first from another device. Replayed
         later, the queued entry keeps 06:05 and is asked about (the sync
         panel's "Record anyway" resends it confirmed)."""
-        assert _post(client, _body("group", HERD, MIX, 30, at=_at(6, 0), event_type="delivered")).status_code == 201
-        queued = {**_body("animal", BELLA, MIX, 10, at=_at(6, 5)), "notes": "offline"}
-        replay = client.post(f"{API}/feeding-events", json=queued, headers={**_h(client), HEADER: "outbox-offline-1"})
+        _herd_round(client)
+        queued, key = {**_body("animal", BELLA, MIX, 10, at=_at(6, 5)), "notes": "offline"}, {**_h(client), HEADER: "outbox-offline-1"}
+        replay = _post(client, queued, key)
         assert _is_possible_duplicate(replay), replay.text
-        resent = client.post(f"{API}/feeding-events", json={**queued, "confirm_duplicate": True, "additional_feeding_reason": "Recorded on the tablet offline"}, headers={**_h(client), HEADER: "outbox-offline-1"})
+        resent = _post(client, {**queued, "confirm_duplicate": True, "additional_feeding_reason": "Recorded on the tablet offline"}, key)
         assert resent.status_code == 201, resent.text
         assert resent.json()["occurred_at"].startswith(_at(6, 5).astimezone(UTC).strftime("%Y-%m-%dT%H:%M"))
-
-
-def ensure_minutes(e: fm.FeedingEvent) -> tuple[int, int]:
-    t = e.occurred_at if e.occurred_at.tzinfo else e.occurred_at.replace(tzinfo=UTC)
-    local = t.astimezone(BEIRUT)
-    return local.hour, local.minute

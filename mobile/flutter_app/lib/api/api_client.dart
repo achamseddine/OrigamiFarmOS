@@ -18,9 +18,40 @@ import '../data/local/outbox_labels.dart';
 /// handled quite differently from a rejection, so it has its own test:
 /// [isOffline].
 class ApiException implements Exception {
-  ApiException(this.statusCode, this.message);
+  ApiException(this.statusCode, this.message, {this.code, this.confirmField, this.reasonField});
   final int statusCode;
   final String message;
+
+  /// The rule that refused it, when the server names one (`code`, e.g.
+  /// `more_than_given`, `feeding_overlap`): a form says it in the person's
+  /// language without reading the English sentence.
+  final String? code;
+
+  /// For a "Possible duplicate:" refusal, the body field that confirms it
+  /// (`confirm`, default `confirm_duplicate`) and the one that must carry
+  /// why, when the server asks for a reason (`reason`).
+  final String? confirmField;
+  final String? reasonField;
+
+  /// Whether [body] already carries what confirms this refusal — sending it
+  /// again would only be refused again.
+  bool isConfirmedBy(Map body) =>
+      body[confirmField ?? 'confirm_duplicate'] == true && (reasonField == null || '${body[reasonField] ?? ''}'.trim().isNotEmpty);
+
+  /// What to add to the request body to confirm it, with [reason] when one
+  /// is asked for.
+  Map<String, dynamic> confirmation([String? reason]) => {
+        confirmField ?? 'confirm_duplicate': true,
+        if (reasonField != null && reason != null) reasonField!: reason,
+      };
+
+  /// What a queued write keeps of the refusal, to ask again from the sync
+  /// panel ([LocalStore.markOutboxFailed]).
+  Map<String, dynamic> toRefusal() => {'code': code, 'confirm': confirmField, 'reason': reasonField};
+
+  /// A refusal kept with a queued write, as the server sent it.
+  static ApiException fromRefusal(String message, Map<String, dynamic> refusal) => ApiException(409, message,
+      code: refusal['code'] as String?, confirmField: refusal['confirm'] as String?, reasonField: refusal['reason'] as String?);
 
   /// The request never got an answer. Reads fall back to the cache and
   /// writes go to the outbox; the session is *not* signed out.
@@ -80,14 +111,17 @@ const kPossibleDuplicate = 'Possible duplicate:';
 /// expects (`result.success`, `result.error`), plus [queued] for a write
 /// that is safely on the tablet but has not reached the server yet.
 class WriteResult {
-  const WriteResult.ok([this.data]) : error = null, queued = false, statusCode = null;
-  const WriteResult.queued([this.data]) : error = null, queued = true, statusCode = null;
-  const WriteResult.fail(this.error, {this.statusCode}) : queued = false, data = null;
+  const WriteResult.ok([this.data]) : error = null, queued = false, statusCode = null, code = null;
+  const WriteResult.queued([this.data]) : error = null, queued = true, statusCode = null, code = null;
+  const WriteResult.fail(this.error, {this.statusCode, this.code}) : queued = false, data = null;
 
   final String? error;
 
   /// The HTTP status of a refusal, when there was one.
   final int? statusCode;
+
+  /// The rule that refused it, when the server names one ([ApiException.code]).
+  final String? code;
 
   /// Refused as already on record, and the person chose not to record it
   /// again (see [ApiClient.confirmPossibleDuplicate]).
@@ -125,11 +159,14 @@ class WriteResult {
 /// matching branch on the server.
 class ApiClient {
   /// Asked when the server answers a write with "Possible duplicate: …"
-  /// (the same fact already on record). True resends that one request with
-  /// `confirm_duplicate: true`; false leaves it unrecorded and the form
-  /// shows the server's sentence. Installed once by the app shell
-  /// (core/widgets/duplicate_confirmation.dart) — every form gets it.
-  static Future<bool> Function(String detail)? confirmPossibleDuplicate;
+  /// (the same fact already on record; a head fed twice in one round).
+  /// Returns what to add to the body to confirm it
+  /// ([ApiException.confirmation], with the reason when one is asked for),
+  /// or null to leave it unrecorded — the form then shows the server's
+  /// sentence. Installed once by the app shell
+  /// (core/widgets/duplicate_confirmation.dart) — every form, and the sync
+  /// panel's "Record anyway", gets it.
+  static Future<Map<String, dynamic>?> Function(ApiException refusal)? confirmPossibleDuplicate;
 
   ApiClient({required String baseUrl, this.token, LocalStore? store, http.Client? httpClient})
       : baseUrl = _trimTrailingSlash(baseUrl),
@@ -378,11 +415,8 @@ class ApiClient {
   // Writes
   // ------------------------------------------------------------------
 
-  /// [askIfDuplicate] false: a "Possible duplicate:" refusal comes back to
-  /// the caller instead of the generic question — for a form that asks its
-  /// own, more specific one (the feeding's "Fed already this round?").
-  Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query, bool askIfDuplicate = true}) =>
-      _write('POST', path, body: body, query: query, ask: askIfDuplicate);
+  Future<dynamic> post(String path, {Object? body, Map<String, dynamic>? query}) =>
+      _write('POST', path, body: body, query: query);
   Future<dynamic> patch(String path, {Object? body}) => _write('PATCH', path, body: body);
   Future<dynamic> put(String path, {Object? body}) => _write('PUT', path, body: body);
   Future<dynamic> delete(String path) => _write('DELETE', path);
@@ -392,12 +426,10 @@ class ApiClient {
   /// the "internet required the first time" rule.
   Future<dynamic> authenticate(String path, {Object? body}) => send('POST', path, body: body);
 
-  Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query, bool ask = true}) async {
+  Future<dynamic> _write(String method, String path, {Object? body, Map<String, dynamic>? query}) async {
     final store = _store;
-    Future<dynamic> attempt(String key) =>
-        ask ? _sendAsking(method, path, body: body, query: query, idempotencyKey: key) : send(method, path, body: body, query: query, idempotencyKey: key);
     if (store == null || !store.available) {
-      return attempt(newIdempotencyKey());
+      return _sendAsking(method, path, body: body, query: query, idempotencyKey: newIdempotencyKey());
     }
 
     if (standalone) return _writeLocal(store, method, path, body);
@@ -408,7 +440,7 @@ class ApiClient {
 
     if (monitor.online) {
       try {
-        return await attempt(idempotencyKey);
+        return await _sendAsking(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
       } on ApiException catch (e) {
         if (!e.isOffline) rethrow;
         // Fall through: the tablet lost the server mid-write.
@@ -457,20 +489,27 @@ class ApiClient {
     return created;
   }
 
-  /// Sends a write; on "Possible duplicate:" asks the person and, if they
-  /// say it is a second one, sends the same request again confirmed. The
-  /// refusal was not stored by the server's idempotency guard (4xx never
-  /// is), so the same key still names this one logical write.
+  /// Sends a write; on "Possible duplicate:" asks the person
+  /// ([confirmPossibleDuplicate]) and, if they confirm, sends the same
+  /// request again with what the server named to confirm it. At most twice
+  /// (a second question may follow the first: the same record twice, then
+  /// a head fed twice in its round), and never again for what the body
+  /// already confirms. The refusal was not stored by the server's
+  /// idempotency guard (4xx never is), so the same key still names this
+  /// one logical write.
   Future<dynamic> _sendAsking(String method, String path,
       {Object? body, Map<String, dynamic>? query, required String idempotencyKey}) async {
-    try {
-      return await send(method, path, body: body, query: query, idempotencyKey: idempotencyKey);
-    } on ApiException catch (e) {
-      final ask = confirmPossibleDuplicate;
-      if (!e.isPossibleDuplicate || ask == null || body is! Map || body['confirm_duplicate'] == true) rethrow;
-      if (!await ask(e.duplicateDetail)) rethrow;
-      final confirmed = <String, dynamic>{...body.cast<String, dynamic>(), 'confirm_duplicate': true};
-      return send(method, path, body: confirmed, query: query, idempotencyKey: idempotencyKey);
+    var current = body;
+    for (var asked = 0;; asked++) {
+      try {
+        return await send(method, path, body: current, query: query, idempotencyKey: idempotencyKey);
+      } on ApiException catch (e) {
+        final ask = confirmPossibleDuplicate;
+        if (!e.isPossibleDuplicate || ask == null || current is! Map || asked >= 2 || e.isConfirmedBy(current)) rethrow;
+        final confirmation = await ask(e);
+        if (confirmation == null) rethrow;
+        current = <String, dynamic>{...current.cast<String, dynamic>(), ...confirmation};
+      }
     }
   }
 
@@ -538,9 +577,11 @@ class ApiClient {
     }
 
     var message = 'Request failed (HTTP ${response.statusCode}).';
+    Map? decoded;
     try {
-      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      if (decoded is Map && decoded['detail'] != null) {
+      final body = jsonDecode(utf8.decode(response.bodyBytes));
+      if (body is Map) decoded = body;
+      if (decoded != null && decoded['detail'] != null) {
         final detail = decoded['detail'];
         message = detail is String ? detail : (detail is List ? readableValidation(detail) : detail.toString());
       }
@@ -555,7 +596,8 @@ class ApiClient {
       message = 'The farm server at $baseUrl does not have this function (HTTP ${response.statusCode}). '
           'It is probably running an older version than this app — update the server, then try again.';
     }
-    throw ApiException(response.statusCode, message);
+    throw ApiException(response.statusCode, message,
+        code: decoded?['code'] as String?, confirmField: decoded?['confirm'] as String?, reasonField: decoded?['reason'] as String?);
   }
 
   /// Runs an API call meant to report success/failure back to a form
@@ -571,7 +613,7 @@ class ApiClient {
       final queued = result is Map && result[kPendingFlag] == true;
       return queued ? WriteResult.queued(result) : WriteResult.ok(result);
     } on ApiException catch (e) {
-      return WriteResult.fail(e.message, statusCode: e.statusCode);
+      return WriteResult.fail(e.message, statusCode: e.statusCode, code: e.code);
     }
   }
 }

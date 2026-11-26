@@ -68,20 +68,27 @@ class SnapshotApi extends ApiClient {
   /// same-fact check (backend app/core/duplicates.py).
   final Map<String, String> possibleDuplicates = {};
 
+  /// Paths answered like the server's feeding-round question
+  /// (`feeding_overlap`): recorded once resent with
+  /// `confirm_additional_feeding` and a reason (backend screen_feeding).
+  final Map<String, String> feedingOverlaps = {};
+
   /// Every write goes through the real [ApiClient] write path (and its
   /// duplicate question); only the network call is the snapshot's.
   @override
   Future<dynamic> send(String method, String path, {Object? body, Map<String, dynamic>? query, String? idempotencyKey}) async {
     if (method == 'GET') return get(path, query: query);
-    final refusal = possibleDuplicates[path];
-    // A feeding confirmed as an additional one, with its reason, is
-    // accepted like a confirmed duplicate (backend api/v1/feeding.py).
-    final confirmed = body is Map &&
-        (body['confirm_duplicate'] == true ||
-            (body['confirm_additional_feeding'] == true && '${body['additional_feeding_reason'] ?? ''}'.trim().isNotEmpty));
-    if (refusal != null && !confirmed) {
+    final overlap = feedingOverlaps[path], duplicate = possibleDuplicates[path];
+    final refusal = overlap != null
+        ? ApiException(409, '$kPossibleDuplicate $overlap',
+            code: 'feeding_overlap', confirmField: 'confirm_additional_feeding', reasonField: 'additional_feeding_reason')
+        : duplicate != null
+            ? ApiException(409, '$kPossibleDuplicate $duplicate')
+            : null;
+    // Accepted on the client's own rule for what confirms a refusal.
+    if (refusal != null && !(body is Map && refusal.isConfirmedBy(body))) {
       writes.add(('REFUSED $method', path, body));
-      throw ApiException(409, '$kPossibleDuplicate $refusal');
+      throw refusal;
     }
     writes.add((method, path, body));
     return <String, dynamic>{'id': 'local-${writes.length}', if (body is Map) ...body.cast<String, dynamic>()};

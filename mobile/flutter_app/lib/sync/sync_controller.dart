@@ -170,7 +170,7 @@ class SyncController extends ChangeNotifier {
             // The server understood and said no — a revoked permission, a
             // duplicate ear tag, a deleted animal. Retrying will not help,
             // so flag it for a human instead of looping forever.
-            await store.markOutboxFailed(item.id, e.message, permanent: true);
+            await store.markOutboxFailed(item.id, e.message, permanent: true, refusal: e.isPossibleDuplicate ? e.toRefusal() : null);
             rejectedAny = true;
             continue;
           }
@@ -216,8 +216,8 @@ class SyncController extends ChangeNotifier {
 
   /// "Record anyway" for a queued entry the server took for one already
   /// on record: resent confirmed, so it is kept as a confirmed repeat.
-  Future<void> recordAnyway(int id, {Map<String, dynamic> extra = const {}}) async {
-    await _store?.confirmOutboxDuplicate(id, extra: extra);
+  Future<void> recordAnyway(int id, {Map<String, dynamic> confirmation = const {'confirm_duplicate': true}}) async {
+    await _store?.confirmOutboxDuplicate(id, confirmation: confirmation);
     await refreshCounts();
     await syncNow();
   }
