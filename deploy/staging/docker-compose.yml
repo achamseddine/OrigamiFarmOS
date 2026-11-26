@@ -1,0 +1,44 @@
+# Origami FarmOS staging (master prompt Package 6): a throwaway PostgreSQL 16
+# and the API, for scripts/staging/staging.sh with STAGING_MODE=docker
+# (docs/runbooks/STAGING-POSTGRES.md). Both ports are bound to this machine
+# only. Never a production database: the data lives in the volume
+# origami_staging_pg and is the synthetic demo farm.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: origami_staging
+      POSTGRES_USER: origami
+      # Trust on a port bound to 127.0.0.1 only: a throwaway staging server.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports: ["127.0.0.1:${STAGING_PG_PORT:-55440}:5432"]
+    volumes: [origami_staging_pg:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U origami -d origami_staging"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ../..
+      dockerfile: deploy/staging/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://origami@postgres:5432/origami_staging
+      # Set by staging.sh (a random key kept in $STAGING_DIR/secret); the
+      # image refuses to start without one.
+      FARMOS_SECRET_KEY: ${FARMOS_SECRET_KEY:-}
+      FARMOS_SCHEDULER: "false"
+    ports: ["127.0.0.1:${STAGING_API_PORT:-8770}:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  origami_staging_pg:

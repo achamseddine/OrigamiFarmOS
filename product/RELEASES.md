@@ -1,5 +1,22 @@
 # Releases
 
+## Staging and recovery — a PostgreSQL 16 staging server built, checked, backed up, restored and restarted (server tooling; the app is unchanged)
+
+Master prompt Package 6 (docs/runbooks/STAGING-POSTGRES.md):
+- **`scripts/staging/staging.sh all`** builds a throwaway PostgreSQL 16 staging server from nothing: migrations from an empty database to the head revision, the synthetic demo farm, the API with a random secret key and its health check. It then runs:
+  - API smoke tests over synthetic records: sign-in and access, an expense, a milk record and a feed delivery each sent twice and recorded once, refusals, reads;
+  - a checksummed `pg_dump` backup, restored into a second database that must be identical table by table (row counts and row checksums), with an API on the restored copy that finds every record;
+  - a restart of the API and PostgreSQL that must keep them;
+  - the reconciliations' dry runs (feed stock, Mouneh sales, milk safety; purchases where the server has it).
+
+  It writes a report. With `STAGING_MODE=docker` it uses `deploy/staging/docker-compose.yml` and the API image `deploy/staging/Dockerfile`.
+- **Never production:** its own database, `DATABASE_URL`/`PROD_DATABASE_URL` ignored, synthetic records only, and a smoke test that refuses any server but this machine or a staging host.
+- **Fixed, found by the first staging run:** `python -m app.seed` (the README quick start) crashed as a script with `NameError` before creating the farm. That left an empty database nobody could sign in to, while every test passed because they import the module. It now seeds the farm and runs twice safely (`tests/test_seed_command.py`).
+- Server: **no migration**, no API change. Tests:
+  - `tests/test_staging_chain_pg.py` runs the whole chain on PostgreSQL 16 (in `scripts/verify-all.sh` and CI);
+  - `tests/test_staging_tools.py` covers the server guard and the snapshot comparison;
+  - `tests/test_seed_command.py` runs the seed command as a script.
+
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 
 Audit 2026-11-25 (I-8). On the tablet and the web app, enforced by the server:

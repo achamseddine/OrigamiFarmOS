@@ -80,7 +80,7 @@ if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # tests (v0.8.4) prove the migration and two simultaneous last-stock
   # feedings on a real PostgreSQL, each in a schema of its own.
   step "backend migrations on PostgreSQL" bash -c \
-    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py tests/test_feed_stock_migration.py tests/test_feed_stock_concurrency_pg.py tests/test_feeding_plan_policy_pg.py tests/test_feeding_event_integrity_pg.py"
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py tests/test_feed_stock_migration.py tests/test_feed_stock_concurrency_pg.py tests/test_feeding_plan_policy_pg.py tests/test_feeding_event_integrity_pg.py tests/test_staging_chain_pg.py"
 else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
 fi
