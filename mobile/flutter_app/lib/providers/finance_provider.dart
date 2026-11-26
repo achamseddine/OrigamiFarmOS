@@ -109,7 +109,8 @@ class FinanceProvider extends ChangeNotifier {
 
   /// One payment for several sales of one buyer — the collector's week.
   /// [amountReceived] is in [currency]; a difference with what the sales
-  /// came to is kept by the server as its own row.
+  /// came to is kept by the server as its own row — unless it is a
+  /// [partPayment] toward one sale, whose rest stays owed.
   Future<WriteResult> receivePayment({
     required List<String> saleIds,
     required double amountReceived,
@@ -118,6 +119,7 @@ class FinanceProvider extends ChangeNotifier {
     required DateTime paidAt,
     String? reference,
     String? notes,
+    bool partPayment = false,
   }) =>
       _write(() => _api.post('/finance/payments', body: {
             'sale_ids': saleIds,
@@ -127,6 +129,7 @@ class FinanceProvider extends ChangeNotifier {
             'paid_at': paidAt.toUtc().toIso8601String(),
             if (reference != null && reference.trim().isNotEmpty) 'reference': reference.trim(),
             if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+            if (partPayment) 'part_payment': true,
           }));
 
   /// Unpaid sales of [buyer] (case-insensitive), oldest first.

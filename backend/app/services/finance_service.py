@@ -18,7 +18,11 @@ The books are the canonical records, never a figure kept on the side:
 
 Profit and loss counts feed when it is fed (what it cost), and medicine
 when it is received; cash out counts feed when it is delivered. A sale is
-revenue when it is made and cash when it is paid.
+revenue when it is made and cash when it is paid — in full, or in parts
+(each part a receipt of its own, `customer_payments.sale_id`). Mouneh sales
+are posted by the Mouneh shop (services/mouneh_sales_service.py); their
+production cost stays on the sale and in Mouneh's profitability, and is not
+a second cost here (the ingredients bought are the expenses).
 """
 from __future__ import annotations
 
@@ -174,18 +178,44 @@ def get_sale(db: Session, sale_id: str, farm_id: str) -> models.Sale:
     return s
 
 
+def received(db: Session, sale_ids) -> dict[str, float]:
+    """What was received so far toward each of [sale_ids] paid in parts —
+    its receipts (`customer_payments.sale_id`); a refund is negative."""
+    ids = [i for i in dict.fromkeys(sale_ids) if i]
+    if not ids:
+        return {}
+    rows = db.execute(select(fin.CustomerPayment.sale_id, func.sum(fin.CustomerPayment.amount_received))
+                      .where(fin.CustomerPayment.sale_id.in_(ids)).group_by(fin.CustomerPayment.sale_id))
+    return {sale_id: round(total or 0.0, 2) for sale_id, total in rows}
+
+
+def paid_so_far(s: models.Sale, got: dict[str, float]) -> float:
+    """The cash received for [s]: all of it once paid, else its parts."""
+    return round(s.amount if s.payment_status == "paid" else got.get(s.id, 0.0), 2)
+
+
+def balance_due(s: models.Sale, got: dict[str, float]) -> float:
+    """What the buyer still owes for [s] — nothing for a sale paid,
+    cancelled, or the row undoing one."""
+    if s.status != "recorded" or s.payment_status == "paid" or s.amount <= 0:
+        return 0.0
+    return round(s.amount - got.get(s.id, 0.0), 2)
+
+
 def _linked(db: Session, sale: models.Sale) -> tuple[str, object | None]:
-    """Which module recorded this sale: milk (a tank sale), mouneh, visits,
-    or a sale recorded here."""
+    """Which module recorded this sale: milk (a tank sale, with its MilkSale),
+    visits (a farm-shop purchase — Mouneh jars in it point to it too), mouneh
+    (a sale in the Mouneh shop, with its line), or a sale recorded here."""
     milk = db.scalar(select(mm.MilkSale).where(mm.MilkSale.sale_id == sale.id))
     if milk is not None:
         return "milk", milk
     from app.domain import mouneh_models as mo
     from app.domain import visits_models as vm
-    if db.scalar(select(mo.MounehSaleLine.id).where(mo.MounehSaleLine.sale_id == sale.id).limit(1)):
-        return "mouneh", None
     if db.scalar(select(vm.VisitRetailSale.id).where(vm.VisitRetailSale.sale_id == sale.id).limit(1)):
         return "visits", None
+    line = db.scalar(select(mo.MounehSaleLine).where(mo.MounehSaleLine.sale_id == sale.id).limit(1))
+    if line is not None:
+        return "mouneh", line
     return "finance", None
 
 
@@ -272,57 +302,101 @@ def mark_sale_paid(db: Session, sale: models.Sale, user: models.User, *, paid_at
     return sale
 
 
+def reverse_sale(db: Session, sale: models.Sale, user: models.User, *, reason: str) -> tuple[models.Sale, float]:
+    """Undo [sale] in the books: it stays on file, marked cancelled with the
+    reason, and a negative row takes it out of every total. The money
+    received for it is given back — all of it for a sale paid (the negative
+    row is paid), the parts received for one paid in parts (a negative
+    receipt). Returns the negative row and the parts refunded."""
+    paid = sale.payment_status == "paid"
+    at = now()
+    reversal = models.Sale(
+        id=new_id(), farm_id=sale.farm_id, customer_id=sale.customer_id, product_type=sale.product_type,
+        product_label=f"{sale.product_label or sale.product_type} (cancelled sale)"[:100], quantity=-sale.quantity if sale.quantity else None,
+        unit=sale.unit, amount=-sale.amount, currency=sale.currency, payment_status="paid" if paid else "pending", sold_at=at,
+        unit_price=sale.unit_price, buyer_name=sale.buyer_name, status="reversal", reversal_of_id=sale.id, paid_at=at if paid else None,
+        original_amount=-sale.original_amount if sale.original_amount is not None else None, original_currency=sale.original_currency,
+        exchange_rate=sale.exchange_rate, activity=sale.activity, recorded_by=user.id, created_at=at)
+    db.add(reversal)
+    refund = 0.0 if paid else received(db, [sale.id]).get(sale.id, 0.0)
+    if abs(refund) >= 0.01:
+        db.add(fin.CustomerPayment(id=new_id(), farm_id=sale.farm_id, customer_id=sale.customer_id, buyer_name=sale.buyer_name, paid_at=at,
+                                   sales_count=1, amount_due=-refund, amount_received=-refund, sale_id=sale.id,
+                                   notes=f"Refund: the sale was cancelled ({reason.strip()})"[:500], recorded_by=user.id, created_at=at))
+    sale.status, sale.cancel_reason, sale.cancelled_at = "cancelled", reason.strip(), at
+    db.flush()
+    return reversal, refund
+
+
 def cancel_sale(db: Session, sale: models.Sale, user: models.User, *, reason: str) -> models.Sale:
     """A sale recorded by mistake: kept on file, marked cancelled with the
-    reason, and undone by a negative row. A milk sale goes back to the tank;
-    Mouneh and farm-shop sales are cancelled where their stock is."""
+    reason, and undone by a negative row. A milk sale goes back to the tank,
+    a Mouneh sale's jars back on the shelf; a farm-shop purchase is cancelled
+    in Farm visits."""
     if sale.status == "reversal":
         raise FinanceError("This row undoes a cancelled sale; it is not cancelled itself.", 409)
     if sale.status == "cancelled":
         raise FinanceError("This sale is already cancelled.", 409)
     if not reason or not reason.strip():
         raise FinanceError("Say why the sale is cancelled.")
-    module, milk = _linked(db, sale)
+    module, linked = _linked(db, sale)
     if module == "milk":
-        milk_sales.cancel(db, milk, user, reason=reason)
+        milk_sales.cancel(db, linked, user, reason=reason)
         return sale
     if module == "mouneh":
-        raise FinanceError("This is a Mouneh sale: cancel it in Mouneh, so its jars go back on the shelf.", 409)
+        from app.services import mouneh_sales_service
+        mouneh_sales_service.cancel(db, linked, user, reason=reason)
+        return sale
     if module == "visits":
         raise FinanceError("This is a farm-shop sale from a visit: cancel it in Farm visits.", 409)
-    reversal = models.Sale(
-        id=new_id(), farm_id=sale.farm_id, customer_id=sale.customer_id, product_type=sale.product_type,
-        product_label=f"{sale.product_label or sale.product_type} (cancelled sale)"[:100], quantity=-sale.quantity if sale.quantity else None,
-        unit=sale.unit, amount=-sale.amount, currency=sale.currency, payment_status=sale.payment_status, sold_at=now(),
-        unit_price=sale.unit_price, buyer_name=sale.buyer_name, status="reversal", reversal_of_id=sale.id,
-        paid_at=now() if sale.payment_status == "paid" else None,
-        original_amount=-sale.original_amount if sale.original_amount is not None else None, original_currency=sale.original_currency,
-        exchange_rate=sale.exchange_rate, activity=sale.activity, recorded_by=user.id, created_at=now())
-    db.add(reversal)
-    sale.status, sale.cancel_reason, sale.cancelled_at = "cancelled", reason.strip(), now()
-    db.flush()
+    reversal, refund = reverse_sale(db, sale, user, reason=reason)
     write_audit_log(db, farm_id=sale.farm_id, user_id=user.id, action="sale_cancelled", entity_type="sale", entity_id=sale.id, module_code=perms.SALES,
                     summary=f"Sale of {sale.product_label or sale.product_type} ({sale.amount:g} {sale.currency}) cancelled: {reason.strip()}"[:500],
-                    changes={"status": {"from": "recorded", "to": "cancelled"}}, metadata={"reason": reason.strip(), "reversal_sale_id": reversal.id})
+                    changes={"status": {"from": "recorded", "to": "cancelled"}},
+                    metadata={"reason": reason.strip(), "reversal_sale_id": reversal.id, "refunded": refund})
     write_event(db, farm_id=sale.farm_id, entity_type="sale", entity_id=sale.id, event_type="sale_cancelled",
-                payload={"amount": sale.amount, "reason": reason.strip(), "reversal_sale_id": reversal.id}, created_by=user.id)
+                payload={"amount": sale.amount, "reason": reason.strip(), "reversal_sale_id": reversal.id, "refunded": refund}, created_by=user.id)
     return sale
 
 
-def sale_dict(db: Session, s: models.Sale, *, customers: dict[str, str] | None = None) -> dict:
+def _mouneh_lines(db: Session, sales) -> dict:
+    """The Mouneh sale line behind each Mouneh sale of [sales]."""
+    from app.domain import mouneh_models as mo
+    ids = [s.id for s in sales if s.product_type == "mouneh" and s.status != "reversal"]
+    if not ids:
+        return {}
+    return {line.sale_id: line for line in db.scalars(select(mo.MounehSaleLine).where(mo.MounehSaleLine.sale_id.in_(ids)))}
+
+
+def sale_rows(db: Session, sales, *, customers: dict[str, str] | None = None) -> list[dict]:
+    """[sales] as sale_dict, with their receipts and Mouneh lines read once."""
+    got = received(db, [s.id for s in sales if s.payment_status == "partial"])
+    lines = _mouneh_lines(db, sales)
+    return [sale_dict(db, s, customers=customers, got=got, lines=lines) for s in sales]
+
+
+def sale_dict(db: Session, s: models.Sale, *, customers: dict[str, str] | None = None, got: dict[str, float] | None = None,
+              lines: dict | None = None) -> dict:
     buyer = s.buyer_name
     if not buyer and s.customer_id:
         buyer = (customers or {}).get(s.customer_id)
         if buyer is None:
             c = db.get(models.Customer, s.customer_id)
             buyer = c.name if c else None
+    if got is None:
+        got = received(db, [s.id]) if s.payment_status == "partial" else {}
+    line = (lines if lines is not None else _mouneh_lines(db, [s])).get(s.id)
     return {"id": s.id, "product_type": s.product_type, "product_label": s.product_label, "quantity": s.quantity, "unit": s.unit,
             "unit_price": s.unit_price, "amount": s.amount, "currency": s.currency, "original_amount": s.original_amount,
             "original_currency": s.original_currency, "exchange_rate": s.exchange_rate, "payment_status": s.payment_status,
             "paid_at": s.paid_at, "sold_at": s.sold_at, "customer_id": s.customer_id, "buyer_name": buyer, "reference": s.reference,
             "notes": s.notes, "status": s.status, "cancel_reason": s.cancel_reason, "cancelled_at": s.cancelled_at,
             "reversal_of_id": s.reversal_of_id, "activity": s.activity or ACTIVITY_OF_PRODUCT.get(s.product_type, "general"),
-            "recorded_by": s.recorded_by, "payment_id": s.payment_id}
+            "recorded_by": s.recorded_by, "payment_id": s.payment_id,
+            "amount_paid": paid_so_far(s, got), "balance_due": balance_due(s, got),
+            # A sale in the Mouneh shop: its line, and what the jars cost to make.
+            "mouneh_sale_id": line.id if line else None,
+            "cost_of_goods": round(line.quantity * line.cost_per_unit, 4) if line else None}
 
 
 def list_sales(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
@@ -330,7 +404,7 @@ def list_sales(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
     rows = db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.sold_at >= since)
                       .order_by(models.Sale.sold_at.desc()).limit(1000)).all()
     customers = {c.id: c.name for c in db.scalars(select(models.Customer).where(models.Customer.farm_id == farm_id))}
-    return [sale_dict(db, s, customers=customers) for s in rows]
+    return sale_rows(db, rows, customers=customers)
 
 
 # -------------------------------------------------------------- expenses
@@ -438,11 +512,16 @@ def list_expenses(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
 # ------------------------------------------------- payments for many sales
 def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amount_received: float, currency: str | None,
                     exchange_rate: float | None, paid_at: datetime | None, reference: str | None, notes: str | None,
-                    confirm_duplicate: bool) -> fin.CustomerPayment:
+                    confirm_duplicate: bool, part_payment: bool = False) -> fin.CustomerPayment:
     """One payment for several sales of one buyer — the milk collector paying
     for the week. Every sale is marked paid on the payment's day; when the
     money received differs from what they came to, the difference is kept as
-    its own revenue row (a deduction or a bonus), so revenue is what came in."""
+    its own revenue row (a deduction or a bonus), so revenue is what came in.
+
+    What a sale comes to is what is still owed on it (less the parts already
+    received). A [part_payment] is toward one sale and leaves the rest owed
+    (no difference row): the sale is paid in part until its parts cover it.
+    A payment toward one sale paid in parts is one of its receipts."""
     ids = list(dict.fromkeys(sale_ids or []))
     if not ids:
         raise FinanceError("Choose the sales this payment is for.")
@@ -454,6 +533,11 @@ def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amou
             raise FinanceError(f"{s.product_label or s.product_type} of {s.sold_at:%d/%m/%Y} is cancelled and cannot be paid.", 409)
         if s.payment_status == "paid":
             raise FinanceError(f"{s.product_label or s.product_type} of {s.sold_at:%d/%m/%Y} is already paid.", 409)
+    if part_payment:
+        if len(sales) != 1:
+            raise FinanceError("A part payment is toward one sale: choose that sale.")
+        if _linked(db, sales[0])[0] == "milk":
+            raise FinanceError("A milk sale is settled in full; a difference is kept as its own row.")
     customers = {c.id: c.name for c in db.scalars(select(models.Customer).where(models.Customer.farm_id == user.farm_id))}
 
     def buyer_of(s: models.Sale) -> str:
@@ -463,32 +547,54 @@ def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amou
     if len(buyers) != 1:
         raise FinanceError("One payment is from one buyer: choose sales of the same buyer.")
     when = not_in_future(paid_at, "A payment") or now()
-    received, original, original_cur, rate = to_base(db, user.farm_id, amount_received, currency, exchange_rate, when)
-    due = round(sum(s.amount for s in sales), 2)
+    received_usd, original, original_cur, rate = to_base(db, user.farm_id, amount_received, currency, exchange_rate, when)
+    got = received(db, ids)
+    due = round(sum(s.amount - got.get(s.id, 0.0) for s in sales), 2)
+    in_part = part_payment and received_usd < due - 0.005
+    if in_part and received_usd <= 0:
+        raise FinanceError("A part payment is more than nothing.")
     first = sales[0]
     name = first.buyer_name or customers.get(first.customer_id or "")
 
     # The same buyer paying the same amount within half an hour.
     lo, hi = duplicates.near(when)
     earlier = db.scalar(select(fin.CustomerPayment).where(
-        fin.CustomerPayment.farm_id == user.farm_id, fin.CustomerPayment.amount_received == received,
+        fin.CustomerPayment.farm_id == user.farm_id, fin.CustomerPayment.amount_received == received_usd,
         fin.CustomerPayment.buyer_name == name, fin.CustomerPayment.paid_at >= lo, fin.CustomerPayment.paid_at <= hi))
-    match = duplicates.guard(earlier, f"A payment of {received:g} {fin.BASE_CURRENCY} from {name or 'this buyer'} was already recorded "
+    match = duplicates.guard(earlier, f"A payment of {received_usd:g} {fin.BASE_CURRENCY} from {name or 'this buyer'} was already recorded "
                              "within half an hour." if earlier else "", confirm=confirm_duplicate)
 
+    # A receipt of its sale: a part, or the rest of a sale paid in parts.
+    toward = first.id if len(sales) == 1 and (part_payment or first.id in got) else None
     payment = fin.CustomerPayment(
         id=new_id(), farm_id=user.farm_id, customer_id=first.customer_id, buyer_name=name, paid_at=when, sales_count=len(sales),
-        amount_due=due, amount_received=received, original_amount=original, original_currency=original_cur, exchange_rate=rate,
-        reference=(reference or "").strip()[:120] or None, notes=(notes or "").strip() or None, recorded_by=user.id, created_at=now())
+        amount_due=due, amount_received=received_usd, original_amount=original, original_currency=original_cur, exchange_rate=rate,
+        sale_id=toward, reference=(reference or "").strip()[:120] or None, notes=(notes or "").strip() or None, recorded_by=user.id,
+        created_at=now())
     db.add(payment)
     db.flush()
+    money = f"{original:,.0f} {original_cur} ({received_usd:g} {fin.BASE_CURRENCY})" if original_cur else f"{received_usd:g} {fin.BASE_CURRENCY}"
+    if in_part:
+        before = first.payment_status
+        first.payment_status = "partial"
+        duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id,
+                                 match_id=match.id if match else None, what=f"customer_payment:{payment.id}", user_id=user.id)
+        write_audit_log(db, farm_id=user.farm_id, user_id=user.id, action="payment_received", entity_type="customer_payment", entity_id=payment.id,
+                        module_code=perms.SALES, summary=(f"{name or 'A buyer'} paid {money} toward {first.product_label or first.product_type} "
+                                                          f"of {first.sold_at:%d/%m/%Y}; {due - received_usd:g} {fin.BASE_CURRENCY} still owed")[:500],
+                        changes={"payment_status": {"from": before, "to": "partial"}}, metadata={"sale_ids": ids, "part_payment": True})
+        write_event(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id, event_type="payment_received",
+                    payload={"buyer": name, "sales": ids, "due": due, "received": received_usd, "part_payment": True,
+                             "original_amount": original, "original_currency": original_cur, "exchange_rate": rate}, created_by=user.id)
+        return payment
+    prior = sorted({s.payment_status for s in sales})
     for s in sales:
         module, milk = _linked(db, s)
         if module == "milk":
             milk_sales.mark_paid(db, milk, user)
             milk.paid_at = when
         s.payment_status, s.paid_at, s.payment_id = "paid", when, payment.id
-    difference = round(received - due, 2)
+    difference = round(received_usd - due, 2)
     if abs(difference) >= 0.01:
         types = {s.product_type for s in sales}
         product_type = types.pop() if len(types) == 1 else "other"
@@ -503,13 +609,13 @@ def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amou
         payment.difference_sale_id = diff.id
     duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id,
                              match_id=match.id if match else None, what=f"customer_payment:{payment.id}", user_id=user.id)
-    money = f"{original:,.0f} {original_cur} ({received:g} {fin.BASE_CURRENCY})" if original_cur else f"{received:g} {fin.BASE_CURRENCY}"
     write_audit_log(db, farm_id=user.farm_id, user_id=user.id, action="payment_received", entity_type="customer_payment", entity_id=payment.id,
                     module_code=perms.SALES, summary=(f"{name or 'A buyer'} paid {money} for {len(sales)} sale(s) of {due:g} {fin.BASE_CURRENCY}"
                                                       + (f"; difference {difference:+g}" if abs(difference) >= 0.01 else ""))[:500],
-                    changes={"payment_status": {"from": "pending", "to": "paid"}}, metadata={"sale_ids": ids, "difference": difference})
+                    changes={"payment_status": {"from": prior[0] if len(prior) == 1 else prior, "to": "paid"}},
+                    metadata={"sale_ids": ids, "difference": difference})
     write_event(db, farm_id=user.farm_id, entity_type="customer_payment", entity_id=payment.id, event_type="payment_received",
-                payload={"buyer": name, "sales": ids, "due": due, "received": received, "difference": difference,
+                payload={"buyer": name, "sales": ids, "due": due, "received": received_usd, "difference": difference,
                          "original_amount": original, "original_currency": original_cur, "exchange_rate": rate}, created_by=user.id)
     return payment
 
@@ -517,6 +623,7 @@ def receive_payment(db: Session, user: models.User, *, sale_ids: list[str], amou
 def payment_dict(p: fin.CustomerPayment) -> dict:
     return {"id": p.id, "buyer_name": p.buyer_name, "customer_id": p.customer_id, "paid_at": p.paid_at, "sales_count": p.sales_count,
             "amount_due": p.amount_due, "amount_received": p.amount_received, "difference": round(p.amount_received - p.amount_due, 2),
+            "sale_id": p.sale_id,
             "original_amount": p.original_amount, "original_currency": p.original_currency, "exchange_rate": p.exchange_rate,
             "reference": p.reference, "notes": p.notes, "recorded_by": p.recorded_by}
 
@@ -541,16 +648,17 @@ def owed(db: Session, farm_id: str, *, receivables: bool = True, payables: bool 
                           .order_by(models.Sale.sold_at)).all()
         items = []
         by_buyer: dict[str, dict] = {}
-        for s in rows:
-            d = sale_dict(db, s, customers=customers)
+        for d, s in zip(sale_rows(db, rows, customers=customers), rows):
+            if d["balance_due"] <= 0:
+                continue
             d["days_outstanding"] = (today - _farm_day(db, farm_id, s.sold_at)).days
             items.append(d)
             key = (d["buyer_name"] or "").strip().lower()
             b = by_buyer.setdefault(key, {"buyer_name": d["buyer_name"], "amount": 0.0, "sales": 0, "oldest_days": 0})
-            b["amount"] += s.amount
+            b["amount"] += d["balance_due"]
             b["sales"] += 1
             b["oldest_days"] = max(b["oldest_days"], d["days_outstanding"])
-        out["receivables"] = {"total": round(sum(s.amount for s in rows), 2), "items": items,
+        out["receivables"] = {"total": round(sum(d["balance_due"] for d in items), 2), "items": items,
                               "by_buyer": sorted(({**b, "amount": round(b["amount"], 2)} for b in by_buyer.values()), key=lambda b: -b["amount"])}
     if payables:
         suppliers = {s.id: s.name for s in db.scalars(select(models.Supplier).where(models.Supplier.farm_id == farm_id))}
@@ -644,9 +752,15 @@ def profit_loss(db: Session, farm_id: str, start: date | None, end: date | None)
         act = s.activity or ACTIVITY_OF_PRODUCT.get(s.product_type, "general")
         mo["revenue"] += s.amount
         mo["revenue_by_activity"][act] += s.amount
-    # Cash in: sales paid in the period (a refund of a paid sale is negative).
+    # Cash in: what customers paid in the period — each part of a sale paid
+    # in parts on its day (a refund is negative), a sale paid in full on its
+    # day less the parts before it (the refund of a sale paid is negative).
+    parts: dict[str, float] = defaultdict(float)
+    for p in db.scalars(select(fin.CustomerPayment).where(fin.CustomerPayment.farm_id == farm_id, fin.CustomerPayment.sale_id.is_not(None))):
+        parts[p.sale_id] += p.amount_received
+        add_cash(p.paid_at, "cash_in", p.amount_received)
     for s in db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.payment_status == "paid")):
-        add_cash(s.paid_at or s.sold_at, "cash_in", s.amount)
+        add_cash(s.paid_at or s.sold_at, "cash_in", s.amount - parts.get(s.id, 0.0))
 
     # Expenses and bills recorded here.
     for e in db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.status == "recorded",

@@ -124,7 +124,10 @@ class FinanceSaleRow extends StatelessWidget {
         ? StatusPill(label: context.t('finReversal'), level: FarmStatusLevel.neutral, dense: true)
         : s.cancelled
             ? StatusPill(label: context.t('msCancelled'), level: FarmStatusLevel.neutral, dense: true)
-            : StatusPill(label: context.t(s.paid ? 'msPaid' : 'msToBePaid'), level: s.paid ? FarmStatusLevel.good : FarmStatusLevel.watch, dense: true);
+            : StatusPill(
+                label: context.t(s.paid ? 'msPaid' : (s.partlyPaid ? 'finPartPaid' : 'msToBePaid')),
+                level: s.paid ? FarmStatusLevel.good : FarmStatusLevel.watch,
+                dense: true);
     final q = s.quantity;
     final qty = q == null ? '' : ' · ${q == q.roundToDouble() ? q.toStringAsFixed(0) : q.toStringAsFixed(2)} ${unitLabel(context, s.unit)}'.trimRight();
     return Container(
@@ -149,6 +152,7 @@ class FinanceSaleRow extends StatelessWidget {
           [
             _d(s.soldAt),
             if ((s.buyerName ?? '').isNotEmpty) s.buyerName!,
+            if (s.partlyPaid && s.owed) '${context.t('mnOwed')} ${money(s.due, 'USD')}',
             if (s.reference != null) '#${s.reference}',
             if (s.cancelReason != null) '${context.t('reason')}: ${s.cancelReason}',
             if (s.pending) context.t('msWaitingSync'),
@@ -305,7 +309,7 @@ class FinanceOwedTab extends StatelessWidget {
     final today = DateTime.now();
     final unpaid = finance.unpaidSales;
     final bills = finance.billsToPay;
-    final owedToUs = unpaid.fold(0.0, (t, s) => t + s.amount);
+    final owedToUs = unpaid.fold(0.0, (t, s) => t + s.due);
     final weOwe = bills.fold(0.0, (t, e) => t + e.amount);
     final overdue = bills.where((e) => e.overdue(today)).fold(0.0, (t, e) => t + e.amount);
     Widget figure(String key, String label, String value, {Color? color}) => Container(
@@ -323,7 +327,7 @@ class FinanceOwedTab extends StatelessWidget {
       final name = (s.buyerName ?? '').trim().isEmpty ? context.t('finNoName') : s.buyerName!.trim();
       final k = name.toLowerCase();
       final b = byBuyer[k];
-      byBuyer[k] = (name: name, amount: (b?.amount ?? 0) + s.amount, count: (b?.count ?? 0) + 1);
+      byBuyer[k] = (name: name, amount: (b?.amount ?? 0) + s.due, count: (b?.count ?? 0) + 1);
     }
     final bySupplier = <String, ({String name, double amount, int count})>{};
     for (final e in bills) {

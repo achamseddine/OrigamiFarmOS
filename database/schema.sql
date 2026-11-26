@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 142 tables, 47 secondary indexes.
+-- 142 tables, 49 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -731,29 +731,6 @@ CREATE TABLE crop_plantings (
 );
 CREATE INDEX ix_crop_plantings_field ON crop_plantings (field_id);
 
-CREATE TABLE customer_payments (
-    id VARCHAR(36) NOT NULL,
-    farm_id VARCHAR(36) NOT NULL,
-    customer_id VARCHAR(36),
-    buyer_name VARCHAR(200),
-    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    sales_count INTEGER NOT NULL,
-    amount_due FLOAT NOT NULL,
-    amount_received FLOAT NOT NULL,
-    original_amount FLOAT,
-    original_currency VARCHAR(10),
-    exchange_rate FLOAT,
-    difference_sale_id VARCHAR(36),
-    reference VARCHAR(120),
-    notes TEXT,
-    recorded_by VARCHAR(36),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(farm_id) REFERENCES farms (id),
-    FOREIGN KEY(customer_id) REFERENCES customers (id)
-);
-CREATE INDEX ix_customer_payments_farm_paid ON customer_payments (farm_id, paid_at);
-
 CREATE TABLE emergency_protocol_versions (
     id VARCHAR(36) NOT NULL,
     emergency_protocol_id VARCHAR(36) NOT NULL,
@@ -1352,6 +1329,32 @@ CREATE TABLE breeding_events (
     FOREIGN KEY(male_animal_id) REFERENCES animals (id)
 );
 CREATE INDEX ix_breeding_events_female ON breeding_events (female_animal_id, occurred_at);
+
+CREATE TABLE customer_payments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    customer_id VARCHAR(36),
+    buyer_name VARCHAR(200),
+    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sales_count INTEGER NOT NULL,
+    amount_due FLOAT NOT NULL,
+    amount_received FLOAT NOT NULL,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    difference_sale_id VARCHAR(36),
+    sale_id VARCHAR(36),
+    reference VARCHAR(120),
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id),
+    FOREIGN KEY(sale_id) REFERENCES sales (id)
+);
+CREATE INDEX ix_customer_payments_farm_paid ON customer_payments (farm_id, paid_at);
+CREATE INDEX ix_customer_payments_sale_id ON customer_payments (sale_id);
 
 CREATE TABLE egg_records (
     id VARCHAR(36) NOT NULL,
@@ -2336,6 +2339,10 @@ CREATE TABLE mouneh_sale_lines (
     margin FLOAT NOT NULL,
     sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
     sold_by VARCHAR(36),
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    cancelled_by VARCHAR(36),
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(sale_id) REFERENCES sales (id),
@@ -2344,6 +2351,7 @@ CREATE TABLE mouneh_sale_lines (
     FOREIGN KEY(finished_goods_stock_id) REFERENCES finished_goods_stock (id),
     FOREIGN KEY(customer_id) REFERENCES customers (id)
 );
+CREATE INDEX ix_mouneh_sale_lines_sale_id ON mouneh_sale_lines (sale_id);
 
 CREATE TABLE pregnancy_assessments (
     id VARCHAR(36) NOT NULL,

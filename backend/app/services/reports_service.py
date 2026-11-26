@@ -27,7 +27,10 @@ def build_daily_summary(db: Session, farm_id: str) -> dict:
 
     revenue = sum(s.amount for s in sales)
     expense_total = sum(e.amount for e in expenses)
-    cash_collected = sum(s.amount for s in sales if s.payment_status == "paid")
+    from app.services.finance_service import paid_so_far, received
+
+    got = received(db, [s.id for s in sales if s.payment_status == "partial"])
+    cash_collected = sum(paid_so_far(s, got) for s in sales)
     pending = revenue - cash_collected
 
     sales_by_type: dict[str, float] = defaultdict(float)

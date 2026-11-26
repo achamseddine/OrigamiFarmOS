@@ -31,6 +31,9 @@ class FinanceSale {
     this.cancelReason,
     this.reversalOfId,
     this.activity,
+    this.amountPaid = 0,
+    this.balanceDue,
+    this.mounehSaleId,
     this.pending = false,
   });
 
@@ -58,13 +61,27 @@ class FinanceSale {
   final String? reversalOfId;
   final String? activity;
 
+  /// Received so far (all of it once paid; the parts of a sale paid in part).
+  final double amountPaid;
+
+  /// What the buyer still owes, as the server counts it (the amount less
+  /// the parts paid); null on a sale not yet sent.
+  final double? balanceDue;
+
+  /// A sale in the Mouneh shop: its line there.
+  final String? mounehSaleId;
+
   /// Saved on this device, waiting to be sent.
   final bool pending;
 
   bool get cancelled => status == 'cancelled';
   bool get isReversal => status == 'reversal';
   bool get paid => paymentStatus == 'paid';
-  bool get owed => status == 'recorded' && !paid && amount > 0;
+  bool get partlyPaid => paymentStatus == 'partial';
+
+  /// What is still to be received for it.
+  double get due => status == 'recorded' && !paid && amount > 0 ? (balanceDue ?? amount) : 0;
+  bool get owed => due > 0.004;
 
   factory FinanceSale.fromJson(Map<String, dynamic> j) => FinanceSale(
         id: j['id'] as String,
@@ -88,6 +105,9 @@ class FinanceSale {
         cancelReason: j['cancel_reason'] as String?,
         reversalOfId: j['reversal_of_id'] as String?,
         activity: j['activity'] as String?,
+        amountPaid: _d(j['amount_paid']),
+        balanceDue: _dn(j['balance_due']),
+        mounehSaleId: j['mouneh_sale_id'] as String?,
         pending: j['_pending'] == true,
       );
 }

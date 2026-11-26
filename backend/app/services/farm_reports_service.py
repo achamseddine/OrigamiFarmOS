@@ -391,7 +391,10 @@ def finance_report(db: Session, farm_id: str, start: date | None, end: date | No
             d["expenses"] += e.amount
     revenue = sum(s.amount for s in sales)
     expense_total = sum(e.amount for e in expenses)
-    paid = sum(s.amount for s in sales if s.payment_status == "paid")
+    from app.services.finance_service import paid_so_far, received
+
+    got = received(db, [s.id for s in sales if s.payment_status == "partial"])
+    paid = sum(paid_so_far(s, got) for s in sales)
     out.update({
         "kpis": {"revenue": _r(revenue), "expenses": _r(expense_total), "margin": _r(revenue - expense_total), "cash_collected": _r(paid),
                  "pending": _r(revenue - paid), "sales": len(sales)},
@@ -428,8 +431,9 @@ def sales_report(db: Session, farm_id: str, start: date | None, end: date | None
         lbl = s.product_label or s.product_type
         return lbl[: -len(_CANCELLED_SUFFIX)] if lbl.endswith(_CANCELLED_SUFFIX) else lbl
 
-    from app.services.finance_service import ACTIVITY_OF_PRODUCT
+    from app.services.finance_service import ACTIVITY_OF_PRODUCT, balance_due, paid_so_far, received
 
+    got = received(db, [s.id for s in rows if s.payment_status == "partial"])
     by_product: dict[tuple[str, str, str | None], dict] = {}
     by_buyer: dict[str, dict] = {}
     by_activity: dict[str, float] = defaultdict(float)
@@ -453,12 +457,13 @@ def sales_report(db: Session, farm_id: str, start: date | None, end: date | None
             d["amount"] += s.amount
             if s.status == "recorded":
                 d["sales"] += 1
-        if s.status == "recorded" and s.payment_status in ("pending", "partial") and s.amount > 0:
-            b["unpaid"] += s.amount
-            unpaid.append({"date": _day(s.sold_at, tz), "product": label(s), "buyer": buyer(s), "amount": _r(s.amount),
+        due = balance_due(s, got)
+        if due > 0:
+            b["unpaid"] += due
+            unpaid.append({"date": _day(s.sold_at, tz), "product": label(s), "buyer": buyer(s), "amount": _r(due),
                            "days": (today - ensure_utc(s.sold_at).astimezone(tz).date()).days})
     revenue = sum(s.amount for s in rows)
-    paid = sum(s.amount for s in rows if s.payment_status == "paid")
+    paid = sum(paid_so_far(s, got) for s in rows)
     count = sum(1 for s in rows if s.status == "recorded")
     out.update({
         "kpis": {"sales": count, "revenue": _r(revenue), "paid": _r(paid), "unpaid": _r(sum(u["amount"] for u in unpaid)),
