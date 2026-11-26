@@ -1,5 +1,32 @@
 # Releases
 
+## v0.8.12 — Buying feed: suppliers' prices, purchase orders, deliveries against them, and what is still owed
+
+Master prompt Package 2 (database/PROCUREMENT-SCHEMA.md §4, §7, §8). On the tablet and the web app (Feed → **Buying**), enforced by the server. Builds on v0.8.9's supplier bills.
+- **Suppliers' prices.** Several suppliers can sell the same ingredient at different prices. Each supplier's quote is kept per item (the manager sets it; a new price replaces the quote and the old one stays in the audit log). The list is cheapest first in USD at today's rate, with what each supplier's last delivery cost.
+- **Purchase orders.**
+  - An order goes to one supplier at a price per line — the supplier's quote when none is given, and an LBP quote never prices a USD order.
+  - It is placed direct, or from an approved purchase request (which becomes *ordered*, then *received*).
+  - A worker drafts it and the manager places it: the approval and the authority behind it are kept. Orders are numbered `PO-000001` per farm.
+  - Orders are in USD or LBP at an agreed rate, paid on each delivery or on credit.
+- **Deliveries against an order**, partial or whole: what came, what was rejected (with the reason) and the quality seen, numbered `GR-000001`.
+  - The accepted goods become a feed lot through the stock ledger, with the supplier, the price ordered, the day, the delivery note and the quality. A poor delivery is held until released.
+  - The supplier's bill is posted for what was accepted.
+  - More than 10% over what was ordered is refused. An order with goods received is closed short (the rest is not coming), not cancelled.
+  - Two people receiving the last of an order at once cannot both take it (the order's row is locked).
+- **The match** (*Ordered vs delivered*): per line and for the order, it shows:
+  - ordered, received, accepted, rejected and still to come;
+  - the value accepted at the price ordered, against what was billed, paid and is still owed;
+  - any difference, named, never hidden.
+
+  Payments are made on the bills, in parts (v0.8.9).
+- **A mix stays traceable to its suppliers.** A lot's trace and a mix's ingredient lots now show each lot's supplier, cost, day, quality and the order, receipt and delivery note it came on.
+- Server: **migration `c7e9a1b3d5f8`** — tables `supplier_items`, `purchase_orders`, `purchase_order_lines`, `goods_receipts` and `goods_receipt_lines` (accepted + rejected ≤ received, checked by the database).
+  - Endpoints, under `/procurement`: `GET/POST supplier-items`; `GET/POST purchase-orders`; `GET purchase-orders/{id}`; `POST purchase-orders/{id}/approve | cancel | close | receive`; `GET purchase-orders/{id}/match`.
+  - Events: `purchase_order_created`, `purchase_order_approved`, `purchase_order_cancelled`, `purchase_order_closed`, `goods_received`, `goods_rejected`, `supplier_price_set`.
+- Tests: backend +10 (`test_procurement_orders.py`), and the same on PostgreSQL 16 with a two-thread receipt race (`test_procurement_orders_pg.py`); app +4 (`test/records/purchase_orders_test.dart`).
+- Not in this release: medicines on purchase orders (they keep v0.8.9's receipt with its bill); supplier contacts and addresses; a supplier-return document (returns stay v0.8.9's *Return to supplier* on a lot, credited on its bill).
+
 ## v0.8.9 — Purchases in the books: what was accepted is stock, what is owed is owed, cash is what was paid
 
 Audit 2026-11-25 (I-9, I-14). On the tablet and the web app, enforced by the server:

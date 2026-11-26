@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 143 tables, 51 secondary indexes.
+-- 148 tables, 55 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -1640,6 +1640,35 @@ CREATE TABLE protocol_trigger_rules (
     FOREIGN KEY(protocol_version_id) REFERENCES emergency_protocol_versions (id)
 );
 
+CREATE TABLE purchase_orders (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    po_no VARCHAR(80) NOT NULL,
+    requisition_id VARCHAR(36),
+    order_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    expected_delivery_date TIMESTAMP WITH TIME ZONE,
+    currency VARCHAR(3) NOT NULL,
+    exchange_rate FLOAT,
+    payment_terms VARCHAR(20) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    subtotal FLOAT NOT NULL,
+    total_amount FLOAT NOT NULL,
+    notes TEXT,
+    created_by VARCHAR(36) NOT NULL,
+    approved_by VARCHAR(36),
+    approved_at TIMESTAMP WITH TIME ZONE,
+    closed_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_purchase_order_no UNIQUE (farm_id, po_no),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(requisition_id) REFERENCES purchase_requisitions (id),
+    FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_purchase_orders_status ON purchase_orders (farm_id, status);
+
 CREATE TABLE purchase_requisition_lines (
     id VARCHAR(36) NOT NULL,
     requisition_id VARCHAR(36) NOT NULL,
@@ -1678,6 +1707,31 @@ CREATE TABLE raw_materials (
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id)
 );
+
+CREATE TABLE supplier_items (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    supplier_item_code VARCHAR(120) NOT NULL,
+    description VARCHAR(250),
+    purchase_uom VARCHAR(30) NOT NULL,
+    pack_quantity FLOAT,
+    minimum_order_quantity FLOAT,
+    standard_lead_time_days FLOAT,
+    unit_price FLOAT,
+    currency VARCHAR(3) NOT NULL,
+    price_updated_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_supplier_item UNIQUE (supplier_id, inventory_item_id, supplier_item_code),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(purchase_uom) REFERENCES units_of_measure (code)
+);
+CREATE INDEX ix_supplier_items_item ON supplier_items (farm_id, inventory_item_id);
 
 CREATE TABLE supplier_payments (
     id VARCHAR(36) NOT NULL,
@@ -1971,6 +2025,25 @@ CREATE TABLE finished_goods_stock (
     FOREIGN KEY(batch_id) REFERENCES production_batches (id)
 );
 
+CREATE TABLE goods_receipts (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    purchase_order_id VARCHAR(36),
+    receipt_no VARCHAR(80) NOT NULL,
+    received_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    received_by VARCHAR(36),
+    delivery_note_no VARCHAR(120),
+    status VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_goods_receipt_no UNIQUE (farm_id, receipt_no),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(purchase_order_id) REFERENCES purchase_orders (id)
+);
+CREATE INDEX ix_goods_receipts_purchase_order_id ON goods_receipts (purchase_order_id);
+
 CREATE TABLE hatch_events (
     id VARCHAR(36) NOT NULL,
     incubation_batch_id VARCHAR(36) NOT NULL,
@@ -2188,6 +2261,27 @@ CREATE TABLE protocol_medication_steps (
     FOREIGN KEY(medicine_product_id) REFERENCES medicine_products (inventory_item_id),
     FOREIGN KEY(dose_unit) REFERENCES units_of_measure (code),
     FOREIGN KEY(weight_unit) REFERENCES units_of_measure (code)
+);
+
+CREATE TABLE purchase_order_lines (
+    id VARCHAR(36) NOT NULL,
+    purchase_order_id VARCHAR(36) NOT NULL,
+    requisition_line_id VARCHAR(36),
+    line_no INTEGER NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    feed_product_id VARCHAR(36),
+    ordered_quantity FLOAT NOT NULL,
+    uom_code VARCHAR(30) NOT NULL,
+    unit_price FLOAT NOT NULL,
+    line_total FLOAT NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_purchase_order_line_no UNIQUE (purchase_order_id, line_no),
+    FOREIGN KEY(purchase_order_id) REFERENCES purchase_orders (id),
+    FOREIGN KEY(requisition_line_id) REFERENCES purchase_requisition_lines (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(feed_product_id) REFERENCES feed_products (id),
+    FOREIGN KEY(uom_code) REFERENCES units_of_measure (code)
 );
 
 CREATE TABLE supplier_feed_performance (
@@ -2873,6 +2967,32 @@ CREATE TABLE feeding_event_components (
     FOREIGN KEY(lot_id) REFERENCES feed_lots (id),
     FOREIGN KEY(batch_id) REFERENCES feed_batches (id)
 );
+
+CREATE TABLE goods_receipt_lines (
+    id VARCHAR(36) NOT NULL,
+    goods_receipt_id VARCHAR(36) NOT NULL,
+    purchase_order_line_id VARCHAR(36),
+    line_no INTEGER NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    received_quantity FLOAT NOT NULL,
+    accepted_quantity FLOAT NOT NULL,
+    rejected_quantity FLOAT NOT NULL,
+    uom_code VARCHAR(30) NOT NULL,
+    feed_lot_id VARCHAR(36),
+    expense_id VARCHAR(36),
+    quality_grade VARCHAR(20),
+    rejection_reason VARCHAR(200),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_goods_receipt_line_no UNIQUE (goods_receipt_id, line_no),
+    CONSTRAINT ck_goods_receipt_line_quantities CHECK (received_quantity >= 0 AND accepted_quantity >= 0 AND rejected_quantity >= 0 AND accepted_quantity + rejected_quantity <= received_quantity + 0.000001),
+    FOREIGN KEY(goods_receipt_id) REFERENCES goods_receipts (id),
+    FOREIGN KEY(purchase_order_line_id) REFERENCES purchase_order_lines (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(uom_code) REFERENCES units_of_measure (code),
+    FOREIGN KEY(feed_lot_id) REFERENCES feed_lots (id),
+    FOREIGN KEY(expense_id) REFERENCES expenses (id)
+);
+CREATE INDEX ix_goods_receipt_lines_purchase_order_line_id ON goods_receipt_lines (purchase_order_line_id);
 
 CREATE TABLE feed_usage_policy_rules (
     id VARCHAR(36) NOT NULL,

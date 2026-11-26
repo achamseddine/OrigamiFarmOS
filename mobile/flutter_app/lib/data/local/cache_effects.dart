@@ -323,6 +323,21 @@ final List<_Rule> _rules = [
   _Rule('POST', '/approval-requests', (m) => [
         AppendRecord('/approval-requests', _newRecord(m, extra: {'status': 'pending', 'summary': m.body['summary'] ?? '', 'requested_at': _now()})),
       ]),
+  // Buying feed (Package 2): a draft or placed order shows at once; what a
+  // delivery changes (lots, stock, the bill) is the server's to say.
+  _Rule('POST', '/procurement/purchase-orders', (m) => [
+        AppendRecord('/procurement/purchase-orders', _newRecord(m, extra: {
+          'po_no': '…',
+          'status': m.body['approve'] == true ? 'approved' : 'draft',
+          'order_date': _now(),
+          'total_amount': [for (final l in (m.body['lines'] as List? ?? const [])) ((l as Map)['quantity'] as num? ?? 0) * (l['unit_price'] as num? ?? 0)]
+              .fold<num>(0, (a, b) => a + b),
+          'lines': const <dynamic>[],
+        })),
+      ]),
+  _Rule('POST', '/procurement/purchase-orders/$_id/approve', (m) => [MergeRecord('/procurement/purchase-orders', m.ids[0], const {'status': 'approved'})]),
+  _Rule('POST', '/procurement/purchase-orders/$_id/close', (m) => [MergeRecord('/procurement/purchase-orders', m.ids[0], const {'status': 'closed'})]),
+  _Rule('POST', '/procurement/purchase-orders/$_id/cancel', (m) => [MergeRecord('/procurement/purchase-orders', m.ids[0], const {'status': 'cancelled'})]),
   _Rule('POST', '/approval-requests/$_id/approve', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'approved', 'decided_at': _now()})]),
   _Rule('POST', '/approval-requests/$_id/reject', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'rejected', 'decided_at': _now(), 'decision_note': m.body['note']})]),
   _Rule('POST', '/approval-requests/$_id/cancel', (m) => [MergeRecord('/approval-requests', m.ids[0], {'status': 'cancelled', 'decided_at': _now()})]),
