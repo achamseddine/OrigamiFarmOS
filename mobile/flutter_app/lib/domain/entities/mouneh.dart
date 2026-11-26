@@ -468,20 +468,35 @@ class FinishedGoodsStock {
 }
 
 /// REQ-MOU-006: sales reduce finished goods stock and calculate profit.
+/// A sale in the Mouneh shop. The jars leave the shelf here; the sale is in
+/// the farm's books too ([saleId]: Sales & Finance, owed, reports, profit
+/// and loss), and what was paid is cash in — paid at the till, owed, or
+/// paid in part ([amountPaid], [balanceDue]).
 class MounehSale {
   const MounehSale({
     required this.id,
     required this.productId,
-    required this.batchId,
-    required this.finishedGoodsStockId,
+    this.batchId = '',
+    this.finishedGoodsStockId = '',
     required this.quantity,
     required this.unitPrice,
     this.discount = 0,
     this.channel = 'retail',
-    required this.costPerUnit,
+    this.costPerUnit = 0,
     required this.revenue,
-    required this.margin,
+    this.margin = 0,
     required this.soldAt,
+    this.status = 'recorded',
+    this.cancelReason,
+    this.saleId,
+    this.farmShop = false,
+    this.paymentStatus = 'paid',
+    this.amountPaid = 0,
+    this.balanceDue = 0,
+    this.buyerName,
+    this.originalAmount,
+    this.originalCurrency,
+    this.pending = false,
   });
 
   final String id;
@@ -497,20 +512,64 @@ class MounehSale {
   final double margin;
   final DateTime soldAt;
 
-  factory MounehSale.fromJson(Map<String, dynamic> json) => MounehSale(
-        id: json['id'] as String,
-        productId: json['product_id'] as String,
-        batchId: json['batch_id'] as String,
-        finishedGoodsStockId: json['finished_goods_stock_id'] as String,
-        quantity: (json['quantity'] as num).toDouble(),
-        unitPrice: (json['unit_price'] as num).toDouble(),
-        discount: (json['discount'] as num?)?.toDouble() ?? 0,
-        channel: json['channel'] as String? ?? 'retail',
-        costPerUnit: (json['cost_per_unit'] as num).toDouble(),
-        revenue: (json['revenue'] as num).toDouble(),
-        margin: (json['margin'] as num).toDouble(),
-        soldAt: DateTime.parse(json['sold_at'] as String),
-      );
+  /// recorded | cancelled (the jars are back on the shelf, the revenue undone)
+  final String status;
+  final String? cancelReason;
+
+  /// The sale in the farm's books: its own, or the farm-shop purchase of a
+  /// visit it was part of ([farmShop] — cancelled in Farm visits).
+  final String? saleId;
+  final bool farmShop;
+
+  /// paid | pending | partial
+  final String paymentStatus;
+  final double amountPaid;
+  final double balanceDue;
+  final String? buyerName;
+  final double? originalAmount;
+  final String? originalCurrency;
+
+  /// Saved on this device, waiting to be sent.
+  final bool pending;
+
+  bool get cancelled => status == 'cancelled';
+  bool get owed => !cancelled && balanceDue > 0.004;
+
+  factory MounehSale.fromJson(Map<String, dynamic> json) {
+    double d(Object? v) => (v as num?)?.toDouble() ?? 0;
+    final quantity = d(json['quantity']);
+    final unitPrice = d(json['unit_price']);
+    final discount = d(json['discount']);
+    // A sale waiting to be sent has only what was typed: what it comes to.
+    final revenue = (json['revenue'] as num?)?.toDouble() ?? quantity * unitPrice - discount;
+    final paymentStatus = json['payment_status'] as String? ?? 'paid';
+    final amountPaid = (json['amount_paid'] as num?)?.toDouble() ?? (paymentStatus == 'paid' ? revenue : 0);
+    return MounehSale(
+      id: json['id'] as String,
+      productId: json['product_id'] as String,
+      batchId: json['batch_id'] as String? ?? '',
+      finishedGoodsStockId: json['finished_goods_stock_id'] as String? ?? '',
+      quantity: quantity,
+      unitPrice: unitPrice,
+      discount: discount,
+      channel: json['channel'] as String? ?? 'retail',
+      costPerUnit: d(json['cost_per_unit']),
+      revenue: revenue,
+      margin: d(json['margin']),
+      soldAt: DateTime.tryParse(json['sold_at'] as String? ?? '') ?? DateTime.now(),
+      status: json['status'] as String? ?? 'recorded',
+      cancelReason: json['cancel_reason'] as String?,
+      saleId: json['sale_id'] as String?,
+      farmShop: json['farm_shop'] == true,
+      paymentStatus: paymentStatus,
+      amountPaid: amountPaid,
+      balanceDue: (json['balance_due'] as num?)?.toDouble() ?? (revenue - amountPaid).clamp(0, double.infinity).toDouble(),
+      buyerName: json['buyer_name'] as String?,
+      originalAmount: (json['original_amount'] as num?)?.toDouble(),
+      originalCurrency: json['original_currency'] as String?,
+      pending: json['_pending'] == true,
+    );
+  }
 }
 
 /// Per-product roll-up shown on the profitability dashboard.

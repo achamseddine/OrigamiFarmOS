@@ -1793,6 +1793,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/reconciliation/mouneh-sales:
+    get:
+      tags:
+      - finance
+      summary: Mouneh Sales Reconciliation
+      description: 'A dry run: Mouneh sales on record that are not in the books yet —
+
+        what posting them would add, the farm-shop jars already in a visit''s
+
+        purchase, and anything that needs a look. Nothing is written.'
+      operationId: mouneh_sales_reconciliation_api_v1_finance_reconciliation_mouneh_sales_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Mouneh Sales Reconciliation Api V1 Finance Reconciliation Mouneh Sales
+                  Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - finance
+      summary: Apply Mouneh Sales Reconciliation
+      description: 'Post each of them once, on the day it was sold (paid then, or still
+
+        owed); link the farm-shop jars to their purchase. Safe to run again.'
+      operationId: apply_mouneh_sales_reconciliation_api_v1_finance_reconciliation_mouneh_sales_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/MounehReconcile'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Apply Mouneh Sales Reconciliation Api V1 Finance Reconciliation Mouneh
+                  Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/animals:
     get:
       tags:
@@ -11448,6 +11505,11 @@ paths:
       tags:
       - mouneh
       summary: Record Sale
+      description: 'The jars leave the shelf, the sale is in the farm''s books (Sales &
+
+        Finance, owed, reports, profit and loss) and what was paid is cash in —
+
+        three records, each written once (services/mouneh_sales_service.py).'
       operationId: record_sale_api_v1_mouneh_sales_post
       security:
       - HTTPBearer: []
@@ -11496,6 +11558,43 @@ paths:
                 items:
                   $ref: '#/components/schemas/MounehSaleOut'
                 title: Response List Sales Api V1 Mouneh Sales Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/mouneh/sales/{sale_id}/cancel:
+    post:
+      tags:
+      - mouneh
+      summary: Cancel Sale
+      description: 'The jars back on the shelf, the revenue undone by a negative row in
+
+        the books, what was received refunded; the sale stays on file.'
+      operationId: cancel_sale_api_v1_mouneh_sales__sale_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: sale_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Sale Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWithReason'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MounehSaleOut'
         '422':
           description: Validation Error
           content:
@@ -19845,6 +19944,17 @@ components:
           title: Status
       type: object
       title: MounehProductUpdate
+    MounehReconcile:
+      properties:
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+      type: object
+      title: MounehReconcile
+      description: 'POST /finance/reconciliation/mouneh-sales — past Mouneh sales into the
+
+        books: as paid on the day they were sold (default), or still owed.'
     MounehSaleCreate:
       properties:
         product_id:
@@ -19870,10 +19980,49 @@ components:
           - type: string
           - type: 'null'
           title: Customer Id
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
         channel:
           type: string
           title: Channel
           default: retail
+        sold_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Sold At
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        amount_paid:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Amount Paid
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
         confirm_duplicate:
           type: boolean
           title: Confirm Duplicate
@@ -19915,6 +20064,11 @@ components:
           - type: string
           - type: 'null'
           title: Customer Id
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
         channel:
           type: string
           title: Channel
@@ -19927,10 +20081,75 @@ components:
         margin:
           type: number
           title: Margin
+        cost_of_goods:
+          type: number
+          title: Cost Of Goods
+          default: 0
         sold_at:
           type: string
           format: date-time
           title: Sold At
+        sold_by:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sold By
+        status:
+          type: string
+          title: Status
+          default: recorded
+        cancel_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cancel Reason
+        cancelled_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Cancelled At
+        sale_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Sale Id
+        farm_shop:
+          type: boolean
+          title: Farm Shop
+          default: false
+        payment_status:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment Status
+        amount_paid:
+          type: number
+          title: Amount Paid
+          default: 0
+        balance_due:
+          type: number
+          title: Balance Due
+          default: 0
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        original_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Original Amount
+        original_currency:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Original Currency
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
       type: object
       required:
       - id
@@ -20716,6 +20935,10 @@ components:
         confirm_duplicate:
           type: boolean
           title: Confirm Duplicate
+          default: false
+        part_payment:
+          type: boolean
+          title: Part Payment
           default: false
       type: object
       required:

@@ -625,6 +625,7 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
   final _notes = TextEditingController();
   String _currency = 'USD';
   bool _amountEdited = false;
+  bool _partPayment = false;
   DateTime _day = DateTime.now();
   bool _saving = false;
   String? _error;
@@ -652,7 +653,7 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
     _syncAmount();
   }
 
-  double _due(List<FinanceSale> sales) => sales.where((s) => _chosen.contains(s.id)).fold(0.0, (t, s) => t + s.amount);
+  double _due(List<FinanceSale> sales) => sales.where((s) => _chosen.contains(s.id)).fold(0.0, (t, s) => t + s.due);
 
   /// The amount received follows what is due until someone types it.
   void _syncAmount() {
@@ -695,6 +696,7 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
           paidAt: recordedInstant(_day),
           reference: _reference.text,
           notes: _notes.text,
+          partPayment: _partPayment && _chosen.length == 1,
         );
     if (!mounted) return;
     if (result.success) {
@@ -765,7 +767,7 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
                 '${_d(s.soldAt.toLocal())} · ${s.productLabel == 'Raw milk' ? context.t('msRawMilk') : (s.productLabel ?? s.productType)}'
                 '${s.quantity == null ? '' : ' · ${s.quantity! == s.quantity!.roundToDouble() ? s.quantity!.toStringAsFixed(0) : s.quantity!.toStringAsFixed(1)} ${s.unit ?? ''}'}',
               ),
-              secondary: Text(moneyWithOriginal(s.amount, s.originalAmount, s.originalCurrency)),
+              secondary: Text(s.partlyPaid ? '${context.t('mnOwed')} ${money(s.due, 'USD')}' : moneyWithOriginal(s.amount, s.originalAmount, s.originalCurrency)),
             ),
           const Divider(height: 20, color: FarmColors.border),
           Text(
@@ -798,11 +800,25 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
             amount: amount,
             farmRate: finance.rates.lbpPerUsd,
           ),
+          // Less than one sale comes to: a part payment (the rest stays owed),
+          // or a deduction kept as its own row.
+          if (_chosen.length == 1 && difference != null && difference <= -0.01)
+            CheckboxListTile(
+              key: const ValueKey('pay-part'),
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _partPayment,
+              onChanged: (v) => setState(() => _partPayment = v ?? false),
+              title: Text(context.t('payPartRestOwed')),
+            ),
           if (difference != null && difference.abs() >= 0.01) ...[
             const SizedBox(height: 8),
             Text(
               key: const ValueKey('pay-difference'),
-              '${context.t(difference < 0 ? 'payShort' : 'payExtra')}: ${money(difference.abs(), 'USD')} — ${context.t('payDifferenceKept')}',
+              _partPayment && _chosen.length == 1 && difference < 0
+                  ? '${context.t('payStillOwed')}: ${money(difference.abs(), 'USD')}'
+                  : '${context.t(difference < 0 ? 'payShort' : 'payExtra')}: ${money(difference.abs(), 'USD')} — ${context.t('payDifferenceKept')}',
               style: FarmTypography.textTheme.bodySmall?.copyWith(color: difference < 0 ? FarmColors.danger : FarmColors.success),
             ),
           ],

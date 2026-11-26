@@ -272,6 +272,11 @@ class MounehProvider extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------- Sales
+  /// The jars leave the shelf; the server puts the sale in the farm's books
+  /// and what was paid in cash in. [paymentStatus]: paid (at the till),
+  /// pending (owed — [buyerName] says by whom) or partial ([amountPaid] now,
+  /// the rest owed). [soldAt] is the moment of the sale, kept when it waits
+  /// offline and is sent later.
   Future<WriteResult> recordSale({
     required String productId,
     String? finishedGoodsStockId,
@@ -279,9 +284,20 @@ class MounehProvider extends ChangeNotifier {
     required double unitPrice,
     double discount = 0,
     String channel = 'retail',
+    String paymentStatus = 'paid',
+    double? amountPaid,
+    String? buyerName,
+    DateTime? soldAt,
   }) async {
     if (quantity <= 0) return const WriteResult.fail('valueMustBePositive');
     if (discount < 0) return const WriteResult.fail('valueMustBePositive');
+    final total = quantity * unitPrice - discount;
+    if (total <= 0) return const WriteResult.fail('mnSaleForNothing');
+    final buyer = (buyerName ?? '').trim();
+    if (paymentStatus != 'paid' && buyer.isEmpty) return const WriteResult.fail('mnSaleNeedsBuyer');
+    if (paymentStatus == 'partial' && (amountPaid == null || amountPaid <= 0 || amountPaid >= total)) {
+      return const WriteResult.fail('mnSalePartInvalid');
+    }
     final result = await _api.write(() => _api.post('/mouneh/sales', body: {
           'product_id': productId,
           'finished_goods_stock_id': finishedGoodsStockId,
@@ -289,16 +305,32 @@ class MounehProvider extends ChangeNotifier {
           'unit_price': unitPrice,
           'discount': discount,
           'channel': channel,
+          'sold_at': (soldAt ?? DateTime.now()).toUtc().toIso8601String(),
+          'payment_status': paymentStatus,
+          if (paymentStatus == 'partial') 'amount_paid': amountPaid,
+          if (buyer.isNotEmpty) 'buyer_name': buyer,
         }));
     if (result.success) await load();
     return result;
   }
 
+  /// A sale recorded by mistake, or brought back: the jars go back on the
+  /// shelf, the revenue is undone in the books and what was paid refunded.
+  Future<WriteResult> cancelSale(String mounehSaleId, String reason) async {
+    if (reason.trim().isEmpty) return const WriteResult.fail('mnCancelWhyRequired');
+    final result = await _api.write(() => _api.post('/mouneh/sales/$mounehSaleId/cancel', body: {'reason': reason.trim()}));
+    if (result.success) await load();
+    return result;
+  }
+
+  /// Sales on record (a cancelled one sold nothing).
+  Iterable<MounehSale> get _soldSales => _sales.where((s) => !s.cancelled);
+
   // --------------------------------------------------------- Dashboards
   MounehProductProfitability profitabilityFor(String productId, {int windowDays = 30}) {
     final product = productById(productId);
     final stocks = stockFor(productId);
-    final productSales = _sales.where((s) => s.productId == productId).toList();
+    final productSales = _soldSales.where((s) => s.productId == productId).toList();
 
     final unitsProduced = stocks.fold<double>(0, (sum, s) => sum + s.quantityProduced);
     final unitsSold = stocks.fold<double>(0, (sum, s) => sum + s.quantitySold);
@@ -348,8 +380,11 @@ class MounehProvider extends ChangeNotifier {
   int get activeBatchCount => _batches.where((b) => b.isInProgress).length;
   double get totalFinishedUnits => _finishedGoods.fold<double>(0, (sum, s) => sum + s.quantityAvailable);
   double get totalStockValue => _finishedGoods.fold<double>(0, (sum, s) => sum + s.quantityAvailable * s.unitCost);
-  double get totalRevenue => _sales.fold<double>(0, (sum, s) => sum + s.revenue);
-  double get totalProfit => _sales.fold<double>(0, (sum, s) => sum + s.margin);
+  double get totalRevenue => _soldSales.fold<double>(0, (sum, s) => sum + s.revenue);
+  double get totalProfit => _soldSales.fold<double>(0, (sum, s) => sum + s.margin);
+
+  /// What buyers still owe for Mouneh sales.
+  double get totalOwed => _soldSales.fold<double>(0, (sum, s) => sum + s.balanceDue);
 }
 
 extension _FirstOrNull<T> on Iterable<T> {

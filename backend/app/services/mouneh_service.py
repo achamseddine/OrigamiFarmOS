@@ -148,7 +148,9 @@ def product_profitability(db: Session, product: mouneh_models.MounehProduct, *, 
     stocks = list(
         db.scalars(select(mouneh_models.FinishedGoodsStock).where(mouneh_models.FinishedGoodsStock.product_id == product.id))
     )
-    sales = list(db.scalars(select(mouneh_models.MounehSaleLine).where(mouneh_models.MounehSaleLine.product_id == product.id)))
+    # A cancelled sale stays on file; its jars are back on the shelf and it sold nothing.
+    sales = list(db.scalars(select(mouneh_models.MounehSaleLine).where(mouneh_models.MounehSaleLine.product_id == product.id,
+                                                                       mouneh_models.MounehSaleLine.status == "recorded")))
 
     units_produced = sum(s.quantity_produced for s in stocks)
     units_sold = sum(s.quantity_sold for s in stocks)

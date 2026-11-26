@@ -254,10 +254,12 @@ final List<_Rule> _rules = [
   _Rule('POST', '/finance/expenses', (m) => [
         AppendRecord('/finance/expenses', _newRecord(m, extra: {'status': 'recorded', ..._inUsd(m.body, m.body['amount'] as num? ?? 0)})),
       ]),
-  // A buyer's payment for several sales: each one shows paid at once.
+  // A buyer's payment for several sales: each one shows paid at once (a
+  // part payment shows paid in part; the server works out the balance).
   _Rule('POST', '/finance/payments', (m) => [
         for (final id in (m.body['sale_ids'] as List<dynamic>? ?? const []))
-          MergeRecord('/finance/sales', '$id', {'payment_status': 'paid', 'paid_at': m.body['paid_at'] ?? _now()}),
+          MergeRecord('/finance/sales', '$id',
+              m.body['part_payment'] == true ? {'payment_status': 'partial'} : {'payment_status': 'paid', 'paid_at': m.body['paid_at'] ?? _now()}),
       ]),
   _Rule('POST', '/finance/expenses/$_id/paid', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
   _Rule('POST', '/finance/expenses/$_id/cancel', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
@@ -575,6 +577,10 @@ final List<_Rule> _rules = [
   ..._crud('/mouneh/raw-materials', update: false),
   _Rule('POST', '/mouneh/batches', (m) => [AppendRecord('/mouneh/batches', _newRecord(m, extra: {'status': 'planned'}))]),
   _Rule('POST', '/mouneh/sales', (m) => [AppendRecord('/mouneh/sales', _newRecord(m))]),
+  // A cancelled sale stays listed, crossed out; its jars are back on the shelf once the server has it.
+  _Rule('POST', '/mouneh/sales/$_id/cancel', (m) => [
+        MergeRecord('/mouneh/sales', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason'], 'balance_due': 0}),
+      ]),
   // Batch lifecycle: consuming inputs starts it, completing it finishes.
   _Rule('POST', '/mouneh/batches/$_id/consume', (m) => [
         MergeRecord('/mouneh/batches', m.ids[0], {'status': 'in_progress', 'started_at': _now()}),

@@ -8,19 +8,18 @@ through these same endpoints.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core import duplicates
 from app.core import permissions as perms
-from app.api.deps import ensure_stock_override, get_current_user, require_module_license, require_mouneh_operations_role
+from app.api.deps import ensure_stock_override, get_current_user, require_module_license, require_mouneh_operations_role, user_can
 from app.db.base import get_db
 from app.domain import models, mouneh_models
 from app.mouneh import costing
 from app.repositories.base import new_id, now
+from app.schemas.finance import CancelWithReason
+from app.services import mouneh_sales_service as mouneh_sales
 from app.services import mouneh_service
 from app.schemas.mouneh import (
     BatchCompleteRequest,
@@ -44,9 +43,6 @@ from app.schemas.mouneh import (
 )
 
 router = APIRouter(prefix="/mouneh", tags=["mouneh"], dependencies=[Depends(require_module_license("mouneh"))])
-
-# A repeated sale is looked for over this short window (see record_sale).
-_SALE_WINDOW = timedelta(minutes=5)
 
 MODULE_CODE = "mouneh"
 
@@ -608,102 +604,48 @@ def record_sale(
     payload: MounehSaleCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(require_mouneh_operations_role),
-) -> mouneh_models.MounehSaleLine:
-    product = _product_or_404(db, payload.product_id, current_user.farm_id)
-
-    if payload.finished_goods_stock_id:
-        stock = db.get(mouneh_models.FinishedGoodsStock, payload.finished_goods_stock_id)
-        if stock is None or stock.farm_id != current_user.farm_id or stock.product_id != product.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Finished goods stock not found for this product")
-    else:
-        # Auto-pick oldest-expiry stock first (sell-through-oldest-first).
-        stock = db.scalars(
-            select(mouneh_models.FinishedGoodsStock)
-            .where(
-                mouneh_models.FinishedGoodsStock.farm_id == current_user.farm_id,
-                mouneh_models.FinishedGoodsStock.product_id == product.id,
-                mouneh_models.FinishedGoodsStock.quantity_available > 0,
-            )
-            .order_by(mouneh_models.FinishedGoodsStock.expiry_date.asc().nulls_last())
-        ).first()
-        if stock is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"No available stock for {product.name}")
-
-    if payload.quantity > stock.quantity_available:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
-            f"Only {stock.quantity_available} units available, cannot sell {payload.quantity}",
-        )
-
-    # The same sale typed in twice (a second tablet, a repeated tap after the
-    # first one went through). Two customers buying the same jar minutes
-    # apart is real — so it is asked, not refused outright.
-    lo, hi = duplicates.near(None, _SALE_WINDOW)
-    customer = mouneh_models.MounehSaleLine.customer_id
-    twin = db.scalars(
-        select(mouneh_models.MounehSaleLine).where(
-            mouneh_models.MounehSaleLine.farm_id == current_user.farm_id,
-            mouneh_models.MounehSaleLine.product_id == product.id,
-            mouneh_models.MounehSaleLine.quantity == payload.quantity,
-            mouneh_models.MounehSaleLine.unit_price == payload.unit_price,
-            customer.is_(None) if payload.customer_id is None else customer == payload.customer_id,
-            mouneh_models.MounehSaleLine.sold_at.between(lo, hi),
-        )
-    ).first()
-    duplicates.guard(twin, f"{payload.quantity:g} × {product.name} at {payload.unit_price:g} was sold a few minutes ago.",
-                     confirm=payload.confirm_duplicate)
-
-    margin = costing.compute_sale_margin(
-        quantity=payload.quantity, unit_price=payload.unit_price, discount=payload.discount, unit_cost=stock.unit_cost
-    )
-
-    sale = mouneh_models.MounehSaleLine(
-        id=new_id(),
-        farm_id=current_user.farm_id,
-        product_id=product.id,
-        batch_id=stock.batch_id,
-        finished_goods_stock_id=stock.id,
-        quantity=payload.quantity,
-        unit_price=payload.unit_price,
-        discount=payload.discount,
-        customer_id=payload.customer_id,
-        channel=payload.channel,
-        cost_per_unit=stock.unit_cost,
-        revenue=margin.revenue,
-        margin=margin.profit,
-        sold_at=now(),
-        sold_by=current_user.id,
-    )
-    db.add(sale)
-
-    stock.quantity_available -= payload.quantity
-    stock.quantity_sold += payload.quantity
-
-    _write_event(
-        db,
-        farm_id=current_user.farm_id,
-        entity_type="mouneh_sale_line",
-        entity_id=sale.id,
-        event_type="sale_recorded",
-        payload={"product_id": product.id, "quantity": payload.quantity, "revenue": margin.revenue},
-        user_id=current_user.id,
-    )
-    if twin is not None:
-        _write_event(db, farm_id=current_user.farm_id, entity_type="mouneh_sale_line", entity_id=sale.id,
-                     event_type="duplicate_confirmed", payload={"record": "sale", "resembles": twin.id}, user_id=current_user.id)
+) -> dict:
+    """The jars leave the shelf, the sale is in the farm's books (Sales &
+    Finance, owed, reports, profit and loss) and what was paid is cash in —
+    three records, each written once (services/mouneh_sales_service.py)."""
+    line = mouneh_sales.sell(
+        db, current_user, product_id=payload.product_id, finished_goods_stock_id=payload.finished_goods_stock_id, quantity=payload.quantity,
+        unit_price=payload.unit_price, discount=payload.discount, customer_id=payload.customer_id, buyer_name=payload.buyer_name,
+        channel=payload.channel, sold_at=payload.sold_at, payment_status=payload.payment_status, amount_paid=payload.amount_paid,
+        currency=payload.currency, exchange_rate=payload.exchange_rate, reference=payload.reference, notes=payload.notes,
+        confirm_duplicate=payload.confirm_duplicate)
     db.commit()
-    db.refresh(sale)
-    return sale
+    return mouneh_sales.line_rows(db, [line])[0]
 
 
 @router.get("/sales", response_model=list[MounehSaleOut])
 def list_sales(
     product_id: str | None = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
-) -> list[mouneh_models.MounehSaleLine]:
+) -> list[dict]:
     stmt = select(mouneh_models.MounehSaleLine).where(mouneh_models.MounehSaleLine.farm_id == current_user.farm_id)
     if product_id:
         stmt = stmt.where(mouneh_models.MounehSaleLine.product_id == product_id)
-    return list(db.scalars(stmt.order_by(mouneh_models.MounehSaleLine.sold_at.desc())))
+    return mouneh_sales.line_rows(db, db.scalars(stmt.order_by(mouneh_models.MounehSaleLine.sold_at.desc())))
+
+
+def _may_cancel_sale(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)) -> models.User:
+    """Cancelling a sale is an approval: Mouneh, Sales or Finance (owners and managers hold it)."""
+    if not any(user_can(db, user, m, perms.APPROVE) for m in (perms.MOUNEH_INVENTORY, perms.MOUNEH_PRODUCTION, perms.SALES, perms.FINANCE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cancelling a sale is the farm manager's (Mouneh, Sales or Finance approval).")
+    return user
+
+
+@router.post("/sales/{sale_id}/cancel", response_model=MounehSaleOut)
+def cancel_sale(sale_id: str, payload: CancelWithReason, db: Session = Depends(get_db),
+                current_user: models.User = Depends(_may_cancel_sale)) -> dict:
+    """The jars back on the shelf, the revenue undone by a negative row in
+    the books, what was received refunded; the sale stays on file."""
+    line = db.get(mouneh_models.MounehSaleLine, sale_id)
+    if line is None or line.farm_id != current_user.farm_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mouneh sale not found")
+    mouneh_sales.cancel(db, line, current_user, reason=payload.reason)
+    db.commit()
+    return mouneh_sales.line_rows(db, [line])[0]
 
 
 # ---------------------------------------------------------------------------
