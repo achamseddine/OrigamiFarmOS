@@ -105,7 +105,7 @@ _Look _lookFor(BuildContext context, SyncController sync) {
     case SyncBadge.pending:
       return (
         label: '$waiting',
-        tooltip: '$waiting ${context.t('waitingToSync')}',
+        tooltip: sync.waitingForSignIn ? '$waiting ${context.t('syncNeedsSignIn')}' : '$waiting ${context.t('waitingToSync')}',
         icon: Icons.cloud_upload_outlined,
         color: FarmColors.warning,
         spinning: false,

@@ -671,6 +671,8 @@ class FarmStrings {
     'signOutAnyway': 'Sign out anyway',
     'firstLoginNeedsInternet': 'Connect to the farm network to sign in the first time. After that this device works offline.',
     'restoredOfflineNotice': 'Opened offline — showing the farm as it was at your last connection.',
+    'syncNeedsSignIn': 'records wait on this tablet: sign in with the farm server to send them (signed in offline).',
+    'offlineSessionNotice': 'Signed in on this tablet without the farm server. What you record waits here and is sent after you sign in with the server.',
     'offlineNotDownloaded': 'Not downloaded to this device yet.',
     // What a queued write is about, in the sync panel.
     'outboxChange': 'Change',
@@ -3506,6 +3508,8 @@ class FarmStrings {
     'signOutAnyway': 'اطلع',
     'firstLoginNeedsInternet': 'لازم تكون عشبكة المزرعة أوّل مرّة بس تفوت. بعدها الجهاز بيشتغل بلا إنترنت.',
     'restoredOfflineNotice': 'فتحت بلا شبكة — عم تشوف المزرعة متل ما كانت آخر مرّة.',
+    'syncNeedsSignIn': 'سجلات ناطرة عالتابلت: فوت عالحساب مع سيرفر المزرعة لتنبعت (فايت بلا شبكة).',
+    'offlineSessionNotice': 'فايت عالتابلت بلا سيرفر المزرعة. يلّي بتسجّلو بيستنّى هون وبينبعت بعد ما تفوت مع السيرفر.',
     'offlineNotDownloaded': 'ما انزّل عالجهاز بعد.',
     'outboxChange': 'تغيير',
     'outboxTask': 'مهمة',

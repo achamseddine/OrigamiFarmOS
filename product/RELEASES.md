@@ -1,5 +1,13 @@
 # Releases
 
+## v0.8.10 — Back in after a restart with no network: offline sign-in on the tablet
+
+Audit 2026-11-25 (I-10), architecture/ADR-007-OFFLINE-SIGN-IN.md:
+- **Restart the tablet with no network and sign in.** A worker who signed in with the farm server on this tablet in the last 7 days types the same email and password; when the server cannot be reached, the tablet opens their cached farm and they carry on (feedings, milk, observations…). The sync panel says so: *Signed in on this tablet without the farm server…*.
+- **Nothing reaches the server from an offline session** — it holds no server token. What is recorded waits in the queue, untouched (*N records wait on this tablet: sign in with the farm server to send them*), and is sent once after the next sign-in the server accepts. A token the server no longer accepts keeps the queue instead of marking records failed.
+- **Safe by design:** only a salted PBKDF2 check of the password is kept — never the password or the token; the same server and email only; it expires 7 days after the last sign-in the server accepted; a password the server refuses, or signing out, closes offline access; another account's cached farm is never shown. The sign-in form still shows on every launch. Not available in a browser.
+- App only, **no migration**. Tests: app +9 (`test/auth/offline_signin_test.dart`). Physical tablet restart: not run in CI.
+
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 
 Audit 2026-11-25 (I-8). On the tablet and the web app, enforced by the server:

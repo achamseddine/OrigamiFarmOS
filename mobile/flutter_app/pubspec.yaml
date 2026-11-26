@@ -17,6 +17,8 @@ dependencies:
   flutter_svg: ^2.0.10+1
   http: ^1.2.2
   shared_preferences: ^2.2.3
+  # Offline sign-in check (PBKDF2-HMAC-SHA256), ADR-007. Pure Dart.
+  crypto: ^3.0.3
 
   # On-device cache + outbox, so a tablet taken out to a field keeps
   # working and the records it collects reach the server on the way back.
