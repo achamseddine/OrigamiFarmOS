@@ -666,7 +666,13 @@ class Sale(Base):
 
 
 class Expense(Base):
+    """An expense, or a supplier's bill. A bill for stock received — a feed
+    lot, a medicine lot — is linked to it (`linked_entity_type` /
+    `linked_entity_id`, one bill per delivery) and is an asset bought, not
+    a cost; what settles it is in `supplier_payments` (v0.8.9)."""
+
     __tablename__ = "expenses"
+    __table_args__ = (UniqueConstraint("linked_entity_type", "linked_entity_id", name="uq_expenses_linked_entity"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -681,7 +687,7 @@ class Expense(Base):
     # v0.8.0 — expenses and bills recorded in Sales & Finance.
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
     supplier_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # paid | pending (a bill still to pay)
+    # paid | pending (a bill still to pay) | partial (paid in parts so far)
     payment_status: Mapped[str] = mapped_column(String(20), default="paid", server_default="paid")
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

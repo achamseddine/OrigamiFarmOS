@@ -262,6 +262,8 @@ final List<_Rule> _rules = [
               m.body['part_payment'] == true ? {'payment_status': 'partial'} : {'payment_status': 'paid', 'paid_at': m.body['paid_at'] ?? _now()}),
       ]),
   _Rule('POST', '/finance/expenses/$_id/paid', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'payment_status': 'paid', 'paid_at': _now()})]),
+  // A part of a bill paid offline: shown paid in part until the server works out the balance.
+  _Rule('POST', '/finance/expenses/$_id/payments', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'payment_status': 'partial'})]),
   _Rule('POST', '/finance/expenses/$_id/cancel', (m) => [MergeRecord('/finance/expenses', m.ids[0], {'status': 'cancelled', 'cancel_reason': m.body['reason']})]),
   _Rule('POST', '/production/harvest', (m) => [AppendRecord('/production/harvest', _newRecord(m))]),
 

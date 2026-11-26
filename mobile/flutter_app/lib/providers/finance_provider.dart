@@ -173,6 +173,16 @@ class FinanceProvider extends ChangeNotifier {
 
   Future<WriteResult> markExpensePaid(FinanceExpense e) => _write(() => _api.post('/finance/expenses/${e.id}/paid', body: <String, dynamic>{}));
 
+  /// A payment toward a supplier's bill (part of it, or the rest), in USD
+  /// or LBP — cash out on [paidAt]; the rest stays owed (v0.8.9).
+  Future<WriteResult> payBill(FinanceExpense e, {required double amount, String currency = 'USD', double? exchangeRate, DateTime? paidAt}) =>
+      _write(() => _api.post('/finance/expenses/${e.id}/payments', body: {
+            'amount': amount,
+            'currency': currency,
+            'exchange_rate': ?exchangeRate,
+            if (paidAt != null) 'paid_at': paidAt.toUtc().toIso8601String(),
+          }));
+
   Future<WriteResult> cancelExpense(FinanceExpense e, String reason) =>
       _write(() => _api.post('/finance/expenses/${e.id}/cancel', body: {'reason': reason}));
 

@@ -132,6 +132,11 @@ class FinanceExpense {
     this.status = 'recorded',
     this.cancelReason,
     this.activity,
+    this.amountPaid = 0,
+    this.balanceDue,
+    this.stockPurchase = false,
+    this.lotId,
+    this.credited = 0,
     this.pending = false,
   });
 
@@ -155,11 +160,26 @@ class FinanceExpense {
   final String status;
   final String? cancelReason;
   final String? activity;
+
+  /// Paid so far (USD) and still owed (USD at the bill's rate) — v0.8.9.
+  final double amountPaid;
+  final double? balanceDue;
+
+  /// A supplier's bill for stock received (a feed or medicine delivery).
+  final bool stockPurchase;
+  final String? lotId;
+
+  /// Taken off by credit notes (goods returned), in the bill's currency.
+  final double credited;
   final bool pending;
 
   bool get cancelled => status == 'cancelled';
   bool get paid => paymentStatus == 'paid';
-  bool get toPay => !cancelled && !paid;
+  bool get partlyPaid => paymentStatus == 'partial';
+  bool get toPay => !cancelled && !paid && owed > 0.004;
+
+  /// What is still to pay on it.
+  double get owed => cancelled || paid ? 0 : (balanceDue ?? amount);
 
   /// A bill past its due date, still unpaid.
   bool overdue(DateTime today) {
@@ -186,6 +206,11 @@ class FinanceExpense {
         status: j['status'] as String? ?? 'recorded',
         cancelReason: j['cancel_reason'] as String?,
         activity: j['activity'] as String?,
+        amountPaid: _d(j['amount_paid']),
+        balanceDue: _dn(j['balance_due']),
+        stockPurchase: j['stock_purchase'] == true,
+        lotId: j['lot_id'] as String?,
+        credited: _d(j['credited']),
         pending: j['_pending'] == true,
       );
 }

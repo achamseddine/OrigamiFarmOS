@@ -21,10 +21,12 @@ from app.api.deps import require_any_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
-from app.schemas.finance import CancelWithReason, ExchangeRateCreate, ExpenseCreate, MarkPaid, PaymentCreate, SaleCreate
+from app.schemas.finance import (CancelWithReason, ExchangeRateCreate, ExpenseCreate, MarkPaid, PaymentCreate, PurchaseReconcile, SaleCreate,
+                                 SupplierPaymentCreate)
 from app.schemas.mouneh import MounehReconcile
 from app.services import finance_service as finance
 from app.services import mouneh_sales_service as mouneh_sales
+from app.services import purchases_service as purchases
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -60,7 +62,7 @@ _RECEIVE = _need((perms.SALES, perms.CREATE), (perms.FINANCE, perms.CREATE), (pe
 _SET_RATE = _need((perms.FINANCE, perms.APPROVE), (perms.SETTINGS, perms.CONFIGURE),
                   message="The exchange rate is set by the farm manager (Finance approval).")
 _RECONCILE = _need((perms.FINANCE, perms.APPROVE),
-                   message="Putting past Mouneh sales in the books is the farm manager's (Finance approval).")
+                   message="Putting past sales and deliveries in the books is the farm manager's (Finance approval).")
 
 
 # ------------------------------------------------------------ the rate
@@ -146,21 +148,21 @@ def record_expense(payload: ExpenseCreate, db: Session = Depends(get_db), user: 
         supplier_name=payload.supplier_name, payment_status=payload.payment_status, due_date=payload.due_date,
         reference=payload.reference, notes=payload.notes, activity=payload.activity, confirm_duplicate=payload.confirm_duplicate)
     db.commit()
-    return finance.expense_dict(row)
+    return finance.expense_rows(db, [row])[0]
 
 
 @router.post("/expenses/{expense_id}/paid")
 def mark_expense_paid(expense_id: str, payload: MarkPaid | None = None, db: Session = Depends(get_db), user: models.User = Depends(_SPEND)) -> dict:
     row = finance.mark_expense_paid(db, finance.get_expense(db, expense_id, user.farm_id), user, paid_at=payload.paid_at if payload else None)
     db.commit()
-    return finance.expense_dict(row)
+    return finance.expense_rows(db, [row])[0]
 
 
 @router.post("/expenses/{expense_id}/cancel")
 def cancel_expense(expense_id: str, payload: CancelWithReason, db: Session = Depends(get_db), user: models.User = Depends(_CANCEL_EXPENSE)) -> dict:
     row = finance.cancel_expense(db, finance.get_expense(db, expense_id, user.farm_id), user, reason=payload.reason)
     db.commit()
-    return finance.expense_dict(row)
+    return finance.expense_rows(db, [row])[0]
 
 
 # ------------------------------------------------ who owes what, P&L
@@ -198,5 +200,57 @@ def apply_mouneh_sales_reconciliation(payload: MounehReconcile | None = None, db
     """Post each of them once, on the day it was sold (paid then, or still
     owed); link the farm-shop jars to their purchase. Safe to run again."""
     out = mouneh_sales.reconcile(db, user, apply=True, payment_status=(payload or MounehReconcile()).payment_status)
+    db.commit()
+    return out
+
+
+
+# --------------------------------------------- supplier bills (I-9, I-14)
+def _bill_out(db: Session, bill: models.Expense) -> dict:
+    return {**purchases.bill_summary(db, bill), "payments": purchases.payments_of(db, bill)}
+
+
+@router.post("/expenses/{expense_id}/payments", status_code=status.HTTP_201_CREATED)
+def pay_bill(expense_id: str, payload: SupplierPaymentCreate, db: Session = Depends(get_db), user: models.User = Depends(_SPEND)) -> dict:
+    """A payment toward a supplier's bill — cash out on its day, the rest
+    still owed — or the supplier's refund (kind "refund")."""
+    bill = purchases.get_bill(db, expense_id, user.farm_id, lock=True)
+    row = purchases.pay_bill(db, user, bill, amount=payload.amount, currency=payload.currency, exchange_rate=payload.exchange_rate,
+                             paid_at=payload.paid_at, reference=payload.reference, notes=payload.notes, kind=payload.kind,
+                             confirm_duplicate=payload.confirm_duplicate)
+    db.commit()
+    return {**purchases.payment_dict(row), "bill": purchases.bill_summary(db, bill)}
+
+
+@router.get("/expenses/{expense_id}/payments")
+def bill_payments(expense_id: str, db: Session = Depends(get_db), user: models.User = Depends(_EXPENSES_VIEW)) -> dict:
+    return _bill_out(db, purchases.get_bill(db, expense_id, user.farm_id))
+
+
+@router.post("/supplier-payments/{payment_id}/reverse")
+def reverse_supplier_payment(payment_id: str, payload: CancelWithReason, db: Session = Depends(get_db),
+                             user: models.User = Depends(_CANCEL_EXPENSE)) -> dict:
+    """A payment, refund or credit recorded by mistake: undone by a negative row; it stays on file."""
+    from app.domain import finance_models as fin
+
+    row = db.get(fin.SupplierPayment, payment_id)
+    if row is None or row.farm_id != user.farm_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Payment not found")
+    undo = purchases.reverse_payment(db, user, row, reason=payload.reason)
+    db.commit()
+    return {**purchases.payment_dict(undo), "bill": purchases.bill_summary(db, db.get(models.Expense, row.expense_id))}
+
+
+@router.get("/reconciliation/purchases")
+def purchases_reconciliation(db: Session = Depends(get_db), user: models.User = Depends(_RECONCILE)) -> dict:
+    """A dry run: priced deliveries recorded before v0.8.9 with no bill — the
+    expense that may already have paid for each, or nothing to go on."""
+    return purchases.reconcile(db, user)
+
+
+@router.post("/reconciliation/purchases")
+def apply_purchases_reconciliation(payload: PurchaseReconcile, db: Session = Depends(get_db), user: models.User = Depends(_RECONCILE)) -> dict:
+    """The manager's decisions, applied once: link, paid on arrival, or still owed."""
+    out = purchases.reconcile(db, user, decisions=[d.model_dump() for d in payload.decisions])
     db.commit()
     return out

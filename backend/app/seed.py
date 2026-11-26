@@ -422,6 +422,12 @@ def seed_demo_data(db: Session) -> None:
     db.flush()
     seed_visits_demo_data(db, FARM_ID)
     _seed_rule_groups_and_responsibilities(db)
+    # Each priced delivery of the demo farm has its supplier's bill, paid on
+    # arrival (v0.8.9) — the books start agreeing with the stock.
+    from app.services import purchases_service
+
+    db.flush()
+    purchases_service.bill_seeded_deliveries(db, FARM_ID, "user-rami")
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")

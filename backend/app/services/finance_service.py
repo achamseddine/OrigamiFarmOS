@@ -62,6 +62,9 @@ ACTIVITY_OF_CATEGORY = {"feed": "livestock", "medicine": "livestock", "veterinar
 ACTIVITY_OF_SPECIES = {"cow": "dairy", "goat": "dairy", "sheep": "dairy", "layer_hen": "poultry", "duck": "poultry",
                        "turkey": "poultry"}
 MAX_PL_DAYS = 731
+# A supplier's bill for stock received (v0.8.9): linked to its lot, an asset
+# bought — never a cost here (purchases_service).
+STOCK_BILLS = ("feed_lot", "medicine_lot")
 
 
 class FinanceError(FeedError):
@@ -408,6 +411,55 @@ def list_sales(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
 
 
 # -------------------------------------------------------------- expenses
+def is_stock_bill(e: models.Expense) -> bool:
+    return e.linked_entity_type in STOCK_BILLS
+
+
+def settlement(db: Session, expense_ids) -> dict[str, dict]:
+    """Per bill, from its `supplier_payments` (net of reversals): the cash
+    paid in USD (refunds negative), what was settled in the bill's own
+    currency, what credit notes took off, and how many rows there are."""
+    ids = [i for i in dict.fromkeys(expense_ids) if i]
+    out: dict[str, dict] = {}
+    if not ids:
+        return out
+    rows = db.execute(select(fin.SupplierPayment.expense_id, fin.SupplierPayment.kind, func.sum(fin.SupplierPayment.amount),
+                             func.sum(fin.SupplierPayment.settles), func.count()).where(fin.SupplierPayment.expense_id.in_(ids))
+                      .group_by(fin.SupplierPayment.expense_id, fin.SupplierPayment.kind))
+    for eid, kind, amount, settles, n in rows:
+        d = out.setdefault(eid, {"paid": 0.0, "settled": 0.0, "credited": 0.0, "rows": 0})
+        d["paid"] += amount or 0.0
+        d["settled"] += settles or 0.0
+        if kind == "credit":
+            d["credited"] += settles or 0.0
+        d["rows"] += n
+    return {k: {**v, "paid": round(v["paid"], 2), "settled": round(v["settled"], 2), "credited": round(v["credited"], 2)} for k, v in out.items()}
+
+
+def bill_total(e: models.Expense) -> float:
+    """The bill in its own currency (LBP when it was in LBP)."""
+    return e.original_amount if e.original_currency and e.original_amount is not None else e.amount
+
+
+def bill_balance(e: models.Expense, st: dict | None) -> tuple[float, float]:
+    """(still owed in the bill's currency, the same in USD at the bill's
+    rate). Negative: the supplier owes the farm (overpaid, goods returned)."""
+    if e.status != "recorded":
+        return 0.0, 0.0
+    if not st or not st["rows"]:
+        return (0.0, 0.0) if e.payment_status == "paid" else (round(bill_total(e), 2), round(e.amount, 2))
+    rest = round(bill_total(e) - st["settled"], 2)
+    usd = round(rest / e.exchange_rate, 2) if e.original_currency and e.exchange_rate else rest
+    return rest, usd
+
+
+def expense_rows(db: Session, rows, suppliers: dict[str, str] | None = None) -> list[dict]:
+    """[rows] as expense_dict, with what was paid and is still owed on each."""
+    rows = list(rows)
+    st = settlement(db, [e.id for e in rows])
+    return [expense_dict(e, suppliers, st.get(e.id)) for e in rows]
+
+
 def get_expense(db: Session, expense_id: str, farm_id: str) -> models.Expense:
     e = db.get(models.Expense, expense_id)
     if e is None or e.farm_id != farm_id:
@@ -467,6 +519,15 @@ def mark_expense_paid(db: Session, e: models.Expense, user: models.User, *, paid
         raise FinanceError("A cancelled expense cannot be paid.", 409)
     if e.payment_status == "paid":
         return e
+    st = settlement(db, [e.id]).get(e.id)
+    if is_stock_bill(e) or (st and st["rows"]):
+        # A supplier's bill: the rest is paid, as one more payment, once.
+        from app.services import purchases_service as purchases
+        rest, _usd = bill_balance(e, st)
+        if rest > 0.005:
+            purchases.pay_bill(db, user, e, amount=rest, currency=e.original_currency or fin.BASE_CURRENCY, exchange_rate=e.exchange_rate,
+                               paid_at=paid_at, notes="The rest of the bill", confirm_duplicate=True)
+        return e
     when = not_in_future(paid_at, "A payment") or now()
     e.payment_status, e.paid_at = "paid", when
     write_audit_log(db, farm_id=e.farm_id, user_id=user.id, action="expense_paid", entity_type="expense", entity_id=e.id, module_code=perms.EXPENSES,
@@ -482,6 +543,9 @@ def cancel_expense(db: Session, e: models.Expense, user: models.User, *, reason:
         raise FinanceError("This expense is already cancelled.", 409)
     if not reason or not reason.strip():
         raise FinanceError("Say why the expense is cancelled.")
+    st = settlement(db, [e.id]).get(e.id)
+    if st and (abs(st["paid"]) > 0.005 or abs(st["settled"]) > 0.005):
+        raise FinanceError("This bill has payments on it: reverse them first, then cancel the bill.", 409)
     e.status, e.cancel_reason, e.cancelled_at = "cancelled", reason.strip(), now()
     write_audit_log(db, farm_id=e.farm_id, user_id=user.id, action="expense_cancelled", entity_type="expense", entity_id=e.id,
                     module_code=perms.EXPENSES, summary=f"{e.category.capitalize()} {e.amount:g} {e.currency} cancelled: {reason.strip()}"[:500],
@@ -491,14 +555,21 @@ def cancel_expense(db: Session, e: models.Expense, user: models.User, *, reason:
     return e
 
 
-def expense_dict(e: models.Expense, suppliers: dict[str, str] | None = None) -> dict:
+def expense_dict(e: models.Expense, suppliers: dict[str, str] | None = None, st: dict | None = None) -> dict:
     supplier = e.supplier_label or ((suppliers or {}).get(e.supplier_id) if e.supplier_id else None)
+    rest, rest_usd = bill_balance(e, st)
+    paid = st["paid"] if st and st["rows"] else (e.amount if e.payment_status == "paid" and e.status == "recorded" else 0.0)
     return {"id": e.id, "category": e.category, "description": e.description, "amount": e.amount, "currency": e.currency,
             "original_amount": e.original_amount, "original_currency": e.original_currency, "exchange_rate": e.exchange_rate,
             "incurred_at": e.incurred_at, "supplier_id": e.supplier_id, "supplier_name": supplier, "payment_status": e.payment_status,
             "due_date": e.due_date, "paid_at": e.paid_at, "reference": e.reference, "notes": e.notes, "status": e.status,
             "cancel_reason": e.cancel_reason, "cancelled_at": e.cancelled_at,
-            "activity": e.activity or ACTIVITY_OF_CATEGORY.get(e.category, "general"), "recorded_by": e.recorded_by}
+            "activity": e.activity or ACTIVITY_OF_CATEGORY.get(e.category, "general"), "recorded_by": e.recorded_by,
+            # v0.8.9 — a supplier's bill: paid so far (cash, USD), still owed (USD at the bill's rate, and in
+            # the bill's own currency), credit notes; a bill for stock names its lot.
+            "amount_paid": round(paid, 2), "balance_due": rest_usd, "balance_original": rest,
+            "credited": st["credited"] if st else 0.0, "stock_purchase": is_stock_bill(e),
+            "lot_type": e.linked_entity_type if is_stock_bill(e) else None, "lot_id": e.linked_entity_id if is_stock_bill(e) else None}
 
 
 def list_expenses(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
@@ -506,7 +577,7 @@ def list_expenses(db: Session, farm_id: str, *, days: int = 90) -> list[dict]:
     rows = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.incurred_at >= since)
                       .order_by(models.Expense.incurred_at.desc()).limit(1000)).all()
     suppliers = {s.id: s.name for s in db.scalars(select(models.Supplier).where(models.Supplier.farm_id == farm_id))}
-    return [expense_dict(e, suppliers) for e in rows]
+    return expense_rows(db, rows, suppliers)
 
 
 # ------------------------------------------------- payments for many sales
@@ -663,25 +734,28 @@ def owed(db: Session, farm_id: str, *, receivables: bool = True, payables: bool 
     if payables:
         suppliers = {s.id: s.name for s in db.scalars(select(models.Supplier).where(models.Supplier.farm_id == farm_id))}
         rows = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.status == "recorded",
-                                                       models.Expense.payment_status == "pending").order_by(models.Expense.incurred_at)).all()
+                                                       models.Expense.payment_status.in_(("pending", "partial")))
+                          .order_by(models.Expense.incurred_at)).all()
         items = []
         by_supplier: dict[str, dict] = {}
         overdue = 0.0
-        for e in rows:
-            d = expense_dict(e, suppliers)
+        for d, e in zip(expense_rows(db, rows, suppliers), rows):
+            if d["balance_due"] <= 0.005:
+                continue
+            owe = d["balance_due"]
             due = _farm_day(db, farm_id, e.due_date) if e.due_date else None
             d["days_outstanding"] = (today - _farm_day(db, farm_id, e.incurred_at)).days
             d["overdue_days"] = (today - due).days if due and due < today else 0
             if d["overdue_days"]:
-                overdue += e.amount
+                overdue += owe
             items.append(d)
             key = (d["supplier_name"] or "").strip().lower()
             b = by_supplier.setdefault(key, {"supplier_name": d["supplier_name"], "amount": 0.0, "bills": 0, "overdue": 0.0})
-            b["amount"] += e.amount
+            b["amount"] += owe
             b["bills"] += 1
             if d["overdue_days"]:
-                b["overdue"] += e.amount
-        out["payables"] = {"total": round(sum(e.amount for e in rows), 2), "overdue": round(overdue, 2), "items": items,
+                b["overdue"] += owe
+        out["payables"] = {"total": round(sum(d["balance_due"] for d in items), 2), "overdue": round(overdue, 2), "items": items,
                            "by_supplier": sorted(({**b, "amount": round(b["amount"], 2), "overdue": round(b["overdue"], 2)}
                                                   for b in by_supplier.values()), key=lambda b: -b["amount"])}
     return out
@@ -762,13 +836,24 @@ def profit_loss(db: Session, farm_id: str, start: date | None, end: date | None)
     for s in db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.payment_status == "paid")):
         add_cash(s.paid_at or s.sold_at, "cash_in", s.amount - parts.get(s.id, 0.0))
 
-    # Expenses and bills recorded here.
+    # Expenses and bills recorded here — a bill for stock received is the
+    # stock's, not a cost (feed is a cost when fed, medicine when received).
     for e in db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.status == "recorded",
                                                      models.Expense.incurred_at >= lo, models.Expense.incurred_at < hi)):
-        add_cost(e.incurred_at, f"expense:{e.category}", e.activity or ACTIVITY_OF_CATEGORY.get(e.category, "general"), e.amount)
+        if not is_stock_bill(e):
+            add_cost(e.incurred_at, f"expense:{e.category}", e.activity or ACTIVITY_OF_CATEGORY.get(e.category, "general"), e.amount)
+    # Cash out: what was actually paid, on the day it was paid — each
+    # supplier payment (a refund back is negative); an expense paid with no
+    # payment rows (recorded paid in one go) on its day. A delivery on
+    # credit is not cash.
+    with_rows = set()
+    for p in db.scalars(select(fin.SupplierPayment).where(fin.SupplierPayment.farm_id == farm_id)):
+        with_rows.add(p.expense_id)
+        add_cash(p.paid_at, "cash_out", p.amount)
     for e in db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.status == "recorded",
                                                      models.Expense.payment_status == "paid")):
-        add_cash(e.paid_at or e.incurred_at, "cash_out", e.amount)
+        if e.id not in with_rows:
+            add_cash(e.paid_at or e.incurred_at, "cash_out", e.amount)
 
     # Feed fed: what the feed given cost, against the species it was fed to.
     species_of: dict[tuple[str, str], str] = {}
@@ -784,19 +869,17 @@ def profit_loss(db: Session, farm_id: str, start: date | None, end: date | None)
         cost = sum(c.cost or 0.0 for c in ev.components)
         species = species_of.get((ev.subject_type, ev.subject_id))
         add_cost(ev.occurred_at, "feed_fed", ACTIVITY_OF_SPECIES.get(species or "", "livestock"), cost)
-    # Feed delivered: cash out when it arrives (it is a cost when fed).
-    for lot in db.scalars(select(fm.FeedLot).where(fm.FeedLot.farm_id == farm_id, fm.FeedLot.source_type == "purchased",
-                                                    fm.FeedLot.unit_cost.is_not(None))):
-        add_cash(lot.received_at, "cash_out", round((lot.unit_cost or 0) * (lot.received_quantity or 0), 2))
-    # Medicine received: a cost, and cash out, when it arrives.
+    # Medicine received: a cost when it arrives (the farm's one policy), for
+    # what was accepted — its bill when it has one. Cash is what paid it.
     from app.domain import pharmacy_models as pm
+    medicine_bills = {e.linked_entity_id: e.amount for e in db.scalars(select(models.Expense).where(
+        models.Expense.farm_id == farm_id, models.Expense.linked_entity_type == "medicine_lot", models.Expense.status == "recorded"))}
     for lot in db.scalars(select(pm.InventoryLot).where(pm.InventoryLot.farm_id == farm_id, pm.InventoryLot.source_type == "purchased",
                                                          pm.InventoryLot.unit_cost.is_not(None))):
-        cost = round((lot.unit_cost or 0) * (lot.received_quantity or 0), 2)
         received = ensure_utc(lot.received_at)
         if lo <= received < hi:
+            cost = medicine_bills.get(lot.id, round((lot.unit_cost or 0) * (lot.accepted_quantity or 0), 2))
             add_cost(received, "medicine_received", "livestock", cost)
-        add_cash(received, "cash_out", cost)
     # Farm-visit session costs.
     from app.domain import visits_models as vm
     for c, day in db.execute(select(vm.VisitCost, vm.VisitSession.date).join(vm.VisitSession, vm.VisitSession.id == vm.VisitCost.session_id)

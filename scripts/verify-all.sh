@@ -85,10 +85,10 @@ else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
-  # v0.8.8 (I-8): Mouneh sales in the books, paid / owed / part paid,
-  # cancellations and the reconciliation of past sales, on PostgreSQL.
-  step "Mouneh sales in the books on PostgreSQL" bash -c \
-    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_mouneh_revenue_pg.py"
+  # v0.8.8 (I-8) Mouneh sales and v0.8.9 (I-9, I-14) purchases in the books —
+  # paid, owed, in parts, reversals, reconciliation, a payment race — on PostgreSQL.
+  step "money in the books on PostgreSQL (Mouneh sales, purchases)" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_mouneh_revenue_pg.py tests/test_purchase_payables_pg.py"
 fi
 
 # --- 2. The app: tablet and web from one codebase --------------------------

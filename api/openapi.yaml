@@ -1850,6 +1850,163 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/finance/expenses/{expense_id}/payments:
+    post:
+      tags:
+      - finance
+      summary: Pay Bill
+      description: 'A payment toward a supplier''s bill — cash out on its day, the rest
+
+        still owed — or the supplier''s refund (kind "refund").'
+      operationId: pay_bill_api_v1_finance_expenses__expense_id__payments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPaymentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Pay Bill Api V1 Finance Expenses  Expense Id  Payments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - finance
+      summary: Bill Payments
+      operationId: bill_payments_api_v1_finance_expenses__expense_id__payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Bill Payments Api V1 Finance Expenses  Expense Id  Payments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/supplier-payments/{payment_id}/reverse:
+    post:
+      tags:
+      - finance
+      summary: Reverse Supplier Payment
+      description: 'A payment, refund or credit recorded by mistake: undone by a negative row; it stays
+        on file.'
+      operationId: reverse_supplier_payment_api_v1_finance_supplier_payments__payment_id__reverse_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Payment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWithReason'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reverse Supplier Payment Api V1 Finance Supplier Payments  Payment Id  Reverse
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/reconciliation/purchases:
+    get:
+      tags:
+      - finance
+      summary: Purchases Reconciliation
+      description: 'A dry run: priced deliveries recorded before v0.8.9 with no bill — the
+
+        expense that may already have paid for each, or nothing to go on.'
+      operationId: purchases_reconciliation_api_v1_finance_reconciliation_purchases_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Purchases Reconciliation Api V1 Finance Reconciliation Purchases Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - finance
+      summary: Apply Purchases Reconciliation
+      description: 'The manager''s decisions, applied once: link, paid on arrival, or still owed.'
+      operationId: apply_purchases_reconciliation_api_v1_finance_reconciliation_purchases_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseReconcile'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Apply Purchases Reconciliation Api V1 Finance Reconciliation Purchases
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
   /api/v1/animals:
     get:
       tags:
@@ -3796,6 +3953,45 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/feed-lots/{lot_id}/return:
+    post:
+      tags:
+      - feeding
+      summary: Return Lot
+      description: 'Goods sent back to the supplier: out of this lot''s stock (a return
+
+        movement) and credited on its bill — no cash moves until the supplier
+
+        refunds what was already paid.'
+      operationId: return_lot_api_v1_feed_lots__lot_id__return_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: lot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Lot Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotReturn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedLotOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed-lots/{lot_id}/status:
     patch:
       tags:
@@ -16529,6 +16725,17 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        accepted_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accepted Value
+        bill:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Bill
       type: object
       required:
       - id
@@ -18331,11 +18538,70 @@ components:
           - type: string
           - type: 'null'
           title: Requisition Id
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        paid_amount:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Paid Amount
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
       type: object
       required:
       - feed_product_id
       - quantity
       title: LotReceive
+    LotReturn:
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        explanation:
+          type: string
+          title: Explanation
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+      type: object
+      required:
+      - quantity
+      - explanation
+      title: LotReturn
+      description: '`POST /feed-lots/{id}/return` — goods sent back to the supplier: out
+
+        of the lot''s stock, and credited on its bill.'
     LotStatusUpdate:
       properties:
         status:
@@ -18670,6 +18936,32 @@ components:
           - type: string
           - type: 'null'
           title: Currency
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        paid_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Paid Amount
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
         source_reference_type:
           anyOf:
           - type: string
@@ -22296,6 +22588,37 @@ components:
           title: Steps
       type: object
       title: ProtocolVersionIn
+    PurchaseDecision:
+      properties:
+        lot_id:
+          type: string
+          title: Lot Id
+        action:
+          type: string
+          title: Action
+        expense_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expense Id
+      type: object
+      required:
+      - lot_id
+      - action
+      title: PurchaseDecision
+    PurchaseReconcile:
+      properties:
+        decisions:
+          items:
+            $ref: '#/components/schemas/PurchaseDecision'
+          type: array
+          title: Decisions
+          default: []
+      type: object
+      title: PurchaseReconcile
+      description: 'POST /finance/reconciliation/purchases — the manager''s decisions for
+
+        deliveries recorded before v0.8.9 with no bill.'
     QuantityEventIn:
       properties:
         event_type:
@@ -24025,6 +24348,53 @@ components:
       - farm_id
       - name
       title: SupplierOut
+    SupplierPaymentCreate:
+      properties:
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        kind:
+          type: string
+          title: Kind
+          default: payment
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - amount
+      title: SupplierPaymentCreate
+      description: 'POST /finance/expenses/{id}/payments — a payment toward a supplier''s
+
+        bill (in parts, USD or LBP at [exchange_rate] or the farm''s rate for the
+
+        day), or kind "refund": money the supplier paid back.'
     SyncItemResult:
       properties:
         idempotency_key:

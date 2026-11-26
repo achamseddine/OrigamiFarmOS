@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 142 tables, 49 secondary indexes.
+-- 143 tables, 51 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -783,6 +783,7 @@ CREATE TABLE expenses (
     recorded_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
+    CONSTRAINT uq_expenses_linked_entity UNIQUE (linked_entity_type, linked_entity_id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
 );
@@ -1677,6 +1678,32 @@ CREATE TABLE raw_materials (
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id)
 );
+
+CREATE TABLE supplier_payments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    expense_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36),
+    kind VARCHAR(20) NOT NULL,
+    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    amount FLOAT NOT NULL,
+    settles FLOAT NOT NULL,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    reversal_of_id VARCHAR(36),
+    reference VARCHAR(120),
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(expense_id) REFERENCES expenses (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
+);
+CREATE INDEX ix_supplier_payments_expense_id ON supplier_payments (expense_id);
+CREATE INDEX ix_supplier_payments_farm_paid ON supplier_payments (farm_id, paid_at);
 
 CREATE TABLE visit_activities (
     id VARCHAR(36) NOT NULL,
