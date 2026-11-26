@@ -22,7 +22,9 @@ from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.schemas.finance import CancelWithReason, ExchangeRateCreate, ExpenseCreate, MarkPaid, PaymentCreate, SaleCreate
+from app.schemas.mouneh import MounehReconcile
 from app.services import finance_service as finance
+from app.services import mouneh_sales_service as mouneh_sales
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -57,6 +59,8 @@ _RECEIVE = _need((perms.SALES, perms.CREATE), (perms.FINANCE, perms.CREATE), (pe
                  message="Recording a payment needs Sales or Finance — ask the farm manager.")
 _SET_RATE = _need((perms.FINANCE, perms.APPROVE), (perms.SETTINGS, perms.CONFIGURE),
                   message="The exchange rate is set by the farm manager (Finance approval).")
+_RECONCILE = _need((perms.FINANCE, perms.APPROVE),
+                   message="Putting past Mouneh sales in the books is the farm manager's (Finance approval).")
 
 
 # ------------------------------------------------------------ the rate
@@ -123,7 +127,7 @@ def receive_payment(payload: PaymentCreate, db: Session = Depends(get_db), user:
     Every sale is marked paid; a difference with what they came to is kept."""
     payment = finance.receive_payment(db, user, sale_ids=payload.sale_ids, amount_received=payload.amount_received, currency=payload.currency,
                                       exchange_rate=payload.exchange_rate, paid_at=payload.paid_at, reference=payload.reference,
-                                      notes=payload.notes, confirm_duplicate=payload.confirm_duplicate)
+                                      notes=payload.notes, confirm_duplicate=payload.confirm_duplicate, part_payment=payload.part_payment)
     db.commit()
     return finance.payment_dict(payment)
 
@@ -177,3 +181,22 @@ def profit_loss(start: date | None = Query(None), end: date | None = Query(None)
     """Month by month from [start] to [end] (default the last 12 months):
     revenue by activity, costs by line, profit, cash in and out."""
     return finance.profit_loss(db, user.farm_id, start, end)
+
+
+# ------------------------------------------------- past Mouneh sales (I-8)
+@router.get("/reconciliation/mouneh-sales")
+def mouneh_sales_reconciliation(db: Session = Depends(get_db), user: models.User = Depends(_RECONCILE)) -> dict:
+    """A dry run: Mouneh sales on record that are not in the books yet —
+    what posting them would add, the farm-shop jars already in a visit's
+    purchase, and anything that needs a look. Nothing is written."""
+    return mouneh_sales.reconcile(db, user, apply=False)
+
+
+@router.post("/reconciliation/mouneh-sales")
+def apply_mouneh_sales_reconciliation(payload: MounehReconcile | None = None, db: Session = Depends(get_db),
+                                      user: models.User = Depends(_RECONCILE)) -> dict:
+    """Post each of them once, on the day it was sold (paid then, or still
+    owed); link the farm-shop jars to their purchase. Safe to run again."""
+    out = mouneh_sales.reconcile(db, user, apply=True, payment_status=(payload or MounehReconcile()).payment_status)
+    db.commit()
+    return out

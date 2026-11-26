@@ -10,12 +10,16 @@ import '../../core/widgets/section_card.dart';
 import '../../core/widgets/status_pill.dart';
 import '../../core/widgets/ux_blocks.dart';
 import '../../domain/entities/mouneh.dart';
+import '../../providers/access_provider.dart';
 import '../../providers/mouneh_provider.dart';
+import '../health/pharmacy_tab.dart' show askReason;
 import 'mouneh_dashboard_tab.dart' show mounehRecommendationLabel, mounehRecommendationLevel;
 
 /// Sales & Profitability (tech spec v0.5 §6, screen 7): record a sale, see
 /// it reduce stock and compute profit, and review each product with the
-/// server's continue / slow-mover / review-pricing call.
+/// server's continue / slow-mover / review-pricing call. Every sale is in
+/// the farm's books too (Sales & Finance): paid now, owed by a named buyer,
+/// or paid in part; a manager cancels one and its jars go back on the shelf.
 class SalesProfitabilityTab extends StatefulWidget {
   const SalesProfitabilityTab({super.key});
 
@@ -34,7 +38,10 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
   final _quantity = TextEditingController(text: '1');
   final _unitPrice = TextEditingController();
   final _discount = TextEditingController(text: '0');
+  final _buyer = TextEditingController();
+  final _amountPaid = TextEditingController();
   String _channel = 'retail';
+  String _payment = 'paid';
   bool _saving = false;
   String? _error;
 
@@ -43,6 +50,8 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
     _quantity.dispose();
     _unitPrice.dispose();
     _discount.dispose();
+    _buyer.dispose();
+    _amountPaid.dispose();
     super.dispose();
   }
 
@@ -98,6 +107,42 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: const ValueKey('mouneh-sale-payment'),
+                    isExpanded: true,
+                    initialValue: _payment,
+                    decoration: InputDecoration(labelText: context.t('mnPayment')),
+                    items: [
+                      for (final (value, label) in const [('paid', 'mnPayPaid'), ('pending', 'mnPayPending'), ('partial', 'mnPayPartial')])
+                        DropdownMenuItem(value: value, child: Text(context.t(label))),
+                    ],
+                    onChanged: (v) => setState(() => _payment = v ?? _payment),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(
+                  flex: 2,
+                  child: TextField(
+                    key: const ValueKey('mouneh-sale-buyer'),
+                    controller: _buyer,
+                    decoration: InputDecoration(labelText: context.t('mnBuyer') + (_payment == 'paid' ? '' : ' *')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _payment == 'partial'
+                      ? TextField(
+                          key: const ValueKey('mouneh-sale-amount-paid'),
+                          controller: _amountPaid,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(labelText: '${context.t('mnAmountPaid')} (\$)'),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
                   child: FilledButton(
                     onPressed: (_saving || _productId == null) ? null : _submit,
                     child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('mnRecordSale')),
@@ -126,23 +171,26 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
               : FarmDataTable(
                   columns: [
                     context.t('mnColProduct'), context.t('mnQuantity'), context.t('mnUnitPrice'), context.t('mnChannel'), context.t('mnRevenue'), context.t('mnProfit'),
+                    context.t('mnPayment'),
                   ],
-                  columnFlex: const [2, 1, 1, 1, 1, 1],
+                  columnFlex: const [2, 1, 1, 1, 1, 1, 2],
                   rows: [
                     for (final s in sales.take(20))
                       [
-                        Text(provider.productById(s.productId)?.name ?? s.productId, style: FarmTypography.textTheme.titleSmall),
+                        Text(provider.productById(s.productId)?.name ?? s.productId,
+                            style: FarmTypography.textTheme.titleSmall?.copyWith(decoration: s.cancelled ? TextDecoration.lineThrough : null)),
                         Text(s.quantity.toStringAsFixed(0)),
                         Text('\$${s.unitPrice.toStringAsFixed(2)}'),
                         Text(mounehChannelLabel(context, s.channel)),
                         Text('\$${s.revenue.toStringAsFixed(2)}'),
                         Text('\$${s.margin.toStringAsFixed(2)}', style: TextStyle(color: s.margin >= 0 ? FarmColors.success : FarmColors.danger, fontWeight: FontWeight.w700)),
+                        _SalePayment(sale: s),
                       ],
                   ],
                 ),
         ),
         const SizedBox(height: FarmSpacing.md),
-        NoticeBanner(text: context.t('mnProfitCaveat')),
+        NoticeBanner(text: '${context.t('mnInBooks')} ${context.t('mnProfitCaveat')}'),
       ],
     );
   }
@@ -162,8 +210,11 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
           productId: _productId!,
           quantity: qty,
           unitPrice: price,
-          discount: double.tryParse(_discount.text) ?? 0,
+          discount: double.tryParse(_discount.text.trim().replaceAll(',', '.')) ?? 0,
           channel: _channel,
+          paymentStatus: _payment,
+          amountPaid: double.tryParse(_amountPaid.text.trim().replaceAll(',', '.')),
+          buyerName: _buyer.text,
         );
     if (!mounted) return;
     setState(() {
@@ -171,9 +222,10 @@ class _SalesProfitabilityTabState extends State<SalesProfitabilityTab> {
       if (result.success) {
         _quantity.text = '1';
         _discount.text = '0';
+        _amountPaid.clear();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(result.queued ? 'workingOffline' : 'mnSaleRecorded'))));
       } else {
-        _error = result.error;
+        _error = result.error == null ? null : context.t(result.error!);
       }
     });
   }
@@ -216,4 +268,49 @@ class _ProfitabilityRow extends StatelessWidget {
           Text(value, style: FarmTypography.textTheme.bodyMedium),
         ],
       );
+}
+
+
+/// How a sale stands in the books — paid, owed, paid in part, cancelled —
+/// and, for a manager, the way to cancel it.
+class _SalePayment extends StatelessWidget {
+  const _SalePayment({required this.sale});
+  final MounehSale sale;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = sale;
+    final (label, level) = s.cancelled
+        ? ('msCancelled', FarmStatusLevel.neutral)
+        : s.pending
+            ? ('msWaitingSync', FarmStatusLevel.neutral)
+            : switch (s.paymentStatus) {
+                'paid' => ('msPaid', FarmStatusLevel.good),
+                'partial' => ('mnPayPartial', FarmStatusLevel.watch),
+                _ => ('msToBePaid', FarmStatusLevel.watch),
+              };
+    final canCancel = !s.cancelled && !s.pending && !s.farmShop && context.watch<AccessProvider>().canCancelMounehSale;
+    return Wrap(spacing: 6, runSpacing: 2, crossAxisAlignment: WrapCrossAlignment.center, children: [
+      StatusPill(label: context.t(label), level: level, dense: true),
+      if (s.owed) Text('${context.t('mnOwed')} \$${s.balanceDue.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11.5, color: FarmColors.muted)),
+      if (s.farmShop) Text(context.t('mnFarmShop'), style: const TextStyle(fontSize: 11.5, color: FarmColors.muted)),
+      if (canCancel)
+        IconButton(
+          key: ValueKey('mouneh-sale-cancel-${s.id}'),
+          tooltip: context.t('msCancelSale'),
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.undo, size: 18),
+          onPressed: () => _cancel(context),
+        ),
+    ]);
+  }
+
+  Future<void> _cancel(BuildContext context) async {
+    final why = await askReason(context, title: context.t('msCancelSale'), label: context.t('msCancelWhy'));
+    if (why == null || !context.mounted) return;
+    final result = await context.read<MounehProvider>().cancelSale(sale.id, why);
+    if (!context.mounted) return;
+    final message = result.success ? (result.queued ? 'workingOffline' : 'mnSaleCancelledDone') : (result.error ?? 'mnCancelWhyRequired');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(message))));
+  }
 }

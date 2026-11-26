@@ -265,16 +265,20 @@ def seed_mouneh_demo_data(db: Session, farm_id: str) -> None:
         (15, 5.00, 5, "wholesale", 5),
         (10, 6.50, 0, "market", 2),
     ]
+    # Each in the farm's books too, paid on its day, as the shop posts it.
+    from app.services import mouneh_sales_service
+
     for qty, price, discount, channel, days_ago in sales_def:
         margin = costing.compute_sale_margin(quantity=qty, unit_price=price, discount=discount, unit_cost=stock.unit_cost)
-        db.add(
-            mouneh_models.MounehSaleLine(
-                id=new_id(), farm_id=farm_id, product_id=product.id, batch_id=batch.id,
-                finished_goods_stock_id=stock.id, quantity=qty, unit_price=price, discount=discount,
-                channel=channel, cost_per_unit=stock.unit_cost, revenue=margin.revenue, margin=margin.profit,
-                sold_at=_days_ago(days_ago), sold_by=super_user_id,
-            )
+        line = mouneh_models.MounehSaleLine(
+            id=new_id(), farm_id=farm_id, product_id=product.id, batch_id=batch.id,
+            finished_goods_stock_id=stock.id, quantity=qty, unit_price=price, discount=discount,
+            channel=channel, cost_per_unit=stock.unit_cost, revenue=margin.revenue, margin=margin.profit,
+            sold_at=_days_ago(days_ago), sold_by=super_user_id,
         )
+        db.add(line)
+        db.flush()
+        mouneh_sales_service.post_line(db, line, super_user_id, payment_status="paid")
         stock.quantity_available -= qty
         stock.quantity_sold += qty
 

@@ -229,11 +229,16 @@ class FinishedGoodsStock(Base):
 
 
 class MounehSaleLine(Base):
+    """Jars out of the shop (the inventory movement). The money is in the
+    farm's books: `sale_id` is the canonical `sales` row that carries this
+    line's revenue — its own (product_type "mouneh"), or the farm-shop
+    purchase of a visit it was part of (v0.8.8, services/mouneh_sales_service.py)."""
+
     __tablename__ = "mouneh_sale_lines"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
-    sale_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("sales.id"), nullable=True)
+    sale_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("sales.id"), nullable=True, index=True)
     product_id: Mapped[str] = mapped_column(String(36), ForeignKey("mouneh_products.id"))
     batch_id: Mapped[str] = mapped_column(String(36), ForeignKey("production_batches.id"))
     finished_goods_stock_id: Mapped[str] = mapped_column(String(36), ForeignKey("finished_goods_stock.id"))
@@ -247,6 +252,12 @@ class MounehSaleLine(Base):
     margin: Mapped[float] = mapped_column(Float)
     sold_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     sold_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # recorded | cancelled — a cancelled sale stays on file: its jars are back
+    # on the shelf and its revenue is undone by a negative `sales` row.
+    status: Mapped[str] = mapped_column(String(20), default="recorded", server_default="recorded")
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class MounehEvent(Base):

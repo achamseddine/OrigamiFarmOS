@@ -124,6 +124,10 @@ class AccessProvider extends ChangeNotifier {
   /// Cancels a sale recorded by mistake.
   bool get canCancelSale => can(FarmModule.sales, PermissionAction.approve) || can(FarmModule.finance, PermissionAction.approve);
 
+  /// Cancels a sale in the Mouneh shop (its jars go back on the shelf).
+  bool get canCancelMounehSale =>
+      canCancelSale || can(FarmModule.mounehInventory, PermissionAction.approve) || can(FarmModule.mounehProduction, PermissionAction.approve);
+
   /// Records an expense or a bill and marks a bill paid.
   bool get canRecordExpense => canCreate(FarmModule.expenses) || canCreate(FarmModule.finance);
 

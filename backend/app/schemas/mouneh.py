@@ -475,7 +475,23 @@ class MounehSaleCreate(BaseModel):
     unit_price: float
     discount: float = 0
     customer_id: str | None = None
+    # Or the buyer's name: found among the farm's customers, or added.
+    buyer_name: str | None = None
     channel: str = "retail"
+    # When the sale was made — a sale entered offline keeps its own time
+    # (never in the future); now when left out.
+    sold_at: datetime | None = None
+    # paid (at the till) | pending (owed: name the buyer) | partial (part paid
+    # now: amount_paid, in [currency]; the rest is owed)
+    payment_status: str = "paid"
+    amount_paid: float | None = None
+    # USD (default) | LBP — the price, discount and amount paid are in this
+    # currency; LBP is converted at [exchange_rate], or the farm's rate for
+    # the day. The shop's figures are kept in USD, the LBP on the sale.
+    currency: str = "USD"
+    exchange_rate: float | None = None
+    reference: str | None = None
+    notes: str | None = None
     # The same sale entered twice in a few minutes is refused (409 "Possible
     # duplicate:") unless the person confirms it is a second sale.
     confirm_duplicate: bool = False
@@ -512,11 +528,38 @@ class MounehSaleOut(ORMModel):
     unit_price: float
     discount: float
     customer_id: str | None = None
+    buyer_name: str | None = None
     channel: str
     cost_per_unit: float
     revenue: float
     margin: float
+    # What the jars sold cost to make (quantity × cost per unit).
+    cost_of_goods: float = 0
     sold_at: datetime
+    sold_by: str | None = None
+    # recorded | cancelled (the jars are back on the shelf)
+    status: str = "recorded"
+    cancel_reason: str | None = None
+    cancelled_at: datetime | None = None
+    # The sale in the farm's books (Sales & Finance) — this one's own, or the
+    # farm-shop purchase of a visit it was part of ([farm_shop]).
+    sale_id: str | None = None
+    farm_shop: bool = False
+    # paid | pending | partial — from the books; what was paid and what is owed.
+    payment_status: str | None = None
+    amount_paid: float = 0
+    balance_due: float = 0
+    currency: str = "USD"
+    original_amount: float | None = None
+    original_currency: str | None = None
+    exchange_rate: float | None = None
+
+
+class MounehReconcile(BaseModel):
+    """POST /finance/reconciliation/mouneh-sales — past Mouneh sales into the
+    books: as paid on the day they were sold (default), or still owed."""
+
+    payment_status: str = "paid"
 
 
 # ---------------------------------------------------------------------------

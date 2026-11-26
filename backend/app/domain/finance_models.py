@@ -73,6 +73,10 @@ class CustomerPayment(Base):
     original_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
     exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     difference_sale_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # v0.8.8 — a receipt toward one sale paid in parts (or the refund of
+    # those parts when it is cancelled). Null for a payment that settles its
+    # sales in full; those sales point to it instead (`sales.payment_id`).
+    sale_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("sales.id"), nullable=True, index=True)
     reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

@@ -517,7 +517,9 @@ def record_retail_sale(payload: VisitRetailSaleCreate, db: Session = Depends(get
             stock.quantity_available -= line.quantity
             stock.quantity_sold += line.quantity
             margin = line.quantity * (line.unit_price - stock.unit_cost)
-            db.add(mm.MounehSaleLine(id=new_id(), farm_id=current_user.farm_id, product_id=stock.product_id, batch_id=stock.batch_id, finished_goods_stock_id=stock.id, quantity=line.quantity, unit_price=line.unit_price, discount=0, customer_id=None, channel="retail", cost_per_unit=stock.unit_cost, revenue=line.quantity * line.unit_price, margin=margin, sold_at=now(), sold_by=current_user.id))
+            # The jars' revenue is in this purchase's sale: the line points to
+            # it, so it is never posted to the books a second time (I-8).
+            db.add(mm.MounehSaleLine(id=new_id(), farm_id=current_user.farm_id, sale_id=sale.id, product_id=stock.product_id, batch_id=stock.batch_id, finished_goods_stock_id=stock.id, quantity=line.quantity, unit_price=line.unit_price, discount=0, customer_id=None, channel="retail", cost_per_unit=stock.unit_cost, revenue=line.quantity * line.unit_price, margin=margin, sold_at=now(), sold_by=current_user.id))
 
     retail_sale = vm.VisitRetailSale(id=new_id(), farm_id=current_user.farm_id, booking_id=payload.booking_id, visitor_id=payload.visitor_id, sale_id=sale.id, channel=payload.channel, notes=None)
     db.add(retail_sale)

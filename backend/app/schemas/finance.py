@@ -85,3 +85,6 @@ class PaymentCreate(BaseModel):
     reference: str | None = None
     notes: str | None = None
     confirm_duplicate: bool = False
+    # Toward one sale, the rest still owed (no difference row): the sale is
+    # paid in part until its parts cover it.
+    part_payment: bool = False

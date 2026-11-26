@@ -217,7 +217,7 @@ def seed_visits_demo_data(db: Session, farm_id: str = FARM_ID) -> None:
         makdous_stock.quantity_sold += 2
         db.add(
             mouneh_models.MounehSaleLine(
-                id=new_id(), farm_id=farm_id, product_id=makdous_stock.product_id, batch_id=makdous_stock.batch_id,
+                id=new_id(), farm_id=farm_id, sale_id=sale.id, product_id=makdous_stock.product_id, batch_id=makdous_stock.batch_id,
                 finished_goods_stock_id=makdous_stock.id, quantity=2, unit_price=6.5, discount=0, customer_id=None,
                 channel="retail", cost_per_unit=makdous_stock.unit_cost, revenue=13.0, margin=13.0 - 2 * makdous_stock.unit_cost,
                 sold_at=_now() - timedelta(days=7), sold_by=super_user_id,

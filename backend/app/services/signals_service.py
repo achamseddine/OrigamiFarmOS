@@ -297,12 +297,19 @@ def _visit_signals(db: Session, farm_id: str) -> list[Signal]:
 
 
 def _pending_payment_signals(db: Session, farm_id: str) -> list[Signal]:
-    rows = db.scalars(
-        select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.payment_status != "paid")
+    # What customers still owe, as Who owes what counts it: sales on record
+    # less the parts already paid (not cancelled sales or their reversals).
+    from app.services.finance_service import balance_due, received
+
+    sales = db.scalars(
+        select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.payment_status != "paid",
+                                  models.Sale.status == "recorded", models.Sale.amount > 0)
     ).all()
+    got = received(db, [s.id for s in sales if s.payment_status == "partial"])
+    rows = [s for s in sales if balance_due(s, got) > 0]
     if not rows:
         return []
-    total = sum(s.amount for s in rows)
+    total = sum(balance_due(s, got) for s in rows)
     newest = max(rows, key=lambda s: ensure_utc(s.sold_at))
     return [
         Signal(
