@@ -9,6 +9,7 @@ import 'package:farmos/app/app_navigator.dart';
 import 'package:farmos/auth/session_controller.dart';
 import 'package:farmos/core/theme/theme.dart';
 import 'package:farmos/core/widgets/duplicate_confirmation.dart';
+import 'package:farmos/features/feed/additional_feeding_question.dart';
 import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
@@ -67,15 +68,27 @@ class SnapshotApi extends ApiClient {
   /// same-fact check (backend app/core/duplicates.py).
   final Map<String, String> possibleDuplicates = {};
 
+  /// Paths answered like the server's feeding-round question
+  /// (`feeding_overlap`): recorded once resent with
+  /// `confirm_additional_feeding` and a reason (backend screen_feeding).
+  final Map<String, String> feedingOverlaps = {};
+
   /// Every write goes through the real [ApiClient] write path (and its
   /// duplicate question); only the network call is the snapshot's.
   @override
   Future<dynamic> send(String method, String path, {Object? body, Map<String, dynamic>? query, String? idempotencyKey}) async {
     if (method == 'GET') return get(path, query: query);
-    final refusal = possibleDuplicates[path];
-    if (refusal != null && !(body is Map && body['confirm_duplicate'] == true)) {
+    final overlap = feedingOverlaps[path], duplicate = possibleDuplicates[path];
+    final refusal = overlap != null
+        ? ApiException(409, '$kPossibleDuplicate $overlap',
+            code: 'feeding_overlap', confirmField: 'confirm_additional_feeding', reasonField: 'additional_feeding_reason')
+        : duplicate != null
+            ? ApiException(409, '$kPossibleDuplicate $duplicate')
+            : null;
+    // Accepted on the client's own rule for what confirms a refusal.
+    if (refusal != null && !(body is Map && refusal.isConfirmedBy(body))) {
       writes.add(('REFUSED $method', path, body));
-      throw ApiException(409, '$kPossibleDuplicate $refusal');
+      throw refusal;
     }
     writes.add((method, path, body));
     return <String, dynamic>{'id': 'local-${writes.length}', if (body is Map) ...body.cast<String, dynamic>()};
@@ -87,6 +100,8 @@ class SnapshotFarm {
   SnapshotFarm._(this.api, this.session) {
     // The app's "Already recorded?" question, asked over this test's app.
     installDuplicateConfirmation(navigatorKey);
+    // The "Fed already this round?" question (v0.8.7), asked over this test's app.
+    installAdditionalFeedingQuestion(navigatorKey);
   }
   final SnapshotApi api;
   final SessionController session;

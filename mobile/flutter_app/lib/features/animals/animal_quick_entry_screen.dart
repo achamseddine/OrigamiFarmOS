@@ -332,8 +332,19 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       if (offeredText.isEmpty && refusedText.isEmpty) continue;
       final offered = parseLocalizedDouble(offeredText);
       final refused = refusedText.isEmpty ? null : parseLocalizedDouble(refusedText);
-      if (!canFeed || offered == null || offered <= 0 || (refusedText.isNotEmpty && (refused == null || refused < 0 || refused > offered))) {
+      if (!canFeed || offered == null || offered <= 0 || (refusedText.isNotEmpty && (refused == null || refused < 0))) {
         setState(() => _error = context.t('qrInvalidQuantity'));
+        return;
+      }
+      if (refused != null && refused > offered) {
+        // What was eaten (given less left) cannot be below nothing — the
+        // server refuses it too (v0.8.7, audit I-7).
+        final name = row.productId == null ? '' : context.read<FeedingProvider>().productName(row.productId!, Localizations.localeOf(context).languageCode);
+        setState(() => _error = context
+            .t('feedLeftOverMoreThanGiven')
+            .replaceAll('{feed}', name)
+            .replaceAll('{left}', '${feedNumber(refused)} ${row.unit}')
+            .replaceAll('{given}', '${feedNumber(offered)} ${row.unit}'));
         return;
       }
       if (row.productId == null) {
@@ -401,9 +412,8 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         });
         if (!mounted) return;
         if (!result.success) {
-          final message = result.error ?? context.t('couldNotSave');
-          final short = message.startsWith('Not enough');
-          final shown = short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
+          final short = (result.error ?? '').startsWith('Not enough');
+          final shown = feedingErrorText(context, result);
           setState(() {
             _feedStockShort = _feedStockShort || short;
             _error = milkSaved ? '${context.t('qrMilkSavedPartial')} $shown' : shown;

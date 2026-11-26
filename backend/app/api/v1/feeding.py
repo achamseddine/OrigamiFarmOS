@@ -917,14 +917,15 @@ def record_feeding_event(payload: FeedingEventCreate, db: Session = Depends(get_
     subject = programs.load_subject(db, payload.subject_type, payload.subject_id, user.farm_id)
     override = _require_override(db, user, payload.allow_negative, payload.override_reason)
     components = [c.model_dump() for c in payload.components]
-    earlier = programs.find_duplicate_feeding(db, payload.subject_type, subject.id, event_type=payload.event_type, components=components, at=payload.occurred_at)
-    match = duplicates.guard(earlier, f"The same feeding of {getattr(subject, 'name', 'this subject')} was already recorded within half an hour.",
-                             confirm=payload.confirm_duplicate)
+    # I-7 and the duplicate questions (the same feeding twice; a head fed
+    # with her group and on her own — I-12), before anything is written.
+    screen = programs.screen_feeding(db, user.farm_id, payload.subject_type, subject, event_type=payload.event_type, components=components,
+                                     at=payload.occurred_at, head_count=payload.head_count, confirm_duplicate=payload.confirm_duplicate,
+                                     confirm_additional_feeding=payload.confirm_additional_feeding, reason=payload.additional_feeding_reason)
     event = programs.record_feeding(db, user.farm_id, subject_type=payload.subject_type, subject=subject, components=components,
-                                    event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count, notes=payload.notes,
-                                    override=override, user_id=user.id)
-    duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type=payload.subject_type, entity_id=subject.id, match_id=match.id if match else None,
-                             what=f"feeding:{event.id}", user_id=user.id)
+                                    event_type=payload.event_type, occurred_at=payload.occurred_at, head_count=payload.head_count,
+                                    notes=screen.notes(payload.notes), override=override, user_id=user.id)
+    programs.log_confirmations(db, user.farm_id, payload.subject_type, subject, event, screen, user_id=user.id)
     _commit(db, event)
     return programs.event_to_dict(event)
 

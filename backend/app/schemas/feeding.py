@@ -697,6 +697,14 @@ class FeedingEventCreate(BaseModel):
     # The same feeding of the same subject within half an hour is refused as
     # a possible duplicate unless confirmed (app/core/duplicates.py).
     confirm_duplicate: bool = False
+    # A head fed with her group and on her own in the same round, the same
+    # feed (audit I-12): recorded only when the person confirms it is extra
+    # feed on top of the group's ration. `confirm_duplicate` confirms it too.
+    confirm_additional_feeding: bool = False
+    # Why it is extra (Session 01): required whenever an overlap is
+    # confirmed (asked again, 409, without it); kept on the audit record
+    # and the feeding's notes.
+    additional_feeding_reason: str | None = Field(default=None, max_length=300)
 
 
 class FeedingEventReverse(BaseModel):

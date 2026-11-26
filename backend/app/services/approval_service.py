@@ -169,6 +169,8 @@ def _check_feeding(db: Session, user: models.User, target_id: str | None, payloa
         p = db.get(fm.FeedProduct, c.feed_product_id)
         if p is None or p.farm_id != user.farm_id:
             raise ApprovalError("Feed not found", 404)
+    # Refused when asked, not when the manager approves (audit I-7).
+    programs.check_consumption(db, [c.model_dump() for c in body.components])
     before = ", ".join(f"{c.quantity_offered:g} {c.unit}" for c in event.components) or "—"
     when = ensure_utc(event.occurred_at).date().isoformat()
     name = getattr(subject, "name", event.subject_id)

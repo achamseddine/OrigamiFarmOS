@@ -47,6 +47,7 @@ from app.api.v1 import (
 from app.core import scheduler
 from app import web_client
 from app.core.config import get_settings
+from app.core.duplicates import PossibleDuplicate
 from app.core.idempotency import IdempotencyMiddleware
 from app.services.feed_inventory_service import FeedError
 from app.db.base import Base, engine
@@ -155,8 +156,15 @@ app.include_router(platform.router, prefix=api_prefix)
 @app.exception_handler(FeedError)
 async def _feed_error(_request, exc: FeedError):
     """A feed-architecture rule refused the write. The message is written
-    for the farmer, so it goes out as `detail` like every other refusal."""
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+    for the farmer, so it goes out as `detail` like every other refusal;
+    the rule's `code`, when it has one, beside it."""
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message, **({"code": exc.code} if exc.code else {})})
+
+
+@app.exception_handler(PossibleDuplicate)
+async def _possible_duplicate(_request, exc: PossibleDuplicate):
+    """409 "Possible duplicate: …" with what confirms it (app/core/duplicates.py)."""
+    return JSONResponse(status_code=exc.status_code, content=exc.body())
 app.include_router(observations.router, prefix=api_prefix)
 app.include_router(tasks.router, prefix=api_prefix)
 app.include_router(feed.router, prefix=api_prefix)

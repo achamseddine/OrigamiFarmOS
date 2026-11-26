@@ -265,8 +265,18 @@ class _QueuedRow extends StatelessWidget {
               // is a second one. Retrying unchanged would only be refused again.
               if ((item.lastError ?? '').startsWith(kPossibleDuplicate))
                 OutlinedButton(
+                  key: ValueKey('sync-record-anyway-${item.id}'),
                   onPressed: () async {
-                    await sync.recordAnyway(item.id);
+                    // The button confirms it; a refusal that wants to know
+                    // why (a head fed twice in one round) asks the reason,
+                    // as the form would have.
+                    final refusal = item.refusal == null ? null : ApiException.fromRefusal(item.lastError ?? '', item.refusal!);
+                    var confirmation = refusal?.confirmation();
+                    if (refusal?.reasonField != null) {
+                      confirmation = await ApiClient.confirmPossibleDuplicate?.call(refusal!);
+                      if (confirmation == null) return;
+                    }
+                    await sync.recordAnyway(item.id, confirmation: confirmation ?? const {'confirm_duplicate': true});
                     onChanged();
                   },
                   child: Text(context.t('syncRecordAnyway')),

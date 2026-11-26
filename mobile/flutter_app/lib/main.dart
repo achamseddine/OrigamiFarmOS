@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app/app.dart';
 import 'core/widgets/duplicate_confirmation.dart';
+import 'features/feed/additional_feeding_question.dart';
 import 'data/local/local_store.dart';
 
 Future<void> main() async {
@@ -11,5 +12,6 @@ Future<void> main() async {
   final store = await LocalStore.open();
   // "Already recorded?" for every form (core/widgets/duplicate_confirmation.dart).
   installDuplicateConfirmation();
+  installAdditionalFeedingQuestion();
   runApp(FarmOSApp(store: store));
 }

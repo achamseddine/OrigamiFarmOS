@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_client.dart';
 import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/typography.dart';
@@ -189,8 +190,7 @@ class _FeedingEventDialogState extends State<_FeedingEventDialog> {
     setState(() {
       _saving = false;
       _serverShortfall = _serverShortfall || short;
-      // The server's sentence, without the developer's hint at its end.
-      _error = short ? message.replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '') : message;
+      _error = feedingErrorText(context, result);
     });
   }
 
@@ -418,3 +418,12 @@ class _FeedRow extends StatelessWidget {
 List<FeedingLine> linesFromTargets(Iterable<DailyTarget> targets, {double fraction = 1}) => [
       for (final t in targets) FeedingLine(productId: t.feedProductId, quantity: t.dailyTotal * fraction),
     ];
+
+/// What a feeding form shows for a refusal: more eaten or left over than
+/// was given (I-7, code `more_than_given`) in the person's language; the
+/// server's sentence otherwise, without the developer's hint at the end of
+/// a stock refusal.
+String feedingErrorText(BuildContext context, WriteResult result) {
+  if (result.code == 'more_than_given') return context.t('feedMoreThanGiven');
+  return (result.error ?? context.t('couldNotSave')).replaceAll(RegExp(r'\s*Pass allow_negative=true to override\.?'), '');
+}

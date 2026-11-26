@@ -58,10 +58,14 @@ class FeedError(Exception):
     HTTP status the API layer should answer with and a sentence written for
     the farmer, not the log."""
 
-    def __init__(self, message: str, status_code: int = 422):
+    def __init__(self, message: str, status_code: int = 422, *, code: str | None = None):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+        # A stable name for the rule that refused it, sent beside `detail`
+        # so a client can say it in the person's language without reading
+        # the English sentence (v0.8.7).
+        self.code = code
 
 
 @dataclass
