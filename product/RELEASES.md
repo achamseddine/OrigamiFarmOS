@@ -1,5 +1,15 @@
 # Releases
 
+## v0.8.11 — Milk entered offline is cleared by the farm server; morning and afternoon on the farm's clock
+
+Audit 2026-11-25 (I-11, I-16). On the tablet and the web app, decided by the server (architecture/ADR-008):
+- **Milk recorded offline waits for the server's safety check.** A tablet without the farm server may not know of a treatment recorded on another device. Its milk is shown at once — no second entry — as *Waiting for check*: not counted as stored on the Milk page, and never in the tank, the collector's handover or a sale (those are the server's figures). The Milk page's new card **Milk waiting for the farm server's safety check** lists it; the milk form says so when the server cannot be asked.
+- **The server decides, from the treatment history, when the tablet reconnects.** The milking keeps its own day and time and is judged then: clear milk is saleable; milk the records cannot vouch for is held for review; **milk under a recorded withdrawal is kept as entered but held** — before, it was refused and lost while it might already be in the tank. Held, it is out of the tank, the collector's handover and every sale and can never be released, only withheld with a reason. The manager, the owner, the veterinarian and the person who recorded it are told (*10 L of Bella's milk under withdrawal entered offline as stored*; the note says to check the tank). At the parlour, online, the same milking is still refused so it is withheld on the spot.
+- **What the server refuses stays in view.** Milk the server refused (a cow dried off, an animal no longer on the farm) stays on the Milk page card with the server's reason, **Try again** and **Discard** (asked first) — not only in the sync panel.
+- **Morning or afternoon by the farm's clock.** The suggested milking (quick entry, the cow queue, Record milk, the handover) is the farm's hour in its own zone (Asia/Beirut on Origami), with the daylight-saving changes, whatever zone the tablet or browser is set to; milk entered for an earlier day is dated at that milking's farm hour.
+- On the animal's milk tab, milk waiting for the check and held milk carry their status; milk held under a recorded withdrawal offers only *Withhold* to the reviewer.
+- Server: **no migration.** A replayed write carries `X-Offline-Recorded-At`; `POST /production/milk` and `POST /sync/push` keep offline milk under a recorded withdrawal as held (`milk_held_offline_under_withdrawal` audit entry, `milk_held_for_review` event, `recorded_offline_at` on `milk_recorded`); `GET /farms/me` adds `clock` (`timezone`, `offsets`). Tests: backend +12 (`test_offline_milk_clearance.py`) and the same 12 on PostgreSQL 16 (`test_offline_milk_clearance_pg.py`); the older replay test now expects the held record; app +10 (`test/production/offline_milk_test.dart`).
+
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 
 Audit 2026-11-25 (I-8). On the tablet and the web app, enforced by the server:

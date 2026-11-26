@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../api/api_client.dart';
+import '../data/local/cache_effects.dart';
 import '../domain/entities/field.dart';
 import '../domain/entities/production_records.dart';
 
@@ -83,6 +84,18 @@ class ProductionProvider extends ChangeNotifier {
     final result = await _api.write(() => _api.post('/production/milk', body: {'animal_id': animalId, 'session': session, 'liters': liters, 'destination': destination}));
     if (result.success) await load();
     return result;
+  }
+
+  /// No farm server at all (the demo farm): nothing waits for a check.
+  bool get standalone => _api.standalone;
+
+  /// A milk entry the server refused and the person discarded: it leaves
+  /// the tablet's list too, not only the outbox (ADR-008).
+  Future<void> forgetLocalMilk(String localId) async {
+    final store = _api.store;
+    if (store != null) await applyCacheEffects(store, [RemoveRecord('/production/milk', localId)]);
+    _milk = [for (final r in _milk) if (r.id != localId) r];
+    notifyListeners();
   }
 
   /// The server's answer for a milking of [animalId] at [at] before it is

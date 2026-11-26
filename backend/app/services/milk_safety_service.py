@@ -252,6 +252,21 @@ def lactation_at(db: Session, animal: models.Animal, at: datetime) -> LactationA
     return LactationAnswer(None, f"{animal.name} was dried off on {dried}; milk after the dry-off is refused.")
 
 
+# ------------------------------------------- milk entered offline (ADR-008)
+def offline_withdrawal_note(db: Session, animal: models.Animal, assessment: Assessment, destination: str, recorded_offline_at: datetime) -> str:
+    """Why milk a tablet recorded offline as [destination] is held: it was
+    entered without the withdrawal the server knows of, and may already be
+    where it was recorded — the tank above all."""
+    from app.services.farm_time import farm_tz
+
+    tz = farm_tz(db, animal.farm_id)
+    entered = ensure_utc(recorded_offline_at).astimezone(tz).strftime("%Y-%m-%d %H:%M")
+    where = {"stored": "the tank", "sold": "a buyer", "processed": "processing", "consumed": "the farm's own use"}.get(destination, destination)
+    tank = " If it went into the tank, the tank holds milk under withdrawal: check it before any sale or handover." if destination == "stored" else ""
+    return (f"Entered offline on {entered} as {destination}, before this tablet knew of the withdrawal. {assessment.note(animal.name) or ''} "
+            f"Milk under withdrawal is never sold: withhold it, and record what was done with the milk sent to {where}.{tank}").strip()
+
+
 # ------------------------------------------------- facts recorded later
 def hold_after_new_withdrawal(db: Session, animal: models.Animal, *, starts_at: datetime, until: datetime | None, source: str,
                               user_id: str) -> list[models.MilkRecord]:
@@ -306,6 +321,21 @@ def _notify_reviewers(db: Session, animal: models.Animal, title: str, descriptio
             title=title[:300], description=description, priority="high", entity_type="animal", entity_id=animal.id,
             source_type="milk_safety", source_id=f"{key}|{u.id}", created_at=now(),
         ))
+
+
+def notify_recorder(db: Session, animal: models.Animal, user: models.User, title: str, description: str, *, key: str) -> None:
+    """The person who recorded the milk (offline, ADR-008) is told too,
+    unless they are among the reviewers already told: they saw "saved" on
+    the tablet, and the milk may be in the tank."""
+    from app.repositories.base import new_id
+
+    if user.role in REVIEW_ROLES or db.scalar(select(models.Notification.id).where(models.Notification.source_id == f"{key}|{user.id}")):
+        return
+    db.add(models.Notification(
+        id=new_id(), farm_id=animal.farm_id, user_id=user.id, module_code="milk_production", notification_type="milk_safety",
+        title=title[:300], description=description, priority="high", entity_type="animal", entity_id=animal.id,
+        source_type="milk_safety", source_id=f"{key}|{user.id}", created_at=now(),
+    ))
 
 
 # Who may release held milk: the roles that diagnose and decide on

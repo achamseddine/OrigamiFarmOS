@@ -9,6 +9,10 @@ import '../data/local/connection_monitor.dart';
 import '../data/local/local_store.dart';
 import '../data/local/outbox_labels.dart';
 
+/// The header a queued write is replayed with: when it was recorded on the
+/// tablet while offline (audit I-11, ADR-008).
+const kOfflineRecordedAtHeader = 'X-Offline-Recorded-At';
+
 /// Thrown by [ApiClient] for any non-2xx response. `message` is the
 /// backend's own `detail` string where available (FastAPI's standard
 /// error shape), so it's already suitable to show a user directly.
@@ -220,11 +224,20 @@ class ApiClient {
     return full.replace(queryParameters: params);
   }
 
-  Map<String, String> _headers({String? idempotencyKey}) => {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-        if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
-      };
+  Map<String, String> _headers({String? idempotencyKey}) {
+    final recordedOffline = Zone.current[_recordedOfflineAt];
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+      if (idempotencyKey != null) 'Idempotency-Key': idempotencyKey,
+      // A write recorded while the tablet was offline (ADR-008): the server
+      // judges it as it would a live one, knowing the person did not see its
+      // answer at the time.
+      if (recordedOffline is DateTime) kOfflineRecordedAtHeader: recordedOffline.toUtc().toIso8601String(),
+    };
+  }
+
+  static const _recordedOfflineAt = #farmosRecordedOfflineAt;
 
   /// Check health and published API contract without sending a password,
   /// bearer token or farm data. Azure staging hosts a Next.js home page,
@@ -481,7 +494,7 @@ class ApiClient {
   /// pending marker, nothing waiting to be sent.
   Future<dynamic> _writeLocal(LocalStore store, String method, String path, Object? body) async {
     final localId = newUuid();
-    final effects = effectsFor(method, path, body, localId: localId);
+    final effects = effectsFor(method, path, body, localId: localId, queued: false);
     await applyCacheEffects(store, effects);
     // Give back something shaped like the record the server would have
     // returned, so a caller that reads the response still works.
@@ -517,12 +530,19 @@ class ApiClient {
   /// idempotency key is the stored one, so a replay of something the
   /// server already committed comes back as that original response
   /// instead of writing it twice.
-  Future<dynamic> replay(OutboxItem item) => send(
-        item.method,
-        item.path,
-        body: item.body,
-        query: item.query,
-        idempotencyKey: item.idempotencyKey,
+  ///
+  /// It says when it was recorded on the tablet ([kOfflineRecordedAtHeader]):
+  /// milk a withdrawal covers, for one, is then kept but held instead of
+  /// refused, since nobody saw the refusal at the parlour (ADR-008).
+  Future<dynamic> replay(OutboxItem item) => runZoned(
+        () => send(
+          item.method,
+          item.path,
+          body: item.body,
+          query: item.query,
+          idempotencyKey: item.idempotencyKey,
+        ),
+        zoneValues: {_recordedOfflineAt: item.createdAt},
       );
 
   // ------------------------------------------------------------------

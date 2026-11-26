@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'farm_clock.dart';
+
 /// The instant a record picked as a calendar day is sent with: now for
 /// today (the time it actually happened, as near as the tablet knows), else
 /// local midday of that day — never in the future, which the server refuses.
@@ -20,14 +22,17 @@ bool isToday(DateTime d) {
 
 /// When a milking on [day] happened, for the record: now for today; on an
 /// earlier day — milk noted on paper and entered later — that session's
-/// usual hour (morning 07:00, midday 12:00, evening 18:00), so the record
-/// falls in the right day and session and is never in the future.
-DateTime milkingInstant(DateTime day, String session) {
-  final now = DateTime.now();
-  if (isToday(day)) return now;
+/// usual hour on the farm's clock (morning 07:00, midday 12:00, evening
+/// 18:00; audit I-16), so the record falls in the right farm day and
+/// session whatever zone the tablet is set to, and is never in the future.
+DateTime milkingInstant(DateTime day, String session, {FarmClock? clock, DateTime? now}) {
+  final c = clock ?? FarmClock.current;
+  final at0 = now ?? DateTime.now();
+  final deviceToday = day.year == at0.year && day.month == at0.month && day.day == at0.day;
+  if (deviceToday || c.isFarmToday(day, now: at0)) return at0;
   final hour = switch (session) { 'evening' => 18, 'midday' => 12, _ => 7 };
-  final at = DateTime(day.year, day.month, day.day, hour);
-  return at.isAfter(now) ? now : at;
+  final at = c.instantOf(day, hour);
+  return at.isAfter(at0) ? at0 : at;
 }
 
 /// A "when did it happen" button for a record form: shows the chosen day

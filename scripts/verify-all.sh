@@ -91,6 +91,12 @@ if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
     "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_mouneh_revenue_pg.py"
 fi
 
+if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
+  # v0.8.11 (I-11, I-16): milk a tablet entered offline, cleared by the
+  # server from the treatment history; the farm's clock for the tablet.
+  step "offline milk cleared by the server on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_offline_milk_clearance_pg.py"
+fi
 # --- 2. The app: tablet and web from one codebase --------------------------
 cd "$ROOT/mobile/flutter_app"
 step "app dependencies" "$FLUTTER" pub get

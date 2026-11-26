@@ -27,12 +27,20 @@ class MilkRecord {
   final String withdrawalCheck;
 
   /// saleable | held (kept, not sold until reviewed) | released |
-  /// not_for_sale (withheld).
+  /// not_for_sale (withheld) — or, on the tablet only, awaiting_check:
+  /// recorded offline, not yet judged by the server (ADR-008).
   final String releaseStatus;
   final String? safetyNote;
   final String? animalName;
 
   bool get isHeld => releaseStatus == 'held';
+
+  /// Recorded on this tablet while offline: the server has not checked it
+  /// against the treatments it knows of, so it is nobody's sellable milk yet.
+  bool get awaitingCheck => releaseStatus == 'awaiting_check';
+
+  /// May be sold (counts in the tank when stored).
+  bool get saleable => releaseStatus == 'saleable' || releaseStatus == 'released';
 
   factory MilkRecord.fromJson(Map<String, dynamic> json) => MilkRecord(
         id: json['id'] as String,

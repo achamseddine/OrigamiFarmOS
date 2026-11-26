@@ -27,6 +27,7 @@ import '../../providers/animals_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import 'held_milk_card.dart';
+import 'milk_awaiting_check_card.dart';
 
 bool _isToday(DateTime d) {
   final now = DateTime.now();
@@ -119,7 +120,10 @@ class MilkProductionScreen extends StatelessWidget {
     final todaysMilk = milkRecords.where((r) => _isToday(r.recordedAt)).toList();
     final producers = _topMilkProducers(todaysMilk, animalsProvider);
 
-    double destTotal(String dest) => todaysMilk.where((r) => r.destination == dest).fold(0.0, (s, r) => s + r.liters);
+    // Milk recorded offline is nobody's stored or sold milk until the
+    // server has checked it (I-11, ADR-008): shown apart, not in these.
+    double destTotal(String dest) => todaysMilk.where((r) => r.destination == dest && !r.awaitingCheck).fold(0.0, (s, r) => s + r.liters);
+    final waitingL = todaysMilk.where((r) => r.awaitingCheck).fold(0.0, (s, r) => s + r.liters);
     final storedL = destTotal('stored');
     final soldL = destTotal('sold');
     final processedL = destTotal('processed');
@@ -157,6 +161,9 @@ class MilkProductionScreen extends StatelessWidget {
           const SizedBox(height: FarmSpacing.md),
           // Milk corrections waiting for the manager, or the answers to one's own.
           const ApprovalsCard(modules: {FarmModule.milkProduction}),
+          // Milk recorded offline, until the server has checked it, and what
+          // it refused (v0.8.11, I-11).
+          const MilkAwaitingCheckCard(),
           // Milk kept but not saleable until reviewed (v0.8.5).
           const HeldMilkCard(),
           // After each milking: the calves, then the collector (v0.8.1).
@@ -290,14 +297,22 @@ class MilkProductionScreen extends StatelessWidget {
               title: context.t('milkDestinationToday'),
               trailing: access.canReadReport('milk') ? context.t('viewDestinationDetails') : null,
               onTrailingTap: access.canReadReport('milk') ? () => openReport(context, 'milk') : null,
-              child: destSum == 0
+              child: destSum == 0 && waitingL == 0
                   ? Text(context.t('noMilkToday'), style: FarmTypography.textTheme.bodySmall)
-                  : Row(children: [
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
                       Expanded(child: _DestinationTile(icon: FarmIcon.milkBottle, label: context.t('stored'), value: '${storedL.toStringAsFixed(0)} L', pct: '${destPct(storedL).toStringAsFixed(0)}%')),
                       Expanded(child: _DestinationTile(icon: FarmIcon.tractor, label: context.t('sold'), value: '${soldL.toStringAsFixed(0)} L', pct: '${destPct(soldL).toStringAsFixed(0)}%')),
                       Expanded(child: _DestinationTile(icon: FarmIcon.inventory, label: context.t('processed'), value: '${processedL.toStringAsFixed(0)} L', pct: '${destPct(processedL).toStringAsFixed(0)}%')),
                       Expanded(child: _DestinationTile(icon: FarmIcon.leaf, label: context.t('consumed'), value: '${consumedL.toStringAsFixed(0)} L', pct: '${destPct(consumedL).toStringAsFixed(0)}%')),
                     ]),
+                    if (waitingL > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(context.t('macStoredNote').replaceAll('{liters}', waitingL.toStringAsFixed(waitingL == waitingL.roundToDouble() ? 0 : 1)),
+                            key: const ValueKey('milk-waiting-note'), style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.warning)),
+                      ),
+                  ]),
             );
             if (!wide) {
               return Column(children: [sessions, const SizedBox(height: FarmSpacing.md), destination]);

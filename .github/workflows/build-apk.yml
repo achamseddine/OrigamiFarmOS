@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.8-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.11-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.8 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.11 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.11:** **Milk entered offline is cleared by the farm server** — milk a tablet records without the server waits as *Waiting for check* (never stored, sold or handed over) until the server judges it from the treatment history; milk under a withdrawal recorded on another tablet is kept but **held** (never sold, the manager and vet told) instead of lost, and what the server refuses stays on the Milk page with Try again / Discard. The morning or afternoon milking is the **farm's hour**, whatever zone the device is in. No migration.
             - **v0.8.8:** **Mouneh sales in the farm's books** — every sale in the Mouneh shop is one sale in Sales & Finance (revenue once, on its day; the jars' production cost kept with it): paid now, owed by a named buyer, or part paid (the rest received later); a manager cancels one and its jars go back on the shelf, the revenue undone, what was paid refunded. Past Mouneh sales are put in the books once by a dry-run-then-apply reconciliation. Migration `a3c5e7f9b1d2`.
             - **v0.8.7:** **Feeding records you can trust** — what was eaten can no longer be more than what was given (grams converted first); a cow fed with her group and on her own in the same round, the same feed, is asked about — *Record as additional feeding* (saying why) or *Don't record* — in English or Arabic, offline too; supplements and partial group feedings are not asked. No migration.
             - **v0.8.6:** **One feeding plan the reports agree with** — each animal is planned **once**: a herd's line counts only the cows its ration feeds and names any cow on her own ration (*2 of 3 head*); a supplement adds on top; a **refusal is shown apart and never counted as fed**, in the plan, the costs, the reports and the reorder forecast; every *today*, *yesterday* and day-by-day figure is the **farm's day in Beirut** (a feeding at 00:30 is that day), summer time included. No migration.

@@ -19,7 +19,7 @@ import '../animals/add_animal_form.dart';
 import '../animals/animal_quick_actions.dart';
 import '../animals/animal_queue_screen.dart';
 import '../animals/animal_quick_entry_screen.dart';
-import '../animals/animal_scan.dart' show milkSessionForHour;
+import '../../core/util/farm_clock.dart';
 import '../animals/quick_round.dart';
 import '../health/pharmacy_tab.dart' show showAdministerDialog;
 import '../feed/feed_movement_dialog.dart';
@@ -295,7 +295,7 @@ Future<void> _recordMilk(BuildContext context) async {
   // this time of day is offered on top, and each cow's number is shown.
   final livestock = context.read<LivestockProvider>();
   bool milked(Animal a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction);
-  final status = milkingRoundStatus(milkSessionForHour(DateTime.now().hour),
+  final status = milkingRoundStatus(FarmClock.current.milkSessionNow(),
       animals: context.read<AnimalsProvider>().animals, milked: milked, milk: context.read<ProductionProvider>().milkRecords);
   final animal = await _pickAnimal(
     context,
@@ -320,7 +320,7 @@ Future<void> walkMilkQueue(BuildContext context, Animal first, {String? session,
   final production = context.read<ProductionProvider>();
   bool milked(Animal a) => livestock.resolve(species: a.species, sex: a.sex, lifeStage: a.lifeStage, managementProfile: a.managementProfile).has(Cap.milkProduction);
   RoundStatus queueOf(String s, DateTime d) => milkingRoundStatus(s, animals: animals.animals, milked: milked, milk: production.milkRecords, now: d);
-  var s = session ?? milkSessionForHour(DateTime.now().hour);
+  var s = session ?? FarmClock.current.milkSessionNow();
   var d = day ?? DateTime.now();
   // Saved or skipped in this run: not offered again.
   final passed = <String>{};
