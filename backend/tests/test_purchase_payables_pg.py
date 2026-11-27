@@ -7,7 +7,9 @@ reversals, medicine, farm isolation and the reconciliation of deliveries
 recorded before — against the demo farm seeded in PostgreSQL. And a real
 race: two people pay USD 200 each on the same USD 240 bill at the same
 moment; the bill's row lock lets one through and refuses the other, so the
-farm never pays more than it owes.
+farm never pays more than it owes. And two people reversing the same
+payment at once: the second, having waited for the lock, finds it already
+reversed, so it is undone once.
 
 Runs when FARMOS_TEST_POSTGRES_URL names a disposable PostgreSQL database;
 each test works in a schema of its own, so parallel workers never meet.
@@ -148,3 +150,51 @@ def test_two_people_paying_the_same_bill_at_once_never_pay_more_than_is_owed(db_
         rows = db.scalars(select(fin.SupplierPayment).where(fin.SupplierPayment.expense_id == bill_id)).all()
         assert [p.amount for p in rows] == [200], "one payment of 200 on a bill of 240"
         assert db.get(models.Expense, bill_id).payment_status == "partial"
+
+
+def test_two_people_reversing_the_same_payment_at_once_undo_it_once(db_session):
+    """Both load the payment, as the route does, then reverse it at the same
+    moment. The bill's lock makes the second wait; it must then see the
+    payment already reversed, not undo it a second time (which would leave
+    the bill owing twice the payment)."""
+    _session, factory = db_session
+    with factory() as db:
+        product = inv.create_product(db, "farm-origami", code="RACE-CORN-2", name="Race corn 2", ration_type="raw_material", created_by="user-rami")
+        lot = inv.receive(db, product, quantity=500, rejected_quantity=20, unit_cost=0.5, supplier_label="Bekaa Grain Co.", user_id="user-rami")
+        bill = purchases.bill_delivery(db, farm_id="farm-origami", user_id="user-rami", lot_type="feed_lot", lot=lot, category="feed",
+                                       label=product.name, unit_price=0.5, currency="USD", exchange_rate=None, payment="credit")
+        payment = purchases.pay_bill(db, db.get(models.User, "user-rami"), bill, amount=100, reference="paid by mistake")
+        db.commit()
+        bill_id, payment_id = bill.id, payment.id
+
+    barrier = threading.Barrier(2)
+    outcomes: list[str] = []
+
+    def reverse(who: str):
+        db = factory()
+        try:
+            user = db.get(models.User, "user-rami")
+            row = db.get(fin.SupplierPayment, payment_id)  # loaded before the lock, as the route loads it
+            barrier.wait()
+            purchases.reverse_payment(db, user, row, reason=f"mistake ({who})")
+            time.sleep(1.0)  # hold the lock: the other is certainly deciding meanwhile
+            db.commit()
+            outcomes.append("reversed")
+        except FinanceError as e:
+            db.rollback()
+            outcomes.append(f"refused: {e}")
+        finally:
+            db.close()
+
+    threads = [threading.Thread(target=reverse, args=(f"T{i}",)) for i in (1, 2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sorted(o.split(":")[0] for o in outcomes) == ["refused", "reversed"], outcomes
+    assert any("already reversed" in o for o in outcomes), outcomes
+    with factory() as db:
+        rows = db.scalars(select(fin.SupplierPayment).where(fin.SupplierPayment.expense_id == bill_id)).all()
+        assert sorted(p.amount for p in rows) == [-100, 100], "the payment and one reversal"
+        assert db.get(models.Expense, bill_id).payment_status == "pending"

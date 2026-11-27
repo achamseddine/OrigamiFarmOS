@@ -50,7 +50,9 @@ def _pharmacy():
 def get_bill(db: Session, expense_id: str, farm_id: str, *, lock: bool = False) -> models.Expense:
     stmt = select(models.Expense).where(models.Expense.id == expense_id)
     if lock:
-        stmt = stmt.with_for_update()
+        # Locked and read afresh: a copy this session already holds is
+        # refreshed, so no decision is taken on what another payment changed.
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     e = db.scalar(stmt)
     if e is None or e.farm_id != farm_id:
         raise FinanceError("Expense not found", 404)
@@ -247,13 +249,16 @@ def credit_return(db: Session, *, user_id: str, bill: models.Expense, value: flo
 def reverse_payment(db: Session, user: models.User, row: fin.SupplierPayment, *, reason: str) -> fin.SupplierPayment:
     """A payment, refund or credit recorded by mistake: it stays on file and
     is undone by a negative row."""
+    # Under the bill's lock, read the payment afresh: another reversal of it
+    # may have been committed while this one waited for the lock.
+    get_bill(db, row.expense_id, row.farm_id, lock=True)
+    db.refresh(row)
     if row.status == "reversal":
         raise FinanceError("This row undoes another; it is not reversed itself.", 409)
     if row.status == "reversed":
         raise FinanceError("This payment is already reversed.", 409)
     if not reason or not reason.strip():
         raise FinanceError("Say why it is reversed.")
-    get_bill(db, row.expense_id, row.farm_id, lock=True)
     undo = fin.SupplierPayment(
         id=new_id(), farm_id=row.farm_id, expense_id=row.expense_id, supplier_id=row.supplier_id, kind=row.kind, paid_at=now(),
         amount=-row.amount, settles=-row.settles, original_amount=-row.original_amount if row.original_amount is not None else None,
