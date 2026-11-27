@@ -23,11 +23,19 @@ from app.schemas.agriculture import (
     CropPlantingCreate,
     CropPlantingOut,
     CropPlantingUpdate,
+    CycleCloseIn,
     DailyHarvestCreate,
     DailyHarvestOut,
     FieldCreate,
+    FieldOperationIn,
     FieldUpdate,
+    IrrigationIn,
+    OperationReverseIn,
+    ProduceSaleIn,
 )
+from app.api.deps import require_any_permission
+from app.domain import crop_models as cm
+from app.services import crop_cycles_service as cycles
 from app.schemas.production import FieldOut
 
 router = APIRouter(tags=["agriculture"])
@@ -195,6 +203,8 @@ def create_planting(
     planting = models.CropPlanting(
         id=new_id(), farm_id=current_user.farm_id, created_by=current_user.id, **data
     )
+    # The crop cycle's farm-wide code (Package 7).
+    planting.cycle_code = cycles.next_cycle_code(db, current_user.farm_id, crop, planting.planted_date)
     if planting.expected_harvest_date is None and planting.planted_date and crop.default_cycle_days:
         from datetime import timedelta
 
@@ -275,6 +285,8 @@ def record_daily_harvest(
         planting = db.get(models.CropPlanting, payload.planting_id)
         if planting is None or planting.farm_id != current_user.farm_id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Planting not found")
+        if planting.closed_at is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Crop cycle {planting.cycle_code or planting.id} is closed: nothing more is harvested from it.")
     if not product_name and payload.crop_id:
         crop = db.get(models.Crop, payload.crop_id)
         product_name = crop.name if crop else None
@@ -357,6 +369,9 @@ def record_daily_harvest(
 
     if planting is not None:
         planting.stage = "harvested"
+        # The harvest belongs to its crop cycle (Package 7), with why some was lost.
+        record.crop_planting_id = planting.id
+    record.loss_reason = (payload.loss_reason or "").strip() or None
 
     write_event(
         db, farm_id=current_user.farm_id, entity_type="field", entity_id=field.id,
@@ -387,3 +402,92 @@ def record_daily_harvest(
         "inventory_item_id": item.id if item else None,
         "inventory_qty_after": qty_after,
     }
+
+
+# ---------------------------------------------------------------------------
+# A crop cycle's work, water, sales and margin (Package 7; CROPS-SCHEMA §4–§8)
+# ---------------------------------------------------------------------------
+_CYCLE_WORK = require_any_permission(perms.AGRICULTURE, perms.PRODUCE_HARVEST, action=perms.CREATE)
+_CYCLE_VIEW = require_any_permission(perms.AGRICULTURE, perms.PRODUCE_HARVEST, action=perms.VIEW)
+_CYCLE_SELL = require_any_permission(perms.SALES, perms.FINANCE, action=perms.CREATE)
+_CYCLE_MONEY = require_any_permission(perms.FINANCE, perms.SALES, perms.REPORTS)
+
+
+@router.get("/crop-inputs")
+def list_crop_inputs(db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_VIEW)) -> list[dict]:
+    """Seeds, fertiliser, plant treatments and supplies in stock: what a crop cycle can use."""
+    return cycles.crop_inputs(db, user.farm_id)
+
+
+@router.post("/crop-plantings/{planting_id}/operations", status_code=status.HTTP_201_CREATED)
+def record_operation(planting_id: str, payload: FieldOperationIn, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_WORK)) -> dict:
+    """Work done on a crop cycle: its labour, and each input out of stock at its cost."""
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    op = cycles.record_operation(db, user, cycle, operation_type=payload.operation_type, completed_at=payload.completed_at,
+                                 labour_hours=payload.labour_hours, labour_cost=payload.labour_cost,
+                                 inputs=[i.model_dump() for i in payload.inputs], notes=payload.notes)
+    db.commit()
+    return cycles.operation_dict(op)
+
+
+@router.get("/crop-plantings/{planting_id}/operations")
+def list_operations(planting_id: str, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_VIEW)) -> list[dict]:
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    return [cycles.operation_dict(op) for op in db.scalars(select(cm.FieldOperation).where(cm.FieldOperation.crop_planting_id == cycle.id)
+                                                           .order_by(cm.FieldOperation.completed_at.desc()))]
+
+
+@router.post("/crop-plantings/{planting_id}/operations/{operation_id}/reverse")
+def reverse_operation(planting_id: str, operation_id: str, payload: OperationReverseIn, db: Session = Depends(get_db),
+                      user: models.User = Depends(require_any_permission(perms.AGRICULTURE, action=perms.APPROVE))) -> dict:
+    """Work recorded by mistake: its inputs go back into stock; it stays on file, reversed."""
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    op = db.get(cm.FieldOperation, operation_id)
+    if op is None or op.crop_planting_id != cycle.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Work not found")
+    cycles.reverse_operation(db, user, op, reason=payload.reason)
+    db.commit()
+    return cycles.operation_dict(op)
+
+
+@router.post("/crop-plantings/{planting_id}/irrigation", status_code=status.HTTP_201_CREATED)
+def record_irrigation(planting_id: str, payload: IrrigationIn, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_WORK)) -> dict:
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    ev = cycles.record_irrigation(db, user, cycle, started_at=payload.started_at, ended_at=payload.ended_at, water_quantity=payload.water_quantity,
+                                  unit=payload.unit, source_code=payload.source_code, energy_cost=payload.energy_cost)
+    db.commit()
+    return cycles.irrigation_dict(ev)
+
+
+@router.get("/crop-plantings/{planting_id}/irrigation")
+def list_irrigation(planting_id: str, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_VIEW)) -> list[dict]:
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    return [cycles.irrigation_dict(e) for e in db.scalars(select(cm.IrrigationEvent).where(cm.IrrigationEvent.crop_planting_id == cycle.id)
+                                                          .order_by(cm.IrrigationEvent.started_at.desc()))]
+
+
+@router.post("/crop-plantings/{planting_id}/sales", status_code=status.HTTP_201_CREATED)
+def sell_produce(planting_id: str, payload: ProduceSaleIn, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_SELL)) -> dict:
+    """This cycle's produce sold: a sale of the farm, out of its stock."""
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    sale = cycles.sell_produce(db, user, cycle, quantity=payload.quantity, unit_price=payload.unit_price, currency=payload.currency,
+                               exchange_rate=payload.exchange_rate, sold_at=payload.sold_at, buyer_name=payload.buyer_name,
+                               payment_status=payload.payment_status, reference=payload.reference, confirm_duplicate=payload.confirm_duplicate)
+    db.commit()
+    return {"sale_id": sale.id, "amount": sale.amount, "quantity": sale.quantity, "unit": sale.unit, "crop_planting_id": cycle.id}
+
+
+@router.get("/crop-plantings/{planting_id}/margin")
+def cycle_margin(planting_id: str, db: Session = Depends(get_db), user: models.User = Depends(_CYCLE_MONEY)) -> dict:
+    """What this crop cycle's produce sold for against what it cost (inputs,
+    labour, irrigation energy, expenses linked to it); unknown costs named."""
+    return cycles.margin(db, cycles.get_cycle(db, planting_id, user.farm_id))
+
+
+@router.post("/crop-plantings/{planting_id}/close")
+def close_cycle(planting_id: str, payload: CycleCloseIn | None = None, db: Session = Depends(get_db),
+                user: models.User = Depends(require_permission(perms.AGRICULTURE, perms.EDIT))) -> dict:
+    cycle = cycles.get_cycle(db, planting_id, user.farm_id)
+    cycles.close_cycle(db, user, cycle, notes=payload.notes if payload else None)
+    db.commit()
+    return cycles.margin(db, cycle)

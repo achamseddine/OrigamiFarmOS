@@ -47,6 +47,9 @@ class CropPlanting {
     required this.stage,
     required this.status,
     this.notes,
+    this.cycleCode,
+    this.productionPurpose,
+    this.closedAt,
   });
 
   final String id;
@@ -61,6 +64,13 @@ class CropPlanting {
   final String stage;
   final String status;
   final String? notes;
+
+  /// The crop cycle (Package 7): its farm-wide code, what it is grown for,
+  /// and when it was closed after its last harvest.
+  final String? cycleCode;
+  final String? productionPurpose;
+  final DateTime? closedAt;
+  bool get closed => closedAt != null || status == 'closed';
 
   int? get daysUntilHarvest =>
       expectedHarvestDate == null ? null : expectedHarvestDate!.difference(DateTime.now()).inDays;
@@ -79,6 +89,9 @@ class CropPlanting {
         stage: json['stage'] as String? ?? 'planted',
         status: json['status'] as String? ?? 'active',
         notes: json['notes'] as String?,
+        cycleCode: json['cycle_code'] as String?,
+        productionPurpose: json['production_purpose'] as String?,
+        closedAt: json['closed_at'] == null ? null : DateTime.tryParse('${json['closed_at']}'),
       );
 }
 

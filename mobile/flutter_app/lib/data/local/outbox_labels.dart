@@ -91,7 +91,22 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/modules': (labelKey: 'outboxModuleLicense', moduleCode: FarmModule.settings),
 };
 
+/// A crop cycle's work, water, sales and closing (Package 7) sit under the
+/// cycle's id — `/crop-plantings/{id}/operations` — so they are told apart
+/// by the segment after the id.
+const Map<String, OutboxDescriptor> _cropCycleParts = {
+  'operations': (labelKey: 'outboxCropWork', moduleCode: FarmModule.agriculture),
+  'irrigation': (labelKey: 'outboxIrrigation', moduleCode: FarmModule.agriculture),
+  'sales': (labelKey: 'outboxSale', moduleCode: FarmModule.sales),
+  'close': (labelKey: 'outboxCropCycleClose', moduleCode: FarmModule.agriculture),
+};
+
 OutboxDescriptor describeWrite(String path) {
+  final segments = path.split('/');
+  if (segments.length > 3 && segments[1] == 'crop-plantings') {
+    final part = _cropCycleParts[segments[3]];
+    if (part != null) return part;
+  }
   OutboxDescriptor? best;
   var bestLength = 0;
   for (final entry in _byPathPrefix.entries) {

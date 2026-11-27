@@ -996,6 +996,313 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/crop-inputs:
+    get:
+      tags:
+      - agriculture
+      summary: List Crop Inputs
+      description: 'Seeds, fertiliser, plant treatments and supplies in stock: what a crop cycle can use.'
+      operationId: list_crop_inputs_api_v1_crop_inputs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+                title: Response List Crop Inputs Api V1 Crop Inputs Get
+      security:
+      - HTTPBearer: []
+  /api/v1/crop-plantings/{planting_id}/operations:
+    post:
+      tags:
+      - agriculture
+      summary: Record Operation
+      description: 'Work done on a crop cycle: its labour, and each input out of stock at its cost.'
+      operationId: record_operation_api_v1_crop_plantings__planting_id__operations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldOperationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Operation Api V1 Crop Plantings  Planting Id  Operations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - agriculture
+      summary: List Operations
+      operationId: list_operations_api_v1_crop_plantings__planting_id__operations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Operations Api V1 Crop Plantings  Planting Id  Operations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/operations/{operation_id}/reverse:
+    post:
+      tags:
+      - agriculture
+      summary: Reverse Operation
+      description: 'Work recorded by mistake: its inputs go back into stock; it stays on file, reversed.'
+      operationId: reverse_operation_api_v1_crop_plantings__planting_id__operations__operation_id__reverse_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Operation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationReverseIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reverse Operation Api V1 Crop Plantings  Planting Id  Operations  Operation
+                  Id  Reverse Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/irrigation:
+    post:
+      tags:
+      - agriculture
+      summary: Record Irrigation
+      operationId: record_irrigation_api_v1_crop_plantings__planting_id__irrigation_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IrrigationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Irrigation Api V1 Crop Plantings  Planting Id  Irrigation Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - agriculture
+      summary: List Irrigation
+      operationId: list_irrigation_api_v1_crop_plantings__planting_id__irrigation_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Irrigation Api V1 Crop Plantings  Planting Id  Irrigation Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/sales:
+    post:
+      tags:
+      - agriculture
+      summary: Sell Produce
+      description: 'This cycle''s produce sold: a sale of the farm, out of its stock.'
+      operationId: sell_produce_api_v1_crop_plantings__planting_id__sales_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProduceSaleIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sell Produce Api V1 Crop Plantings  Planting Id  Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/margin:
+    get:
+      tags:
+      - agriculture
+      summary: Cycle Margin
+      description: 'What this crop cycle''s produce sold for against what it cost (inputs,
+
+        labour, irrigation energy, expenses linked to it); unknown costs named.'
+      operationId: cycle_margin_api_v1_crop_plantings__planting_id__margin_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cycle Margin Api V1 Crop Plantings  Planting Id  Margin Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/close:
+    post:
+      tags:
+      - agriculture
+      summary: Close Cycle
+      operationId: close_cycle_api_v1_crop_plantings__planting_id__close_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/CycleCloseIn'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Close Cycle Api V1 Crop Plantings  Planting Id  Close Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/farms/me:
     get:
       tags:
@@ -15972,6 +16279,11 @@ components:
           - type: string
           - type: 'null'
           title: Variety
+        production_purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Production Purpose
         planted_area:
           anyOf:
           - type: number
@@ -16072,6 +16384,22 @@ components:
           type: string
           format: date-time
           title: Created At
+        cycle_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cycle Code
+        production_purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Production Purpose
+        closed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Closed At
       type: object
       required:
       - id
@@ -16143,6 +16471,15 @@ components:
       - farm_id
       - name
       title: CustomerOut
+    CycleCloseIn:
+      properties:
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: CycleCloseIn
     DailyHarvestCreate:
       properties:
         field_id:
@@ -16175,6 +16512,11 @@ components:
           type: number
           title: Waste Quantity
           default: 0
+        loss_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Loss Reason
         unit:
           type: string
           title: Unit
@@ -17726,6 +18068,11 @@ components:
           - type: string
           - type: 'null'
           title: Field Code
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
         area_value:
           anyOf:
           - type: number
@@ -17765,6 +18112,46 @@ components:
       required:
       - name
       title: FieldCreate
+    FieldOperationIn:
+      properties:
+        operation_type:
+          type: string
+          title: Operation Type
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        labour_hours:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Labour Hours
+        labour_cost:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Labour Cost
+        inputs:
+          items:
+            $ref: '#/components/schemas/OperationInputIn'
+          type: array
+          title: Inputs
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - operation_type
+      title: FieldOperationIn
+      description: '`POST /crop-plantings/{id}/operations` — work done on a crop cycle,
+
+        its labour and the stock it used (CROPS-SCHEMA §5, §6).'
     FieldOut:
       properties:
         id:
@@ -17833,6 +18220,11 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
       type: object
       required:
       - id
@@ -17850,6 +18242,11 @@ components:
           - type: string
           - type: 'null'
           title: Field Code
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
         area_value:
           anyOf:
           - type: number
@@ -18781,6 +19178,46 @@ components:
       - occurred_at
       title: InventoryMovementOut
       description: '`GET /feed/transactions` — the movement history the tablet shows.'
+    IrrigationIn:
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+        water_quantity:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Water Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+          default: m3
+        source_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Code
+        energy_cost:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Energy Cost
+      type: object
+      required:
+      - started_at
+      title: IrrigationIn
+      description: '`POST /crop-plantings/{id}/irrigation` (CROPS-SCHEMA §8).'
     LactationCorrectIn:
       properties:
         started_at:
@@ -21604,6 +22041,36 @@ components:
       required:
       - weekday
       title: OpeningCalendarDayUpsert
+    OperationInputIn:
+      properties:
+        inventory_item_id:
+          type: string
+          title: Inventory Item Id
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+      type: object
+      required:
+      - inventory_item_id
+      - quantity
+      title: OperationInputIn
+    OperationReverseIn:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: OperationReverseIn
     ParentIn:
       properties:
         parent_animal_id:
@@ -22200,6 +22667,56 @@ components:
         and `entity_id` are what the tablet turns into a deep link, so every
 
         card opens the record that produced it.'
+    ProduceSaleIn:
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit_price:
+          type: number
+          minimum: 0.0
+          title: Unit Price
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
+        sold_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Sold At
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - quantity
+      - unit_price
+      title: ProduceSaleIn
+      description: '`POST /crop-plantings/{id}/sales` — this cycle''s produce sold, out of stock.'
     ProductProfitabilityOut:
       properties:
         product_id:

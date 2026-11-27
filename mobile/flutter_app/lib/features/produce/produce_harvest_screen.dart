@@ -11,12 +11,15 @@ import '../../core/widgets/kpi_card.dart';
 import '../../core/widgets/photo_slot.dart';
 import '../../core/widgets/section_card.dart';
 import '../../domain/entities/access.dart';
+import '../../domain/entities/crop.dart';
 import '../../domain/entities/field.dart';
 import '../../domain/entities/production_records.dart';
 import '../../providers/access_provider.dart';
+import '../../providers/agriculture_provider.dart';
 import '../../providers/feed_provider.dart';
 import '../../providers/production_provider.dart';
 import 'agriculture_forms.dart';
+import 'crop_cycle_sheet.dart';
 
 /// Produce & Harvest is always-online now: [ProductionProvider] (fields +
 /// harvest history) and [FeedProvider] (the whole farm's generic inventory,
@@ -252,12 +255,29 @@ class _AgricultureActions extends StatelessWidget {
   }
 }
 
+/// The crop cycle a field row opens: the one still growing there, else the
+/// last one planted.
+CropPlanting? currentCycle(List<CropPlanting> cycles) {
+  CropPlanting? best;
+  for (final c in cycles) {
+    if (best == null || (best.closed && !c.closed)) {
+      best = c;
+      continue;
+    }
+    if (best.closed == c.closed && (c.plantedDate ?? DateTime(0)).isAfter(best.plantedDate ?? DateTime(0))) best = c;
+  }
+  return best;
+}
+
 class _FieldRow extends StatelessWidget {
   const _FieldRow({required this.field});
   final Field field;
 
   @override
   Widget build(BuildContext context) {
+    final access = context.watch<AccessProvider>();
+    final mayOpenCycle = access.canCreate(FarmModule.agriculture) || access.canCreate(FarmModule.produceHarvest) || access.canRecordSale || access.canSeeMoney;
+    final cycle = mayOpenCycle ? currentCycle(context.watch<AgricultureProvider>().plantingsForField(field.id)) : null;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -270,6 +290,14 @@ class _FieldRow extends StatelessWidget {
               Text(field.name, style: FarmTypography.textTheme.titleSmall),
               Text('Stage: ${field.stage ?? '—'}', style: FarmTypography.textTheme.bodySmall),
               Text('${context.t('nextHarvest')}: ${field.expectedHarvestDate != null ? _fmt(field.expectedHarvestDate!) : '—'}', style: const TextStyle(fontSize: 11, color: FarmColors.muted)),
+              if (cycle != null)
+                TextButton.icon(
+                  key: ValueKey('cc-open-${field.id}'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
+                  onPressed: () => showCropCycleSheet(context, cycle),
+                  icon: const Icon(Icons.eco_outlined, size: 16),
+                  label: Text([context.t('ccManage'), if (cycle.cycleCode != null) cycle.cycleCode!].join(' · ')),
+                ),
             ],
           ),
         ),
