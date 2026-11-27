@@ -30,6 +30,7 @@ MODEL_MODULES: tuple[str, ...] = (
     "app.domain.finance_models",    # exchange rates (USD / LBP)
     "app.domain.nutrition_models",   # nutrient requirement sets (versioned, sourced) and formula assessments
     "app.domain.formulation_models", # least-cost formulation runs: drafts, prices of the day, approval
+    "app.domain.feed_action_models", # the manager's action on a feed performance alert and its measured outcome
 )
 
 

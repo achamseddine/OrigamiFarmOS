@@ -45,6 +45,7 @@ class FeedingProvider extends ChangeNotifier {
   FeedPerformanceSummary performance = FeedPerformanceSummary.empty;
   List<FeedPerformanceMonitor> monitors = [];
   List<FeedPerformanceAlert> performanceAlerts = [];
+  List<FeedAction> feedActions = [];
   List<FeedBatchScore> batchScores = [];
   List<SupplierPerformance> supplierScores = [];
   final Map<String, FeedingPlan> _plans = {};
@@ -180,6 +181,7 @@ class FeedingProvider extends ChangeNotifier {
         _fetch('/feed-performance/summary', (j) => performance = FeedPerformanceSummary.fromJson(j as Map<String, dynamic>)),
         _fetch('/feed-performance/monitors', (j) => monitors = [for (final m in j as List<dynamic>) FeedPerformanceMonitor.fromJson(m as Map<String, dynamic>)]),
         _fetch('/feed-performance/alerts', (j) => performanceAlerts = [for (final a in j as List<dynamic>) FeedPerformanceAlert.fromJson(a as Map<String, dynamic>)]),
+        _fetch('/feed-performance/actions', (j) => feedActions = [for (final a in j as List<dynamic>) FeedAction.fromJson(a as Map<String, dynamic>)]),
         _fetch('/feed-performance/batches', (j) => batchScores = [for (final b in j as List<dynamic>) FeedBatchScore.fromJson(b as Map<String, dynamic>)]),
         _fetch('/feed-performance/suppliers', (j) => supplierScores = [for (final s in j as List<dynamic>) SupplierPerformance.fromJson(s as Map<String, dynamic>)]),
       ];
@@ -207,6 +209,16 @@ class FeedingProvider extends ChangeNotifier {
       _write(() => _api.post('/feed-performance/alerts/$alertId/acknowledge'), then: reloadPerformance);
   Future<WriteResult> resolvePerformanceAlert(String alertId, String note) =>
       _write(() => _api.post('/feed-performance/alerts/$alertId/resolve', body: {'note': note}), then: reloadPerformance);
+  /// The actions on one alert, newest first (Package 13).
+  List<FeedAction> actionsFor(String alertId) => [for (final a in feedActions) if (a.alertId == alertId) a];
+
+  /// The manager's action on an alert: measured against the production records once its window has passed.
+  Future<WriteResult> recordFeedAction(String alertId, Map<String, dynamic> body) =>
+      _write(() => _api.post('/feed-performance/alerts/$alertId/actions', body: body), then: reloadPerformance);
+  Future<WriteResult> measureFeedAction(String actionId) => _write(() => _api.post('/feed-performance/actions/$actionId/measure'), then: reloadPerformance);
+  Future<WriteResult> reviewFeedAction(String actionId) => _write(() => _api.post('/feed-performance/actions/$actionId/review'), then: reloadPerformance);
+  Future<WriteResult> cancelFeedAction(String actionId, String reason) =>
+      _write(() => _api.post('/feed-performance/actions/$actionId/cancel', body: {'reason': reason}), then: reloadPerformance);
   Future<WriteResult> createPerformanceMonitor(Map<String, dynamic> body) =>
       _write(() => _api.post('/feed-performance/monitors', body: body), then: reloadPerformance);
 

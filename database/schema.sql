@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 146 tables, 53 secondary indexes.
+-- 147 tables, 55 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -2827,6 +2827,49 @@ CREATE TABLE feed_exposure_windows (
 );
 CREATE INDEX ix_feed_exposure_batch ON feed_exposure_windows (feed_batch_id);
 CREATE INDEX ix_feed_exposure_subject ON feed_exposure_windows (farm_id, subject_type, subject_id);
+
+CREATE TABLE feed_performance_actions (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    alert_id VARCHAR(36) NOT NULL,
+    assessment_id VARCHAR(36),
+    monitor_id VARCHAR(36) NOT NULL,
+    subject_type VARCHAR(10) NOT NULL,
+    subject_id VARCHAR(36) NOT NULL,
+    metric_code VARCHAR(40) NOT NULL,
+    action_type VARCHAR(40) NOT NULL,
+    description TEXT NOT NULL,
+    expected_effect VARCHAR(20) NOT NULL,
+    linked_entity_type VARCHAR(60),
+    linked_entity_id VARCHAR(36),
+    decided_by VARCHAR(36) NOT NULL,
+    decided_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    baseline_days INTEGER NOT NULL,
+    measure_after_days INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    measured_at TIMESTAMP WITH TIME ZONE,
+    baseline_value FLOAT,
+    outcome_value FLOAT,
+    change_pct FLOAT,
+    outcome VARCHAR(30),
+    confidence_score FLOAT,
+    evidence_json JSON NOT NULL,
+    explanation TEXT,
+    reviewed_by VARCHAR(36),
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    cancel_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT ck_feed_perf_actions_windows CHECK (measure_after_days > 0 AND baseline_days > 0),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(alert_id) REFERENCES feed_performance_alerts (id),
+    FOREIGN KEY(assessment_id) REFERENCES feed_performance_assessments (id),
+    FOREIGN KEY(monitor_id) REFERENCES feed_performance_monitors (id),
+    FOREIGN KEY(decided_by) REFERENCES users (id),
+    FOREIGN KEY(reviewed_by) REFERENCES users (id)
+);
+CREATE INDEX ix_feed_perf_actions_alert ON feed_performance_actions (alert_id);
+CREATE INDEX ix_feed_perf_actions_farm_status ON feed_performance_actions (farm_id, status);
 
 CREATE TABLE feed_reconciliations (
     id VARCHAR(36) NOT NULL,

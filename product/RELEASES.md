@@ -1,5 +1,15 @@
 # Releases
 
+## v0.8.20 — Feed performance: from the alert to what the manager did, and what came of it
+
+Master prompt Package 13 (database/FEED-PERFORMANCE-ACTIONS.md). On the tablet and the web app (Feed → **Performance**, on each alert), measured by the server. Built on the existing Feed Performance Intelligence: alerts still wait for enough evidence, lose confidence for every confounder, and never twin.
+- **Record action** (the manager), on an alert about an animal's or a herd's production: what was done — back to the previous lot, another supplier, a sample sent, the formula revised, the feeding adjusted, a health check — what the milk (or eggs, or growth) should do, and how many days to wait. The alert is acknowledged. One action at a time per alert; it can be cancelled with a reason.
+- **The outcome, measured once** after those days — by the daily cycle, or *Measure now*: the same number of days before against the days after, from the milk records themselves. *As expected*, *no clear change* or *the opposite* — or **insufficient data** when fewer than five days are recorded on either side (never read as no change).
+- **Confidence** starts at 0.80 and drops for each confounder seen in between — a health event, a calving or a dry-off, animals moved, another feed change, a change of the milked herd — and for what the farm does not record; each reduction is listed. *An association with the action, not proof that it caused it.*
+- **One bell notice** per outcome for the manager, until marked reviewed.
+- Server: **migration `d1f3a5c7e9b2`** (after `c9e1a3b5d7f0`): table `feed_performance_actions`. Endpoints `GET /feed-performance/actions`, `GET …/{id}`, `POST /feed-performance/alerts/{id}/actions`, `POST /feed-performance/actions/{id}/measure | review | cancel`. The daily cycle reports `outcomes_measured`. Events `feed_action_recorded`, `feed_action_outcome_measured`, `feed_action_outcome_reviewed`, `feed_action_cancelled`.
+- Tests: backend +7 (`test_feed_actions.py`: measured once as expected with its confidence and one bell notice, a health event lowering the confidence, the opposite, too few records, the cycle measuring once, rules and farms, alerts that cannot be measured) and the same on PostgreSQL 16 with a two-manager race (`test_feed_actions_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +5 (`test/records/feed_actions_test.dart`).
+
 ## v0.8.19 — Least-cost drafts: the cheapest formula that still meets the requirements
 
 Master prompt Package 12 (database/LEAST-COST-FORMULATION.md, architecture/ADR-010-LEAST-COST-SOLVER.md). On the tablet and the web app (Feed → **Nutrition**), solved by the server. Built on v0.8.18's requirements and analyses.
