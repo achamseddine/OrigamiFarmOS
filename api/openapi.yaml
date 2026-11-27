@@ -8949,6 +8949,368 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/supplier-items:
+    get:
+      tags:
+      - procurement
+      summary: List Quotes
+      description: 'Who sells this item and for how much — cheapest first (in USD at
+
+        today''s rate) — with each supplier''s last delivery price.'
+      operationId: list_quotes_api_v1_procurement_supplier_items_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: inventory_item_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+      - name: feed_product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Quotes Api V1 Procurement Supplier Items Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - procurement
+      summary: Set Quote
+      description: 'A supplier''s price for an item (the manager''s: prices decide orders).'
+      operationId: set_quote_api_v1_procurement_supplier_items_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierQuoteIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Set Quote Api V1 Procurement Supplier Items Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders:
+    get:
+      tags:
+      - procurement
+      summary: List Orders
+      operationId: list_orders_api_v1_procurement_purchase_orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Orders Api V1 Procurement Purchase Orders Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - procurement
+      summary: Create Order
+      description: 'A draft order to one supplier, direct or from an approved request;
+
+        `approve` places it at once when the person may.'
+      operationId: create_order_api_v1_procurement_purchase_orders_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Order Api V1 Procurement Purchase Orders Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}:
+    get:
+      tags:
+      - procurement
+      summary: Get Order
+      operationId: get_order_api_v1_procurement_purchase_orders__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Order Api V1 Procurement Purchase Orders  Order Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/approve:
+    post:
+      tags:
+      - procurement
+      summary: Approve Order
+      operationId: approve_order_api_v1_procurement_purchase_orders__order_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/PurchaseOrderDecision'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Approve Order Api V1 Procurement Purchase Orders  Order Id  Approve Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/cancel:
+    post:
+      tags:
+      - procurement
+      summary: Cancel Order
+      operationId: cancel_order_api_v1_procurement_purchase_orders__order_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderClose'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Order Api V1 Procurement Purchase Orders  Order Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/close:
+    post:
+      tags:
+      - procurement
+      summary: Close Order
+      operationId: close_order_api_v1_procurement_purchase_orders__order_id__close_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderClose'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Close Order Api V1 Procurement Purchase Orders  Order Id  Close Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/receive:
+    post:
+      tags:
+      - procurement
+      summary: Receive Order
+      description: 'A delivery against an approved order. The order''s row is locked, so
+
+        two people receiving the same order at once cannot both take its last
+
+        quantity.'
+      operationId: receive_order_api_v1_procurement_purchase_orders__order_id__receive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoodsReceiptIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Receive Order Api V1 Procurement Purchase Orders  Order Id  Receive Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/match:
+    get:
+      tags:
+      - procurement
+      summary: Match Order
+      description: 'Ordered, received, accepted, billed, paid and owed, per line and for
+
+        the order — from the receipts, the lots'' bills and their payments.'
+      operationId: match_order_api_v1_procurement_purchase_orders__order_id__match_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Match Order Api V1 Procurement Purchase Orders  Order Id  Match Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/approval-requests:
     get:
       tags:
@@ -17808,6 +18170,78 @@ components:
       - created_at
       - components
       title: FormulaVersionOut
+    GoodsReceiptIn:
+      properties:
+        lines:
+          items:
+            $ref: '#/components/schemas/GoodsReceiptLineIn'
+          type: array
+          title: Lines
+        received_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Received At
+        delivery_note_no:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Delivery Note No
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
+      type: object
+      title: GoodsReceiptIn
+      description: '`POST /procurement/purchase-orders/{id}/receive` — a delivery against
+
+        an approved order (§8), partial or whole.'
+    GoodsReceiptLineIn:
+      properties:
+        purchase_order_line_id:
+          type: string
+          title: Purchase Order Line Id
+        received_quantity:
+          type: number
+          minimum: 0.0
+          title: Received Quantity
+        rejected_quantity:
+          type: number
+          minimum: 0.0
+          title: Rejected Quantity
+          default: 0
+        rejection_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejection Reason
+        quality_grade:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Grade
+        quality_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Notes
+        lot_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Code
+      type: object
+      required:
+      - purchase_order_line_id
+      - received_quantity
+      title: GoodsReceiptLineIn
     HTTPValidationError:
       properties:
         detail:
@@ -22606,6 +23040,113 @@ components:
       - lot_id
       - action
       title: PurchaseDecision
+    PurchaseOrderClose:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: PurchaseOrderClose
+    PurchaseOrderDecision:
+      properties:
+        comments:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comments
+      type: object
+      title: PurchaseOrderDecision
+    PurchaseOrderIn:
+      properties:
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        lines:
+          items:
+            $ref: '#/components/schemas/PurchaseOrderLineIn'
+          type: array
+          title: Lines
+        requisition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requisition Id
+        expected_delivery_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Delivery Date
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
+        payment_terms:
+          type: string
+          title: Payment Terms
+          default: credit
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        approve:
+          type: boolean
+          title: Approve
+          default: false
+      type: object
+      title: PurchaseOrderIn
+      description: '`POST /procurement/purchase-orders` — a draft order to one supplier
+
+        (§7): direct, or from an approved requisition (`requisition_id`).'
+    PurchaseOrderLineIn:
+      properties:
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Price
+      type: object
+      required:
+      - quantity
+      title: PurchaseOrderLineIn
     PurchaseReconcile:
       properties:
         decisions:
@@ -24395,6 +24936,72 @@ components:
         bill (in parts, USD or LBP at [exchange_rate] or the farm''s rate for the
 
         day), or kind "refund": money the supplier paid back.'
+    SupplierQuoteIn:
+      properties:
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Price
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        purchase_uom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purchase Uom
+        supplier_item_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Item Code
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        minimum_order_quantity:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Minimum Order Quantity
+        standard_lead_time_days:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Standard Lead Time Days
+      type: object
+      title: SupplierQuoteIn
+      description: '`POST /procurement/supplier-items` — the price a supplier quotes for
+
+        an item (PROCUREMENT-SCHEMA §4). The same item from another supplier is
+
+        another quote; a new price replaces this supplier''s (kept in the audit).'
     SyncItemResult:
       properties:
         idempotency_key:

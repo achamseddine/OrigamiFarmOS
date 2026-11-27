@@ -1668,6 +1668,9 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
                     entry["quantity"] += e["quantity"]
                     entry["events"] += e["events"]
                 events_out.extend(nested["feeding_events"])
+    # The order and the delivery a purchased lot came on (Package 2).
+    from app.services.purchase_orders_service import origin_of_lot  # local: that module imports this one
+
     upstream = []
     mix = None
     if lot.feed_batch_id:
@@ -1677,14 +1680,18 @@ def lot_trace(db: Session, lot: fm.FeedLot) -> dict:
             for comp in batch.components:
                 src = db.get(fm.FeedLot, comp.lot_id) if comp.lot_id else None
                 upstream.append({"feed_product_id": comp.feed_product_id, "lot_id": comp.lot_id, "lot_code": src.lot_code if src else None,
-                                 "supplier_label": src.supplier_label if src else None, "quantity": comp.actual_quantity, "unit": comp.unit})
+                                 "supplier_label": src.supplier_label if src else None, "supplier_id": src.supplier_id if src else None,
+                                 "unit_cost": src.unit_cost if src else None, "received_at": src.received_at if src else None,
+                                 "quality_grade": src.quality_grade if src else None, "origin": origin_of_lot(db, src.id) if src else None,
+                                 "quantity": comp.actual_quantity, "unit": comp.unit})
     for e in exposed.values():
         subj = db.get(models.Animal, e["subject_id"]) if e["subject_type"] == "animal" else db.get(models.Flock, e["subject_id"])
         e["name"] = getattr(subj, "name", None)
         e["species"] = getattr(subj, "species", None)
     return {
         "lot": {"id": lot.id, "lot_code": lot.lot_code, "feed_product_id": lot.feed_product_id, "status": lot.status,
-                "source_type": lot.source_type, "supplier_label": lot.supplier_label, "received_at": lot.received_at,
+                "source_type": lot.source_type, "supplier_label": lot.supplier_label, "supplier_id": lot.supplier_id, "received_at": lot.received_at,
+                "unit_cost": lot.unit_cost, "quality_grade": lot.quality_grade, "origin": origin_of_lot(db, lot.id),
                 "quantity_on_hand": lot.quantity_on_hand, "unit": lot.unit, "feed_batch_id": lot.feed_batch_id},
         "mix": mix,
         "upstream_ingredient_lots": upstream,

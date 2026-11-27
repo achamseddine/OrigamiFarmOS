@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.9-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.12-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.9 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.12 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.12:** **Buying feed** (Feed → Buying) — several suppliers' prices for each ingredient, cheapest first; purchase orders (a worker drafts, the manager places), deliveries received against them in parts with rejections and the quality seen, each becoming a lot with its supplier and price and a supplier's bill; *Ordered vs delivered* shows what was accepted, billed, paid and is still owed. A mix traces back to the order and the supplier. **The server needs migration `c7e9a1b3d5f8`.**
             - **v0.8.9:** **Purchases in the books** — a delivery is stock for what was accepted (500 kg − 20 kg rejected at 0.50 = USD 240), one supplier bill (paid on delivery, on credit, or part paid), and cash only when paid (USD 100 paid → USD 140 still owed); bills paid in parts from Sales & Finance, returns credited, payments reversed, never counted twice. Migration `b5d7f9a1c3e6`; deliveries from before are reviewed once by the manager.
             - **v0.8.8:** **Mouneh sales in the farm's books** — every sale in the Mouneh shop is one sale in Sales & Finance (revenue once, on its day; the jars' production cost kept with it): paid now, owed by a named buyer, or part paid (the rest received later); a manager cancels one and its jars go back on the shelf, the revenue undone, what was paid refunded. Past Mouneh sales are put in the books once by a dry-run-then-apply reconciliation. Migration `a3c5e7f9b1d2`.
             - **v0.8.7:** **Feeding records you can trust** — what was eaten can no longer be more than what was given (grams converted first); a cow fed with her group and on her own in the same round, the same feed, is asked about — *Record as additional feeding* (saying why) or *Don't record* — in English or Arabic, offline too; supplements and partial group feedings are not asked. No migration.
