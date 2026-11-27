@@ -85,6 +85,11 @@ else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
+  # Package 3: each cow's milk value, costs and margin, reconciled with the records.
+  step "cow profitability on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_animal_profitability_pg.py"
+fi
+if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # v0.8.8 (I-8): Mouneh sales in the books, paid / owed / part paid,
   # cancellations and the reconciliation of past sales, on PostgreSQL.
   step "Mouneh sales in the books on PostgreSQL" bash -c \
