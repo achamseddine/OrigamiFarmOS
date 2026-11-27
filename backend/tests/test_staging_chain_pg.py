@@ -13,12 +13,15 @@ it, in one test the suite and CI can run:
 
 Runs when FARMOS_TEST_POSTGRES_URL names a disposable PostgreSQL server
 (its role creates two databases of its own and drops them afterwards).
-`pg_dump` and `pg_restore` must be the server's major version or newer.
+`pg_dump` and `pg_restore` must be the server's own major version
+(app/staging/pg_tools.py: a newer pg_dump writes settings, such as pg_dump
+17's `SET transaction_timeout`, that a PostgreSQL 16 server refuses on
+restore). Without them the backup half is skipped — unless
+FARMOS_REQUIRE_PG_TOOLS=1 (CI), where it fails instead.
 """
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -35,7 +38,7 @@ from app.db.base import get_db
 from app.domain.registry import import_all
 from app.main import app
 from app.seed import seed_demo_data
-from app.staging import smoke, snapshot
+from app.staging import pg_tools, smoke, snapshot
 
 pytestmark = pytest.mark.skipif(not os.environ.get("FARMOS_TEST_POSTGRES_URL"), reason="needs FARMOS_TEST_POSTGRES_URL (PostgreSQL 16)")
 
@@ -65,11 +68,6 @@ def _server_major(url: str) -> int:
             return int(conn.execute(text("SHOW server_version_num")).scalar()) // 10000
     finally:
         engine.dispose()
-
-
-def _tool_major(tool: str) -> int:
-    out = subprocess.run([tool, "--version"], capture_output=True, text=True).stdout  # "pg_dump (PostgreSQL) 16.15 ..."
-    return int(out.split(")")[1].strip().split(".")[0])
 
 
 @pytest.fixture()
@@ -141,14 +139,16 @@ def test_migrate_seed_smoke_backup_restore_restart_reconcile(databases, tmp_path
     assert {"expense_id", "milk_record_id", "feed_lot_id"} <= report.state.keys()
 
     # A backup, and a restore into a second database: identical.
-    if not (shutil.which("pg_dump") and shutil.which("pg_restore")):
-        pytest.skip("pg_dump / pg_restore are not installed")
-    if min(_tool_major("pg_dump"), _tool_major("pg_restore")) < _server_major(staging):
-        pytest.skip("pg_dump / pg_restore are older than the server")
+    try:
+        tools = pg_tools.find(_server_major(staging))
+    except pg_tools.ToolsMissing as exc:
+        if os.environ.get("FARMOS_REQUIRE_PG_TOOLS") == "1":
+            pytest.fail(str(exc))
+        pytest.skip(str(exc))
     dump = tmp_path / "staging.dump"
-    _run("pg_dump", "--format=custom", "--no-owner", f"--file={dump}", f"--dbname={_libpq(staging)}")
+    _run(tools["pg_dump"], "--format=custom", "--no-owner", f"--file={dump}", f"--dbname={_libpq(staging)}")
     before = snapshot.take(staging)
-    _run("pg_restore", "--no-owner", "--exit-on-error", f"--dbname={_libpq(restored)}", str(dump))
+    _run(tools["pg_restore"], "--no-owner", "--exit-on-error", f"--dbname={_libpq(restored)}", str(dump))
     after = snapshot.take(restored)
     assert snapshot.differences(before, after) == []
     assert after["alembic"] == [heads]

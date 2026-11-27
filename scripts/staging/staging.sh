@@ -168,10 +168,17 @@ cmd_smoke() {
   smoke_ --base-url "http://127.0.0.1:$API_PORT/api/v1" --state "$DIR/state.json" --report "$DIR/reports/smoke-$TS.json"
 }
 
+# pg_dump and pg_restore of the server's own major version, never newer (a newer
+# pg_dump writes settings the server refuses on restore): app/staging/pg_tools.py.
+pg_tools_dir() {
+  local major; major="$(psql_ -d postgres -tAc 'SHOW server_version_num')" || die "cannot read the server's version"
+  (cd "$ROOT/backend" && "$PYTHON" -m app.staging.pg_tools "$((major / 10000))") || die "no pg_dump / pg_restore for this server's version"
+}
+
 cmd_backup() {
   say "backup"
-  local dump="$DIR/backups/$DB-$TS.dump"
-  pg_dump -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" --format=custom --no-owner --file "$dump" "$DB"
+  local dump="$DIR/backups/$DB-$TS.dump" tools; tools="$(pg_tools_dir)"
+  "$tools/pg_dump" -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" --format=custom --no-owner --file "$dump" "$DB"
   snapshot_ --database-url "$(db_url "$DB")" --out "$dump.snapshot.json"
   (cd "$DIR/backups" && sha256sum "$(basename "$dump")" > "$(basename "$dump").sha256")
   ln -sfn "$dump" "$DIR/backups/latest.dump"
@@ -187,7 +194,8 @@ cmd_restore() {
   echo "checksum verified"
   psql_ -d postgres -qc "DROP DATABASE IF EXISTS $RESTORE_DB"
   create_db "$RESTORE_DB"
-  pg_restore -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" --no-owner --exit-on-error -d "$RESTORE_DB" "$dump"
+  local tools; tools="$(pg_tools_dir)"
+  "$tools/pg_restore" -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" --no-owner --exit-on-error -d "$RESTORE_DB" "$dump"
   snapshot_ --database-url "$(db_url "$RESTORE_DB")" --compare "$dump.snapshot.json"
   check_head "$RESTORE_DB"
   # The API on the restored copy finds what the smoke test made before the backup.

@@ -27,3 +27,32 @@ def test_a_restore_that_lost_or_changed_rows_is_named():
     assert [d.split(":")[0] for d in snapshot.differences(backup, lost)] == ["milk_records"]
     older = {"tables": dict(backup["tables"]), "alembic": ["e8a0c2e4b6d9"]}
     assert snapshot.differences(backup, older) and "alembic_version" in snapshot.differences(backup, older)[0]
+
+
+# --- the backup tools must be the server's own major version ------------------
+def _fake_tool(folder, name: str, version: str):
+    folder.mkdir(parents=True, exist_ok=True)
+    tool = folder / name
+    tool.write_text(f"#!/bin/sh\necho '{name} (PostgreSQL) {version}'\n")
+    tool.chmod(0o755)
+    return tool
+
+
+def test_a_newer_pg_dump_is_never_used_on_an_older_server(tmp_path):
+    """pg_dump 17 writes `SET transaction_timeout` into the dump, which a
+    PostgreSQL 16 server refuses on restore (the CI failure on PR #38)."""
+    from app.staging import pg_tools
+
+    newer, same = tmp_path / "pg17", tmp_path / "pg16"
+    for name in ("pg_dump", "pg_restore"):
+        _fake_tool(newer, name, "17.2 (Ubuntu 17.2-1.pgdg24.04+1)")
+        _fake_tool(same, name, "16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)")
+    # The newer tools come first on the PATH; the server's own are found anyway.
+    found = pg_tools.find(16, search=[str(newer), str(same)])
+    assert found == {"pg_dump": str(same / "pg_dump"), "pg_restore": str(same / "pg_restore")}
+    # Only newer tools: refused, saying which versions were seen.
+    with pytest.raises(pg_tools.ToolsMissing) as err:
+        pg_tools.find(16, search=[str(newer)])
+    assert "16" in str(err.value) and "17" in str(err.value)
+    # The server's major on a standard Debian/Ubuntu layout comes before the PATH.
+    assert pg_tools.candidate_dirs(16, path="/usr/bin")[:1] == ["/usr/lib/postgresql/16/bin"]

@@ -27,6 +27,13 @@ Each step's result goes into a report at `$STAGING_DIR/reports/summary-<time>.md
 | **restart persistence**: the API and PostgreSQL stopped (`pg_ctl stop -m fast`) and started again; the records found again; `alembic upgrade head` again is a no-op | nothing lives only in memory; migrating twice is safe |
 | **reconciliation dry runs**: `python -m app.feed_stock_integrity --json` (exit 0: every feed product consistent with its movements); the Mouneh-sales reconciliation, the milk-safety review and the purchases reconciliation (where the server has it) are read in the smoke test | the reconciliations report and apply nothing |
 
+**The client tools must be the server's own major version.** `pg_dump` and `pg_restore` are taken from the server's
+version directory (`/usr/lib/postgresql/16/bin` on Debian/Ubuntu), never simply the first on the PATH
+(`backend/app/staging/pg_tools.py`): a newer `pg_dump` writes settings the older server refuses on restore — pg_dump 17
+writes `SET transaction_timeout`, which PostgreSQL 16 rejects, and `--exit-on-error` stops the restore. Install
+`postgresql-client-16` next to a newer client, or set `PG_BIN`. CI does this, and sets `FARMOS_REQUIRE_PG_TOOLS=1` so the
+backup and restore test fails rather than skips when the tools are missing.
+
 The smoke test covers:
 - health, and the published OpenAPI contract;
 - a signed-out request refused (401);
