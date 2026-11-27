@@ -85,9 +85,9 @@ else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
-  # Package 11: nutrient requirements and formula assessments, and the revision race.
-  step "nutrition assessment on PostgreSQL" bash -c \
-    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_nutrition_assessment_pg.py"
+  # Packages 11 and 12: requirements, assessments, least-cost drafts, and their races.
+  step "nutrition and least-cost on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_nutrition_assessment_pg.py tests/test_least_cost_formulation_pg.py"
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # v0.8.8 (I-8): Mouneh sales in the books, paid / owed / part paid,

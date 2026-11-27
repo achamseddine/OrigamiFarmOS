@@ -5981,6 +5981,135 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/least-cost:
+    get:
+      tags:
+      - nutrition
+      summary: List Least Cost
+      operationId: list_least_cost_api_v1_nutrition_least_cost_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 30
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Least Cost Api V1 Nutrition Least Cost Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - nutrition
+      summary: Create Least Cost
+      operationId: create_least_cost_api_v1_nutrition_least_cost_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeastCostCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Least Cost Api V1 Nutrition Least Cost Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/least-cost/{run_id}:
+    get:
+      tags:
+      - nutrition
+      summary: Get Least Cost
+      operationId: get_least_cost_api_v1_nutrition_least_cost__run_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Least Cost Api V1 Nutrition Least Cost  Run Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/least-cost/{run_id}/approve:
+    post:
+      tags:
+      - nutrition
+      summary: Approve Least Cost
+      operationId: approve_least_cost_api_v1_nutrition_least_cost__run_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeastCostApprove'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Approve Least Cost Api V1 Nutrition Least Cost  Run Id  Approve Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed-performance/summary:
     get:
       tags:
@@ -15308,6 +15437,31 @@ components:
           default: ''
       type: object
       title: CancelWithReason
+    CandidateIn:
+      properties:
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        min_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Min Pct
+        max_pct:
+          anyOf:
+          - type: number
+            maximum: 100.0
+            minimum: 0.0
+          - type: 'null'
+          title: Max Pct
+      type: object
+      required:
+      - feed_product_id
+      title: CandidateIn
+      description: An ingredient the least-cost run may use, and its limits in the batch (% of the batch
+        as fed).
     CapabilityOut:
       properties:
         code:
@@ -18469,6 +18623,92 @@ components:
           title: Lactation Number
       type: object
       title: LactationStartIn
+    LeastCostApprove:
+      properties:
+        draft:
+          type: string
+          maxLength: 10
+          title: Draft
+        note:
+          type: string
+          maxLength: 2000
+          title: Note
+        formula_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Formula Id
+      type: object
+      required:
+      - draft
+      - note
+      title: LeastCostApprove
+    LeastCostCreate:
+      properties:
+        requirement_set_id:
+          type: string
+          title: Requirement Set Id
+        base_formula_version_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Base Formula Version Id
+        candidates:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/CandidateIn'
+            type: array
+          - type: 'null'
+          title: Candidates
+        batch_size_kg:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Batch Size Kg
+        concentrate_kg_per_head:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Concentrate Kg Per Head
+        forages:
+          items:
+            $ref: '#/components/schemas/ForageIn'
+          type: array
+          title: Forages
+          default: []
+        no_forage:
+          type: boolean
+          title: No Forage
+          default: false
+        body_weight_kg:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Body Weight Kg
+        premix:
+          anyOf:
+          - $ref: '#/components/schemas/PremixIn'
+          - type: 'null'
+        margin_pct:
+          anyOf:
+          - type: number
+            maximum: 20.0
+            minimum: 0.0
+          - type: 'null'
+          title: Margin Pct
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - requirement_set_id
+      title: LeastCostCreate
     LifeStageOut:
       properties:
         code:

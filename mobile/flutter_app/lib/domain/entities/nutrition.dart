@@ -239,3 +239,127 @@ class NutritionAssessment {
     );
   }
 }
+
+// ------------------------------------------------------------------ least-cost drafts (Package 12)
+class DraftLine {
+  const DraftLine({required this.name, required this.quantityKg, required this.inclusionPct, this.pricePerKg, this.cost});
+  final String name;
+  final double quantityKg;
+  final double inclusionPct;
+  final double? pricePerKg;
+  final double? cost;
+
+  factory DraftLine.fromJson(Map<String, dynamic> j) => DraftLine(
+        name: '${j['name'] ?? ''}',
+        quantityKg: _d(j['quantity_kg']),
+        inclusionPct: _d(j['inclusion_pct']),
+        pricePerKg: _dn(j['price_per_kg']),
+        cost: _dn(j['cost']),
+      );
+}
+
+/// One draft of a least-cost run: A the cheapest, B with a margin, C the closest to today's formula.
+class FormulationDraft {
+  const FormulationDraft({
+    required this.key,
+    required this.label,
+    required this.lines,
+    this.premix,
+    required this.batchKg,
+    required this.totalKg,
+    required this.cost,
+    required this.costPerKg,
+    this.saving,
+    this.changedKg,
+    required this.nutrients,
+  });
+
+  final String key;
+
+  /// least_cost | with_margin | least_change
+  final String label;
+  final List<DraftLine> lines;
+  final DraftLine? premix;
+  final double batchKg;
+  final double totalKg;
+  final double cost;
+  final double costPerKg;
+  final double? saving;
+  final double? changedKg;
+  final List<RationNutrient> nutrients;
+
+  factory FormulationDraft.fromJson(Map<String, dynamic> j) {
+    final premix = (j['premix'] as Map?)?.cast<String, dynamic>();
+    return FormulationDraft(
+      key: '${j['key']}',
+      label: '${j['label'] ?? ''}',
+      lines: [for (final c in _maps(j['components'])) DraftLine.fromJson(c)],
+      premix: premix == null ? null : DraftLine.fromJson({...premix, 'inclusion_pct': 0}),
+      batchKg: _d(j['batch_kg']),
+      totalKg: _d(j['total_kg']),
+      cost: _d(j['cost']),
+      costPerKg: _d(j['cost_per_kg']),
+      saving: _dn(j['saving']),
+      changedKg: _dn(j['changed_kg']),
+      nutrients: [for (final n in _maps(j['nutrients'])) RationNutrient.fromJson(n)],
+    );
+  }
+}
+
+class LeastCostRun {
+  const LeastCostRun({
+    required this.id,
+    required this.status,
+    this.createdAt,
+    this.baseName,
+    this.baseVersion,
+    this.baseCostToday,
+    required this.batchKg,
+    required this.drafts,
+    required this.infeasible,
+    required this.missing,
+    required this.setCode,
+    required this.setVersion,
+    this.approvedDraft,
+    this.approvalNote,
+  });
+
+  final String id;
+
+  /// drafts | infeasible | insufficient_data
+  final String status;
+  final DateTime? createdAt;
+  final String? baseName;
+  final int? baseVersion;
+  final double? baseCostToday;
+  final double batchKg;
+  final List<FormulationDraft> drafts;
+  final List<String> infeasible;
+  final List<({String code, String detail})> missing;
+  final String setCode;
+  final int setVersion;
+  final String? approvedDraft;
+  final String? approvalNote;
+
+  factory LeastCostRun.fromJson(Map<String, dynamic> j) {
+    final base = (j['base'] as Map?)?.cast<String, dynamic>();
+    final set = (j['requirement_set'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final approval = (j['approval'] as Map?)?.cast<String, dynamic>();
+    return LeastCostRun(
+      id: '${j['id']}',
+      status: '${j['status'] ?? 'insufficient_data'}',
+      createdAt: DateTime.tryParse('${j['created_at'] ?? ''}'),
+      baseName: base?['formula_name'] as String?,
+      baseVersion: (base?['version'] as num?)?.toInt(),
+      baseCostToday: _dn(base?['cost_today']),
+      batchKg: _d(j['batch_size_kg']),
+      drafts: [for (final d in _maps(j['drafts'])) FormulationDraft.fromJson(d)],
+      infeasible: [for (final x in _maps(j['infeasible'])) '${x['detail'] ?? ''}'],
+      missing: [for (final m in _maps(j['missing'])) (code: '${m['code']}', detail: '${m['detail'] ?? ''}')],
+      setCode: '${set['code'] ?? ''}',
+      setVersion: (set['version'] as num?)?.toInt() ?? 1,
+      approvedDraft: approval?['draft'] as String?,
+      approvalNote: approval?['note'] as String?,
+    );
+  }
+}
