@@ -151,3 +151,15 @@ CropCycleCreated, CropPlanted, FieldOperationCompleted, CropInputApplied, Irriga
 
 ## 10. Acceptance
 Multiple crop cycles retain history per field; planned inputs do not reduce inventory; actual seed/fertilizer/etc. uses traceable lots; field/cycle costs can be derived; irrigation is measurable; crop output can flow into harvest inventory without creating a separate stock truth.
+
+## 11. Implementation status (v0.8.14, master prompt Package 7)
+What runs today, on the existing tables rather than beside them:
+- **field** (§2): the existing `fields` table, with `unit_type` (open_field | greenhouse | tunnel | orchard). Geometry, soil and irrigation-method columns stay as they were.
+- **crop_cycle** (§4): the existing `crop_plantings` row is the cycle: `cycle_code` (farm-wide, unique, e.g. `CHER-2026-001`), `production_purpose` (sale | feed | seed | mixed), `closed_at`. A closed cycle takes no more work, water or harvest.
+- **field_operation** (§5): `field_operations`, completed work only (planned work is not stored as a transaction), with labour hours and cost; `status` completed | reversed. A reversal returns the inputs to stock and keeps the row.
+- **field_operation_input** (§6): `field_operation_inputs`, each with its own `inventory_transactions` row (`out`, reason `crop_input`, linked to the operation) at the item's cost. The stock line is row-locked and re-read before the check. **Gap:** generic stock has no lots, so an input is traced to its stock line and movement, not yet to a supplier lot.
+- **irrigation_event** (§8): `irrigation_events` (quantity in m³ or L, source code, energy cost in USD). No asset link yet (Pass 6C).
+- **Harvest** (§10): `harvest_records.crop_planting_id` and `loss_reason`; the sellable part enters the produce stock line as before.
+- **Sales:** `sales.crop_planting_id`; a cycle's sale is a farm sale (activity `crops`) with its own `out` movement.
+- **Margin:** `GET /crop-plantings/{id}/margin`, derived on read from the above and from expenses linked to the cycle (`linked_entity_type = crop_planting`); unknown costs are listed, never zero.
+- **Not yet:** field_observation (§7), cultivar master data, planned operations, CropReadyForHarvest. Events emitted: `field_operation_completed`, `field_operation_reversed`, `irrigation_recorded`, `crop_produce_sold`, `crop_cycle_closed`.

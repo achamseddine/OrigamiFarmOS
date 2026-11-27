@@ -1,5 +1,33 @@
 # Releases
 
+## v0.8.14 — Crop cycles: a greenhouse from planting to its actual margin
+
+Master prompt Package 7 (database/CROPS-SCHEMA.md §2, §4–§6, §8; status in its new §11). On the tablet and the web app (Produce & Harvest → a field's **Manage cycle**), enforced by the server. Built on the existing fields, crops, plantings, harvests, stock and Sales & Finance — no second crop or stock model.
+- **Growing units.** A field is an open field, a greenhouse, a tunnel or an orchard (`unit_type`).
+- **A crop cycle** is a planting: one crop in one growing unit from planting to its last harvest, with a farm-wide code (`CHER-2026-001`) and what it is grown for (sale, feed, seed, mixed). A field keeps every cycle it had.
+- **The work on a cycle:** planting, fertilising, spraying, weeding, pruning, irrigation work, harvest preparation, with its labour hours and their cost, and the seeds, fertiliser, plant treatments or supplies it used.
+  - Each input leaves stock by its own movement at the item's cost. More than is in stock is refused: the stock line is locked and read afresh, so two people cannot both take the last of it.
+  - Feed, medicine and produce are not crop inputs.
+  - Work recorded by mistake is reversed by a manager: its inputs return to stock and it stays on file.
+  - Work queued on a tablet keeps the time it was done (a tablet clock a few minutes fast is accepted, a date in the future is not).
+- **Water:** each irrigation, how much (m³ or L), from which source, and the pumping cost when it is known.
+- **Harvest into stock:** a harvest names its cycle and why some was lost; the sellable part goes into the produce stock as before. A closed cycle takes no more work, water or harvest; its produce in stock can still be sold.
+- **Sold:** the cycle's produce sold from its sheet is a sale of the farm (Sales & Finance, *Crops*), in USD or LBP, paid now or owed, and leaves the produce stock. More than is in stock is refused, under the same lock.
+- **Its actual margin:** what its produce sold for, against its inputs, labour, pumping and the expenses linked to it; harvested, lost, sold, and the cost per kg harvested.
+  - A cost that is not known (an input with no price, labour not priced, pumping not metered) is named as unknown, never counted as free.
+  - It is read from the records each time; nothing is kept on the side.
+- **The acceptance case** (test): a 400 m² greenhouse of cherry tomatoes.
+  - Planted with 2 packets of seed (USD 10) and 6 h of labour (USD 30); fertilised with 20 kg of NPK (USD 30) and 2 h (USD 10); 12 m³ of well water (USD 8 pumping).
+  - 500 kg harvested, 20 kg lost to split fruit, 480 kg into stock; 400 kg sold at USD 1.20.
+  - Revenue USD 480, known costs USD 88, **margin USD 392**, USD 0.176 per kg harvested.
+- **Who:** the field team (Agriculture or Produce & Harvest) records work and water; Sales or Finance sell; whoever reads the farm's money (Finance, Sales or Reports) sees the margin; closing needs Agriculture edit, reversing work Agriculture approval. Another farm sees nothing.
+- Server: **migration `d9b1c3e5f7a2`** (after `c7e9a1b3d5f8`).
+  - Schema: `fields.unit_type`; `crop_plantings.cycle_code` (unique per farm), `production_purpose`, `closed_at`; tables `field_operations`, `field_operation_inputs`, `irrigation_events`; `harvest_records.crop_planting_id`, `loss_reason`; `sales.crop_planting_id`.
+  - Endpoints: `GET /crop-inputs`; `GET/POST /crop-plantings/{id}/operations`, `POST …/operations/{op}/reverse`; `GET/POST …/irrigation`; `POST …/sales`; `GET …/margin`; `POST …/close`.
+  - Events: `field_operation_completed`, `field_operation_reversed`, `irrigation_recorded`, `crop_produce_sold`, `crop_cycle_closed`; audit entries for work, reversals and closing.
+- Tests: backend +10 (`test_crop_cycles.py`) and the same on PostgreSQL 16 with two-thread races for the last fertiliser and the last produce (`test_crop_cycles_pg.py`, a new step in `scripts/verify-all.sh`); app +13 (`test/records/crop_cycles_test.dart`).
+- Not in this release: seeds and fertiliser are traced to their stock line and its movement, not to a supplier lot (generic stock has no lots yet); planned work; field observations (§7); labour from the employees' time sheets.
+
 ## v0.8.12 — Buying feed: suppliers' prices, purchase orders, deliveries against them, and what is still owed
 
 Master prompt Package 2 (database/PROCUREMENT-SCHEMA.md §4, §7, §8). On the tablet and the web app (Feed → **Buying**), enforced by the server. Builds on v0.8.9's supplier bills.
