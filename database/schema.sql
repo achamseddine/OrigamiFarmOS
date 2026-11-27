@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 142 tables, 49 secondary indexes.
+-- 145 tables, 52 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -455,6 +455,33 @@ CREATE TABLE notifications (
 );
 CREATE INDEX ix_notifications_farm ON notifications (farm_id);
 CREATE INDEX ix_notifications_source ON notifications (farm_id, source_type, source_id);
+
+CREATE TABLE nutrition_requirement_sets (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    code VARCHAR(60) NOT NULL,
+    version INTEGER NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    species_code VARCHAR(30) NOT NULL,
+    production_stage VARCHAR(60),
+    reference_body_weight_kg FLOAT,
+    milk_yield_kg FLOAT,
+    expected_dmi_kg FLOAT,
+    basis VARCHAR(20) NOT NULL,
+    source_type VARCHAR(30) NOT NULL,
+    source_reference VARCHAR(400) NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    notes TEXT,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    retired_at TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_nutrition_requirement_sets_version UNIQUE (farm_id, code, version),
+    CONSTRAINT ck_nutrition_requirement_sets_version CHECK (version >= 1),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(species_code) REFERENCES species (code)
+);
+CREATE INDEX ix_nutrition_requirement_sets_farm_id ON nutrition_requirement_sets (farm_id);
 
 CREATE TABLE recommendations (
     id VARCHAR(36) NOT NULL,
@@ -948,6 +975,22 @@ CREATE TABLE notification_routes (
     FOREIGN KEY(user_id) REFERENCES users (id)
 );
 CREATE INDEX ix_notification_routes_farm_route ON notification_routes (farm_id, route_code);
+
+CREATE TABLE nutrition_requirement_values (
+    id VARCHAR(36) NOT NULL,
+    requirement_set_id VARCHAR(36) NOT NULL,
+    nutrient_code VARCHAR(30) NOT NULL,
+    min_value FLOAT,
+    max_value FLOAT,
+    unit VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_nutrition_requirement_values_nutrient UNIQUE (requirement_set_id, nutrient_code),
+    CONSTRAINT ck_nutrition_requirement_values_bound CHECK (min_value IS NOT NULL OR max_value IS NOT NULL),
+    CONSTRAINT ck_nutrition_requirement_values_order CHECK (min_value IS NULL OR max_value IS NULL OR min_value <= max_value),
+    FOREIGN KEY(requirement_set_id) REFERENCES nutrition_requirement_sets (id),
+    FOREIGN KEY(nutrient_code) REFERENCES feed_nutrients (code)
+);
+CREATE INDEX ix_nutrition_requirement_values_requirement_set_id ON nutrition_requirement_values (requirement_set_id);
 
 CREATE TABLE procurement_approvals (
     id VARCHAR(36) NOT NULL,
@@ -2545,6 +2588,26 @@ CREATE TABLE medication_administrations (
     FOREIGN KEY(unit) REFERENCES units_of_measure (code)
 );
 CREATE INDEX ix_medication_admin_subject ON medication_administrations (farm_id, subject_type, subject_id);
+
+CREATE TABLE nutrition_assessments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    formula_version_id VARCHAR(36) NOT NULL,
+    requirement_set_id VARCHAR(36) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    premix_product_id VARCHAR(36),
+    premix_quantity_kg FLOAT,
+    inputs JSON NOT NULL,
+    result JSON NOT NULL,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(formula_version_id) REFERENCES feed_formula_versions (id),
+    FOREIGN KEY(requirement_set_id) REFERENCES nutrition_requirement_sets (id),
+    FOREIGN KEY(premix_product_id) REFERENCES feed_products (id)
+);
+CREATE INDEX ix_nutrition_assessments_version ON nutrition_assessments (farm_id, formula_version_id, created_at);
 
 CREATE TABLE feed_batch_performance_scores (
     feed_batch_id VARCHAR(36) NOT NULL,

@@ -24,6 +24,8 @@ NUTRIENTS: tuple[tuple[str, str, str, str, str, int], ...] = (
     ("NDF", "Neutral detergent fibre", "الألياف NDF", "%", "fibre", 40),
     ("ADF", "Acid detergent fibre", "الألياف ADF", "%", "fibre", 41),
     ("CF", "Crude fibre", "الألياف الخام", "%", "fibre", 42),
+    # Physically effective NDF: the fibre long enough to make a cow chew (Package 11).
+    ("PENDF", "Physically effective NDF", "الألياف الفعّالة peNDF", "%", "fibre", 43),
     ("FAT", "Crude fat", "الدهون الخام", "%", "fat", 50),
     ("ASH", "Ash", "الرماد", "%", "minerals", 60),
     ("CA", "Calcium", "الكالسيوم", "%", "minerals", 61),

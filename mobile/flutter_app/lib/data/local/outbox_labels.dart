@@ -43,6 +43,8 @@ const Map<String, OutboxDescriptor> _byPathPrefix = {
   '/feed-lots': (labelKey: 'outboxFeedReceipt', moduleCode: FarmModule.feedNutrition),
   '/feed-products': (labelKey: 'outboxFeedProduct', moduleCode: FarmModule.feedNutrition),
   '/feed-formulas': (labelKey: 'outboxFormula', moduleCode: FarmModule.feedNutrition),
+  // Nutrient requirements and formula assessments (Package 11).
+  '/nutrition': (labelKey: 'outboxNutrition', moduleCode: FarmModule.feedNutrition),
   '/feed-batches': (labelKey: 'outboxFeedBatch', moduleCode: FarmModule.feedNutrition),
   // The one-step mix is a batch too: without this it showed as an unnamed
   // "Change" under My Day in the sync panel.

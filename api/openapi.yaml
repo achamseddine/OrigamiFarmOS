@@ -5744,6 +5744,243 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/requirement-sets:
+    get:
+      tags:
+      - nutrition
+      summary: List Requirement Sets
+      operationId: list_requirement_sets_api_v1_nutrition_requirement_sets_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: include_retired
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Retired
+      - name: species_code
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Species Code
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Requirement Sets Api V1 Nutrition Requirement Sets Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - nutrition
+      summary: Create Requirement Set
+      operationId: create_requirement_set_api_v1_nutrition_requirement_sets_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementSetCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Requirement Set Api V1 Nutrition Requirement Sets Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/requirement-sets/{set_id}:
+    get:
+      tags:
+      - nutrition
+      summary: Get Requirement Set
+      operationId: get_requirement_set_api_v1_nutrition_requirement_sets__set_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: set_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Set Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Requirement Set Api V1 Nutrition Requirement Sets  Set Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/requirement-sets/{set_id}/versions:
+    post:
+      tags:
+      - nutrition
+      summary: Revise Requirement Set
+      operationId: revise_requirement_set_api_v1_nutrition_requirement_sets__set_id__versions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: set_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Set Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementSetRevise'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Revise Requirement Set Api V1 Nutrition Requirement Sets  Set Id  Versions
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/assessments:
+    get:
+      tags:
+      - nutrition
+      summary: List Assessments
+      operationId: list_assessments_api_v1_nutrition_assessments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: formula_version_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Formula Version Id
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 200
+          minimum: 1
+          default: 50
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Assessments Api V1 Nutrition Assessments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - nutrition
+      summary: Create Assessment
+      operationId: create_assessment_api_v1_nutrition_assessments_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssessmentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Assessment Api V1 Nutrition Assessments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/nutrition/assessments/{assessment_id}:
+    get:
+      tags:
+      - nutrition
+      summary: Get Assessment
+      operationId: get_assessment_api_v1_nutrition_assessments__assessment_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: assessment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Assessment Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Assessment Api V1 Nutrition Assessments  Assessment Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed-performance/summary:
     get:
       tags:
@@ -13917,6 +14154,51 @@ components:
       required:
       - approval_reference
       title: ApproveVersionIn
+    AssessmentCreate:
+      properties:
+        formula_version_id:
+          type: string
+          title: Formula Version Id
+        requirement_set_id:
+          type: string
+          title: Requirement Set Id
+        premix:
+          anyOf:
+          - $ref: '#/components/schemas/PremixIn'
+          - type: 'null'
+        concentrate_kg_per_head:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Concentrate Kg Per Head
+        forages:
+          items:
+            $ref: '#/components/schemas/ForageIn'
+          type: array
+          title: Forages
+          default: []
+        no_forage:
+          type: boolean
+          title: No Forage
+          default: false
+        body_weight_kg:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Body Weight Kg
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - formula_version_id
+      - requirement_set_id
+      title: AssessmentCreate
     AssessmentIn:
       properties:
         subject_type:
@@ -17339,6 +17621,20 @@ components:
           title: Est Yield Kg
       type: object
       title: FieldUpdate
+    ForageIn:
+      properties:
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        as_fed_kg:
+          type: number
+          exclusiveMinimum: 0.0
+          title: As Fed Kg
+      type: object
+      required:
+      - feed_product_id
+      - as_fed_kg
+      title: ForageIn
     FormulaComponentIn:
       properties:
         feed_product_id:
@@ -21354,6 +21650,20 @@ components:
           title: Notes
       type: object
       title: PregnancyLossIn
+    PremixIn:
+      properties:
+        feed_product_id:
+          type: string
+          title: Feed Product Id
+        quantity_kg:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity Kg
+      type: object
+      required:
+      - feed_product_id
+      - quantity_kg
+      title: PremixIn
     PrepareStepIn:
       properties:
         weight_kg:
@@ -23059,6 +23369,145 @@ components:
       required:
       - feed_product_id
       title: ReorderPolicyUpsert
+    RequirementSetCreate:
+      properties:
+        code:
+          type: string
+          maxLength: 60
+          title: Code
+        name:
+          type: string
+          maxLength: 200
+          title: Name
+        species_code:
+          type: string
+          maxLength: 30
+          title: Species Code
+        production_stage:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Production Stage
+        reference_body_weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Reference Body Weight Kg
+        milk_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Milk Yield Kg
+        expected_dmi_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Dmi Kg
+        source_reference:
+          type: string
+          maxLength: 400
+          title: Source Reference
+        source_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Type
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Notes
+        values:
+          items:
+            $ref: '#/components/schemas/RequirementValueIn'
+          type: array
+          title: Values
+      type: object
+      required:
+      - code
+      - name
+      - species_code
+      - source_reference
+      - values
+      title: RequirementSetCreate
+    RequirementSetRevise:
+      properties:
+        source_reference:
+          type: string
+          maxLength: 400
+          title: Source Reference
+        source_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Type
+        name:
+          anyOf:
+          - type: string
+            maxLength: 200
+          - type: 'null'
+          title: Name
+        production_stage:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Production Stage
+        reference_body_weight_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Reference Body Weight Kg
+        milk_yield_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Milk Yield Kg
+        expected_dmi_kg:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Expected Dmi Kg
+        notes:
+          anyOf:
+          - type: string
+            maxLength: 2000
+          - type: 'null'
+          title: Notes
+        values:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/RequirementValueIn'
+            type: array
+          - type: 'null'
+          title: Values
+      type: object
+      required:
+      - source_reference
+      title: RequirementSetRevise
+      description: 'A new version: its own source, and the values (the old ones kept when left out).'
+    RequirementValueIn:
+      properties:
+        nutrient_code:
+          type: string
+          maxLength: 30
+          title: Nutrient Code
+        min_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Min Value
+        max_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Max Value
+      type: object
+      required:
+      - nutrient_code
+      title: RequirementValueIn
     RequisitionCancel:
       properties:
         reason:

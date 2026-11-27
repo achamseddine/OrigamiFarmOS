@@ -22,6 +22,7 @@ import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/feeding_provider.dart';
+import '../providers/nutrition_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/pharmacy_provider.dart';
 import '../providers/livestock_provider.dart';
@@ -138,6 +139,7 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => NutritionProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)),
         ChangeNotifierProvider(create: (_) => MilkSalesProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FinanceProvider(apiClient: api)),

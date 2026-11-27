@@ -23,6 +23,7 @@ import 'package:farmos/providers/emergency_provider.dart';
 import 'package:farmos/providers/employees_provider.dart';
 import 'package:farmos/providers/feed_provider.dart';
 import 'package:farmos/providers/feeding_provider.dart';
+import 'package:farmos/providers/nutrition_provider.dart';
 import 'package:farmos/providers/health_records_provider.dart';
 import 'package:farmos/providers/herd_records_provider.dart';
 import 'package:farmos/providers/livestock_provider.dart';
@@ -139,6 +140,7 @@ class SnapshotFarm {
         ChangeNotifierProvider(lazy: false, create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedingProvider(apiClient: api)..load()),
+        ChangeNotifierProvider(create: (_) => NutritionProvider(apiClient: api)),
         ChangeNotifierProvider(lazy: false, create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => MilkSalesProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FinanceProvider(apiClient: api)),

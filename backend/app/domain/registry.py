@@ -28,6 +28,7 @@ MODEL_MODULES: tuple[str, ...] = (
     "app.domain.approval_models",    # employee work waiting for the manager: mixes, corrections
     "app.domain.milk_models",        # milk sales and the milk tank's adjustments
     "app.domain.finance_models",    # exchange rates (USD / LBP)
+    "app.domain.nutrition_models",   # nutrient requirement sets (versioned, sourced) and formula assessments
 )
 
 

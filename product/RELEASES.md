@@ -1,5 +1,25 @@
 # Releases
 
+## v0.8.18 — Feed nutrition: what the animals need, and whether the formula meets it
+
+Master prompt Package 11 (database/NUTRITION-ASSESSMENT.md). On the tablet and the web app (Feed → **Nutrition**), computed and enforced by the server. Built on the existing feed formulas and nutrient analyses — nothing is copied, and no formula, batch or feeding program is ever changed by it.
+- **What the animals need** (the manager): requirement sets per species and stage — cows in early lactation at 650 kg, ewes in late gestation… — each nutrient's minimum and/or maximum on the ration's dry matter (protein, energy, NDF and the new **physically effective NDF**, calcium, phosphorus…), the reference weight and the dry matter they are expected to eat, and **where the figures come from** (required).
+  - A change is a **new version** with its own source; the old one is kept, and what was assessed against it still reads as it was.
+- **Assess a formula:** the formula **as the farm makes it** — the base concentrate stays **1,210 kg before any premix**, never relabelled a one-ton batch — in its ration (the concentrate per head, the forage, the animals' weight), against one version of the requirements.
+  - Each ingredient's latest lab analysis, else the declared one, **as fed and on dry matter**; what each ingredient brings to each nutrient.
+  - **A premix on top**, as a what-if: the 1,210 kg kept, the total and the inclusions recomputed; a premix not allowed for the species (a cattle-only premix for sheep) is refused.
+  - Each requirement **met, below or above**, with the dry matter eaten against what is expected, and an explanation that names the gap and the source — *an assessment, not a ration*.
+- **Insufficient data, never a guess:** an ingredient without its analysis or its dry matter (the soybean, the cottonseed, the beet pulp…), no intake, no forage, no weight, or a weight the requirements are not for — the assessment says exactly what is missing and **recommends nothing**. It never predicts milk.
+- **Other species** have their own requirements: a cow formula is not assessed against sheep requirements.
+- **Kept as computed:** every assessment is stored with the analyses and the requirement version it used; a later analysis makes a new one.
+- **Who:** whoever sees the feed reads; whoever makes feed assesses; the requirements are the manager's (Feed approval). Another farm sees nothing. Offline, an assessment waits and is computed when it reaches the server.
+- Server: **migration `b7d9f1a3c5e8`**.
+  - Tables `nutrition_requirement_sets`, `nutrition_requirement_values`, `nutrition_assessments`; the nutrient catalog gains `PENDF`.
+  - Endpoints: `GET/POST /nutrition/requirement-sets`, `GET …/{id}`, `POST …/{id}/versions`; `GET/POST /nutrition/assessments`, `GET …/{id}`.
+  - Events: `nutrition_requirements_recorded`, `nutrition_requirements_revised`, `nutrition_assessed`.
+- Tests: backend +12 (`test_nutrition_assessment.py`: the 1,210 kg mass balance and the premix on top, missing soy/cottonseed/beet pulp, unknown intake/forage/weight, everything known with calcium short, dry-matter conversion and DM-basis lab results, no DM, sources and versions, species, the premix policy, roles and farms, kept as computed and one per retry) and the same on PostgreSQL 16 with a two-manager revision race (`test_nutrition_assessment_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +11 (`test/records/nutrition_assessment_test.dart`).
+- Not in this release: least-cost formulation (Package 12), amino acids, DCAD, intake predicted from weight and milk.
+
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 
 Audit 2026-11-25 (I-8). On the tablet and the web app, enforced by the server:
