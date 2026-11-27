@@ -113,6 +113,10 @@ def test_two_people_receiving_the_last_of_an_order_at_once_receive_it_once(db_se
         db = factory()
         try:
             user = db.get(models.User, "user-worker-1")
+            # Each holds a copy of the order read before the other's receipt:
+            # the lock must read it afresh, not hand back this stale copy.
+            stale = orders.get_order(db, po_id, "farm-origami")
+            assert stale.status == "approved"
             barrier.wait()
             locked = orders.get_order(db, po_id, "farm-origami", lock=True)
             orders.receive(db, user, locked, lines=[{"purchase_order_line_id": line_id, "received_quantity": 100}], delivery_note_no=who)

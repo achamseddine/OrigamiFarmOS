@@ -62,7 +62,9 @@ def resolve_supplier(db: Session, farm_id: str, supplier_id: str | None, supplie
 def get_order(db: Session, order_id: str, farm_id: str, *, lock: bool = False) -> prm.PurchaseOrder:
     stmt = select(prm.PurchaseOrder).where(prm.PurchaseOrder.id == order_id)
     if lock:
-        stmt = stmt.with_for_update()
+        # Locked and read afresh: a copy this session already holds is
+        # refreshed, so a receipt never decides on quantities another took.
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
     po = db.scalar(stmt)
     if po is None or po.farm_id != farm_id:
         raise ProcurementError("Purchase order not found", 404)
