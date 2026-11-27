@@ -6662,6 +6662,222 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/actions:
+    get:
+      tags:
+      - feed-performance
+      summary: List Actions
+      description: The manager's actions on alerts and their measured outcomes.
+      operationId: list_actions_api_v1_feed_performance_actions_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Alert Id
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Actions Api V1 Feed Performance Actions Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/actions/{action_id}:
+    get:
+      tags:
+      - feed-performance
+      summary: Get Action
+      operationId: get_action_api_v1_feed_performance_actions__action_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Action Api V1 Feed Performance Actions  Action Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/alerts/{alert_id}/actions:
+    post:
+      tags:
+      - feed-performance
+      summary: Record Action
+      description: The manager's decision on an alert, measured later against the production records.
+      operationId: record_action_api_v1_feed_performance_alerts__alert_id__actions_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: alert_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Alert Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedActionIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Action Api V1 Feed Performance Alerts  Alert Id  Actions Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/actions/{action_id}/measure:
+    post:
+      tags:
+      - feed-performance
+      summary: Measure Action
+      description: Measures the outcome now (the daily cycle does it by itself once the window has passed).
+      operationId: measure_action_api_v1_feed_performance_actions__action_id__measure_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      - name: as_of
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: As Of
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Measure Action Api V1 Feed Performance Actions  Action Id  Measure Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/actions/{action_id}/review:
+    post:
+      tags:
+      - feed-performance
+      summary: Review Action
+      operationId: review_action_api_v1_feed_performance_actions__action_id__review_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Review Action Api V1 Feed Performance Actions  Action Id  Review Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/feed-performance/actions/{action_id}/cancel:
+    post:
+      tags:
+      - feed-performance
+      summary: Cancel Action
+      operationId: cancel_action_api_v1_feed_performance_actions__action_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: action_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Action Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedActionCancelIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Action Api V1 Feed Performance Actions  Action Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/pharmacy/summary:
     get:
       tags:
@@ -16812,6 +17028,67 @@ components:
       description: 'The farm-level settings a manager changes from the tablet. Only the
 
         fields sent are changed.'
+    FeedActionCancelIn:
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: FeedActionCancelIn
+    FeedActionIn:
+      properties:
+        action_type:
+          type: string
+          title: Action Type
+        description:
+          type: string
+          maxLength: 2000
+          title: Description
+        expected_effect:
+          type: string
+          title: Expected Effect
+          default: increase
+        measure_after_days:
+          anyOf:
+          - type: integer
+            maximum: 60.0
+            minimum: 3.0
+          - type: 'null'
+          title: Measure After Days
+        baseline_days:
+          anyOf:
+          - type: integer
+            maximum: 60.0
+            minimum: 3.0
+          - type: 'null'
+          title: Baseline Days
+        decided_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Decided At
+        linked_entity_type:
+          anyOf:
+          - type: string
+            maxLength: 60
+          - type: 'null'
+          title: Linked Entity Type
+        linked_entity_id:
+          anyOf:
+          - type: string
+            maxLength: 36
+          - type: 'null'
+          title: Linked Entity Id
+      type: object
+      required:
+      - action_type
+      - description
+      title: FeedActionIn
+      description: The manager's action on a feed performance alert (Package 13).
     FeedAvailabilityOut:
       properties:
         feed_product_id:

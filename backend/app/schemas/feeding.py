@@ -894,3 +894,22 @@ class FeedPerformanceMonitorPatch(BaseModel):
 
 class FeedPerformanceAlertClose(BaseModel):
     note: str
+
+
+class FeedActionIn(BaseModel):
+    """The manager's action on a feed performance alert (Package 13)."""
+
+    # change_lot | change_supplier | sample_lot | revise_formula | adjust_feeding | health_check | other
+    action_type: str
+    description: str = Field(..., max_length=2000)
+    # increase | decrease | no_change — what the production is expected to do
+    expected_effect: str = "increase"
+    measure_after_days: int | None = Field(None, ge=3, le=60)
+    baseline_days: int | None = Field(None, ge=3, le=60)
+    decided_at: datetime | None = None
+    linked_entity_type: str | None = Field(None, max_length=60)
+    linked_entity_id: str | None = Field(None, max_length=36)
+
+
+class FeedActionCancelIn(BaseModel):
+    reason: str = Field(..., max_length=1000)

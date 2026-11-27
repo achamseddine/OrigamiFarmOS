@@ -1421,13 +1421,16 @@ def run_cycle(db: Session, farm_id: str, *, as_of: datetime | None = None, monit
     suppliers = supplier_performance(db, farm_id, user_id=user_id)
     cost = check_cost_efficiency(db, farm_id, user_id=user_id)
     intake = check_intake(db, farm_id, user_id=user_id)
+    from app.services import feed_action_service as actions  # local: actions builds on this module
+
+    outcomes = actions.measure_due(db, farm_id, as_of=as_of)
     open_alerts = db.scalar(select(func.count(fm.FeedPerformanceAlert.id)).where(fm.FeedPerformanceAlert.farm_id == farm_id, fm.FeedPerformanceAlert.status != "resolved")) or 0
     return {
         "evaluated_at": (ensure_utc(as_of) if as_of else now()), "monitors": len(assessments),
         "assessments": [assessment_dict(db, a) for a in assessments], "anomalies": sum(1 for a in assessments if a.status == "anomaly"),
         "insufficient": sum(1 for a in assessments if a.status == "insufficient"), "batches_scored": len(scores), "ingredient_lots_evaluated": len(lots),
         "ingredient_lot_anomalies": sum(1 for f in lots if f["weak"]), "suppliers": len(suppliers),
-        "cost_efficiency": cost, "intake_alerts": len(intake), "open_alerts": open_alerts,
+        "cost_efficiency": cost, "intake_alerts": len(intake), "open_alerts": open_alerts, "outcomes_measured": len(outcomes),
     }
 
 

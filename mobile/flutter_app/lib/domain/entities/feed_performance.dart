@@ -192,6 +192,7 @@ class FeedPerformanceAlert {
     this.mixCode,
     this.feedBatchId,
     this.productName,
+    this.assessmentId,
     this.subjectType,
     this.subjectId,
     this.subjectName,
@@ -217,6 +218,8 @@ class FeedPerformanceAlert {
   final String? mixCode;
   final String? feedBatchId;
   final String? productName;
+  /// The assessment it came from: only an alert with one can have its action's outcome measured.
+  final String? assessmentId;
   final String? subjectType;
   final String? subjectId;
   final String? subjectName;
@@ -241,6 +244,7 @@ class FeedPerformanceAlert {
         mixCode: json['mix_code'] as String?,
         feedBatchId: json['feed_batch_id'] as String?,
         productName: json['product_name'] as String?,
+        assessmentId: json['assessment_id'] as String?,
         subjectType: json['subject_type'] as String?,
         subjectId: json['subject_id'] as String?,
         subjectName: json['subject_name'] as String?,
@@ -374,5 +378,70 @@ class SupplierPerformance {
         confidence: _d(json['confidence_score']),
         methodologyCode: json['methodology_code'] as String? ?? '',
         generatedAt: _dt(json['generated_at']),
+      );
+}
+
+
+/// The manager's action on an alert and its outcome, measured once (Package 13).
+class FeedAction {
+  const FeedAction({
+    required this.id,
+    required this.alertId,
+    required this.actionType,
+    required this.description,
+    required this.expectedEffect,
+    required this.status,
+    this.measureFrom,
+    this.decidedByName,
+    this.outcome,
+    this.baselineValue,
+    this.outcomeValue,
+    this.changePct,
+    this.confidence,
+    this.explanation,
+    this.reviewed = false,
+    this.cancelReason,
+  });
+
+  final String id;
+  final String alertId;
+  final String actionType;
+  final String description;
+  final String expectedEffect;
+
+  /// measuring | measured | cancelled
+  final String status;
+  final DateTime? measureFrom;
+  final String? decidedByName;
+
+  /// as_expected | no_change | opposite | insufficient_data
+  final String? outcome;
+  final double? baselineValue;
+  final double? outcomeValue;
+  final double? changePct;
+  final double? confidence;
+  final String? explanation;
+  final bool reviewed;
+  final String? cancelReason;
+
+  bool get measuring => status == 'measuring';
+
+  factory FeedAction.fromJson(Map<String, dynamic> j) => FeedAction(
+        id: '${j['id']}',
+        alertId: '${j['alert_id']}',
+        actionType: '${j['action_type'] ?? 'other'}',
+        description: '${j['description'] ?? ''}',
+        expectedEffect: '${j['expected_effect'] ?? 'increase'}',
+        status: '${j['status'] ?? 'measuring'}',
+        measureFrom: DateTime.tryParse('${j['measure_from'] ?? ''}'),
+        decidedByName: j['decided_by_name'] as String?,
+        outcome: j['outcome'] as String?,
+        baselineValue: _dn(j['baseline_value']),
+        outcomeValue: _dn(j['outcome_value']),
+        changePct: _dn(j['change_pct']),
+        confidence: _dn(j['confidence_score']),
+        explanation: j['explanation'] as String?,
+        reviewed: j['reviewed_at'] != null,
+        cancelReason: j['cancel_reason'] as String?,
       );
 }

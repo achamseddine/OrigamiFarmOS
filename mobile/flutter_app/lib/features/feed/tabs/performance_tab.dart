@@ -13,6 +13,7 @@ import '../../../domain/entities/access.dart';
 import '../../../domain/entities/feed_performance.dart';
 import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
+import '../../health/pharmacy_tab.dart' show askReason;
 import '../feed_workspace_screen.dart';
 
 /// Feed performance intelligence (database/FEED-PERFORMANCE-INTELLIGENCE.md):
@@ -67,7 +68,7 @@ class PerformanceTab extends StatelessWidget {
             ? const FeedEmpty('perfNoAlerts')
             : Column(children: [
                 for (final a in feeding.performanceAlerts)
-                  _AlertCard(alert: a, canAcknowledge: canEdit && a.isOpen, canResolve: canApprove && !a.isResolved),
+                  _AlertCard(alert: a, canAcknowledge: canEdit && a.isOpen, canResolve: canApprove && !a.isResolved, canAct: canApprove),
               ]),
       ),
       SectionCard(
@@ -221,14 +222,20 @@ class _AssessmentPill extends StatelessWidget {
 /// One alert: what it is, how sure the model is, the whole explanation,
 /// and the two things a person can do — see it, or close it with a reason.
 class _AlertCard extends StatelessWidget {
-  const _AlertCard({required this.alert, required this.canAcknowledge, required this.canResolve});
+  const _AlertCard({required this.alert, required this.canAcknowledge, required this.canResolve, this.canAct = false});
   final FeedPerformanceAlert alert;
   final bool canAcknowledge;
   final bool canResolve;
 
+  /// The manager records what was done about it (Package 13); the server checks again.
+  final bool canAct;
+
   @override
   Widget build(BuildContext context) {
     final a = alert;
+    // An action can be measured only on an alert about one subject's production, with no action still being measured.
+    final measurable = canAct && !a.isResolved && a.assessmentId != null && a.subjectId != null &&
+        !context.watch<FeedingProvider>().actionsFor(a.id).any((x) => x.measuring);
     final where = [if (a.mixCode != null) a.mixCode!, if (a.subjectName != null) a.subjectName!, if (a.productName != null && a.mixCode == null) a.productName!].join(' · ');
     return Container(
       margin: const EdgeInsets.only(bottom: FarmSpacing.sm),
@@ -273,9 +280,17 @@ class _AlertCard extends StatelessWidget {
             Text(_score(a.confidence), style: FarmTypography.textTheme.bodySmall),
           ]),
         ],
-        if (canAcknowledge || canResolve) ...[
+        // What the manager did about it, and what came of it (Package 13).
+        for (final act in context.watch<FeedingProvider>().actionsFor(a.id)) _ActionLine(action: act, canManage: canAct),
+        if (canAcknowledge || canResolve || measurable) ...[
           const SizedBox(height: 6),
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (measurable)
+              TextButton(
+                key: ValueKey('perf-act-${a.id}'),
+                onPressed: () => showDialog<void>(context: context, builder: (_) => _ActionDialog(alert: a)),
+                child: Text(context.t('faRecord')),
+              ),
             if (canAcknowledge)
               TextButton(onPressed: () => _acknowledge(context), child: Text(context.t('perfAcknowledge'))),
             if (canResolve)
@@ -327,4 +342,160 @@ class _AlertCard extends StatelessWidget {
       messenger.showSnackBar(SnackBar(content: Text(savedOffline)));
     }
   }
+}
+
+
+FarmStatusLevel _outcomeLevel(String? outcome) => switch (outcome) {
+      'as_expected' => FarmStatusLevel.good,
+      'opposite' => FarmStatusLevel.alert,
+      _ => FarmStatusLevel.watch,
+    };
+
+/// One action on an alert: being measured (from when), or its outcome with its confidence.
+class _ActionLine extends StatelessWidget {
+  const _ActionLine({required this.action, required this.canManage});
+  final FeedAction action;
+  final bool canManage;
+
+  Future<void> _run(BuildContext context, Future<dynamic> Function() call) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final failed = context.t('couldNotSave');
+    final r = await call();
+    if (!r.success) messenger.showSnackBar(SnackBar(content: Text(r.error ?? failed)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final x = action;
+    final feeding = context.read<FeedingProvider>();
+    final small = FarmTypography.textTheme.bodySmall;
+    return Container(
+      key: ValueKey('perf-action-${x.id}'),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: FarmColors.white, borderRadius: BorderRadius.circular(FarmRadii.sm), border: Border.all(color: FarmColors.mist)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('${context.t('faType_${x.actionType}')} · ${x.description}', style: FarmTypography.textTheme.titleSmall)),
+          StatusPill(
+            label: x.status == 'measured' ? context.t('faOutcome_${x.outcome ?? 'insufficient_data'}') : context.t('faStatus_${x.status}'),
+            level: x.status == 'measured' ? _outcomeLevel(x.outcome) : FarmStatusLevel.neutral,
+            dense: true,
+          ),
+        ]),
+        if (x.measuring && x.measureFrom != null)
+          Text(context.t('faMeasuredFrom').replaceAll('{date}', feedDate(x.measureFrom!.toLocal())), style: small),
+        if (x.explanation != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(x.explanation!, style: small)),
+        if (x.cancelReason != null) Text('${context.t('faCancelled')}: ${x.cancelReason}', style: small),
+        if (canManage)
+          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+            if (x.measuring) ...[
+              TextButton(key: ValueKey('perf-measure-${x.id}'), onPressed: () => _run(context, () => feeding.measureFeedAction(x.id)), child: Text(context.t('faMeasure'))),
+              TextButton(
+                key: ValueKey('perf-cancel-${x.id}'),
+                onPressed: () async {
+                  final reason = await askReason(context, title: context.t('faCancelTitle'), label: context.t('faCancelWhy'));
+                  if (reason == null || !context.mounted) return;
+                  await _run(context, () => feeding.cancelFeedAction(x.id, reason));
+                },
+                child: Text(context.t('cancel')),
+              ),
+            ],
+            if (x.status == 'measured' && !x.reviewed)
+              TextButton(key: ValueKey('perf-review-${x.id}'), onPressed: () => _run(context, () => feeding.reviewFeedAction(x.id)), child: Text(context.t('faReviewed'))),
+          ]),
+      ]),
+    );
+  }
+}
+
+const kFeedActionTypes = ['change_lot', 'change_supplier', 'sample_lot', 'revise_formula', 'adjust_feeding', 'health_check', 'other'];
+
+class _ActionDialog extends StatefulWidget {
+  const _ActionDialog({required this.alert});
+  final FeedPerformanceAlert alert;
+
+  @override
+  State<_ActionDialog> createState() => _ActionDialogState();
+}
+
+class _ActionDialogState extends State<_ActionDialog> {
+  String _type = 'change_lot';
+  String _effect = 'increase';
+  final _what = TextEditingController();
+  final _days = TextEditingController(text: '14');
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _what.dispose();
+    _days.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final days = int.tryParse(_days.text.trim());
+    if (_what.text.trim().isEmpty) return setState(() => _error = context.t('faSayWhat'));
+    if (days == null || days < 3 || days > 60) return setState(() => _error = context.t('faDaysRange'));
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final r = await context.read<FeedingProvider>().recordFeedAction(widget.alert.id, {
+      'action_type': _type,
+      'description': _what.text.trim(),
+      'expected_effect': _effect,
+      'measure_after_days': days,
+      'baseline_days': days,
+    });
+    if (!mounted) return;
+    if (r.success) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(r.queued ? 'workingOffline' : 'faSaved'))));
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _error = r.error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(context.t('faRecord')),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text(widget.alert.title, style: FarmTypography.textTheme.bodySmall),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('fa-type'),
+              isExpanded: true,
+              value: _type,
+              decoration: InputDecoration(labelText: context.t('faWhatKind')),
+              items: [for (final t in kFeedActionTypes) DropdownMenuItem(value: t, child: Text(context.t('faType_$t')))],
+              onChanged: (v) => setState(() => _type = v ?? _type),
+            ),
+            TextField(key: const ValueKey('fa-what'), controller: _what, maxLines: 2, decoration: InputDecoration(labelText: context.t('faWhatDone'))),
+            DropdownButtonFormField<String>(
+              key: const ValueKey('fa-effect'),
+              isExpanded: true,
+              value: _effect,
+              decoration: InputDecoration(labelText: context.t('faExpected')),
+              items: [for (final e in const ['increase', 'decrease', 'no_change']) DropdownMenuItem(value: e, child: Text(context.t('faEffect_$e')))],
+              onChanged: (v) => setState(() => _effect = v ?? _effect),
+            ),
+            TextField(
+              key: const ValueKey('fa-days'),
+              controller: _days,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(labelText: context.t('faDays'), helperText: context.t('faDaysHelp'), helperMaxLines: 3),
+            ),
+            if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: const TextStyle(color: FarmColors.danger))),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
+          FilledButton(key: const ValueKey('fa-save'), onPressed: _saving ? null : _save, child: Text(context.t('save'))),
+        ],
+      );
 }
