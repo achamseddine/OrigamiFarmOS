@@ -14,6 +14,7 @@ class NutritionProvider extends ChangeNotifier {
 
   List<RequirementSet> sets = [];
   List<NutritionAssessment> assessments = [];
+  List<LeastCostRun> runs = [];
   bool loaded = false;
 
   Future<void> load() async {
@@ -26,6 +27,10 @@ class NutritionProvider extends ChangeNotifier {
     try {
       final rows = await _api.get('/nutrition/assessments', query: {'limit': 20}) as List<dynamic>;
       assessments = [for (final r in rows) NutritionAssessment.fromJson((r as Map).cast<String, dynamic>())];
+    } catch (_) {}
+    try {
+      final rows = await _api.get('/nutrition/least-cost', query: {'limit': 20}) as List<dynamic>;
+      runs = [for (final r in rows) LeastCostRun.fromJson((r as Map).cast<String, dynamic>())];
     } catch (_) {}
     loaded = true;
     notifyListeners();
@@ -54,4 +59,16 @@ class NutritionProvider extends ChangeNotifier {
     }
     return (result, null);
   }
+
+  /// Up to three least-cost drafts at today's prices (Package 12); the run is in the result.
+  Future<(WriteResult, LeastCostRun?)> leastCost(Map<String, dynamic> body) async {
+    final result = await _write(() => _api.post('/nutrition/least-cost', body: body));
+    final data = result.data;
+    if (result.success && !result.queued && data is Map) return (result, LeastCostRun.fromJson(data.cast<String, dynamic>()));
+    return (result, null);
+  }
+
+  /// The manager approves one draft, with a reason: it becomes a new draft version of the formula.
+  Future<WriteResult> approveDraft(String runId, String draft, {required String note}) =>
+      _write(() => _api.post('/nutrition/least-cost/$runId/approve', body: {'draft': draft, 'note': note}));
 }

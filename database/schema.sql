@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 145 tables, 52 secondary indexes.
+-- 146 tables, 53 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
@@ -2526,6 +2526,30 @@ CREATE TABLE feed_formula_components (
     FOREIGN KEY(version_id) REFERENCES feed_formula_versions (id),
     FOREIGN KEY(feed_product_id) REFERENCES feed_products (id)
 );
+
+CREATE TABLE formulation_runs (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    requirement_set_id VARCHAR(36) NOT NULL,
+    base_formula_version_id VARCHAR(36),
+    status VARCHAR(30) NOT NULL,
+    inputs JSON NOT NULL,
+    result JSON NOT NULL,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    approved_draft VARCHAR(10),
+    approved_by VARCHAR(36),
+    approved_at TIMESTAMP WITH TIME ZONE,
+    approval_note TEXT,
+    approved_formula_version_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(requirement_set_id) REFERENCES nutrition_requirement_sets (id),
+    FOREIGN KEY(base_formula_version_id) REFERENCES feed_formula_versions (id),
+    FOREIGN KEY(approved_by) REFERENCES users (id),
+    FOREIGN KEY(approved_formula_version_id) REFERENCES feed_formula_versions (id)
+);
+CREATE INDEX ix_formulation_runs_farm_created ON formulation_runs (farm_id, created_at);
 
 CREATE TABLE lactation_episodes (
     id VARCHAR(36) NOT NULL,

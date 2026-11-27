@@ -1,5 +1,17 @@
 # Releases
 
+## v0.8.19 — Least-cost drafts: the cheapest formula that still meets the requirements
+
+Master prompt Package 12 (database/LEAST-COST-FORMULATION.md, architecture/ADR-010-LEAST-COST-SOLVER.md). On the tablet and the web app (Feed → **Nutrition**), solved by the server. Built on v0.8.18's requirements and analyses.
+- **Find least-cost drafts** for a formula: its ingredients (or the ones allowed, each with a minimum and maximum share), its batch size (the base concentrate's 1,210 kg), the ration (concentrate per head, silage, weight) and a premix on top if any — against one version of the requirements.
+- **Up to three drafts:** *A, the cheapest*; *B, the cheapest with a safety margin* (3 % inside every bound by default); *C, the closest to today's formula* (the fewest kg changed). Each meets every requirement, is costed ingredient by ingredient at **today's prices** (the lot used next and its supplier, else the feed's price) and says what it saves against the current formula.
+- **Infeasible** says which requirement cannot be reached (calcium with no mineral source, protein with the soybean held to 5 %…). **Insufficient data** — an analysis, a dry matter or a price not known — runs nothing at all.
+- **Blocked:** another species' requirements, an ingredient or a premix the feed rules do not allow for the species.
+- **Approved by the manager**, with a reason, once per run: the draft becomes a new **draft** version of the formula — never active by itself, activated by the usual formula approval. The run, its prices and every batch stay as they were when prices change.
+- Server: **migration `c9e1a3b5d7f0`** (after `b7d9f1a3c5e8`): table `formulation_runs`. Endpoints `GET/POST /nutrition/least-cost`, `GET …/{id}`, `POST …/{id}/approve`. Events `least_cost_formulated`, `least_cost_draft_approved`. A small in-house solver (no new dependency, ADR-010).
+- Tests: backend +14 (`test_lp_solver.py` 6 on known optima, infeasible, unbounded, degenerate cycling; `test_least_cost_formulation.py` 8) and the same on PostgreSQL 16 with a two-manager approval race (`test_least_cost_formulation_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +7 (`test/records/least_cost_test.dart`).
+- Not in this release: optimisation across several groups at once, stock availability as a constraint, amino acids.
+
 ## v0.8.18 — Feed nutrition: what the animals need, and whether the formula meets it
 
 Master prompt Package 11 (database/NUTRITION-ASSESSMENT.md). On the tablet and the web app (Feed → **Nutrition**), computed and enforced by the server. Built on the existing feed formulas and nutrient analyses — nothing is copied, and no formula, batch or feeding program is ever changed by it.

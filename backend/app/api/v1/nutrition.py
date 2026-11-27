@@ -8,6 +8,10 @@ database/NUTRITION-ASSESSMENT.md).
     GET  /nutrition/assessments                       the assessments (?formula_version_id)
     POST /nutrition/assessments                       assess a formula version (and its ration) against a set (Feed create)
     GET  /nutrition/assessments/{id}                  as it was computed
+    GET  /nutrition/least-cost                        the least-cost runs (Package 12)
+    POST /nutrition/least-cost                        up to three drafts at today's prices (Feed create)
+    GET  /nutrition/least-cost/{id}
+    POST /nutrition/least-cost/{id}/approve           one draft → a new draft formula version (Feed approve)
 
 Whoever sees the feed reads them; an assessment never changes a formula,
 a batch or a feeding program.
@@ -21,7 +25,8 @@ from app.api.deps import get_current_user, require_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
-from app.schemas.nutrition import AssessmentCreate, RequirementSetCreate, RequirementSetRevise
+from app.schemas.nutrition import AssessmentCreate, LeastCostApprove, LeastCostCreate, RequirementSetCreate, RequirementSetRevise
+from app.services import least_cost_service as lcf
 from app.services import nutrition_service as nut
 
 router = APIRouter(tags=["nutrition"])
@@ -83,3 +88,31 @@ def create_assessment(payload: AssessmentCreate, db: Session = Depends(get_db), 
 @router.get("/nutrition/assessments/{assessment_id}")
 def get_assessment(assessment_id: str, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
     return nut.assessment_dict(db, nut.get_assessment(db, assessment_id, user.farm_id))
+
+
+@router.get("/nutrition/least-cost")
+def list_least_cost(limit: int = Query(30, ge=1, le=200), db: Session = Depends(get_db), user: models.User = Depends(_view)) -> list[dict]:
+    return [lcf.run_dict(db, r) for r in lcf.list_runs(db, user.farm_id, limit=limit)]
+
+
+@router.post("/nutrition/least-cost", status_code=status.HTTP_201_CREATED)
+def create_least_cost(payload: LeastCostCreate, db: Session = Depends(get_db), user: models.User = Depends(_assess)) -> dict:
+    data = payload.model_dump()
+    r = lcf.run(db, user, **data)
+    db.commit()
+    return lcf.run_dict(db, r)
+
+
+@router.get("/nutrition/least-cost/{run_id}")
+def get_least_cost(run_id: str, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    return lcf.run_dict(db, lcf.get_run(db, run_id, user.farm_id))
+
+
+@router.post("/nutrition/least-cost/{run_id}/approve")
+def approve_least_cost(run_id: str, payload: LeastCostApprove, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    r = lcf.get_run(db, run_id, user.farm_id)
+    version = lcf.approve(db, user, r, draft_key=payload.draft, note=payload.note, formula_id=payload.formula_id)
+    db.commit()
+    return {**lcf.run_dict(db, lcf.get_run(db, run_id, user.farm_id)),
+            "formula_version": {"id": version.id, "formula_id": version.formula_id, "version": version.version, "status": version.status,
+                                "batch_size": version.batch_size}}

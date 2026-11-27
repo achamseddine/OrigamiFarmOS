@@ -106,14 +106,15 @@ jobs:
       - name: Publish versioned APK prerelease
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tablet-v0.8.18-build-${{ github.run_number }}
+          tag_name: tablet-v0.8.19-build-${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          name: "Origami FarmOS v0.8.18 — tablet APK 0.8.${{ github.run_number }}"
+          name: "Origami FarmOS v0.8.19 — tablet APK 0.8.${{ github.run_number }}"
           body: |
             **Build 0.8.${{ github.run_number }}** — commit ${{ github.sha }} on branch `${{ github.ref_name }}`.
             Release notes: [product/RELEASES.md at this commit](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/product/RELEASES.md).
 
             **Pre-release / on-farm test APK.** What is new since the last tablet build:
+            - **v0.8.19:** **Least-cost drafts** (Feed → Nutrition) — up to three drafts of a formula at today's prices (the cheapest, one with a safety margin, the closest to today's), each meeting every requirement; infeasible or insufficient data said plainly; a manager approves one as a new draft version of the formula. Migration `c9e1a3b5d7f0`.
             - **v0.8.18:** **Feed nutrition** (Feed → Nutrition) — what the animals need, per species and stage, with its source and versions; a formula as the farm makes it (the base concentrate stays 1,210 kg before any premix, a premix on top as a what-if) assessed in its ration, each requirement met, below or above on dry matter — or **insufficient data**, naming what is unknown and recommending nothing. Migration `b7d9f1a3c5e8`.
             - **v0.8.8:** **Mouneh sales in the farm's books** — every sale in the Mouneh shop is one sale in Sales & Finance (revenue once, on its day; the jars' production cost kept with it): paid now, owed by a named buyer, or part paid (the rest received later); a manager cancels one and its jars go back on the shelf, the revenue undone, what was paid refunded. Past Mouneh sales are put in the books once by a dry-run-then-apply reconciliation. Migration `a3c5e7f9b1d2`.
             - **v0.8.7:** **Feeding records you can trust** — what was eaten can no longer be more than what was given (grams converted first); a cow fed with her group and on her own in the same round, the same feed, is asked about — *Record as additional feeding* (saying why) or *Don't record* — in English or Arabic, offline too; supplements and partial group feedings are not asked. No migration.

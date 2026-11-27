@@ -23,16 +23,16 @@ import '../feed_workspace_screen.dart';
 /// computed; this shows them — the 1,210 kg base kept, the premix on top,
 /// *insufficient data* when anything is unknown, never a ration.
 
-bool _manages(AccessProvider a) => a.can(FarmModule.feedNutrition, PermissionAction.approve);
-bool _assesses(AccessProvider a) => a.canCreate(FarmModule.feedNutrition) || _manages(a);
+bool nuManages(AccessProvider a) => a.can(FarmModule.feedNutrition, PermissionAction.approve);
+bool nuAssesses(AccessProvider a) => a.canCreate(FarmModule.feedNutrition) || nuManages(a);
 
-String _n(double v, [int digits = 2]) {
+String nuNum(double v, [int digits = 2]) {
   final s = v.toStringAsFixed(digits);
   return s.contains('.') ? s.replaceFirst(RegExp(r'\.?0+$'), '') : s;
 }
 
 /// 1210 → "1,210" (the farm reads its mixes in kg, grouped).
-String _kg(double v) {
+String nuKg(double v) {
   final whole = v.truncateToDouble() == v;
   final text = whole ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
   final parts = text.split('.');
@@ -45,13 +45,13 @@ String _kg(double v) {
   return parts.length > 1 ? '$b.${parts[1]}' : b.toString();
 }
 
-String _range(double? min, double? max, String unit) {
-  if (min != null && max != null) return '${_n(min)}–${_n(max)} $unit';
-  if (min != null) return '≥ ${_n(min)} $unit';
-  return '≤ ${_n(max!)} $unit';
+String nuRange(double? min, double? max, String unit) {
+  if (min != null && max != null) return '${nuNum(min)}–${nuNum(max)} $unit';
+  if (min != null) return '≥ ${nuNum(min)} $unit';
+  return '≤ ${nuNum(max!)} $unit';
 }
 
-FarmStatusLevel _level(String status) => switch (status) {
+FarmStatusLevel nuLevel(String status) => switch (status) {
       'meets' || 'met' => FarmStatusLevel.good,
       'below' || 'above' || 'does_not_meet' => FarmStatusLevel.alert,
       _ => FarmStatusLevel.watch,
@@ -79,14 +79,14 @@ class _NutritionAssessmentCardsState extends State<NutritionAssessmentCards> {
     final nut = context.watch<NutritionProvider>();
     final access = context.watch<AccessProvider>();
     final lang = Localizations.localeOf(context).languageCode;
-    final manages = _manages(access);
+    final manages = nuManages(access);
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       SectionCard(
         key: const ValueKey('nu-assessments'),
         title: context.t('nuAssessTitle'),
         subtitle: context.t('nuAssessSubtitle'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (_assesses(access))
+          if (nuAssesses(access))
             FilledButton.icon(
               key: const ValueKey('nu-assess'),
               onPressed: nut.sets.isEmpty ? null : () => showDialog<void>(context: context, builder: (_) => const _AssessDialog()),
@@ -111,7 +111,7 @@ class _NutritionAssessmentCardsState extends State<NutritionAssessmentCards> {
                             style: FarmTypography.textTheme.bodySmall),
                       ]),
                     ),
-                    StatusPill(label: context.t('nuStatus_${a.status}'), level: _level(a.status), dense: true),
+                    StatusPill(label: context.t('nuStatus_${a.status}'), level: nuLevel(a.status), dense: true),
                   ]),
                 ),
               ),
@@ -150,14 +150,14 @@ class _NutritionAssessmentCardsState extends State<NutritionAssessmentCards> {
                   [
                     s.speciesCode,
                     if (s.stage != null) s.stage!,
-                    if (s.referenceWeightKg != null) '${_n(s.referenceWeightKg!)} kg',
-                    if (s.expectedDmiKg != null) context.t('nuDmiShort').replaceAll('{kg}', _n(s.expectedDmiKg!)),
+                    if (s.referenceWeightKg != null) '${nuNum(s.referenceWeightKg!)} kg',
+                    if (s.expectedDmiKg != null) context.t('nuDmiShort').replaceAll('{kg}', nuNum(s.expectedDmiKg!)),
                   ].join(' · '),
                   style: FarmTypography.textTheme.bodySmall,
                 ),
                 Text('${context.t('nuSource')}: ${s.sourceReference}', style: const TextStyle(fontSize: 12, color: FarmColors.muted)),
                 Wrap(spacing: 6, runSpacing: 4, children: [
-                  for (final v in s.values) Chip(visualDensity: VisualDensity.compact, label: Text('${v.label(lang)} ${_range(v.min, v.max, v.unit)}', style: const TextStyle(fontSize: 12))),
+                  for (final v in s.values) Chip(visualDensity: VisualDensity.compact, label: Text('${v.label(lang)} ${nuRange(v.min, v.max, v.unit)}', style: const TextStyle(fontSize: 12))),
                 ]),
               ]),
             ),
@@ -186,7 +186,7 @@ class _AssessmentResult extends StatelessWidget {
       width: 560,
       content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [
-          StatusPill(key: const ValueKey('nu-result-status'), label: context.t('nuStatus_${a.status}'), level: _level(a.status)),
+          StatusPill(key: const ValueKey('nu-result-status'), label: context.t('nuStatus_${a.status}'), level: nuLevel(a.status)),
           const SizedBox(width: 8),
           Expanded(child: Text('${a.setCode} v${a.setVersion} · ${a.setSource}', style: small)),
         ]),
@@ -194,14 +194,14 @@ class _AssessmentResult extends StatelessWidget {
         // The mass balance: the formula's own quantities, the premix on top.
         Text(context.t('nuMix'), style: FarmTypography.textTheme.titleSmall),
         for (final c in a.components)
-          FeedKeyValue('${c.name}${c.profileSource == null ? ' · ${context.t('nuNoAnalysis')}' : ''}', '${_kg(c.quantityKg)} kg · ${_n(c.inclusionPct)} %'),
-        FeedKeyValue(context.t('nuBaseTotal'), '${_kg(a.baseTotalKg)} kg', bold: true),
+          FeedKeyValue('${c.name}${c.profileSource == null ? ' · ${context.t('nuNoAnalysis')}' : ''}', '${nuKg(c.quantityKg)} kg · ${nuNum(c.inclusionPct)} %'),
+        FeedKeyValue(context.t('nuBaseTotal'), '${nuKg(a.baseTotalKg)} kg', bold: true),
         if (a.premix != null) ...[
-          FeedKeyValue('${context.t('nuPremix')}: ${a.premix!.name}', '+ ${_kg(a.premix!.quantityKg)} kg · ${_n(a.premix!.inclusionPct)} %'),
-          FeedKeyValue(context.t('nuWithPremix'), '${_kg(a.totalKg)} kg', bold: true),
+          FeedKeyValue('${context.t('nuPremix')}: ${a.premix!.name}', '+ ${nuKg(a.premix!.quantityKg)} kg · ${nuNum(a.premix!.inclusionPct)} %'),
+          FeedKeyValue(context.t('nuWithPremix'), '${nuKg(a.totalKg)} kg', bold: true),
         ],
         if (a.mixDryMatterKg != null)
-          FeedKeyValue(context.t('nuDryMatter'), '${_kg(a.mixDryMatterKg!)} kg · ${_n(a.mixDmPct ?? 0, 1)} %'),
+          FeedKeyValue(context.t('nuDryMatter'), '${nuKg(a.mixDryMatterKg!)} kg · ${nuNum(a.mixDmPct ?? 0, 1)} %'),
         const Divider(height: 20),
         if (a.missing.isNotEmpty) ...[
           Text(context.t('nuMissing'), key: const ValueKey('nu-missing'), style: FarmTypography.textTheme.titleSmall?.copyWith(color: FarmColors.warning)),
@@ -212,17 +212,17 @@ class _AssessmentResult extends StatelessWidget {
         if (a.dryMatterIntakeKg != null)
           FeedKeyValue(
             context.t('nuDmi'),
-            '${_n(a.dryMatterIntakeKg!)} kg${a.expectedDmiKg != null ? ' (${context.t('nuExpected')} ${_n(a.expectedDmiKg!)} kg)' : ''}',
+            '${nuNum(a.dryMatterIntakeKg!)} kg${a.expectedDmiKg != null ? ' (${context.t('nuExpected')} ${nuNum(a.expectedDmiKg!)} kg)' : ''}',
           ),
         for (final n in a.rationNutrients)
           Padding(
             key: ValueKey('nu-r-${n.code}'),
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(children: [
-              Expanded(child: Text('${n.label(lang)} · ${_range(n.min, n.max, n.unit)}', style: small)),
-              Text(n.value == null ? '—' : '${_n(n.value!)} ${n.unit}', style: FarmTypography.textTheme.bodyMedium),
+              Expanded(child: Text('${n.label(lang)} · ${nuRange(n.min, n.max, n.unit)}', style: small)),
+              Text(n.value == null ? '—' : '${nuNum(n.value!)} ${n.unit}', style: FarmTypography.textTheme.bodyMedium),
               const SizedBox(width: 8),
-              StatusPill(label: context.t('nuStatus_${n.status}'), level: _level(n.status), dense: true),
+              StatusPill(label: context.t('nuStatus_${n.status}'), level: nuLevel(n.status), dense: true),
             ]),
           ),
         const Divider(height: 20),
@@ -239,8 +239,8 @@ class _AssessmentResult extends StatelessWidget {
             for (final n in a.mixNutrients)
               FeedKeyValue(
                 n.label(lang),
-                '${n.asFed == null ? '—' : _n(n.asFed!)} ${context.t('nuAsFed')} · ${n.dryMatter == null ? '—' : _n(n.dryMatter!)} ${context.t('nuOnDm')}'
-                '${n.coveragePct < 100 ? ' · ${context.t('nuCoverage').replaceAll('{pct}', _n(n.coveragePct, 1))}' : ''}',
+                '${n.asFed == null ? '—' : nuNum(n.asFed!)} ${context.t('nuAsFed')} · ${n.dryMatter == null ? '—' : nuNum(n.dryMatter!)} ${context.t('nuOnDm')}'
+                '${n.coveragePct < 100 ? ' · ${context.t('nuCoverage').replaceAll('{pct}', nuNum(n.coveragePct, 1))}' : ''}',
               ),
           ],
         ),
@@ -351,7 +351,7 @@ class _AssessDialogState extends State<_AssessDialog> {
           decoration: InputDecoration(labelText: context.t('nuFormula')),
           items: [
             for (final f in formulas)
-              DropdownMenuItem(value: f.id, child: Text('${f.name} v${f.active!.version} · ${_kg(f.active!.batchSize)} ${f.active!.unit}', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(value: f.id, child: Text('${f.name} v${f.active!.version} · ${nuKg(f.active!.batchSize)} ${f.active!.unit}', overflow: TextOverflow.ellipsis)),
           ],
           onChanged: (v) => setState(() => _formulaId = v),
         ),
@@ -437,8 +437,8 @@ class _RequirementDialogState extends State<_RequirementDialog> {
   late final _code = TextEditingController(text: widget.revising?.code ?? '');
   late final _name = TextEditingController(text: widget.revising?.name ?? '');
   late final _stage = TextEditingController(text: widget.revising?.stage ?? '');
-  late final _weight = TextEditingController(text: widget.revising?.referenceWeightKg == null ? '' : _n(widget.revising!.referenceWeightKg!));
-  late final _dmi = TextEditingController(text: widget.revising?.expectedDmiKg == null ? '' : _n(widget.revising!.expectedDmiKg!));
+  late final _weight = TextEditingController(text: widget.revising?.referenceWeightKg == null ? '' : nuNum(widget.revising!.referenceWeightKg!));
+  late final _dmi = TextEditingController(text: widget.revising?.expectedDmiKg == null ? '' : nuNum(widget.revising!.expectedDmiKg!));
   final _source = TextEditingController();
   late String? _species = widget.revising?.speciesCode;
   final Map<String, (TextEditingController, TextEditingController)> _bounds = {};
@@ -451,8 +451,8 @@ class _RequirementDialogState extends State<_RequirementDialog> {
           if (v.code == code) old = v;
         }
         return (
-          TextEditingController(text: old?.min == null ? '' : _n(old!.min!, 3)),
-          TextEditingController(text: old?.max == null ? '' : _n(old!.max!, 3)),
+          TextEditingController(text: old?.min == null ? '' : nuNum(old!.min!, 3)),
+          TextEditingController(text: old?.max == null ? '' : nuNum(old!.max!, 3)),
         );
       });
 

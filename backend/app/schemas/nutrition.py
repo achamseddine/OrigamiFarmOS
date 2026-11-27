@@ -62,3 +62,35 @@ class AssessmentCreate(BaseModel):
     no_forage: bool = False
     body_weight_kg: float | None = Field(None, gt=0)
     notes: str | None = Field(None, max_length=2000)
+
+
+class CandidateIn(BaseModel):
+    """An ingredient the least-cost run may use, and its limits in the batch (% of the batch as fed)."""
+
+    feed_product_id: str
+    min_pct: float | None = Field(None, ge=0, le=100)
+    max_pct: float | None = Field(None, ge=0, le=100)
+
+
+class LeastCostCreate(BaseModel):
+    requirement_set_id: str
+    # The formula to start from: its ingredients, its batch size, and the "least change" draft.
+    base_formula_version_id: str | None = None
+    candidates: list[CandidateIn] | None = None
+    batch_size_kg: float | None = Field(None, gt=0)
+    concentrate_kg_per_head: float | None = Field(None, gt=0)
+    forages: list[ForageIn] = []
+    no_forage: bool = False
+    body_weight_kg: float | None = Field(None, gt=0)
+    premix: PremixIn | None = None
+    # Draft B keeps this far inside every bound (default 3 %).
+    margin_pct: float | None = Field(None, ge=0, le=20)
+    notes: str | None = Field(None, max_length=2000)
+
+
+class LeastCostApprove(BaseModel):
+    draft: str = Field(..., max_length=10)
+    # Why (the nutritionist's review, the trial): required.
+    note: str = Field(..., max_length=2000)
+    # Only when the run had no base formula: the formula the draft becomes a version of.
+    formula_id: str | None = None
