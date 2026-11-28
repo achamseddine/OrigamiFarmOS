@@ -52,6 +52,9 @@ jobs:
       FARMOS_SCHEDULER: "false"
       # A disposable database the migration test may drop and recreate.
       FARMOS_TEST_POSTGRES_URL: postgresql://farmos:farmos@localhost:5432/farmos_test
+      # The staging chain's backup and restore must run here, not be skipped:
+      # it fails when pg_dump / pg_restore of the server's version are missing.
+      FARMOS_REQUIRE_PG_TOOLS: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +65,24 @@ jobs:
           cache-dependency-path: backend/requirements.txt
 
       - run: pip install -r requirements.txt
+
+      # pg_dump / pg_restore of the service's own version, from the service's own
+      # image: the runner's default client is newer (pg_dump 17 writes
+      # `SET transaction_timeout`, which PostgreSQL 16 refuses on restore), and
+      # its package sources may not carry postgresql-client-16 (Ubuntu 26.04).
+      # PG_BIN points app/staging/pg_tools.py at these wrappers.
+      - name: PostgreSQL 16 client tools (from the postgres:16 image)
+        run: |
+          bin="$RUNNER_TEMP/pg16"
+          mkdir -p "$bin"
+          for tool in pg_dump pg_restore; do
+            printf '#!/bin/sh\nexec docker run --rm --network host --user %s -v /tmp:/tmp -v %s:%s -w /tmp postgres:16 %s "$@"\n' \
+              "$(id -u):$(id -g)" "$RUNNER_TEMP" "$RUNNER_TEMP" "$tool" > "$bin/$tool"
+            chmod +x "$bin/$tool"
+          done
+          echo "PG_BIN=$bin" >> "$GITHUB_ENV"
+          "$bin/pg_dump" --version
+          "$bin/pg_restore" --version
 
       - name: Generated files are current
         run: |

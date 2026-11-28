@@ -140,6 +140,22 @@ Audit 2026-11-25 (I-9, I-14). On the tablet and the web app, enforced by the ser
 - **Returns, refunds, corrections.** Goods sent back (*Return to supplier* on the lot, or a stock return naming the lot) leave the lot's stock and are credited on its bill; when the bill was already paid, the supplier's refund is recorded as money back. A payment recorded by mistake is reversed by a negative row and stays on file; a bill with payments is cancelled only once they are reversed. Every step is audited.
 - **Deliveries from before this release** have no bill. Profit and loss no longer assumes they were paid on arrival; a manager reviews them once (`GET` / `POST /finance/reconciliation/purchases`, docs/runbooks/PURCHASES-RECONCILIATION.md): the expense that already paid for one is linked (it stops being a second cost), or the manager says it was paid on arrival or is still owed. Nothing is paid on the farm's behalf; nothing already recorded is rewritten.
 - Server: **migration `b5d7f9a1c3e6`** — table `supplier_payments` (payments, refunds, credit notes; reversal links), unique bill per delivery on `expenses (linked_entity_type, linked_entity_id)`; expenses gain `partial`. `POST /feed-lots/receive` and `POST /pharmacy/lots/receive` take `payment` (paid | credit | partial), `paid_amount`, `due_date`, `invoice_reference`, `currency`, `exchange_rate` and answer with the `bill`; lots add `accepted_value`; `POST /feed-lots/{id}/return`; `POST /finance/expenses/{id}/payments` (+ `GET`), `POST /finance/supplier-payments/{id}/reverse`; expenses add `amount_paid`, `balance_due`, `balance_original`, `credited`, `stock_purchase`, `lot_id`. Tests: backend +18 (`test_purchase_payables.py`) and the same 18 plus two-thread races on PostgreSQL 16 — two payments of one bill, two reversals of one payment (`test_purchase_payables_pg.py`), app +4 (`test/records/purchase_payables_test.dart`).
+## Staging and recovery — a PostgreSQL 16 staging server built, checked, backed up, restored and restarted (server tooling; the app is unchanged)
+
+Master prompt Package 6 (docs/runbooks/STAGING-POSTGRES.md):
+- **`scripts/staging/staging.sh all`** builds a throwaway PostgreSQL 16 staging server from nothing: migrations from an empty database to the head revision, the synthetic demo farm, the API with a random secret key and its health check. It then runs:
+  - API smoke tests over synthetic records: sign-in and access, an expense, a milk record and a feed delivery each sent twice and recorded once, refusals, reads;
+  - a checksummed `pg_dump` backup, restored into a second database that must be identical table by table (row counts and row checksums), with an API on the restored copy that finds every record;
+  - a restart of the API and PostgreSQL that must keep them;
+  - the reconciliations' dry runs (feed stock, Mouneh sales, milk safety; purchases where the server has it).
+
+  It writes a report. With `STAGING_MODE=docker` it uses `deploy/staging/docker-compose.yml` and the API image `deploy/staging/Dockerfile`.
+- **Never production:** its own database, `DATABASE_URL`/`PROD_DATABASE_URL` ignored, synthetic records only, and a smoke test that refuses any server but this machine or a staging host.
+- **Fixed, found by the first staging run:** `python -m app.seed` (the README quick start) crashed as a script with `NameError` before creating the farm. That left an empty database nobody could sign in to, while every test passed because they import the module. It now seeds the farm and runs twice safely (`tests/test_seed_command.py`).
+- Server: **no migration**, no API change. Tests:
+  - `tests/test_staging_chain_pg.py` runs the whole chain on PostgreSQL 16 (in `scripts/verify-all.sh` and CI);
+  - `tests/test_staging_tools.py` covers the server guard and the snapshot comparison;
+  - `tests/test_seed_command.py` runs the seed command as a script.
 
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 

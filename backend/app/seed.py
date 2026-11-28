@@ -433,11 +433,6 @@ def seed_demo_data(db: Session) -> None:
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")
 
 
-if __name__ == "__main__":
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as session:
-        seed_demo_data(session)
-
 
 
 def _seed_rule_groups_and_responsibilities(db: Session) -> None:
@@ -461,3 +456,11 @@ def _seed_rule_groups_and_responsibilities(db: Session) -> None:
         responsibility_service.assign(db, employee=karim, scope_type="group", scope_id="grp-dairy-herd",
                                       duties=["milking", "feeding", "observation"], notes="Morning and evening rounds.", by=manager)
     db.flush()
+
+
+# Last, after every helper the seed calls is defined: run as a script
+# (`python -m app.seed`) the module executes top to bottom.
+if __name__ == "__main__":
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        seed_demo_data(session)
