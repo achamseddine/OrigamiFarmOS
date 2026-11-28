@@ -431,6 +431,8 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
   final _reference = TextEditingController();
   DateTime? _expiry;
   bool _saving = false;
+  // The supplier's bill (v0.8.9): paid on delivery unless bought on credit.
+  bool _onCredit = false;
   String? _error;
 
   @override
@@ -463,6 +465,7 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
       'rejected_quantity': double.tryParse(_rejected.text) ?? 0,
       'ordered_quantity': double.tryParse(_ordered.text),
       'unit_cost': double.tryParse(_cost.text),
+      if (double.tryParse(_cost.text) != null) 'payment': _onCredit ? 'credit' : 'paid',
       if (_lotCode.text.trim().isNotEmpty) 'lot_code': _lotCode.text.trim(),
       if (_supplier.text.trim().isNotEmpty) 'supplier_label': _supplier.text.trim(),
       if (_reference.text.trim().isNotEmpty) 'reference': _reference.text.trim(),
@@ -516,6 +519,13 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
             const SizedBox(width: 10),
             Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('reference')))),
           ]),
+          SwitchListTile(
+              key: const ValueKey('lot-on-credit'),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              value: _onCredit,
+              onChanged: (v) => setState(() => _onCredit = v),
+              title: Text(context.t('fpOnCredit'))),
           const SizedBox(height: 10),
           Align(
             alignment: AlignmentDirectional.centerStart,

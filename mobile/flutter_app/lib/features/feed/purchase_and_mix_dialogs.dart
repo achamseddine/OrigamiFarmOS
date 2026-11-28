@@ -69,6 +69,9 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
   final _cost = TextEditingController();
   final _moisture = TextEditingController();
   final _qualityNotes = TextEditingController();
+  // The supplier's bill (v0.8.9): paid on delivery, on credit, or part paid.
+  String _payment = 'paid';
+  final _paidAmount = TextEditingController();
   String? _grade;
   bool _saving = false;
   String? _error;
@@ -89,7 +92,7 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
 
   @override
   void dispose() {
-    for (final c in [_name, _qty, _rejected, _supplier, _reference, _cost, _moisture, _qualityNotes]) {
+    for (final c in [_name, _qty, _rejected, _supplier, _reference, _cost, _moisture, _qualityNotes, _paidAmount]) {
       c.dispose();
     }
     super.dispose();
@@ -126,6 +129,13 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
       setState(() => _error = context.t('fpMoistureRange'));
       return;
     }
+    // The bill is for what was accepted, at the price: a part paid now is
+    // more than nothing and less than the bill.
+    final paidNow = _payment == 'partial' ? parseLocalizedDouble(_paidAmount.text) : null;
+    if (cost != null && _payment == 'partial' && (paidNow == null || paidNow <= 0 || paidNow >= (qty - rejected) * cost)) {
+      setState(() => _error = context.t('fpPaidInvalid'));
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -140,6 +150,8 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
         if (_supplier.text.trim().isNotEmpty) 'supplier_label': _supplier.text.trim(),
         if (_reference.text.trim().isNotEmpty) 'reference': _reference.text.trim(),
         'unit_cost': ?cost,
+        if (cost != null) 'payment': _payment,
+        'paid_amount': ?paidNow,
         'quality_grade': ?_grade,
         'moisture_pct': ?moisture,
         if (_qualityNotes.text.trim().isNotEmpty) 'quality_notes': _qualityNotes.text.trim(),
@@ -262,6 +274,34 @@ class _PurchaseDialogState extends State<_PurchaseDialog> {
             Expanded(child: TextField(controller: _supplier, decoration: InputDecoration(labelText: context.t('supplier')))),
             const SizedBox(width: 10),
             Expanded(child: TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('fpInvoice'), hintText: context.t('optional')))),
+          ]),
+          const SizedBox(height: 10),
+          // The supplier's bill: for what was accepted, at the price above.
+          Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                key: const ValueKey('purchase-payment'),
+                isExpanded: true,
+                initialValue: _payment,
+                decoration: InputDecoration(labelText: context.t('fpPayment')),
+                items: [
+                  for (final (value, label) in const [('paid', 'fpPaidOnDelivery'), ('credit', 'fpOnCredit'), ('partial', 'fpPartPaid')])
+                    DropdownMenuItem(value: value, child: Text(context.t(label))),
+                ],
+                onChanged: (v) => setState(() => _payment = v ?? _payment),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _payment == 'partial'
+                  ? TextField(
+                      key: const ValueKey('purchase-paid-amount'),
+                      controller: _paidAmount,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(labelText: context.t('fpPaidNow'), prefixText: '\$ '),
+                    )
+                  : Text(context.t(_payment == 'credit' ? 'fpCreditNote' : 'fpPaidNote'), style: FarmTypography.textTheme.bodySmall),
+            ),
           ]),
           const SizedBox(height: 14),
           Text(context.t('fpQuality'), style: FarmTypography.textTheme.titleSmall),

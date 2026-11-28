@@ -20,6 +20,10 @@ enum SyncOutcome {
 
   /// The server is reachable but erroring (a 5xx). Retried automatically.
   serverError,
+
+  /// Signed in offline (no server token): nothing is sent until the next
+  /// sign-in the server accepts; the queue is untouched (I-10).
+  needsSignIn,
 }
 
 /// Drains the outbox when the farm server comes back, and tells the rest
@@ -110,6 +114,10 @@ class SyncController extends ChangeNotifier {
 
   Set<String> _pendingIds = const {};
 
+  /// Records are waiting and this session cannot send them: sign in with
+  /// the farm server to send them (offline session, or an expired token).
+  bool waitingForSignIn = false;
+
   /// True for a record that was created on this tablet and has not
   /// reached the server yet — what a list shows a "Not synced" chip
   /// against. Works for any entity: an offline record keeps the same
@@ -137,6 +145,15 @@ class SyncController extends ChangeNotifier {
         await _finish(store, SyncOutcome.nothingToDo, touchTimestamp: reason != SyncTrigger.startup);
         return SyncOutcome.nothingToDo;
       }
+      // An offline session holds no server token: sending now would only
+      // collect 401s and mark good records failed. They wait, untouched,
+      // for the next sign-in the server accepts.
+      if (!_api.standalone && (_api.token ?? '').isEmpty) {
+        waitingForSignIn = true;
+        await _finish(store, SyncOutcome.needsSignIn, touchTimestamp: false);
+        return SyncOutcome.needsSignIn;
+      }
+      waitingForSignIn = false;
 
       // A manual attempt should confirm the server is really there before
       // marching through the queue; a reconnect already knows it is.
@@ -164,6 +181,13 @@ class SyncController extends ChangeNotifier {
             // Went out of range again mid-queue. Everything still in the
             // outbox stays pending and goes on the next attempt.
             outcome = sent > 0 ? SyncOutcome.sent : SyncOutcome.stillOffline;
+            break;
+          }
+          if (e.statusCode == 401) {
+            // The sign-in expired on the server: this record and the rest
+            // wait for the next sign-in, unchanged.
+            waitingForSignIn = true;
+            outcome = SyncOutcome.needsSignIn;
             break;
           }
           if (e.statusCode >= 400 && e.statusCode < 500) {

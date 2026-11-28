@@ -29,7 +29,7 @@ from app.schemas.feeding import (
     AdjustmentCreate, AllocationCreate, AllocationOut, AllocationTransfer, AssignmentCreate, AssignmentOut, BatchComplete,
     BatchOut, BatchQuarantine, BatchStart, FeedAvailabilityOut, FeedingEventCreate, FeedingEventOut, FeedingEventReverse, FeedProductCreate,
     FeedProductOut, FeedProductUpdate, FormulaCreate, FormulaOut, FormulaVersionCreate, FormulaVersionOut, FeedLotOut,
-    LotReceive, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
+    LotReceive, LotReturn, LotStatusUpdate, MixSettingsOut, MixSettingsUpdate, NutrientOut, NutrientProfileCreate, NutrientProfileOut, PolicyDecisionOut, PolicyOut,
     PolicySet, PolicyValidate, ProgramCreate, ProgramOut, ProgramResolveRequest, ProgramVersionCreate, ProgramVersionOut,
     ReconciliationClose, ReconciliationCreate, ReconciliationOut, ReorderAcknowledge, ReorderPolicyOut, ReorderPolicyUpsert,
     QuickMixIn, StandardFeedSlotOut, StockCountCreate, StockExceptionOut, StockExceptionResolve,
@@ -41,6 +41,8 @@ from app.services import feed_forecast_service as forecast
 from app.services import feed_inventory_service as inv
 from app.services import feed_performance_service as perf
 from app.services import feed_policy_service as policy
+from app.services import finance_service
+from app.services import purchases_service as purchases
 from app.services import procurement_service as procurement
 from app.services import feeding_program_service as programs
 from app.services.feed_inventory_service import FeedError
@@ -102,6 +104,7 @@ def _lot_out(lot: fm.FeedLot) -> dict:
         "quantity_on_hand": round(lot.quantity_on_hand, 3), "unit": lot.unit, "unit_cost": lot.unit_cost, "status": lot.status,
         "reference": lot.reference, "quality_grade": lot.quality_grade, "moisture_pct": lot.moisture_pct,
         "quality_notes": lot.quality_notes, "notes": lot.notes,
+        "accepted_value": round((lot.accepted_quantity or 0) * lot.unit_cost, 2) if lot.unit_cost is not None else None,
     }
 
 
@@ -423,8 +426,20 @@ def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models
     requisition = _purchase_authority(db, user, product, payload)
     if payload.lot_code and db.scalar(select(fm.FeedLot.id).where(fm.FeedLot.farm_id == user.farm_id, fm.FeedLot.lot_code == payload.lot_code.strip())):
         raise FeedError(f"Lot {payload.lot_code.strip()} is already recorded; a delivery is received once.", 409)
+    # The bill's terms are checked before anything else; the stock is
+    # valued in USD at the delivery's rate.
+    terms = purchases.check_terms(payload.payment, payload.paid_amount, payload.unit_cost)
     match = duplicates.guard(_duplicate_receipt(db, product, payload), _receipt_message(product, payload), confirm=payload.confirm_duplicate)
-    lot = inv.receive(db, product, **payload.model_dump(exclude={"feed_product_id", "confirm_duplicate", "requisition_id"}), user_id=user.id)
+    when = payload.received_at or now()
+    body = payload.model_dump(exclude={"feed_product_id", "confirm_duplicate", "requisition_id", "payment", "paid_amount", "due_date",
+                                       "invoice_reference", "currency", "exchange_rate"})
+    body["unit_cost"] = purchases.unit_cost_in_usd(db, user.farm_id, payload.unit_cost, payload.currency, payload.exchange_rate, when)
+    lot = inv.receive(db, product, **body, user_id=user.id)
+    bill = purchases.bill_delivery(
+        db, farm_id=user.farm_id, user_id=user.id, lot_type="feed_lot", lot=lot, category="feed", label=product.name, unit_price=payload.unit_cost,
+        currency=payload.currency, exchange_rate=payload.exchange_rate, payment=terms or "credit", paid_amount=payload.paid_amount,
+        due_date=payload.due_date, invoice_reference=payload.invoice_reference or payload.reference, supplier_id=payload.supplier_id,
+        supplier_name=payload.supplier_label or lot.supplier_label)
     if requisition is not None:
         procurement.mark_received(db, requisition, inventory_item_id=product.inventory_item_id, user_id=user.id)
     if payload.quality_grade == "poor" and lot.status == "active":
@@ -434,7 +449,31 @@ def receive_lot(payload: LotReceive, db: Session = Depends(get_db), user: models
     duplicates.log_confirmed(db, farm_id=user.farm_id, entity_type="feed_product", entity_id=product.id, match_id=match.id if match else None,
                              what=f"lot:{lot.id}", user_id=user.id)
     _commit(db, lot)
-    return _lot_out(lot)
+    return {**_lot_out(lot), "bill": purchases.bill_summary(db, bill)}
+
+
+@router.post("/feed-lots/{lot_id}/return", response_model=FeedLotOut)
+def return_lot(lot_id: str, payload: LotReturn, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    """Goods sent back to the supplier: out of this lot's stock (a return
+    movement) and credited on its bill — no cash moves until the supplier
+    refunds what was already paid."""
+    lot = inv.get_lot(db, lot_id, user.farm_id)
+    product = inv.get_product(db, lot.feed_product_id, user.farm_id)
+    qty = uom.convert(payload.quantity, payload.unit or product.unit, product.unit)
+    inv.adjust(db, product, lot=lot, delta=-qty, reason="return", explanation=payload.explanation, user_id=user.id)
+    bill = _credit_return(db, lot, qty, payload.explanation, user, payload.reference)
+    _commit(db, lot)
+    return {**_lot_out(lot), "bill": purchases.bill_summary(db, bill)}
+
+
+def _credit_return(db: Session, lot: fm.FeedLot, qty: float, explanation: str, user: models.User, reference: str | None = None):
+    """A return of [qty] from [lot] taken off its supplier's bill, at the price it was billed."""
+    bill = purchases.bill_of(db, "feed_lot", lot.id)
+    if bill is None or bill.status != "recorded" or not lot.accepted_quantity:
+        return bill
+    per_unit = finance_service.bill_total(bill) / lot.accepted_quantity
+    purchases.credit_return(db, user_id=user.id, bill=bill, value=qty * per_unit, reason=explanation.strip(), reference=reference)
+    return bill
 
 
 # A delivery may come in a little over what was approved (a full bag, a
@@ -510,6 +549,8 @@ def post_adjustment(payload: AdjustmentCreate, db: Session = Depends(get_db), us
     product = inv.get_product(db, payload.feed_product_id, user.farm_id)
     lot = inv.get_lot(db, payload.lot_id, user.farm_id) if payload.lot_id else None
     txs = inv.adjust(db, product, lot=lot, delta=payload.delta, reason=payload.reason, explanation=payload.explanation, user_id=user.id)
+    if payload.reason == "return" and lot is not None and payload.delta < 0:
+        _credit_return(db, lot, -payload.delta, payload.explanation, user)
     db.commit()
     return {"transaction_id": txs[0].id if txs else None, "transaction_ids": [t.id for t in txs], "lot_ids": [t.lot_id for t in txs],
             "feed_product_id": product.id, "delta": payload.delta, "unit": product.unit, "availability": inv.availability(db, product).to_dict()}

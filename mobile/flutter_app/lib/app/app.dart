@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import '../auth/session_controller.dart';
+import '../core/util/farm_clock.dart';
 import '../core/i18n/locale_controller.dart';
 import '../core/theme/theme.dart';
 import '../core/widgets/app_shell.dart';
@@ -14,6 +15,7 @@ import '../features/auth/login_screen.dart';
 import '../providers/access_provider.dart';
 import '../providers/agriculture_provider.dart';
 import '../providers/approvals_provider.dart';
+import '../providers/purchase_orders_provider.dart';
 import '../providers/finance_provider.dart';
 import 'update/app_update_provider.dart';
 import '../providers/milk_sales_provider.dart';
@@ -22,6 +24,7 @@ import '../providers/animals_provider.dart';
 import '../providers/employees_provider.dart';
 import '../providers/feed_provider.dart';
 import '../providers/feeding_provider.dart';
+import '../providers/nutrition_provider.dart';
 import '../providers/emergency_provider.dart';
 import '../providers/pharmacy_provider.dart';
 import '../providers/livestock_provider.dart';
@@ -138,7 +141,10 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)),
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
+        ChangeNotifierProvider(create: (_) => NutritionProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)),
+        // Buying feed: suppliers' prices, orders, deliveries against them (Package 2).
+        ChangeNotifierProvider(create: (_) => PurchaseOrdersProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => MilkSalesProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FinanceProvider(apiClient: api)),
         // Is there a newer version of the app (checked after sign-in, then every few hours).
@@ -336,6 +342,9 @@ class _DataLoaderState extends State<_DataLoader> with WidgetsBindingObserver {
       // The bell is for everyone: the backend already scopes its contents
       // to the modules this user holds.
       context.read<NotificationsProvider>().load(),
+      // The farm's clock (I-16): the morning or afternoon milking is the
+      // farm's hour, whatever zone this tablet or browser is set to.
+      if (only == null) quietly(() => FarmClock.load(context.read<SessionController>().apiClient)),
       // The species catalog is reference data for anyone who sees an
       // animal anywhere — a herd card, a milk record, a flock — so it is
       // not gated on a module. Small, cached, and what the Add Animal

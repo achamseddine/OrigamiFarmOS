@@ -424,6 +424,70 @@ ReportDoc buildReportDoc(BuildContext context, String kind, Map<String, dynamic>
             ),
         ],
       );
+    case 'profitability':
+      // Each cow's milk, its value and her costs (Package 3). A figure the
+      // records cannot give is "—" with the reason, never 0.
+      final totals = (data['totals'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final price = (data['milk_price'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final unallocated = (data['unallocated'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final rec = (data['reconciliation'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final rules = (data['rules'] as Map?)?.cast<String, dynamic>() ?? const {};
+      String unknown(List<dynamic>? u) => (u == null || u.isEmpty) ? '' : u.map((x) => t('pfUnknown_$x')).join('; ');
+      Map<String, dynamic> pair(String k) => (rec[k] as Map?)?.cast<String, dynamic>() ?? const {};
+      return ReportDoc(
+        title: t('rpProfitabilityReport'),
+        period: period,
+        fileStem: stem,
+        kpis: [
+          (t('rpMilkTotal'), '${n(totals['total_l'])} L'),
+          (t('pfSaleable'), '${n(totals['saleable_l'])} L'),
+          (t('pfMilkPrice'), price['price_per_liter'] == null ? t('pfUnavailable') : '${m(price['price_per_liter'])}/L (${t('pfPriceBasis_${price['basis']}')})'),
+          (t('pfMilkValue'), totals['milk_value'] == null ? t('pfUnavailable') : m(totals['milk_value'])),
+          (t('pfFeedCost'), m(totals['feed_cost'])),
+          (t('pfKnownCosts'), m(totals['known_costs'])),
+          (t('pfMargin'), totals['margin'] == null ? t('pfUnavailable') : m(totals['margin'])),
+          (t('pfUnallocated'), '${t('pfLabour')} ${m(unallocated['labour'])} · ${t('pfPower')} ${m(unallocated['power'])}'),
+        ],
+        tables: [
+          ReportTable(
+            title: t('pfPerCow'),
+            columns: [t('rpAnimal'), 'AM L', 'PM L', t('pfSaleable'), t('pfMilkValue'), t('pfFeedCost'), t('pfFeedPerL'), t('pfVetMedicine'),
+              t('pfLabourPower'), t('pfMargin'), t('pfNotes')],
+            numeric: const {1, 2, 3, 4, 5, 6, 7, 8, 9},
+            flex: const [3, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3],
+            rows: [
+              for (final a in rows('animals'))
+                [
+                  [if ((a['tag'] as String?)?.isNotEmpty ?? false) a['tag'], a['name']].join(' · '),
+                  n(a['am_l']), n(a['pm_l']), n(a['saleable_l']),
+                  a['milk_value'] == null ? '—' : m(a['milk_value']),
+                  m(a['feed_cost']),
+                  a['feed_cost_per_liter'] == null ? '—' : m(a['feed_cost_per_liter']),
+                  m(((a['medicine_cost'] as num?) ?? 0) + ((a['vet_expenses'] as num?) ?? 0)),
+                  m(((a['labour_cost'] as num?) ?? 0) + ((a['power_cost'] as num?) ?? 0)),
+                  a['margin'] == null ? '—' : m(a['margin']),
+                  unknown(a['unknown'] as List<dynamic>?),
+                ],
+            ],
+          ),
+          ReportTable(
+            title: t('pfReconciliation'),
+            columns: [t('pfRecord'), t('pfCanonical'), t('pfAttributed')],
+            numeric: const {1, 2},
+            rows: [
+              [t('pfRecMilk'), '${n(pair('milk_l')['canonical'])} L', '${n(pair('milk_l')['attributed'])} L'],
+              [t('pfRecOwnFeed'), m(pair('own_feed_cost')['canonical']), m(pair('own_feed_cost')['attributed'])],
+              [t('pfRecGroupFeed'), m(pair('group_feed_cost')['canonical']),
+                '${m(pair('group_feed_cost')['attributed_to_these_animals'])} (+ ${m(pair('group_feed_cost')['to_other_heads'])} ${t('pfOtherHeads')})'],
+            ],
+          ),
+          ReportTable(
+            title: t('pfRules'),
+            columns: [t('pfRule')],
+            rows: [for (final k in const ['milk_value', 'sales_revenue', 'group_feed', 'group_medicine', 'dairy_overheads']) if (rules[k] != null) [t('pfRule_$k')]],
+          ),
+        ],
+      );
     default:
       final byDay = [for (final d in rows('by_day')) if (((d['revenue'] as num?) ?? 0) != 0 || ((d['expenses'] as num?) ?? 0) != 0) d];
       return ReportDoc(

@@ -81,3 +81,44 @@ class CustomerPayment(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+SUPPLIER_PAYMENT_KINDS = ("payment", "refund", "credit")
+
+
+class SupplierPayment(Base):
+    """What settles a supplier's bill (v0.8.9, audit I-9/I-14), one row each:
+
+    * payment — money the farm paid the supplier (cash out, on its day);
+    * refund — money the supplier paid back (cash in: a negative amount);
+    * credit — a credit note for goods returned (no money moves).
+
+    `amount` is the cash in USD on its day (zero for a credit); `settles` is
+    what it takes off the bill, in the bill's own currency (an LBP bill paid
+    in LBP is settled in LBP whatever the rate did). A row recorded by
+    mistake is never edited: it is reversed by a negative row
+    (`reversal_of_id`)."""
+
+    __tablename__ = "supplier_payments"
+    __table_args__ = (Index("ix_supplier_payments_farm_paid", "farm_id", "paid_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
+    expense_id: Mapped[str] = mapped_column(String(36), ForeignKey("expenses.id"), index=True)
+    supplier_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("suppliers.id"), nullable=True)
+    # payment | refund | credit
+    kind: Mapped[str] = mapped_column(String(20), default="payment")
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    amount: Mapped[float] = mapped_column(Float, default=0)
+    settles: Mapped[float] = mapped_column(Float, default=0)
+    original_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    original_currency: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    exchange_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # recorded | reversed (undone by a later row) | reversal (the undoing row)
+    status: Mapped[str] = mapped_column(String(20), default="recorded", server_default="recorded")
+    reversal_of_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    reference: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recorded_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+

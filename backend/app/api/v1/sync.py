@@ -97,11 +97,14 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
         # not a milk-record id — each push item is a new, immutable milk
         # entry, so it always gets a fresh row. Duplicate delivery of the
         # same batch is already handled by the idempotency_key check above.
-        # A replay is judged exactly like a live entry, at the milking's own
-        # time (v0.8.5): the lactation that covers it, and a withdrawal the
-        # dated history puts on it — refused here means rejected back to
-        # the device, never stored as saleable.
+        # A replay is judged at the milking's own time (v0.8.5): the
+        # lactation that covers it, and a withdrawal the dated history puts
+        # on it. Milk a recorded withdrawal covers is kept but held (ADR-008:
+        # the device recorded it offline, and the milk may be in the tank);
+        # a milking she cannot have given is rejected back to the device.
+        # Never stored as saleable.
         from app.schemas.production import ALLOWED_MILK_DESTINATIONS, MAX_LITERS_PER_MILKING, MILK_SESSIONS
+        from app.services import milk_safety_service as milk_safety
         from app.services import milk_service
 
         animal = _own(db, models.Animal, item.entity_id, farm_id)
@@ -113,7 +116,7 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
             raise ValueError("Milk entry has an unknown session or destination, or an impossible amount")
         at = not_in_future(item.client_created_at, "Milk")
         try:
-            check = milk_service.check_milk(db, animal, at, destination)
+            check = milk_service.check_milk(db, animal, at, destination, recorded_offline_at=at)
         except milk_service.MilkError as exc:
             raise ValueError(exc.message) from exc
         record = models.MilkRecord(
@@ -122,6 +125,14 @@ def _apply_known_event(db: Session, *, farm_id: str, item, created_by: str) -> N
         )
         milk_service.apply_check(record, check, animal)
         db.add(record)
+        if record.release_status == milk_safety.HELD:
+            db.flush()
+            title = (f"{liters:g} L of {animal.name}'s milk under withdrawal entered offline as {destination}" if check.held_offline_under_withdrawal
+                     else f"{liters:g} L of {animal.name}'s milk held for review")
+            milk_safety._notify_reviewers(db, animal, title, record.safety_note or "", key=f"held:{record.id}")
+            recorder = db.get(models.User, created_by) if created_by else None
+            if recorder is not None and check.held_offline_under_withdrawal:
+                milk_safety.notify_recorder(db, animal, recorder, title, record.safety_note or "", key=f"held:{record.id}")
         return
 
     if item.entity_type == "inventory_item" and {"direction", "quantity"} <= payload.keys():

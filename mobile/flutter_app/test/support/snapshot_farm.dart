@@ -14,6 +14,7 @@ import 'package:farmos/domain/entities/user_profile.dart';
 import 'package:farmos/providers/access_provider.dart';
 import 'package:farmos/providers/agriculture_provider.dart';
 import 'package:farmos/providers/approvals_provider.dart';
+import 'package:farmos/providers/purchase_orders_provider.dart';
 import 'package:farmos/app/update/app_update_provider.dart';
 import 'package:farmos/providers/finance_provider.dart';
 import 'package:farmos/providers/milk_sales_provider.dart';
@@ -23,6 +24,7 @@ import 'package:farmos/providers/emergency_provider.dart';
 import 'package:farmos/providers/employees_provider.dart';
 import 'package:farmos/providers/feed_provider.dart';
 import 'package:farmos/providers/feeding_provider.dart';
+import 'package:farmos/providers/nutrition_provider.dart';
 import 'package:farmos/providers/health_records_provider.dart';
 import 'package:farmos/providers/herd_records_provider.dart';
 import 'package:farmos/providers/livestock_provider.dart';
@@ -111,7 +113,8 @@ class SnapshotFarm {
   final navigatorKey = GlobalKey<NavigatorState>();
 
   static Future<SnapshotFarm> open() async {
-    final api = SnapshotApi(loadSnapshot());
+    // Signed in with the server: a token, so the outbox is sent (ADR-007).
+    final api = SnapshotApi(loadSnapshot())..token = 'snapshot-session';
     final me = (api.snapshot['GET /auth/me'] as Map).cast<String, dynamic>();
     final session = _SnapshotSession(api)
       ..user = UserProfile.fromJson(me)
@@ -139,7 +142,9 @@ class SnapshotFarm {
         ChangeNotifierProvider(lazy: false, create: (_) => HealthRecordsProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedProvider(apiClient: api, farmId: user.farmId)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FeedingProvider(apiClient: api)..load()),
+        ChangeNotifierProvider(create: (_) => NutritionProvider(apiClient: api)),
         ChangeNotifierProvider(lazy: false, create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)..load()),
+        ChangeNotifierProvider(create: (_) => PurchaseOrdersProvider(apiClient: api)),
         ChangeNotifierProvider(lazy: false, create: (_) => MilkSalesProvider(apiClient: api)..load()),
         ChangeNotifierProvider(lazy: false, create: (_) => FinanceProvider(apiClient: api)),
         // Never asks the network in a test; a test that needs an update injects one.

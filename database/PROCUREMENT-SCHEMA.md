@@ -242,3 +242,19 @@ PurchaseRequisitionCreated, PurchaseRequisitionApproved, PurchaseRequisitionReje
 
 ## 12. Acceptance
 The system distinguishes requested/approved/ordered/received/accepted/stocked quantities; partial deliveries work; feed alerts can initiate drafts but not approve purchases; accepted goods become inventory atomically; supplier item codes never replace internal item identity; procurement history survives price/UOM/config changes.
+
+## 13. Implementation status (v0.8.12, master prompt Package 2)
+Implemented for feed and feed ingredients (`backend/app/domain/procurement_models.py`, `services/purchase_orders_service.py`, migration `c7e9a1b3d5f8`):
+- **§4 `supplier_items`.** Each row carries the supplier's current quote (`unit_price`, `currency`, `price_updated_at`). A new price replaces the quote; the old one stays in the audit log (`supplier_price_set`). Orders keep the price they were placed at.
+- **§7 `purchase_orders` / `purchase_order_lines`.**
+  - Each line keeps its ordered unit and price.
+  - The quantity in the feed's stock unit is converted at receipt through the fixed mass/volume table (`app/feeding/uom.py`). Pack units (a 50 kg bag) are not offered on orders yet, so there is no per-order conversion to snapshot.
+  - Approval is `procurement_approvals` with `document_type = purchase_order` and the authority snapshot.
+- **§8 `goods_receipts` / `goods_receipt_lines`.**
+  - Accepted goods are posted through the feed lot ledger (`feed_lots` and their receipt movement: the feed module's inventory lot), in the same transaction as the receipt.
+  - The line links the lot and the supplier's bill (`expenses`, v0.8.9).
+  - The database checks accepted + rejected ≤ received.
+- **Not implemented yet.** These keep v0.8.9's paths in the meantime:
+  - §2–§3 supplier codes, statuses, contacts and addresses;
+  - §9 `supplier_return` (returns stay *Return to supplier* on a lot, credited on its bill);
+  - medicine lines on purchase orders (medicines keep the pharmacy receipt with its bill).

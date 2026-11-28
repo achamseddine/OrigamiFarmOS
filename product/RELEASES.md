@@ -1,5 +1,166 @@
 # Releases
 
+## Integrated release v0.8.20 (2026-11-28) — Packages 1–7 and 11–13 together
+
+One build carries every package below from v0.8.9 to v0.8.20, merged into `claude/origami-farmos-tablet-mvp-u88i3e` from PRs #34, #35, #36, #37, #38, #39, #40, #41, #42 and #43. Migration `e5a7c9b1d3f6` only joins the two migration chains (no schema change). **Not included:** v0.8.15 corn silage, v0.8.16 equipment maintenance, v0.8.17 animal photos (Packages 8–10, frozen on their branches, never released), so those version numbers are skipped. A pre-release for on-farm testing, **not production-ready**: no physical tablet test, no real farm acceptance and no production deployment have been done.
+
+## v0.8.20 — Feed performance: from the alert to what the manager did, and what came of it
+
+Master prompt Package 13 (database/FEED-PERFORMANCE-ACTIONS.md). On the tablet and the web app (Feed → **Performance**, on each alert), measured by the server. Built on the existing Feed Performance Intelligence: alerts still wait for enough evidence, lose confidence for every confounder, and never twin.
+- **Record action** (the manager), on an alert about an animal's or a herd's production: what was done — back to the previous lot, another supplier, a sample sent, the formula revised, the feeding adjusted, a health check — what the milk (or eggs, or growth) should do, and how many days to wait. The alert is acknowledged. One action at a time per alert; it can be cancelled with a reason.
+- **The outcome, measured once** after those days — by the daily cycle, or *Measure now*: the same number of days before against the days after, from the milk records themselves. *As expected*, *no clear change* or *the opposite* — or **insufficient data** when fewer than five days are recorded on either side (never read as no change).
+- **Confidence** starts at 0.80 and drops for each confounder seen in between — a health event, a calving or a dry-off, animals moved, another feed change, a change of the milked herd — and for what the farm does not record; each reduction is listed. *An association with the action, not proof that it caused it.*
+- **One bell notice** per outcome for the manager, until marked reviewed.
+- Server: **migration `d1f3a5c7e9b2`** (after `c9e1a3b5d7f0`): table `feed_performance_actions`. Endpoints `GET /feed-performance/actions`, `GET …/{id}`, `POST /feed-performance/alerts/{id}/actions`, `POST /feed-performance/actions/{id}/measure | review | cancel`. The daily cycle reports `outcomes_measured`. Events `feed_action_recorded`, `feed_action_outcome_measured`, `feed_action_outcome_reviewed`, `feed_action_cancelled`.
+- Tests: backend +7 (`test_feed_actions.py`: measured once as expected with its confidence and one bell notice, a health event lowering the confidence, the opposite, too few records, the cycle measuring once, rules and farms, alerts that cannot be measured) and the same on PostgreSQL 16 with a two-manager race (`test_feed_actions_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +5 (`test/records/feed_actions_test.dart`).
+
+## v0.8.19 — Least-cost drafts: the cheapest formula that still meets the requirements
+
+Master prompt Package 12 (database/LEAST-COST-FORMULATION.md, architecture/ADR-010-LEAST-COST-SOLVER.md). On the tablet and the web app (Feed → **Nutrition**), solved by the server. Built on v0.8.18's requirements and analyses.
+- **Find least-cost drafts** for a formula: its ingredients (or the ones allowed, each with a minimum and maximum share), its batch size (the base concentrate's 1,210 kg), the ration (concentrate per head, silage, weight) and a premix on top if any — against one version of the requirements.
+- **Up to three drafts:** *A, the cheapest*; *B, the cheapest with a safety margin* (3 % inside every bound by default); *C, the closest to today's formula* (the fewest kg changed). Each meets every requirement, is costed ingredient by ingredient at **today's prices** (the lot used next and its supplier, else the feed's price) and says what it saves against the current formula.
+- **Infeasible** says which requirement cannot be reached (calcium with no mineral source, protein with the soybean held to 5 %…). **Insufficient data** — an analysis, a dry matter or a price not known — runs nothing at all.
+- **Blocked:** another species' requirements, an ingredient or a premix the feed rules do not allow for the species.
+- **Approved by the manager**, with a reason, once per run: the draft becomes a new **draft** version of the formula — never active by itself, activated by the usual formula approval. The run, its prices and every batch stay as they were when prices change.
+- Server: **migration `c9e1a3b5d7f0`** (after `b7d9f1a3c5e8`): table `formulation_runs`. Endpoints `GET/POST /nutrition/least-cost`, `GET …/{id}`, `POST …/{id}/approve`. Events `least_cost_formulated`, `least_cost_draft_approved`. A small in-house solver (no new dependency, ADR-010).
+- Tests: backend +14 (`test_lp_solver.py` 6 on known optima, infeasible, unbounded, degenerate cycling; `test_least_cost_formulation.py` 8) and the same on PostgreSQL 16 with a two-manager approval race (`test_least_cost_formulation_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +7 (`test/records/least_cost_test.dart`).
+- Not in this release: optimisation across several groups at once, stock availability as a constraint, amino acids.
+
+## v0.8.18 — Feed nutrition: what the animals need, and whether the formula meets it
+
+Master prompt Package 11 (database/NUTRITION-ASSESSMENT.md). On the tablet and the web app (Feed → **Nutrition**), computed and enforced by the server. Built on the existing feed formulas and nutrient analyses — nothing is copied, and no formula, batch or feeding program is ever changed by it.
+- **What the animals need** (the manager): requirement sets per species and stage — cows in early lactation at 650 kg, ewes in late gestation… — each nutrient's minimum and/or maximum on the ration's dry matter (protein, energy, NDF and the new **physically effective NDF**, calcium, phosphorus…), the reference weight and the dry matter they are expected to eat, and **where the figures come from** (required).
+  - A change is a **new version** with its own source; the old one is kept, and what was assessed against it still reads as it was.
+- **Assess a formula:** the formula **as the farm makes it** — the base concentrate stays **1,210 kg before any premix**, never relabelled a one-ton batch — in its ration (the concentrate per head, the forage, the animals' weight), against one version of the requirements.
+  - Each ingredient's latest lab analysis, else the declared one, **as fed and on dry matter**; what each ingredient brings to each nutrient.
+  - **A premix on top**, as a what-if: the 1,210 kg kept, the total and the inclusions recomputed; a premix not allowed for the species (a cattle-only premix for sheep) is refused.
+  - Each requirement **met, below or above**, with the dry matter eaten against what is expected, and an explanation that names the gap and the source — *an assessment, not a ration*.
+- **Insufficient data, never a guess:** an ingredient without its analysis or its dry matter (the soybean, the cottonseed, the beet pulp…), no intake, no forage, no weight, or a weight the requirements are not for — the assessment says exactly what is missing and **recommends nothing**. It never predicts milk.
+- **Other species** have their own requirements: a cow formula is not assessed against sheep requirements.
+- **Kept as computed:** every assessment is stored with the analyses and the requirement version it used; a later analysis makes a new one.
+- **Who:** whoever sees the feed reads; whoever makes feed assesses; the requirements are the manager's (Feed approval). Another farm sees nothing. Offline, an assessment waits and is computed when it reaches the server.
+- Server: **migration `b7d9f1a3c5e8`**.
+  - Tables `nutrition_requirement_sets`, `nutrition_requirement_values`, `nutrition_assessments`; the nutrient catalog gains `PENDF`.
+  - Endpoints: `GET/POST /nutrition/requirement-sets`, `GET …/{id}`, `POST …/{id}/versions`; `GET/POST /nutrition/assessments`, `GET …/{id}`.
+  - Events: `nutrition_requirements_recorded`, `nutrition_requirements_revised`, `nutrition_assessed`.
+- Tests: backend +12 (`test_nutrition_assessment.py`: the 1,210 kg mass balance and the premix on top, missing soy/cottonseed/beet pulp, unknown intake/forage/weight, everything known with calcium short, dry-matter conversion and DM-basis lab results, no DM, sources and versions, species, the premix policy, roles and farms, kept as computed and one per retry) and the same on PostgreSQL 16 with a two-manager revision race (`test_nutrition_assessment_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +11 (`test/records/nutrition_assessment_test.dart`).
+- Not in this release: least-cost formulation (Package 12), amino acids, DCAD, intake predicted from weight and milk.
+## v0.8.14 — Crop cycles: a greenhouse from planting to its actual margin
+
+Master prompt Package 7 (database/CROPS-SCHEMA.md §2, §4–§6, §8; status in its new §11). On the tablet and the web app (Produce & Harvest → a field's **Manage cycle**), enforced by the server. Built on the existing fields, crops, plantings, harvests, stock and Sales & Finance — no second crop or stock model.
+- **Growing units.** A field is an open field, a greenhouse, a tunnel or an orchard (`unit_type`).
+- **A crop cycle** is a planting: one crop in one growing unit from planting to its last harvest, with a farm-wide code (`CHER-2026-001`) and what it is grown for (sale, feed, seed, mixed). A field keeps every cycle it had.
+- **The work on a cycle:** planting, fertilising, spraying, weeding, pruning, irrigation work, harvest preparation, with its labour hours and their cost, and the seeds, fertiliser, plant treatments or supplies it used.
+  - Each input leaves stock by its own movement at the item's cost. More than is in stock is refused: the stock line is locked and read afresh, so two people cannot both take the last of it.
+  - Feed, medicine and produce are not crop inputs.
+  - Work recorded by mistake is reversed by a manager: its inputs return to stock and it stays on file.
+  - Work queued on a tablet keeps the time it was done (a tablet clock a few minutes fast is accepted, a date in the future is not).
+- **Water:** each irrigation, how much (m³ or L), from which source, and the pumping cost when it is known.
+- **Harvest into stock:** a harvest names its cycle and why some was lost; the sellable part goes into the produce stock as before. A closed cycle takes no more work, water or harvest; its produce in stock can still be sold.
+- **Sold:** the cycle's produce sold from its sheet is a sale of the farm (Sales & Finance, *Crops*), in USD or LBP, paid now or owed, and leaves the produce stock. More than is in stock is refused, under the same lock.
+- **Its actual margin:** what its produce sold for, against its inputs, labour, pumping and the expenses linked to it; harvested, lost, sold, and the cost per kg harvested.
+  - A cost that is not known (an input with no price, labour not priced, pumping not metered) is named as unknown, never counted as free.
+  - It is read from the records each time; nothing is kept on the side.
+- **The acceptance case** (test): a 400 m² greenhouse of cherry tomatoes.
+  - Planted with 2 packets of seed (USD 10) and 6 h of labour (USD 30); fertilised with 20 kg of NPK (USD 30) and 2 h (USD 10); 12 m³ of well water (USD 8 pumping).
+  - 500 kg harvested, 20 kg lost to split fruit, 480 kg into stock; 400 kg sold at USD 1.20.
+  - Revenue USD 480, known costs USD 88, **margin USD 392**, USD 0.176 per kg harvested.
+- **Who:** the field team (Agriculture or Produce & Harvest) records work and water; Sales or Finance sell; whoever reads the farm's money (Finance, Sales or Reports) sees the margin; closing needs Agriculture edit, reversing work Agriculture approval. Another farm sees nothing.
+- Server: **migration `d9b1c3e5f7a2`** (after `c7e9a1b3d5f8`).
+  - Schema: `fields.unit_type`; `crop_plantings.cycle_code` (unique per farm), `production_purpose`, `closed_at`; tables `field_operations`, `field_operation_inputs`, `irrigation_events`; `harvest_records.crop_planting_id`, `loss_reason`; `sales.crop_planting_id`.
+  - Endpoints: `GET /crop-inputs`; `GET/POST /crop-plantings/{id}/operations`, `POST …/operations/{op}/reverse`; `GET/POST …/irrigation`; `POST …/sales`; `GET …/margin`; `POST …/close`.
+  - Events: `field_operation_completed`, `field_operation_reversed`, `irrigation_recorded`, `crop_produce_sold`, `crop_cycle_closed`; audit entries for work, reversals and closing.
+- Tests: backend +10 (`test_crop_cycles.py`) and the same on PostgreSQL 16 with two-thread races for the last fertiliser and the last produce (`test_crop_cycles_pg.py`, a new step in `scripts/verify-all.sh`); app +13 (`test/records/crop_cycles_test.dart`).
+- Not in this release: seeds and fertiliser are traced to their stock line and its movement, not to a supplier lot (generic stock has no lots yet); planned work; field observations (§7); labour from the employees' time sheets.
+
+## v0.8.13 — Cow profitability: each cow's milk, its value, her costs and her margin
+
+Master prompt Package 3. On the tablet and the web app (Reports → **Cow profitability**, with print, PDF and CSV), worked out by the farm server from the records, for a chosen period, a cow or a group (`GET /reports/profitability?start&end&animal_id&group_id`):
+- **Milk.** Morning (AM) and afternoon/evening (PM) litres, the total, and the saleable litres (not withheld, not held for review).
+  - **Milk value**: saleable litres × the farm's average milk sale price in the period (the last sale before it when the period has none).
+  - **Sales revenue**: the period's milk sales shared by saleable litres.
+- **Feed.** Her own feedings at the cost they were fed at, and her share of her group's feedings: a group feeding's cost ÷ the heads it fed, for each cow in the group at the time. Also feed kg and **feed cost per litre**.
+- **Vet and medicine.** Her doses at the cost of the lot they came from (a group dose ÷ its head count), and expenses linked to her.
+- **Labour and electricity.** Expenses linked to her or her group; the farm's dairy labour and electricity shared by days in milk. Other labour and electricity is **not attributed to cows** and is shown as such.
+- **Margin** and the margin per litre, and a **week-by-week trend**.
+- **Unknown is never zero.** No milk price means the value and margin are *unavailable*. Feed fed without a price and a dose from a lot without a cost are named on the cow's row.
+- **It adds up.** The report states how milk, own feedings and group feedings reconcile with the records, including what group feedings gave to heads not in the report. The rules of each allocation are part of the report.
+- Money: **Reports or Finance** view (refused otherwise). One farm only.
+- Server: **no migration.** Tests:
+  - backend +6 (`test_animal_profitability.py`, a synthetic farm checked by hand), and the same 6 on PostgreSQL 16 (`test_animal_profitability_pg.py`);
+  - app +2 (`test/reports/profitability_test.dart`).
+
+  The demo farm's snapshot carries the report for the demo.
+## v0.8.12 — Buying feed: suppliers' prices, purchase orders, deliveries against them, and what is still owed
+
+Master prompt Package 2 (database/PROCUREMENT-SCHEMA.md §4, §7, §8). On the tablet and the web app (Feed → **Buying**), enforced by the server. Builds on v0.8.9's supplier bills.
+- **Suppliers' prices.** Several suppliers can sell the same ingredient at different prices. Each supplier's quote is kept per item (the manager sets it; a new price replaces the quote and the old one stays in the audit log). The list is cheapest first in USD at today's rate, with what each supplier's last delivery cost.
+- **Purchase orders.**
+  - An order goes to one supplier at a price per line — the supplier's quote when none is given, and an LBP quote never prices a USD order.
+  - It is placed direct, or from an approved purchase request (which becomes *ordered*, then *received*).
+  - A worker drafts it and the manager places it: the approval and the authority behind it are kept. Orders are numbered `PO-000001` per farm.
+  - Orders are in USD or LBP at an agreed rate, paid on each delivery or on credit.
+- **Deliveries against an order**, partial or whole: what came, what was rejected (with the reason) and the quality seen, numbered `GR-000001`.
+  - The accepted goods become a feed lot through the stock ledger, with the supplier, the price ordered, the day, the delivery note and the quality. A poor delivery is held until released.
+  - The supplier's bill is posted for what was accepted.
+  - More than 10% over what was ordered is refused. An order with goods received is closed short (the rest is not coming), not cancelled.
+  - Two people receiving the last of an order at once cannot both take it (the order's row is locked).
+- **The match** (*Ordered vs delivered*): per line and for the order, it shows:
+  - ordered, received, accepted, rejected and still to come;
+  - the value accepted at the price ordered, against what was billed, paid and is still owed;
+  - any difference, named, never hidden.
+
+  Payments are made on the bills, in parts (v0.8.9).
+- **A mix stays traceable to its suppliers.** A lot's trace and a mix's ingredient lots now show each lot's supplier, cost, day, quality and the order, receipt and delivery note it came on.
+- Server: **migration `c7e9a1b3d5f8`** — tables `supplier_items`, `purchase_orders`, `purchase_order_lines`, `goods_receipts` and `goods_receipt_lines` (accepted + rejected ≤ received, checked by the database).
+  - Endpoints, under `/procurement`: `GET/POST supplier-items`; `GET/POST purchase-orders`; `GET purchase-orders/{id}`; `POST purchase-orders/{id}/approve | cancel | close | receive`; `GET purchase-orders/{id}/match`.
+  - Events: `purchase_order_created`, `purchase_order_approved`, `purchase_order_cancelled`, `purchase_order_closed`, `goods_received`, `goods_rejected`, `supplier_price_set`.
+- Tests: backend +10 (`test_procurement_orders.py`), and the same on PostgreSQL 16 with a two-thread receipt race (`test_procurement_orders_pg.py`); app +4 (`test/records/purchase_orders_test.dart`).
+- Not in this release: medicines on purchase orders (they keep v0.8.9's receipt with its bill); supplier contacts and addresses; a supplier-return document (returns stay v0.8.9's *Return to supplier* on a lot, credited on its bill).
+
+## v0.8.11 — Milk entered offline is cleared by the farm server; morning and afternoon on the farm's clock
+
+Audit 2026-11-25 (I-11, I-16). On the tablet and the web app, decided by the server (architecture/ADR-008):
+- **Milk recorded offline waits for the server's safety check.** A tablet without the farm server may not know of a treatment recorded on another device. Its milk is shown at once — no second entry — as *Waiting for check*: not counted as stored on the Milk page, and never in the tank, the collector's handover or a sale (those are the server's figures). The Milk page's new card **Milk waiting for the farm server's safety check** lists it; the milk form says so when the server cannot be asked.
+- **The server decides, from the treatment history, when the tablet reconnects.** The milking keeps its own day and time and is judged then: clear milk is saleable; milk the records cannot vouch for is held for review; **milk under a recorded withdrawal is kept as entered but held** — before, it was refused and lost while it might already be in the tank. Held, it is out of the tank, the collector's handover and every sale and can never be released, only withheld with a reason. The manager, the owner, the veterinarian and the person who recorded it are told (*10 L of Bella's milk under withdrawal entered offline as stored*; the note says to check the tank). At the parlour, online, the same milking is still refused so it is withheld on the spot.
+- **What the server refuses stays in view.** Milk the server refused (a cow dried off, an animal no longer on the farm) stays on the Milk page card with the server's reason, **Try again** and **Discard** (asked first) — not only in the sync panel.
+- **Morning or afternoon by the farm's clock.** The suggested milking (quick entry, the cow queue, Record milk, the handover) is the farm's hour in its own zone (Asia/Beirut on Origami), with the daylight-saving changes, whatever zone the tablet or browser is set to; milk entered for an earlier day is dated at that milking's farm hour.
+- On the animal's milk tab, milk waiting for the check and held milk carry their status; milk held under a recorded withdrawal offers only *Withhold* to the reviewer.
+- Server: **no migration.** A replayed write carries `X-Offline-Recorded-At`; `POST /production/milk` and `POST /sync/push` keep offline milk under a recorded withdrawal as held (`milk_held_offline_under_withdrawal` audit entry, `milk_held_for_review` event, `recorded_offline_at` on `milk_recorded`); `GET /farms/me` adds `clock` (`timezone`, `offsets`). Tests: backend +12 (`test_offline_milk_clearance.py`) and the same 12 on PostgreSQL 16 (`test_offline_milk_clearance_pg.py`); the older replay test now expects the held record; app +10 (`test/production/offline_milk_test.dart`).
+## v0.8.10 — Back in after a restart with no network: offline sign-in on the tablet
+
+Audit 2026-11-25 (I-10), architecture/ADR-007-OFFLINE-SIGN-IN.md:
+- **Restart the tablet with no network and sign in.** A worker who signed in with the farm server on this tablet in the last 7 days types the same email and password; when the server cannot be reached, the tablet opens their cached farm and they carry on (feedings, milk, observations…). The sync panel says so: *Signed in on this tablet without the farm server…*.
+- **Nothing reaches the server from an offline session** — it holds no server token. What is recorded waits in the queue, untouched (*N records wait on this tablet: sign in with the farm server to send them*), and is sent once after the next sign-in the server accepts. A token the server no longer accepts keeps the queue instead of marking records failed.
+- **Safe by design:** only a salted PBKDF2 check of the password is kept — never the password or the token; the same server and email only; it expires 7 days after the last sign-in the server accepted; a password the server refuses, or signing out, closes offline access; another account's cached farm is never shown. The sign-in form still shows on every launch. Not available in a browser.
+- App only, **no migration**. Tests: app +9 (`test/auth/offline_signin_test.dart`). Physical tablet restart: not run in CI.
+## v0.8.9 — Purchases in the books: what was accepted is stock, what is owed is owed, cash is what was paid
+
+Audit 2026-11-25 (I-9, I-14). On the tablet and the web app, enforced by the server:
+- **Stock is what was accepted.** 500 kg of corn delivered, 20 kg rejected, at USD 0.50: 480 kg in stock worth **USD 240** — the lot, the stock report and the supplier's bill all say 240, never 250.
+- **Each priced delivery has its supplier's bill** (feed and medicine), for what was accepted, in the invoice's currency (an LBP invoice keeps its LBP and the rate of the delivery's day; the stock is valued in dollars). *Paid on delivery*, *On credit* or *Part paid now* is chosen on the delivery form.
+- **Cash is what was actually paid, on its day.** Bought on credit: cash out USD 0, USD 240 owed. USD 100 paid later: cash out USD 100, **USD 140 still owed** (*Who owes what*), the stock untouched. A bill is paid in parts from Sales & Finance (*Pay…*, any amount, USD or LBP at the day's rate — an LBP bill paid in LBP is settled in LBP whatever the rate did; *Mark paid* pays the rest). More than is owed is refused; a retried request is recorded once, a repeat is asked; two people paying the same bill at once can't pay it twice, and two reversing the same payment at once reverse it once.
+- **Never counted twice.** A bill for stock is not a cost: feed is a cost when it is fed, medicine when it is received (for what was accepted) — the farm's one policy; a delivery no longer also counts as cash out on arrival. Reports' expenses leave stock bought out.
+- **Returns, refunds, corrections.** Goods sent back (*Return to supplier* on the lot, or a stock return naming the lot) leave the lot's stock and are credited on its bill; when the bill was already paid, the supplier's refund is recorded as money back. A payment recorded by mistake is reversed by a negative row and stays on file; a bill with payments is cancelled only once they are reversed. Every step is audited.
+- **Deliveries from before this release** have no bill. Profit and loss no longer assumes they were paid on arrival; a manager reviews them once (`GET` / `POST /finance/reconciliation/purchases`, docs/runbooks/PURCHASES-RECONCILIATION.md): the expense that already paid for one is linked (it stops being a second cost), or the manager says it was paid on arrival or is still owed. Nothing is paid on the farm's behalf; nothing already recorded is rewritten.
+- Server: **migration `b5d7f9a1c3e6`** — table `supplier_payments` (payments, refunds, credit notes; reversal links), unique bill per delivery on `expenses (linked_entity_type, linked_entity_id)`; expenses gain `partial`. `POST /feed-lots/receive` and `POST /pharmacy/lots/receive` take `payment` (paid | credit | partial), `paid_amount`, `due_date`, `invoice_reference`, `currency`, `exchange_rate` and answer with the `bill`; lots add `accepted_value`; `POST /feed-lots/{id}/return`; `POST /finance/expenses/{id}/payments` (+ `GET`), `POST /finance/supplier-payments/{id}/reverse`; expenses add `amount_paid`, `balance_due`, `balance_original`, `credited`, `stock_purchase`, `lot_id`. Tests: backend +18 (`test_purchase_payables.py`) and the same 18 plus two-thread races on PostgreSQL 16 — two payments of one bill, two reversals of one payment (`test_purchase_payables_pg.py`), app +4 (`test/records/purchase_payables_test.dart`).
+## Staging and recovery — a PostgreSQL 16 staging server built, checked, backed up, restored and restarted (server tooling; the app is unchanged)
+
+Master prompt Package 6 (docs/runbooks/STAGING-POSTGRES.md):
+- **`scripts/staging/staging.sh all`** builds a throwaway PostgreSQL 16 staging server from nothing: migrations from an empty database to the head revision, the synthetic demo farm, the API with a random secret key and its health check. It then runs:
+  - API smoke tests over synthetic records: sign-in and access, an expense, a milk record and a feed delivery each sent twice and recorded once, refusals, reads;
+  - a checksummed `pg_dump` backup, restored into a second database that must be identical table by table (row counts and row checksums), with an API on the restored copy that finds every record;
+  - a restart of the API and PostgreSQL that must keep them;
+  - the reconciliations' dry runs (feed stock, Mouneh sales, milk safety; purchases where the server has it).
+
+  It writes a report. With `STAGING_MODE=docker` it uses `deploy/staging/docker-compose.yml` and the API image `deploy/staging/Dockerfile`.
+- **Never production:** its own database, `DATABASE_URL`/`PROD_DATABASE_URL` ignored, synthetic records only, and a smoke test that refuses any server but this machine or a staging host.
+- **Fixed, found by the first staging run:** `python -m app.seed` (the README quick start) crashed as a script with `NameError` before creating the farm. That left an empty database nobody could sign in to, while every test passed because they import the module. It now seeds the farm and runs twice safely (`tests/test_seed_command.py`).
+- Server: **no migration**, no API change. Tests:
+  - `tests/test_staging_chain_pg.py` runs the whole chain on PostgreSQL 16 (in `scripts/verify-all.sh` and CI);
+  - `tests/test_staging_tools.py` covers the server guard and the snapshot comparison;
+  - `tests/test_seed_command.py` runs the seed command as a script.
+
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 
 Audit 2026-11-25 (I-8). On the tablet and the web app, enforced by the server:

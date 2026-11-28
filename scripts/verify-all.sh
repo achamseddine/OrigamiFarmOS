@@ -80,17 +80,39 @@ if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # tests (v0.8.4) prove the migration and two simultaneous last-stock
   # feedings on a real PostgreSQL, each in a schema of its own.
   step "backend migrations on PostgreSQL" bash -c \
-    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py tests/test_feed_stock_migration.py tests/test_feed_stock_concurrency_pg.py tests/test_feeding_plan_policy_pg.py tests/test_feeding_event_integrity_pg.py"
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_migrations.py tests/test_livestock_backfill.py tests/test_feed_stock_migration.py tests/test_feed_stock_concurrency_pg.py tests/test_feeding_plan_policy_pg.py tests/test_feeding_event_integrity_pg.py tests/test_staging_chain_pg.py"
 else
   RESULTS+=("SKIP  backend migrations on PostgreSQL (set FARMOS_TEST_POSTGRES_URL)")
+fi
+if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
+  # Packages 11–13: requirements, assessments, least-cost drafts, feed actions and outcomes, and their races.
+  step "nutrition, least-cost and feed actions on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_nutrition_assessment_pg.py tests/test_least_cost_formulation_pg.py tests/test_feed_actions_pg.py"
+  # Package 3: each cow's milk value, costs and margin, reconciled with the records.
+  step "cow profitability on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_animal_profitability_pg.py"
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # v0.8.8 (I-8): Mouneh sales in the books, paid / owed / part paid,
   # cancellations and the reconciliation of past sales, on PostgreSQL.
   step "Mouneh sales in the books on PostgreSQL" bash -c \
     "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_mouneh_revenue_pg.py"
+  # v0.8.8 (I-8) Mouneh sales and v0.8.9 (I-9, I-14) purchases in the books —
+  # paid, owed, in parts, reversals, reconciliation, a payment race — on PostgreSQL.
+  step "money in the books on PostgreSQL (Mouneh sales, purchases)" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_mouneh_revenue_pg.py tests/test_purchase_payables_pg.py tests/test_procurement_orders_pg.py"
+  # v0.8.14 (Package 7): a crop cycle from planting to its margin, and two
+  # people taking the last fertiliser or selling the last produce at once.
+  step "crop cycles on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_crop_cycles_pg.py"
 fi
 
+if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
+  # v0.8.11 (I-11, I-16): milk a tablet entered offline, cleared by the
+  # server from the treatment history; the farm's clock for the tablet.
+  step "offline milk cleared by the server on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_offline_milk_clearance_pg.py"
+fi
 # --- 2. The app: tablet and web from one codebase --------------------------
 cd "$ROOT/mobile/flutter_app"
 step "app dependencies" "$FLUTTER" pub get

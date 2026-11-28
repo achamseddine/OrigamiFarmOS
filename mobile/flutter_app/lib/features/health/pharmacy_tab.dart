@@ -513,6 +513,8 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
   final _reference = TextEditingController();
   DateTime? _expiry;
   bool _storageException = false;
+  // The supplier's bill (v0.8.9): paid on delivery unless bought on credit.
+  bool _onCredit = false;
   bool _saving = false;
   String? _error;
 
@@ -577,6 +579,13 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
             const SizedBox(height: 12),
             TextField(controller: _reference, decoration: InputDecoration(labelText: context.t('reference'))),
             SwitchListTile(contentPadding: EdgeInsets.zero, dense: true, value: _storageException, onChanged: (v) => setState(() => _storageException = v), title: Text(context.t('phStorageException'), style: FarmTypography.textTheme.bodySmall)),
+            SwitchListTile(
+                key: const ValueKey('medicine-on-credit'),
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                value: _onCredit,
+                onChanged: (v) => setState(() => _onCredit = v),
+                title: Text(context.t('fpOnCredit'), style: FarmTypography.textTheme.bodySmall)),
             if (_error != null) ...[const SizedBox(height: 8), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12))],
           ]),
         ),
@@ -609,6 +618,7 @@ class _ReceiveDialogState extends State<_ReceiveDialog> {
       'lot_code': _lotCode.text.trim(),
       'expiry_date': DateTime(_expiry!.year, _expiry!.month, _expiry!.day, 23, 59).toUtc().toIso8601String(),
       if (_unitCost.text.trim().isNotEmpty) 'unit_cost': double.tryParse(_unitCost.text.trim()),
+      if (_unitCost.text.trim().isNotEmpty) 'payment': _onCredit ? 'credit' : 'paid',
       if (_supplier.text.trim().isNotEmpty) 'supplier_label': _supplier.text.trim(),
       if (_reference.text.trim().isNotEmpty) 'reference': _reference.text.trim(),
       'storage_status': _storageException ? 'EXCEPTION' : 'COMPLIANT',

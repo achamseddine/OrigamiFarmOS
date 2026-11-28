@@ -422,15 +422,16 @@ def seed_demo_data(db: Session) -> None:
     db.flush()
     seed_visits_demo_data(db, FARM_ID)
     _seed_rule_groups_and_responsibilities(db)
+    # Each priced delivery of the demo farm has its supplier's bill, paid on
+    # arrival (v0.8.9) — the books start agreeing with the stock.
+    from app.services import purchases_service
+
+    db.flush()
+    purchases_service.bill_seeded_deliveries(db, FARM_ID, "user-rami")
 
     db.commit()
     print(f"Seeded demo data for farm '{FARM_ID}'. Demo login: rami@origami.farm / farmos123")
 
-
-if __name__ == "__main__":
-    Base.metadata.create_all(bind=engine)
-    with SessionLocal() as session:
-        seed_demo_data(session)
 
 
 
@@ -455,3 +456,14 @@ def _seed_rule_groups_and_responsibilities(db: Session) -> None:
         responsibility_service.assign(db, employee=karim, scope_type="group", scope_id="grp-dairy-herd",
                                       duties=["milking", "feeding", "observation"], notes="Morning and evening rounds.", by=manager)
     db.flush()
+
+
+# Last, after every helper the seed calls is defined: run as a script
+# (`python -m app.seed`) the module executes top to bottom.
+if __name__ == "__main__":
+    from app.domain.registry import import_all
+
+    import_all()  # every table, not only the modules this file imports
+    Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        seed_demo_data(session)

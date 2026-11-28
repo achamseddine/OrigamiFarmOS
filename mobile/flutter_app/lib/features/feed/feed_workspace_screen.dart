@@ -25,6 +25,7 @@ import 'tabs/mixing_tab.dart';
 import 'tabs/nutrition_tab.dart';
 import 'tabs/performance_tab.dart';
 import 'tabs/programs_tab.dart';
+import 'tabs/buying_tab.dart';
 import 'tabs/traceability_tab.dart';
 
 /// The Feed workspace (generic feed architecture §17): the tabs the spec
@@ -41,7 +42,7 @@ class FeedWorkspaceScreen extends StatefulWidget {
 /// The workspace's tabs, in the V3 prototype's order: making feed first,
 /// then what it is made from and where it is kept, then what the animals
 /// are given and what that costs and achieves.
-enum FeedWorkspaceTab { mixing, materials, stock, formulas, intake, programs, nutrition, costs, trace, performance }
+enum FeedWorkspaceTab { mixing, materials, buying, stock, formulas, intake, programs, nutrition, costs, trace, performance }
 
 class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
   FeedWorkspaceTab _tab = FeedWorkspaceTab.mixing;
@@ -58,6 +59,7 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
   static const _labels = {
     FeedWorkspaceTab.mixing: 'fwTabMixing',
     FeedWorkspaceTab.materials: 'fwTabMaterials',
+    FeedWorkspaceTab.buying: 'fwTabBuying',
     FeedWorkspaceTab.stock: 'fwTabStock',
     FeedWorkspaceTab.formulas: 'feedTabFormulas',
     FeedWorkspaceTab.intake: 'fwTabIntake',
@@ -119,6 +121,7 @@ class _FeedWorkspaceScreenState extends State<FeedWorkspaceScreen> {
       tabBuilder: (context, i) => switch (tabs[i]) {
         FeedWorkspaceTab.mixing => const MixingTab(),
         FeedWorkspaceTab.materials => const FeedsAndLotsTab(),
+        FeedWorkspaceTab.buying => const BuyingTab(),
         FeedWorkspaceTab.stock => const FeedInventoryScreen(embedded: true),
         FeedWorkspaceTab.formulas => const FormulasTab(),
         FeedWorkspaceTab.intake => const DailyFeedingTab(),

@@ -154,6 +154,8 @@ class AccessProvider extends ChangeNotifier {
       'finance' => [FarmModule.finance, FarmModule.sales],
       'sales' => [FarmModule.sales, FarmModule.finance],
       'stock' => [FarmModule.inventory, FarmModule.feedNutrition, FarmModule.mounehInventory, FarmModule.animalHealth, FarmModule.milkProduction],
+      // Each cow's money (Package 3): Reports or Finance, as the server asks.
+      'profitability' => [FarmModule.finance],
       _ => const <String>[],
     };
     return [FarmModule.reports, ...modules].any((m) => can(m, PermissionAction.view));

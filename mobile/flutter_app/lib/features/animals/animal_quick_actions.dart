@@ -231,6 +231,9 @@ class _MilkDialogState extends State<_MilkDialog> {
   // that did not cover it. Null offline — the save is checked anyway.
   MilkSafety? _safety;
   int _check = 0;
+  // The server answered nothing (offline): the milk will wait for its
+  // check after it is saved (I-11, ADR-008).
+  bool _noAnswer = false;
 
   @override
   void initState() {
@@ -240,8 +243,14 @@ class _MilkDialogState extends State<_MilkDialog> {
 
   Future<void> _checkSafety() async {
     final seq = ++_check;
-    final answer = await context.read<ProductionProvider>().milkSafetyAt(widget.animal.id, milkingInstant(_day, _session));
-    if (mounted && seq == _check) setState(() => _safety = answer);
+    final production = context.read<ProductionProvider>();
+    final answer = await production.milkSafetyAt(widget.animal.id, milkingInstant(_day, _session));
+    if (mounted && seq == _check) {
+      setState(() {
+        _safety = answer;
+        _noAnswer = answer == null && !production.standalone;
+      });
+    }
   }
 
   @override
@@ -311,6 +320,11 @@ class _MilkDialogState extends State<_MilkDialog> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: NoticeBanner(key: const ValueKey('milk-safety-uncertain'), text: context.t('milkWillBeHeld')),
+              ),
+            if (_noAnswer)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: NoticeBanner(key: const ValueKey('milk-safety-offline'), text: context.t('milkCheckOffline')),
               ),
             if (safety?.lactationProblem != null)
               Padding(
@@ -419,9 +433,11 @@ class _MilkDialogState extends State<_MilkDialog> {
       // Kept but held for review: the server could not confirm it was clear.
       final held = result.data is Map && (result.data! as Map)['release_status'] == 'held';
       Navigator.pop(context, MilkEntryOutcome(saved: true, session: _session, day: _day));
+      // Recorded offline: it waits for the server's safety check (I-11).
+      final said = result.queued ? 'qrMilkWaitsForCheck' : (held ? 'milkHeldSaved' : 'saved');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${widget.animal.name} — ${context.t(held ? 'milkHeldSaved' : 'saved')}'),
-        duration: Duration(seconds: held ? 4 : 2),
+        content: Text('${widget.animal.name} — ${context.t(said)}'),
+        duration: Duration(seconds: held || result.queued ? 4 : 2),
       ));
     } else {
       setState(() {

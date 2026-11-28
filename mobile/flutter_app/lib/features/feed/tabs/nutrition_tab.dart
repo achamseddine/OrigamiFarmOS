@@ -12,6 +12,8 @@ import '../../../domain/entities/feeding.dart';
 import '../../../providers/access_provider.dart';
 import '../../../providers/feeding_provider.dart';
 import '../feed_workspace_screen.dart';
+import 'least_cost.dart';
+import 'nutrition_assessment.dart';
 
 /// Nutrient profiles (§8): what each feed declares, what the lab measured,
 /// side by side — a lab result never overwrites the declaration. Values
@@ -27,6 +29,10 @@ class NutritionTab extends StatelessWidget {
     final lang = Localizations.localeOf(context).languageCode;
     final canCreate = access.canCreate(FarmModule.feedNutrition);
     return FeedTabScaffold(children: [
+      // Package 11: what the animals need, and the formula assessed against it.
+      const NutritionAssessmentCards(),
+      // Package 12: the cheapest drafts that still meet the requirements.
+      const LeastCostCard(),
       SectionCard(
         title: context.t('nutrition'),
         subtitle: context.t('nutritionSubtitle'),

@@ -20,7 +20,8 @@ from app.db.base import get_db
 from app.domain import feed_models as fm
 from app.domain import models
 from app.repositories.base import ensure_utc
-from app.schemas.feeding import FeedPerformanceAlertClose, FeedPerformanceMonitorIn, FeedPerformanceMonitorPatch
+from app.schemas.feeding import FeedActionCancelIn, FeedActionIn, FeedPerformanceAlertClose, FeedPerformanceMonitorIn, FeedPerformanceMonitorPatch
+from app.services import feed_action_service as actions
 from app.services import feed_performance_service as perf
 from app.services.feed_inventory_service import FeedError
 
@@ -182,3 +183,46 @@ def get_effective_feed_value(days: int = Query(7, ge=1, le=90), db: Session = De
     of the mixes in use. Every figure that cannot be computed is named in
     `missing` rather than guessed."""
     return perf.effective_feed_value(db, user.farm_id, days=days)
+
+
+# ------------------------------------------- actions and outcomes (Package 13)
+@router.get("/feed-performance/actions")
+def list_actions(alert_id: str | None = None, status_filter: str | None = Query(None, alias="status"), db: Session = Depends(get_db),
+                 user: models.User = Depends(_view)) -> list[dict]:
+    """The manager's actions on alerts and their measured outcomes."""
+    return [actions.action_dict(db, a) for a in actions.list_actions(db, user.farm_id, alert_id=alert_id, status=status_filter)]
+
+
+@router.get("/feed-performance/actions/{action_id}")
+def get_action(action_id: str, db: Session = Depends(get_db), user: models.User = Depends(_view)) -> dict:
+    return actions.action_dict(db, actions.get_action(db, action_id, user.farm_id))
+
+
+@router.post("/feed-performance/alerts/{alert_id}/actions", status_code=status.HTTP_201_CREATED)
+def record_action(alert_id: str, payload: FeedActionIn, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    """The manager's decision on an alert, measured later against the production records."""
+    a = actions.record_action(db, user, alert_id, **payload.model_dump())
+    db.commit()
+    return actions.action_dict(db, a)
+
+
+@router.post("/feed-performance/actions/{action_id}/measure")
+def measure_action(action_id: str, as_of: datetime | None = None, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    """Measures the outcome now (the daily cycle does it by itself once the window has passed)."""
+    a = actions.measure(db, actions.get_action(db, action_id, user.farm_id), as_of=ensure_utc(as_of) if as_of else None, user_id=user.id)
+    db.commit()
+    return actions.action_dict(db, a)
+
+
+@router.post("/feed-performance/actions/{action_id}/review")
+def review_action(action_id: str, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    a = actions.review(db, user, actions.get_action(db, action_id, user.farm_id))
+    db.commit()
+    return actions.action_dict(db, a)
+
+
+@router.post("/feed-performance/actions/{action_id}/cancel")
+def cancel_action(action_id: str, payload: FeedActionCancelIn, db: Session = Depends(get_db), user: models.User = Depends(_approve)) -> dict:
+    a = actions.cancel(db, user, actions.get_action(db, action_id, user.farm_id), reason=payload.reason)
+    db.commit()
+    return actions.action_dict(db, a)

@@ -88,3 +88,33 @@ class PaymentCreate(BaseModel):
     # Toward one sale, the rest still owed (no difference row): the sale is
     # paid in part until its parts cover it.
     part_payment: bool = False
+
+
+class SupplierPaymentCreate(BaseModel):
+    """POST /finance/expenses/{id}/payments — a payment toward a supplier's
+    bill (in parts, USD or LBP at [exchange_rate] or the farm's rate for the
+    day), or kind "refund": money the supplier paid back."""
+
+    amount: float
+    currency: str = "USD"
+    exchange_rate: float | None = None
+    paid_at: datetime | None = None
+    reference: str | None = None
+    notes: str | None = None
+    kind: str = "payment"
+    confirm_duplicate: bool = False
+
+
+class PurchaseDecision(BaseModel):
+    lot_id: str
+    # link (the expense that already paid for it) | paid_on_receipt | on_credit
+    action: str
+    expense_id: str | None = None
+
+
+class PurchaseReconcile(BaseModel):
+    """POST /finance/reconciliation/purchases — the manager's decisions for
+    deliveries recorded before v0.8.9 with no bill."""
+
+    decisions: list[PurchaseDecision] = []
+

@@ -267,6 +267,8 @@ class FinanceExpenseRow extends StatelessWidget {
           [
             _d(e.incurredAt),
             if ((e.supplierName ?? '').isNotEmpty) e.supplierName!,
+            if (e.partlyPaid && e.toPay) '${context.t('finPaidSoFar')} ${money(e.amountPaid, 'USD')} · ${context.t('payStillOwed')} ${money(e.owed, 'USD')}',
+            if (e.stockPurchase) context.t('finStockPurchase'),
             if (e.toPay && e.dueDate != null) '${context.t('finDueDate')}: ${_d(e.dueDate!)}',
             if (e.reference != null) '#${e.reference}',
             if (e.cancelReason != null) '${context.t('reason')}: ${e.cancelReason}',
@@ -276,6 +278,12 @@ class FinanceExpenseRow extends StatelessWidget {
         ),
         if (!e.cancelled && !e.pending && ((e.toPay && access.canRecordExpense) || access.canCancelExpense))
           Wrap(alignment: WrapAlignment.end, spacing: 4, children: [
+            if (e.toPay && access.canRecordExpense)
+              TextButton(
+                key: ValueKey('finance-expense-pay-${e.id}'),
+                onPressed: () => showPayBillDialog(context, e),
+                child: Text(context.t('finPayPart')),
+              ),
             if (e.toPay && access.canRecordExpense)
               TextButton(
                 key: ValueKey('finance-expense-paid-${e.id}'),
@@ -310,8 +318,8 @@ class FinanceOwedTab extends StatelessWidget {
     final unpaid = finance.unpaidSales;
     final bills = finance.billsToPay;
     final owedToUs = unpaid.fold(0.0, (t, s) => t + s.due);
-    final weOwe = bills.fold(0.0, (t, e) => t + e.amount);
-    final overdue = bills.where((e) => e.overdue(today)).fold(0.0, (t, e) => t + e.amount);
+    final weOwe = bills.fold(0.0, (t, e) => t + e.owed);
+    final overdue = bills.where((e) => e.overdue(today)).fold(0.0, (t, e) => t + e.owed);
     Widget figure(String key, String label, String value, {Color? color}) => Container(
           key: ValueKey(key),
           padding: const EdgeInsets.all(FarmSpacing.md),
@@ -334,7 +342,7 @@ class FinanceOwedTab extends StatelessWidget {
       final name = (e.supplierName ?? '').trim().isEmpty ? context.t('finNoName') : e.supplierName!.trim();
       final k = name.toLowerCase();
       final b = bySupplier[k];
-      bySupplier[k] = (name: name, amount: (b?.amount ?? 0) + e.amount, count: (b?.count ?? 0) + 1);
+      bySupplier[k] = (name: name, amount: (b?.amount ?? 0) + e.owed, count: (b?.count ?? 0) + 1);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       EqualGrid(minTileWidth: 200, maxColumns: 3, spacing: FarmSpacing.sm, children: [

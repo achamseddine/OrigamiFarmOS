@@ -15,7 +15,7 @@ import '../../providers/feeding_provider.dart';
 import '../../providers/livestock_provider.dart';
 import '../../providers/production_provider.dart';
 import 'animal_quick_entry_screen.dart';
-import 'animal_scan.dart' show milkSessionForHour;
+import '../../core/util/farm_clock.dart';
 import 'milking_queue_dialog.dart';
 import 'quick_round.dart';
 import '../production/milk_sessions.dart';
@@ -44,7 +44,7 @@ class _AnimalQueueScreenState extends State<AnimalQueueScreen> {
   QuickRound _defaultRound() {
     final access = context.read<AccessProvider>();
     if (!access.canCreate(FarmModule.milkProduction) && access.canCreate(FarmModule.feedNutrition)) return const QuickRound.feeding();
-    return QuickRound.milking(milkSessionForHour(DateTime.now().hour));
+    return QuickRound.milking(FarmClock.current.milkSessionNow());
   }
 
   bool _same(QuickRound a, QuickRound b) => a.kind == b.kind && a.session == b.session;

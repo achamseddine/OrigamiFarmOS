@@ -10,6 +10,7 @@ from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
 from app.services.recommendation_service import regenerate_recommendations
+from app.services import animal_profitability_service as animal_profitability
 from app.services import farm_reports_service as farm_reports
 from app.services.reports_service import build_daily_summary, build_morning_briefing
 
@@ -114,6 +115,20 @@ def sales_report(start: date | None = Query(None), end: date | None = Query(None
                  user: models.User = Depends(get_current_user)) -> dict:
     """Everything sold in a period: by product, buyer, activity and day; what is still unpaid; every sale."""
     return _farm_report("sales", start, end, db, user)
+
+
+@router.get("/reports/profitability")
+def profitability_report(start: date | None = Query(None), end: date | None = Query(None), animal_id: str | None = Query(None),
+                         group_id: str | None = Query(None), db: Session = Depends(get_db), user: models.User = Depends(get_current_user)) -> dict:
+    """Each dairy animal's milk (AM, PM, saleable), its value and attributed
+    sales, her feed (own and her share of her group's) and its cost per
+    litre, medicine and vet, known labour and electricity, and the margin —
+    by animal, for a group, for a period; unknown costs labelled, never
+    zero; the totals reconciled with the canonical records (Package 3).
+    Money: Reports or Finance."""
+    if not any(user_can(db, user, m, perms.VIEW) for m in (perms.REPORTS, perms.FINANCE)):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This report shows money: it needs Reports or Finance. Ask a farm manager to grant it.")
+    return animal_profitability.report(db, user.farm_id, start, end, animal_id=animal_id, group_id=group_id)
 
 
 @router.get("/reports/stock")

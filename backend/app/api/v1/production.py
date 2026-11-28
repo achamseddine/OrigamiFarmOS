@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,9 +15,9 @@ from app.api.deps import ensure_farm_user, owned_or_404, require_any_permission,
 from app.core import permissions as perms
 from app.db.base import get_db
 from app.domain import models
-from app.core import duplicates
+from app.core import duplicates, offline
 from app.core.record_time import not_in_future
-from app.repositories.base import ensure_utc, new_id, now, write_event
+from app.repositories.base import ensure_utc, new_id, now, write_audit_log, write_event
 from app.schemas.approvals import MilkCorrectionIn
 from app.schemas.production import (EggRecordCreate, EggRecordOut, FieldOut, HarvestRecordCreate, HarvestRecordOut, HeldMilkOut, MilkRecordCreate,
                                     MilkRecordOut, MilkReviewIn, MilkSaleCancel, MilkSaleCreate, MilkTankAdjust, MilkHandoverCreate, MilkRoutineUpdate)
@@ -85,11 +85,18 @@ def list_harvest_records(days: int = 90, db: Session = Depends(get_db), user: mo
 
 
 @router.post("/milk", status_code=status.HTTP_201_CREATED)
-def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), current_user: models.User = Depends(_MILK_CREATE)) -> dict:
+def record_milk(payload: MilkRecordCreate, request: Request, db: Session = Depends(get_db),
+                current_user: models.User = Depends(_MILK_CREATE)) -> dict:
     """Validation rule (tech spec §14): "Milk from an animal under
     withdrawal must show a hard warning or be blocked from sale
     destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
     in the recommendation engine.
+
+    A milking a tablet entered offline (`X-Offline-Recorded-At`, ADR-008)
+    that a recorded withdrawal covers is kept as entered and held — out of
+    the tank, the collector's handover and every sale, never released — and
+    the manager and the veterinarian are told: the person never saw the
+    refusal, and the milk may already be in the tank.
     """
     animal = owned_or_404(db, models.Animal, payload.animal_id, current_user, "Animal")
     ensure_farm_user(db, current_user, payload.recorded_by, "recorder")
@@ -100,7 +107,8 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
     # the milking's own time, so a late entry or an offline replay gets the
     # same answer as at the parlour (milk_service — the same checks a
     # correction passes; v0.8.5).
-    check = milk_service.check_milk(db, animal, recorded_at, payload.destination)
+    entered_offline = offline.recorded_offline_at(request)
+    check = milk_service.check_milk(db, animal, recorded_at, payload.destination, recorded_offline_at=entered_offline)
 
     # The same cow, the same session, the same farm day: two people (or one
     # person twice) recording one milking. A second milking is confirmed.
@@ -142,10 +150,23 @@ def record_milk(payload: MilkRecordCreate, db: Session = Depends(get_db), curren
         entity_id=animal.id,
         event_type="milk_recorded",
         payload={"session": payload.session, "liters": payload.liters, "destination": payload.destination,
-                 "withdrawal_check": record.withdrawal_check, "release_status": record.release_status},
+                 "withdrawal_check": record.withdrawal_check, "release_status": record.release_status,
+                 "recorded_offline_at": entered_offline.isoformat() if entered_offline else None},
         created_by=current_user.id,
     )
-    if record.release_status == milk_safety.HELD:
+    if check.held_offline_under_withdrawal:
+        # Out of the tank on the books; perhaps in it in fact. Said loudly.
+        write_event(db, farm_id=animal.farm_id, entity_type="animal", entity_id=animal.id, event_type="milk_held_for_review",
+                    payload={"milk_record_ids": [record.id], "liters": record.liters, "source": "an entry made offline during a withdrawal",
+                             "recorded_offline_at": entered_offline.isoformat()}, created_by=current_user.id)
+        write_audit_log(db, farm_id=animal.farm_id, user_id=current_user.id, action="milk_held_offline_under_withdrawal", entity_type="milk_record",
+                        entity_id=record.id, module_code=perms.MILK_PRODUCTION,
+                        summary=f"{record.liters:g} L of {animal.name}'s milk entered offline as {record.destination} during a withdrawal: held"[:500],
+                        metadata={"recorded_offline_at": entered_offline.isoformat(), "destination": record.destination})
+        title = f"{record.liters:g} L of {animal.name}'s milk under withdrawal entered offline as {record.destination}"
+        milk_safety._notify_reviewers(db, animal, title, record.safety_note or "", key=f"held:{record.id}")
+        milk_safety.notify_recorder(db, animal, current_user, title, record.safety_note or "", key=f"held:{record.id}")
+    elif record.release_status == milk_safety.HELD:
         milk_safety._notify_reviewers(db, animal, f"{record.liters:g} L of {animal.name}'s milk held for review", record.safety_note or "",
                                       key=f"held:{record.id}")
     db.commit()

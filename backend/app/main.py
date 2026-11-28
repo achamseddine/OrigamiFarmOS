@@ -30,6 +30,7 @@ from app.api.v1 import (
     platform,
     procurement,
     modules,
+    nutrition,
     mouneh,
     notifications,
     observations,
@@ -144,6 +145,7 @@ app.include_router(animals.router, prefix=api_prefix)
 app.include_router(livestock.router, prefix=api_prefix)
 app.include_router(reproduction.router, prefix=api_prefix)
 app.include_router(feeding.router, prefix=api_prefix)
+app.include_router(nutrition.router, prefix=api_prefix)
 app.include_router(feed_performance.router, prefix=api_prefix)
 app.include_router(pharmacy.router, prefix=api_prefix)
 app.include_router(emergency.router, prefix=api_prefix)
