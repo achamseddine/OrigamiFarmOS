@@ -82,6 +82,15 @@ def _tank(client) -> float:
     return client.get(f"{API}/production/milk-tank", headers=_h(client)).json()["balance_l"]
 
 
+def _held_ids(session, animal_id) -> set[str]:
+    """Held records of the animal. The demo farm's own milking of the last
+    hours falls inside a withdrawal started three hours ago and is held too,
+    so a test about tablet A's write counts the rows that write added."""
+    session.expire_all()
+    return set(session.scalars(select(models.MilkRecord.id).where(models.MilkRecord.animal_id == animal_id,
+                                                                  models.MilkRecord.release_status == "held")))
+
+
 def _record(session, record_id) -> models.MilkRecord:
     session.expire_all()
     return session.get(models.MilkRecord, record_id)
@@ -143,12 +152,12 @@ class TestTheMandatoryScenario:
         session, _ = db_session
         now = _now()
         _treat_from_tablet_b(client, session, BELLA, start=now - timedelta(hours=3), until=now + timedelta(days=4))
+        before = _held_ids(session, BELLA)
         first = _milk_from_tablet_a(client, BELLA, now - timedelta(hours=2), queued_at=now - timedelta(hours=2), key="tablet-a-once")
         again = _milk_from_tablet_a(client, BELLA, now - timedelta(hours=2), queued_at=now - timedelta(hours=2), key="tablet-a-once")
         assert (first.status_code, again.status_code) == (201, 201)
         assert first.json()["id"] == again.json()["id"]
-        assert session.scalar(select(func.count(models.MilkRecord.id)).where(models.MilkRecord.animal_id == BELLA,
-                                                                           models.MilkRecord.release_status == "held")) == 1
+        assert _held_ids(session, BELLA) - before == {first.json()["id"]}
 
     def test_at_the_parlour_the_same_milking_is_still_refused_so_it_is_withheld(self, client, db_session):
         session, _ = db_session
@@ -239,13 +248,15 @@ class TestTheOlderSyncPush:
         now = _now()
         _treat_from_tablet_b(client, session, BELLA, start=now - timedelta(hours=3), until=now + timedelta(days=4))
         tank = _tank(client)
+        before = _held_ids(session, BELLA)
         t = now - timedelta(hours=2)
         out = client.post(f"{API}/sync/push", headers=_h(client), json={"farm_id": "farm-origami", "device_id": "tablet-a", "items": [
             {"idempotency_key": "push-bella", "operation": "create", "entity_type": "animal", "entity_id": BELLA,
              "payload": {"session": "morning", "liters": 10, "destination": "stored"}, "client_created_at": _iso(t)},
         ]}).json()
         assert [r["status"] for r in out["results"]] == ["accepted"], out
-        held = session.scalars(select(models.MilkRecord).where(models.MilkRecord.animal_id == BELLA,
-                                                               models.MilkRecord.release_status == "held")).all()
-        assert len(held) == 1 and held[0].withdrawal_check == "withdrawal"
+        added = _held_ids(session, BELLA) - before
+        assert len(added) == 1
+        held = [_record(session, i) for i in added]
+        assert held[0].withdrawal_check == "withdrawal"
         assert _tank(client) == pytest.approx(tank)

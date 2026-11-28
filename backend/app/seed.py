@@ -461,6 +461,9 @@ def _seed_rule_groups_and_responsibilities(db: Session) -> None:
 # Last, after every helper the seed calls is defined: run as a script
 # (`python -m app.seed`) the module executes top to bottom.
 if __name__ == "__main__":
+    from app.domain.registry import import_all
+
+    import_all()  # every table, not only the modules this file imports
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as session:
         seed_demo_data(session)
