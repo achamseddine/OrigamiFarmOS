@@ -14,6 +14,7 @@ import '../features/auth/login_screen.dart';
 import '../providers/access_provider.dart';
 import '../providers/agriculture_provider.dart';
 import '../providers/approvals_provider.dart';
+import '../providers/purchase_orders_provider.dart';
 import '../providers/finance_provider.dart';
 import 'update/app_update_provider.dart';
 import '../providers/milk_sales_provider.dart';
@@ -141,6 +142,8 @@ class _FarmScope extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FeedingProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => NutritionProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => ApprovalsProvider(apiClient: api, currentUserId: user.id)),
+        // Buying feed: suppliers' prices, orders, deliveries against them (Package 2).
+        ChangeNotifierProvider(create: (_) => PurchaseOrdersProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => MilkSalesProvider(apiClient: api)),
         ChangeNotifierProvider(create: (_) => FinanceProvider(apiClient: api)),
         // Is there a newer version of the app (checked after sign-in, then every few hours).

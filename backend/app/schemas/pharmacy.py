@@ -103,6 +103,13 @@ class MedicineLotReceive(BaseModel):
     supplier_lot_code: str | None = None
     manufactured_at: datetime | None = None
     currency: str | None = None
+    exchange_rate: float | None = None
+    # v0.8.9 — the supplier's bill for what was accepted: paid on delivery,
+    # on credit (owed by [due_date]) or partial ([paid_amount] paid now).
+    payment: str | None = None
+    paid_amount: float | None = None
+    due_date: datetime | None = None
+    invoice_reference: str | None = None
     # The purchase requisition this delivery fulfils, if any — closes it.
     source_reference_type: str | None = None
     source_reference_id: str | None = None

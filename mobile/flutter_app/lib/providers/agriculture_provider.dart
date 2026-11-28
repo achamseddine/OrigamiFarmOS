@@ -118,4 +118,65 @@ class AgricultureProvider extends ChangeNotifier {
     if (result.success) await load();
     return result;
   }
+
+  // ------------------------------------------------- crop cycles (Package 7)
+  /// Seeds, fertiliser, plant treatments and supplies in stock.
+  Future<List<Map<String, dynamic>>> cropInputs() async {
+    try {
+      return [for (final i in await _api.get('/crop-inputs') as List<dynamic>) (i as Map).cast<String, dynamic>()];
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// What a crop cycle's produce sold for against what it cost (money).
+  Future<Map<String, dynamic>?> cycleMargin(String plantingId) async {
+    try {
+      return (await _api.get('/crop-plantings/$plantingId/margin') as Map).cast<String, dynamic>();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Work done on a crop cycle; an input leaves stock at its cost. Queued
+  /// offline, it keeps the time it was done ([completedAt]).
+  Future<WriteResult> recordWork(String plantingId,
+      {required String operationType, DateTime? completedAt, double? labourHours, double? labourCost, String? itemId, double? quantity, String? notes}) async {
+    return _api.write(() => _api.post('/crop-plantings/$plantingId/operations', body: {
+          'operation_type': operationType,
+          if (completedAt != null) 'completed_at': completedAt.toUtc().toIso8601String(),
+          'labour_hours': ?labourHours,
+          'labour_cost': ?labourCost,
+          'inputs': [if (itemId != null && quantity != null) {'inventory_item_id': itemId, 'quantity': quantity}],
+          if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+        }));
+  }
+
+  /// Water given to a crop cycle, and the pumping cost when it is known.
+  Future<WriteResult> recordIrrigation(String plantingId, {required DateTime startedAt, double? waterM3, double? energyCost, String? source}) =>
+      _api.write(() => _api.post('/crop-plantings/$plantingId/irrigation', body: {
+            'started_at': startedAt.toUtc().toIso8601String(),
+            'water_quantity': ?waterM3,
+            'unit': 'm3',
+            'energy_cost': ?energyCost,
+            if (source != null && source.isNotEmpty) 'source_code': source,
+          }));
+
+  /// This cycle's produce sold: a sale of the farm, out of its stock.
+  Future<WriteResult> sellProduce(String plantingId,
+          {required double quantity, required double unitPrice, String currency = 'USD', String? buyer, bool paid = true}) =>
+      _api.write(() => _api.post('/crop-plantings/$plantingId/sales', body: {
+            'quantity': quantity,
+            'unit_price': unitPrice,
+            'currency': currency,
+            'sold_at': DateTime.now().toUtc().toIso8601String(),
+            if (buyer != null && buyer.trim().isNotEmpty) 'buyer_name': buyer.trim(),
+            'payment_status': paid ? 'paid' : 'pending',
+          }));
+
+  Future<WriteResult> closeCycle(String plantingId) async {
+    final result = await _api.write(() => _api.post('/crop-plantings/$plantingId/close', body: const {}));
+    if (result.success && !result.queued) await load();
+    return result;
+  }
 }

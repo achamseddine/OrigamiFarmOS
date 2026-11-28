@@ -41,6 +41,71 @@ Master prompt Package 11 (database/NUTRITION-ASSESSMENT.md). On the tablet and t
   - Events: `nutrition_requirements_recorded`, `nutrition_requirements_revised`, `nutrition_assessed`.
 - Tests: backend +12 (`test_nutrition_assessment.py`: the 1,210 kg mass balance and the premix on top, missing soy/cottonseed/beet pulp, unknown intake/forage/weight, everything known with calcium short, dry-matter conversion and DM-basis lab results, no DM, sources and versions, species, the premix policy, roles and farms, kept as computed and one per retry) and the same on PostgreSQL 16 with a two-manager revision race (`test_nutrition_assessment_pg.py`, in the PostgreSQL steps of `scripts/verify-all.sh`); app +11 (`test/records/nutrition_assessment_test.dart`).
 - Not in this release: least-cost formulation (Package 12), amino acids, DCAD, intake predicted from weight and milk.
+## v0.8.14 — Crop cycles: a greenhouse from planting to its actual margin
+
+Master prompt Package 7 (database/CROPS-SCHEMA.md §2, §4–§6, §8; status in its new §11). On the tablet and the web app (Produce & Harvest → a field's **Manage cycle**), enforced by the server. Built on the existing fields, crops, plantings, harvests, stock and Sales & Finance — no second crop or stock model.
+- **Growing units.** A field is an open field, a greenhouse, a tunnel or an orchard (`unit_type`).
+- **A crop cycle** is a planting: one crop in one growing unit from planting to its last harvest, with a farm-wide code (`CHER-2026-001`) and what it is grown for (sale, feed, seed, mixed). A field keeps every cycle it had.
+- **The work on a cycle:** planting, fertilising, spraying, weeding, pruning, irrigation work, harvest preparation, with its labour hours and their cost, and the seeds, fertiliser, plant treatments or supplies it used.
+  - Each input leaves stock by its own movement at the item's cost. More than is in stock is refused: the stock line is locked and read afresh, so two people cannot both take the last of it.
+  - Feed, medicine and produce are not crop inputs.
+  - Work recorded by mistake is reversed by a manager: its inputs return to stock and it stays on file.
+  - Work queued on a tablet keeps the time it was done (a tablet clock a few minutes fast is accepted, a date in the future is not).
+- **Water:** each irrigation, how much (m³ or L), from which source, and the pumping cost when it is known.
+- **Harvest into stock:** a harvest names its cycle and why some was lost; the sellable part goes into the produce stock as before. A closed cycle takes no more work, water or harvest; its produce in stock can still be sold.
+- **Sold:** the cycle's produce sold from its sheet is a sale of the farm (Sales & Finance, *Crops*), in USD or LBP, paid now or owed, and leaves the produce stock. More than is in stock is refused, under the same lock.
+- **Its actual margin:** what its produce sold for, against its inputs, labour, pumping and the expenses linked to it; harvested, lost, sold, and the cost per kg harvested.
+  - A cost that is not known (an input with no price, labour not priced, pumping not metered) is named as unknown, never counted as free.
+  - It is read from the records each time; nothing is kept on the side.
+- **The acceptance case** (test): a 400 m² greenhouse of cherry tomatoes.
+  - Planted with 2 packets of seed (USD 10) and 6 h of labour (USD 30); fertilised with 20 kg of NPK (USD 30) and 2 h (USD 10); 12 m³ of well water (USD 8 pumping).
+  - 500 kg harvested, 20 kg lost to split fruit, 480 kg into stock; 400 kg sold at USD 1.20.
+  - Revenue USD 480, known costs USD 88, **margin USD 392**, USD 0.176 per kg harvested.
+- **Who:** the field team (Agriculture or Produce & Harvest) records work and water; Sales or Finance sell; whoever reads the farm's money (Finance, Sales or Reports) sees the margin; closing needs Agriculture edit, reversing work Agriculture approval. Another farm sees nothing.
+- Server: **migration `d9b1c3e5f7a2`** (after `c7e9a1b3d5f8`).
+  - Schema: `fields.unit_type`; `crop_plantings.cycle_code` (unique per farm), `production_purpose`, `closed_at`; tables `field_operations`, `field_operation_inputs`, `irrigation_events`; `harvest_records.crop_planting_id`, `loss_reason`; `sales.crop_planting_id`.
+  - Endpoints: `GET /crop-inputs`; `GET/POST /crop-plantings/{id}/operations`, `POST …/operations/{op}/reverse`; `GET/POST …/irrigation`; `POST …/sales`; `GET …/margin`; `POST …/close`.
+  - Events: `field_operation_completed`, `field_operation_reversed`, `irrigation_recorded`, `crop_produce_sold`, `crop_cycle_closed`; audit entries for work, reversals and closing.
+- Tests: backend +10 (`test_crop_cycles.py`) and the same on PostgreSQL 16 with two-thread races for the last fertiliser and the last produce (`test_crop_cycles_pg.py`, a new step in `scripts/verify-all.sh`); app +13 (`test/records/crop_cycles_test.dart`).
+- Not in this release: seeds and fertiliser are traced to their stock line and its movement, not to a supplier lot (generic stock has no lots yet); planned work; field observations (§7); labour from the employees' time sheets.
+
+## v0.8.12 — Buying feed: suppliers' prices, purchase orders, deliveries against them, and what is still owed
+
+Master prompt Package 2 (database/PROCUREMENT-SCHEMA.md §4, §7, §8). On the tablet and the web app (Feed → **Buying**), enforced by the server. Builds on v0.8.9's supplier bills.
+- **Suppliers' prices.** Several suppliers can sell the same ingredient at different prices. Each supplier's quote is kept per item (the manager sets it; a new price replaces the quote and the old one stays in the audit log). The list is cheapest first in USD at today's rate, with what each supplier's last delivery cost.
+- **Purchase orders.**
+  - An order goes to one supplier at a price per line — the supplier's quote when none is given, and an LBP quote never prices a USD order.
+  - It is placed direct, or from an approved purchase request (which becomes *ordered*, then *received*).
+  - A worker drafts it and the manager places it: the approval and the authority behind it are kept. Orders are numbered `PO-000001` per farm.
+  - Orders are in USD or LBP at an agreed rate, paid on each delivery or on credit.
+- **Deliveries against an order**, partial or whole: what came, what was rejected (with the reason) and the quality seen, numbered `GR-000001`.
+  - The accepted goods become a feed lot through the stock ledger, with the supplier, the price ordered, the day, the delivery note and the quality. A poor delivery is held until released.
+  - The supplier's bill is posted for what was accepted.
+  - More than 10% over what was ordered is refused. An order with goods received is closed short (the rest is not coming), not cancelled.
+  - Two people receiving the last of an order at once cannot both take it (the order's row is locked).
+- **The match** (*Ordered vs delivered*): per line and for the order, it shows:
+  - ordered, received, accepted, rejected and still to come;
+  - the value accepted at the price ordered, against what was billed, paid and is still owed;
+  - any difference, named, never hidden.
+
+  Payments are made on the bills, in parts (v0.8.9).
+- **A mix stays traceable to its suppliers.** A lot's trace and a mix's ingredient lots now show each lot's supplier, cost, day, quality and the order, receipt and delivery note it came on.
+- Server: **migration `c7e9a1b3d5f8`** — tables `supplier_items`, `purchase_orders`, `purchase_order_lines`, `goods_receipts` and `goods_receipt_lines` (accepted + rejected ≤ received, checked by the database).
+  - Endpoints, under `/procurement`: `GET/POST supplier-items`; `GET/POST purchase-orders`; `GET purchase-orders/{id}`; `POST purchase-orders/{id}/approve | cancel | close | receive`; `GET purchase-orders/{id}/match`.
+  - Events: `purchase_order_created`, `purchase_order_approved`, `purchase_order_cancelled`, `purchase_order_closed`, `goods_received`, `goods_rejected`, `supplier_price_set`.
+- Tests: backend +10 (`test_procurement_orders.py`), and the same on PostgreSQL 16 with a two-thread receipt race (`test_procurement_orders_pg.py`); app +4 (`test/records/purchase_orders_test.dart`).
+- Not in this release: medicines on purchase orders (they keep v0.8.9's receipt with its bill); supplier contacts and addresses; a supplier-return document (returns stay v0.8.9's *Return to supplier* on a lot, credited on its bill).
+
+## v0.8.9 — Purchases in the books: what was accepted is stock, what is owed is owed, cash is what was paid
+
+Audit 2026-11-25 (I-9, I-14). On the tablet and the web app, enforced by the server:
+- **Stock is what was accepted.** 500 kg of corn delivered, 20 kg rejected, at USD 0.50: 480 kg in stock worth **USD 240** — the lot, the stock report and the supplier's bill all say 240, never 250.
+- **Each priced delivery has its supplier's bill** (feed and medicine), for what was accepted, in the invoice's currency (an LBP invoice keeps its LBP and the rate of the delivery's day; the stock is valued in dollars). *Paid on delivery*, *On credit* or *Part paid now* is chosen on the delivery form.
+- **Cash is what was actually paid, on its day.** Bought on credit: cash out USD 0, USD 240 owed. USD 100 paid later: cash out USD 100, **USD 140 still owed** (*Who owes what*), the stock untouched. A bill is paid in parts from Sales & Finance (*Pay…*, any amount, USD or LBP at the day's rate — an LBP bill paid in LBP is settled in LBP whatever the rate did; *Mark paid* pays the rest). More than is owed is refused; a retried request is recorded once, a repeat is asked; two people paying the same bill at once can't pay it twice, and two reversing the same payment at once reverse it once.
+- **Never counted twice.** A bill for stock is not a cost: feed is a cost when it is fed, medicine when it is received (for what was accepted) — the farm's one policy; a delivery no longer also counts as cash out on arrival. Reports' expenses leave stock bought out.
+- **Returns, refunds, corrections.** Goods sent back (*Return to supplier* on the lot, or a stock return naming the lot) leave the lot's stock and are credited on its bill; when the bill was already paid, the supplier's refund is recorded as money back. A payment recorded by mistake is reversed by a negative row and stays on file; a bill with payments is cancelled only once they are reversed. Every step is audited.
+- **Deliveries from before this release** have no bill. Profit and loss no longer assumes they were paid on arrival; a manager reviews them once (`GET` / `POST /finance/reconciliation/purchases`, docs/runbooks/PURCHASES-RECONCILIATION.md): the expense that already paid for one is linked (it stops being a second cost), or the manager says it was paid on arrival or is still owed. Nothing is paid on the farm's behalf; nothing already recorded is rewritten.
+- Server: **migration `b5d7f9a1c3e6`** — table `supplier_payments` (payments, refunds, credit notes; reversal links), unique bill per delivery on `expenses (linked_entity_type, linked_entity_id)`; expenses gain `partial`. `POST /feed-lots/receive` and `POST /pharmacy/lots/receive` take `payment` (paid | credit | partial), `paid_amount`, `due_date`, `invoice_reference`, `currency`, `exchange_rate` and answer with the `bill`; lots add `accepted_value`; `POST /feed-lots/{id}/return`; `POST /finance/expenses/{id}/payments` (+ `GET`), `POST /finance/supplier-payments/{id}/reverse`; expenses add `amount_paid`, `balance_due`, `balance_original`, `credited`, `stock_purchase`, `lot_id`. Tests: backend +18 (`test_purchase_payables.py`) and the same 18 plus two-thread races on PostgreSQL 16 — two payments of one bill, two reversals of one payment (`test_purchase_payables_pg.py`), app +4 (`test/records/purchase_payables_test.dart`).
 
 ## v0.8.8 — Mouneh sales in the farm's books: one sale, its revenue once, its cash when paid
 

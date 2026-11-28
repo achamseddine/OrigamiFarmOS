@@ -996,6 +996,313 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/crop-inputs:
+    get:
+      tags:
+      - agriculture
+      summary: List Crop Inputs
+      description: 'Seeds, fertiliser, plant treatments and supplies in stock: what a crop cycle can use.'
+      operationId: list_crop_inputs_api_v1_crop_inputs_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+                title: Response List Crop Inputs Api V1 Crop Inputs Get
+      security:
+      - HTTPBearer: []
+  /api/v1/crop-plantings/{planting_id}/operations:
+    post:
+      tags:
+      - agriculture
+      summary: Record Operation
+      description: 'Work done on a crop cycle: its labour, and each input out of stock at its cost.'
+      operationId: record_operation_api_v1_crop_plantings__planting_id__operations_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FieldOperationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Operation Api V1 Crop Plantings  Planting Id  Operations Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - agriculture
+      summary: List Operations
+      operationId: list_operations_api_v1_crop_plantings__planting_id__operations_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Operations Api V1 Crop Plantings  Planting Id  Operations Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/operations/{operation_id}/reverse:
+    post:
+      tags:
+      - agriculture
+      summary: Reverse Operation
+      description: 'Work recorded by mistake: its inputs go back into stock; it stays on file, reversed.'
+      operationId: reverse_operation_api_v1_crop_plantings__planting_id__operations__operation_id__reverse_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      - name: operation_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Operation Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperationReverseIn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reverse Operation Api V1 Crop Plantings  Planting Id  Operations  Operation
+                  Id  Reverse Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/irrigation:
+    post:
+      tags:
+      - agriculture
+      summary: Record Irrigation
+      operationId: record_irrigation_api_v1_crop_plantings__planting_id__irrigation_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IrrigationIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Record Irrigation Api V1 Crop Plantings  Planting Id  Irrigation Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - agriculture
+      summary: List Irrigation
+      operationId: list_irrigation_api_v1_crop_plantings__planting_id__irrigation_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Irrigation Api V1 Crop Plantings  Planting Id  Irrigation Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/sales:
+    post:
+      tags:
+      - agriculture
+      summary: Sell Produce
+      description: 'This cycle''s produce sold: a sale of the farm, out of its stock.'
+      operationId: sell_produce_api_v1_crop_plantings__planting_id__sales_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProduceSaleIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Sell Produce Api V1 Crop Plantings  Planting Id  Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/margin:
+    get:
+      tags:
+      - agriculture
+      summary: Cycle Margin
+      description: 'What this crop cycle''s produce sold for against what it cost (inputs,
+
+        labour, irrigation energy, expenses linked to it); unknown costs named.'
+      operationId: cycle_margin_api_v1_crop_plantings__planting_id__margin_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cycle Margin Api V1 Crop Plantings  Planting Id  Margin Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/crop-plantings/{planting_id}/close:
+    post:
+      tags:
+      - agriculture
+      summary: Close Cycle
+      operationId: close_cycle_api_v1_crop_plantings__planting_id__close_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: planting_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Planting Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/CycleCloseIn'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Close Cycle Api V1 Crop Plantings  Planting Id  Close Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/farms/me:
     get:
       tags:
@@ -1842,6 +2149,163 @@ paths:
                 type: object
                 title: Response Apply Mouneh Sales Reconciliation Api V1 Finance Reconciliation Mouneh
                   Sales Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/v1/finance/expenses/{expense_id}/payments:
+    post:
+      tags:
+      - finance
+      summary: Pay Bill
+      description: 'A payment toward a supplier''s bill — cash out on its day, the rest
+
+        still owed — or the supplier''s refund (kind "refund").'
+      operationId: pay_bill_api_v1_finance_expenses__expense_id__payments_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierPaymentCreate'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Pay Bill Api V1 Finance Expenses  Expense Id  Payments Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    get:
+      tags:
+      - finance
+      summary: Bill Payments
+      operationId: bill_payments_api_v1_finance_expenses__expense_id__payments_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: expense_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Expense Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Bill Payments Api V1 Finance Expenses  Expense Id  Payments Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/supplier-payments/{payment_id}/reverse:
+    post:
+      tags:
+      - finance
+      summary: Reverse Supplier Payment
+      description: 'A payment, refund or credit recorded by mistake: undone by a negative row; it stays
+        on file.'
+      operationId: reverse_supplier_payment_api_v1_finance_supplier_payments__payment_id__reverse_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: payment_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Payment Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelWithReason'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Reverse Supplier Payment Api V1 Finance Supplier Payments  Payment Id  Reverse
+                  Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/finance/reconciliation/purchases:
+    get:
+      tags:
+      - finance
+      summary: Purchases Reconciliation
+      description: 'A dry run: priced deliveries recorded before v0.8.9 with no bill — the
+
+        expense that may already have paid for each, or nothing to go on.'
+      operationId: purchases_reconciliation_api_v1_finance_reconciliation_purchases_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Purchases Reconciliation Api V1 Finance Reconciliation Purchases Get
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - finance
+      summary: Apply Purchases Reconciliation
+      description: 'The manager''s decisions, applied once: link, paid on arrival, or still owed.'
+      operationId: apply_purchases_reconciliation_api_v1_finance_reconciliation_purchases_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseReconcile'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                additionalProperties: true
+                type: object
+                title: Response Apply Purchases Reconciliation Api V1 Finance Reconciliation Purchases
+                  Post
         '422':
           description: Validation Error
           content:
@@ -3796,6 +4260,45 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/v1/feed-lots/{lot_id}/return:
+    post:
+      tags:
+      - feeding
+      summary: Return Lot
+      description: 'Goods sent back to the supplier: out of this lot''s stock (a return
+
+        movement) and credited on its bill — no cash moves until the supplier
+
+        refunds what was already paid.'
+      operationId: return_lot_api_v1_feed_lots__lot_id__return_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: lot_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Lot Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LotReturn'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedLotOut'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/feed-lots/{lot_id}/status:
     patch:
       tags:
@@ -9329,6 +9832,368 @@ paths:
                 additionalProperties: true
                 title: Response Cancel Requisition Api V1 Procurement Requisitions  Requisition Id  Cancel
                   Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/supplier-items:
+    get:
+      tags:
+      - procurement
+      summary: List Quotes
+      description: 'Who sells this item and for how much — cheapest first (in USD at
+
+        today''s rate) — with each supplier''s last delivery price.'
+      operationId: list_quotes_api_v1_procurement_supplier_items_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: inventory_item_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+      - name: feed_product_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Quotes Api V1 Procurement Supplier Items Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - procurement
+      summary: Set Quote
+      description: 'A supplier''s price for an item (the manager''s: prices decide orders).'
+      operationId: set_quote_api_v1_procurement_supplier_items_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierQuoteIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Set Quote Api V1 Procurement Supplier Items Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders:
+    get:
+      tags:
+      - procurement
+      summary: List Orders
+      operationId: list_orders_api_v1_procurement_purchase_orders_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Status
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          maximum: 500
+          minimum: 1
+          default: 100
+          title: Limit
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
+                title: Response List Orders Api V1 Procurement Purchase Orders Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      tags:
+      - procurement
+      summary: Create Order
+      description: 'A draft order to one supplier, direct or from an approved request;
+
+        `approve` places it at once when the person may.'
+      operationId: create_order_api_v1_procurement_purchase_orders_post
+      security:
+      - HTTPBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Create Order Api V1 Procurement Purchase Orders Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}:
+    get:
+      tags:
+      - procurement
+      summary: Get Order
+      operationId: get_order_api_v1_procurement_purchase_orders__order_id__get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Get Order Api V1 Procurement Purchase Orders  Order Id  Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/approve:
+    post:
+      tags:
+      - procurement
+      summary: Approve Order
+      operationId: approve_order_api_v1_procurement_purchase_orders__order_id__approve_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        content:
+          application/json:
+            schema:
+              anyOf:
+              - $ref: '#/components/schemas/PurchaseOrderDecision'
+              - type: 'null'
+              title: Payload
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Approve Order Api V1 Procurement Purchase Orders  Order Id  Approve Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/cancel:
+    post:
+      tags:
+      - procurement
+      summary: Cancel Order
+      operationId: cancel_order_api_v1_procurement_purchase_orders__order_id__cancel_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderClose'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Cancel Order Api V1 Procurement Purchase Orders  Order Id  Cancel Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/close:
+    post:
+      tags:
+      - procurement
+      summary: Close Order
+      operationId: close_order_api_v1_procurement_purchase_orders__order_id__close_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PurchaseOrderClose'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Close Order Api V1 Procurement Purchase Orders  Order Id  Close Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/receive:
+    post:
+      tags:
+      - procurement
+      summary: Receive Order
+      description: 'A delivery against an approved order. The order''s row is locked, so
+
+        two people receiving the same order at once cannot both take its last
+
+        quantity.'
+      operationId: receive_order_api_v1_procurement_purchase_orders__order_id__receive_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoodsReceiptIn'
+      responses:
+        '201':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Receive Order Api V1 Procurement Purchase Orders  Order Id  Receive Post
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/procurement/purchase-orders/{order_id}/match:
+    get:
+      tags:
+      - procurement
+      summary: Match Order
+      description: 'Ordered, received, accepted, billed, paid and owed, per line and for
+
+        the order — from the receipts, the lots'' bills and their payments.'
+      operationId: match_order_api_v1_procurement_purchase_orders__order_id__match_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Order Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Match Order Api V1 Procurement Purchase Orders  Order Id  Match Get
         '422':
           description: Validation Error
           content:
@@ -16066,6 +16931,11 @@ components:
           - type: string
           - type: 'null'
           title: Variety
+        production_purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Production Purpose
         planted_area:
           anyOf:
           - type: number
@@ -16166,6 +17036,22 @@ components:
           type: string
           format: date-time
           title: Created At
+        cycle_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Cycle Code
+        production_purpose:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Production Purpose
+        closed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Closed At
       type: object
       required:
       - id
@@ -16237,6 +17123,15 @@ components:
       - farm_id
       - name
       title: CustomerOut
+    CycleCloseIn:
+      properties:
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      title: CycleCloseIn
     DailyHarvestCreate:
       properties:
         field_id:
@@ -16269,6 +17164,11 @@ components:
           type: number
           title: Waste Quantity
           default: 0
+        loss_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Loss Reason
         unit:
           type: string
           title: Unit
@@ -17242,6 +18142,17 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        accepted_value:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Accepted Value
+        bill:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Bill
       type: object
       required:
       - id
@@ -17870,6 +18781,11 @@ components:
           - type: string
           - type: 'null'
           title: Field Code
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
         area_value:
           anyOf:
           - type: number
@@ -17909,6 +18825,46 @@ components:
       required:
       - name
       title: FieldCreate
+    FieldOperationIn:
+      properties:
+        operation_type:
+          type: string
+          title: Operation Type
+        completed_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Completed At
+        labour_hours:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Labour Hours
+        labour_cost:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Labour Cost
+        inputs:
+          items:
+            $ref: '#/components/schemas/OperationInputIn'
+          type: array
+          title: Inputs
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+      type: object
+      required:
+      - operation_type
+      title: FieldOperationIn
+      description: '`POST /crop-plantings/{id}/operations` — work done on a crop cycle,
+
+        its labour and the stock it used (CROPS-SCHEMA §5, §6).'
     FieldOut:
       properties:
         id:
@@ -17977,6 +18933,11 @@ components:
           - type: string
           - type: 'null'
           title: Notes
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
       type: object
       required:
       - id
@@ -17994,6 +18955,11 @@ components:
           - type: string
           - type: 'null'
           title: Field Code
+        unit_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit Type
         area_value:
           anyOf:
           - type: number
@@ -18328,6 +19294,78 @@ components:
       - created_at
       - components
       title: FormulaVersionOut
+    GoodsReceiptIn:
+      properties:
+        lines:
+          items:
+            $ref: '#/components/schemas/GoodsReceiptLineIn'
+          type: array
+          title: Lines
+        received_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Received At
+        delivery_note_no:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Delivery Note No
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
+      type: object
+      title: GoodsReceiptIn
+      description: '`POST /procurement/purchase-orders/{id}/receive` — a delivery against
+
+        an approved order (§8), partial or whole.'
+    GoodsReceiptLineIn:
+      properties:
+        purchase_order_line_id:
+          type: string
+          title: Purchase Order Line Id
+        received_quantity:
+          type: number
+          minimum: 0.0
+          title: Received Quantity
+        rejected_quantity:
+          type: number
+          minimum: 0.0
+          title: Rejected Quantity
+          default: 0
+        rejection_reason:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Rejection Reason
+        quality_grade:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Grade
+        quality_notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Quality Notes
+        lot_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Lot Code
+      type: object
+      required:
+      - purchase_order_line_id
+      - received_quantity
+      title: GoodsReceiptLineIn
     HTTPValidationError:
       properties:
         detail:
@@ -18867,6 +19905,46 @@ components:
       - occurred_at
       title: InventoryMovementOut
       description: '`GET /feed/transactions` — the movement history the tablet shows.'
+    IrrigationIn:
+      properties:
+        started_at:
+          type: string
+          format: date-time
+          title: Started At
+        ended_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Ended At
+        water_quantity:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Water Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+          default: m3
+        source_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Code
+        energy_cost:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Energy Cost
+      type: object
+      required:
+      - started_at
+      title: IrrigationIn
+      description: '`POST /crop-plantings/{id}/irrigation` (CROPS-SCHEMA §8).'
     LactationCorrectIn:
       properties:
         started_at:
@@ -19144,11 +20222,70 @@ components:
           - type: string
           - type: 'null'
           title: Requisition Id
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        paid_amount:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Paid Amount
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
       type: object
       required:
       - feed_product_id
       - quantity
       title: LotReceive
+    LotReturn:
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        explanation:
+          type: string
+          title: Explanation
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+      type: object
+      required:
+      - quantity
+      - explanation
+      title: LotReturn
+      description: '`POST /feed-lots/{id}/return` — goods sent back to the supplier: out
+
+        of the lot''s stock, and credited on its bill.'
     LotStatusUpdate:
       properties:
         status:
@@ -19483,6 +20620,32 @@ components:
           - type: string
           - type: 'null'
           title: Currency
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        payment:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Payment
+        paid_amount:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Paid Amount
+        due_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Due Date
+        invoice_reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Invoice Reference
         source_reference_type:
           anyOf:
           - type: string
@@ -21691,6 +22854,36 @@ components:
       required:
       - weekday
       title: OpeningCalendarDayUpsert
+    OperationInputIn:
+      properties:
+        inventory_item_id:
+          type: string
+          title: Inventory Item Id
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+      type: object
+      required:
+      - inventory_item_id
+      - quantity
+      title: OperationInputIn
+    OperationReverseIn:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: OperationReverseIn
     ParentIn:
       properties:
         parent_animal_id:
@@ -22301,6 +23494,56 @@ components:
         and `entity_id` are what the tablet turns into a deep link, so every
 
         card opens the record that produced it.'
+    ProduceSaleIn:
+      properties:
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit_price:
+          type: number
+          minimum: 0.0
+          title: Unit Price
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
+        sold_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Sold At
+        buyer_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Buyer Name
+        payment_status:
+          type: string
+          title: Payment Status
+          default: paid
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - quantity
+      - unit_price
+      title: ProduceSaleIn
+      description: '`POST /crop-plantings/{id}/sales` — this cycle''s produce sold, out of stock.'
     ProductProfitabilityOut:
       properties:
         product_id:
@@ -23123,6 +24366,144 @@ components:
           title: Steps
       type: object
       title: ProtocolVersionIn
+    PurchaseDecision:
+      properties:
+        lot_id:
+          type: string
+          title: Lot Id
+        action:
+          type: string
+          title: Action
+        expense_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Expense Id
+      type: object
+      required:
+      - lot_id
+      - action
+      title: PurchaseDecision
+    PurchaseOrderClose:
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - reason
+      title: PurchaseOrderClose
+    PurchaseOrderDecision:
+      properties:
+        comments:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Comments
+      type: object
+      title: PurchaseOrderDecision
+    PurchaseOrderIn:
+      properties:
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        lines:
+          items:
+            $ref: '#/components/schemas/PurchaseOrderLineIn'
+          type: array
+          title: Lines
+        requisition_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Requisition Id
+        expected_delivery_date:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Expected Delivery Date
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Exchange Rate
+        payment_terms:
+          type: string
+          title: Payment Terms
+          default: credit
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        approve:
+          type: boolean
+          title: Approve
+          default: false
+      type: object
+      title: PurchaseOrderIn
+      description: '`POST /procurement/purchase-orders` — a draft order to one supplier
+
+        (§7): direct, or from an approved requisition (`requisition_id`).'
+    PurchaseOrderLineIn:
+      properties:
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        quantity:
+          type: number
+          exclusiveMinimum: 0.0
+          title: Quantity
+        unit:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Unit
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Price
+      type: object
+      required:
+      - quantity
+      title: PurchaseOrderLineIn
+    PurchaseReconcile:
+      properties:
+        decisions:
+          items:
+            $ref: '#/components/schemas/PurchaseDecision'
+          type: array
+          title: Decisions
+          default: []
+      type: object
+      title: PurchaseReconcile
+      description: 'POST /finance/reconciliation/purchases — the manager''s decisions for
+
+        deliveries recorded before v0.8.9 with no bill.'
     QuantityEventIn:
       properties:
         event_type:
@@ -24991,6 +26372,119 @@ components:
       - farm_id
       - name
       title: SupplierOut
+    SupplierPaymentCreate:
+      properties:
+        amount:
+          type: number
+          title: Amount
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        exchange_rate:
+          anyOf:
+          - type: number
+          - type: 'null'
+          title: Exchange Rate
+        paid_at:
+          anyOf:
+          - type: string
+            format: date-time
+          - type: 'null'
+          title: Paid At
+        reference:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Reference
+        notes:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Notes
+        kind:
+          type: string
+          title: Kind
+          default: payment
+        confirm_duplicate:
+          type: boolean
+          title: Confirm Duplicate
+          default: false
+      type: object
+      required:
+      - amount
+      title: SupplierPaymentCreate
+      description: 'POST /finance/expenses/{id}/payments — a payment toward a supplier''s
+
+        bill (in parts, USD or LBP at [exchange_rate] or the farm''s rate for the
+
+        day), or kind "refund": money the supplier paid back.'
+    SupplierQuoteIn:
+      properties:
+        supplier_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Id
+        supplier_name:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Name
+        inventory_item_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Inventory Item Id
+        feed_product_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Feed Product Id
+        unit_price:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Unit Price
+        currency:
+          type: string
+          title: Currency
+          default: USD
+        purchase_uom:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Purchase Uom
+        supplier_item_code:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Supplier Item Code
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Description
+        minimum_order_quantity:
+          anyOf:
+          - type: number
+            exclusiveMinimum: 0.0
+          - type: 'null'
+          title: Minimum Order Quantity
+        standard_lead_time_days:
+          anyOf:
+          - type: number
+            minimum: 0.0
+          - type: 'null'
+          title: Standard Lead Time Days
+      type: object
+      title: SupplierQuoteIn
+      description: '`POST /procurement/supplier-items` — the price a supplier quotes for
+
+        an item (PROCUREMENT-SCHEMA §4). The same item from another supplier is
+
+        another quote; a new price replaces this supplier''s (kept in the audit).'
     SyncItemResult:
       properties:
         idempotency_key:

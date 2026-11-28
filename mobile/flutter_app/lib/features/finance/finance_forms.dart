@@ -843,3 +843,109 @@ class _ReceivePaymentDialogState extends State<_ReceivePaymentDialog> {
 }
 
 String litresDueLabel(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
+
+/// Pay a supplier's bill — all of what is owed, or part of it (v0.8.9): the
+/// cash leaves on the day paid; the rest stays owed. USD or LBP at the
+/// farm's rate (or the rate used).
+Future<void> showPayBillDialog(BuildContext context, FinanceExpense bill) =>
+    showDialog<void>(context: context, builder: (_) => _PayBillDialog(bill: bill));
+
+class _PayBillDialog extends StatefulWidget {
+  const _PayBillDialog({required this.bill});
+  final FinanceExpense bill;
+
+  @override
+  State<_PayBillDialog> createState() => _PayBillDialogState();
+}
+
+class _PayBillDialogState extends State<_PayBillDialog> {
+  late final _amount = TextEditingController(text: widget.bill.owed.toStringAsFixed(2));
+  late final _rate = TextEditingController(text: _RecordSaleDialogState._rateText(context.read<FinanceProvider>().rates.lbpPerUsd));
+  String _currency = 'USD';
+  DateTime _day = DateTime.now();
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _rate.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final amount = parseLocalizedDouble(_amount.text);
+    final rate = parseLocalizedDouble(_rate.text);
+    if (amount == null || amount <= 0) {
+      setState(() => _error = context.t('finSayAmount'));
+      return;
+    }
+    if (_currency == 'LBP' && (rate == null || rate <= 0)) {
+      setState(() => _error = context.t('finSayRate'));
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final result = await context.read<FinanceProvider>().payBill(widget.bill,
+        amount: amount, currency: _currency, exchangeRate: _currency == 'LBP' ? rate : null, paidAt: recordedInstant(_day));
+    if (!mounted) return;
+    if (result.success) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.t(result.queued ? 'finSavedOffline' : 'finPaymentRecorded'))));
+      return;
+    }
+    setState(() {
+      _saving = false;
+      _error = result.isPossibleDuplicate ? null : result.error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bill = widget.bill;
+    final finance = context.watch<FinanceProvider>();
+    return FarmFormDialog(
+      title: Text('${context.t('finPayBill')} — ${bill.supplierName ?? bill.description ?? ''}'.trim()),
+      width: 480,
+      content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Text(
+          key: const ValueKey('pay-bill-owed'),
+          '${context.t('payStillOwed')}: ${money(bill.owed, 'USD')}${bill.amountPaid > 0 ? ' · ${context.t('finPaidSoFar')} ${money(bill.amountPaid, 'USD')}' : ''}',
+          style: FarmTypography.textTheme.titleMedium,
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: RecordDateButton(label: context.t('payPaidOn'), value: _day, maxDaysBack: 60, onPicked: (d) => setState(() => _day = d)),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('pay-bill-amount'),
+          controller: _amount,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(labelText: context.t('finAmountToPay'), suffixText: _currency),
+        ),
+        const SizedBox(height: 10),
+        CurrencyChooser(
+          currency: _currency,
+          onCurrency: (c) => setState(() => _currency = c),
+          rate: _rate,
+          amount: parseLocalizedDouble(_amount.text),
+          farmRate: finance.rates.lbpPerUsd,
+        ),
+        if (_error != null) ...[const SizedBox(height: 10), Text(_error!, style: const TextStyle(color: FarmColors.danger, fontSize: 12.5))],
+      ]),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(context.t('cancel'))),
+        FilledButton(
+          key: const ValueKey('pay-bill-save'),
+          onPressed: _saving ? null : _submit,
+          child: _saving ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(context.t('finPay')),
+        ),
+      ],
+    );
+  }
+}
+

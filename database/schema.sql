@@ -326,6 +326,7 @@ CREATE TABLE fields (
     irrigation_method VARCHAR(60),
     status VARCHAR(30) NOT NULL,
     notes TEXT,
+    unit_type VARCHAR(30),
     PRIMARY KEY (id),
     FOREIGN KEY(farm_id) REFERENCES farms (id)
 );
@@ -751,7 +752,11 @@ CREATE TABLE crop_plantings (
     notes TEXT,
     created_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    cycle_code VARCHAR(100),
+    production_purpose VARCHAR(30),
+    closed_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
+    CONSTRAINT uq_crop_plantings_cycle_code UNIQUE (farm_id, cycle_code),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(field_id) REFERENCES fields (id),
     FOREIGN KEY(crop_id) REFERENCES crops (id)
@@ -810,6 +815,7 @@ CREATE TABLE expenses (
     recorded_by VARCHAR(36),
     created_at TIMESTAMP WITH TIME ZONE,
     PRIMARY KEY (id),
+    CONSTRAINT uq_expenses_linked_entity UNIQUE (linked_entity_type, linked_entity_id),
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
 );
@@ -914,19 +920,6 @@ CREATE TABLE flocks (
     FOREIGN KEY(life_stage) REFERENCES life_stages (code),
     FOREIGN KEY(management_profile) REFERENCES management_profiles (code),
     FOREIGN KEY(location_id) REFERENCES locations (id)
-);
-
-CREATE TABLE harvest_records (
-    id VARCHAR(36) NOT NULL,
-    field_id VARCHAR(36) NOT NULL,
-    product_name VARCHAR(100) NOT NULL,
-    quantity FLOAT NOT NULL,
-    unit VARCHAR(20) NOT NULL,
-    waste_qty FLOAT NOT NULL,
-    destination VARCHAR(50),
-    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(field_id) REFERENCES fields (id)
 );
 
 CREATE TABLE inventory_items (
@@ -1044,39 +1037,6 @@ CREATE TABLE recommendation_evidence (
     note VARCHAR(300),
     PRIMARY KEY (id),
     FOREIGN KEY(recommendation_id) REFERENCES recommendations (id)
-);
-
-CREATE TABLE sales (
-    id VARCHAR(36) NOT NULL,
-    farm_id VARCHAR(36) NOT NULL,
-    customer_id VARCHAR(36),
-    product_type VARCHAR(30) NOT NULL,
-    product_label VARCHAR(100),
-    quantity FLOAT,
-    unit VARCHAR(20),
-    amount FLOAT NOT NULL,
-    currency VARCHAR(10) NOT NULL,
-    payment_status VARCHAR(20) NOT NULL,
-    sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    unit_price FLOAT,
-    buyer_name VARCHAR(200),
-    reference VARCHAR(120),
-    notes TEXT,
-    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
-    cancel_reason TEXT,
-    cancelled_at TIMESTAMP WITH TIME ZONE,
-    reversal_of_id VARCHAR(36),
-    paid_at TIMESTAMP WITH TIME ZONE,
-    original_amount FLOAT,
-    original_currency VARCHAR(10),
-    exchange_rate FLOAT,
-    activity VARCHAR(20),
-    recorded_by VARCHAR(36),
-    created_at TIMESTAMP WITH TIME ZONE,
-    payment_id VARCHAR(36),
-    PRIMARY KEY (id),
-    FOREIGN KEY(farm_id) REFERENCES farms (id),
-    FOREIGN KEY(customer_id) REFERENCES customers (id)
 );
 
 CREATE TABLE species_capability_rules (
@@ -1373,32 +1333,6 @@ CREATE TABLE breeding_events (
 );
 CREATE INDEX ix_breeding_events_female ON breeding_events (female_animal_id, occurred_at);
 
-CREATE TABLE customer_payments (
-    id VARCHAR(36) NOT NULL,
-    farm_id VARCHAR(36) NOT NULL,
-    customer_id VARCHAR(36),
-    buyer_name VARCHAR(200),
-    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    sales_count INTEGER NOT NULL,
-    amount_due FLOAT NOT NULL,
-    amount_received FLOAT NOT NULL,
-    original_amount FLOAT,
-    original_currency VARCHAR(10),
-    exchange_rate FLOAT,
-    difference_sale_id VARCHAR(36),
-    sale_id VARCHAR(36),
-    reference VARCHAR(120),
-    notes TEXT,
-    recorded_by VARCHAR(36),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(farm_id) REFERENCES farms (id),
-    FOREIGN KEY(customer_id) REFERENCES customers (id),
-    FOREIGN KEY(sale_id) REFERENCES sales (id)
-);
-CREATE INDEX ix_customer_payments_farm_paid ON customer_payments (farm_id, paid_at);
-CREATE INDEX ix_customer_payments_sale_id ON customer_payments (sale_id);
-
 CREATE TABLE egg_records (
     id VARCHAR(36) NOT NULL,
     flock_id VARCHAR(36) NOT NULL,
@@ -1458,6 +1392,44 @@ CREATE TABLE feeding_program_rules (
     FOREIGN KEY(version_id) REFERENCES feeding_program_versions (id),
     FOREIGN KEY(species_code) REFERENCES species (code)
 );
+
+CREATE TABLE field_operations (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    crop_planting_id VARCHAR(36) NOT NULL,
+    field_id VARCHAR(36) NOT NULL,
+    operation_type VARCHAR(30) NOT NULL,
+    completed_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    labour_hours FLOAT,
+    labour_cost FLOAT,
+    performed_by VARCHAR(36),
+    notes TEXT,
+    created_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(crop_planting_id) REFERENCES crop_plantings (id),
+    FOREIGN KEY(field_id) REFERENCES fields (id)
+);
+CREATE INDEX ix_field_operations_cycle ON field_operations (crop_planting_id, completed_at);
+
+CREATE TABLE harvest_records (
+    id VARCHAR(36) NOT NULL,
+    field_id VARCHAR(36) NOT NULL,
+    product_name VARCHAR(100) NOT NULL,
+    quantity FLOAT NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    waste_qty FLOAT NOT NULL,
+    destination VARCHAR(50),
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    crop_planting_id VARCHAR(36),
+    loss_reason VARCHAR(120),
+    PRIMARY KEY (id),
+    FOREIGN KEY(field_id) REFERENCES fields (id),
+    FOREIGN KEY(crop_planting_id) REFERENCES crop_plantings (id)
+);
+CREATE INDEX ix_harvest_records_crop_planting_id ON harvest_records (crop_planting_id);
 
 CREATE TABLE health_cases (
     id VARCHAR(36) NOT NULL,
@@ -1544,6 +1516,26 @@ CREATE TABLE inventory_lots (
 );
 CREATE INDEX ix_inventory_lots_item ON inventory_lots (farm_id, inventory_item_id);
 
+CREATE TABLE irrigation_events (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    crop_planting_id VARCHAR(36),
+    field_id VARCHAR(36) NOT NULL,
+    started_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    ended_at TIMESTAMP WITH TIME ZONE,
+    water_quantity FLOAT,
+    unit VARCHAR(10),
+    source_code VARCHAR(60),
+    energy_cost FLOAT,
+    recorded_by VARCHAR(36),
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(crop_planting_id) REFERENCES crop_plantings (id),
+    FOREIGN KEY(field_id) REFERENCES fields (id)
+);
+CREATE INDEX ix_irrigation_events_cycle ON irrigation_events (crop_planting_id, started_at);
+
 CREATE TABLE medicine_products (
     inventory_item_id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -1578,36 +1570,6 @@ CREATE TABLE medicine_products (
     FOREIGN KEY(strength_uom) REFERENCES units_of_measure (code),
     FOREIGN KEY(pack_uom) REFERENCES units_of_measure (code)
 );
-
-CREATE TABLE milk_sales (
-    id VARCHAR(36) NOT NULL,
-    farm_id VARCHAR(36) NOT NULL,
-    sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    liters FLOAT NOT NULL,
-    price_per_liter FLOAT NOT NULL,
-    amount FLOAT NOT NULL,
-    currency VARCHAR(10) NOT NULL,
-    customer_id VARCHAR(36),
-    buyer_name VARCHAR(200),
-    payment_status VARCHAR(20) NOT NULL,
-    paid_at TIMESTAMP WITH TIME ZONE,
-    reference VARCHAR(120),
-    notes TEXT,
-    status VARCHAR(20) NOT NULL,
-    cancel_reason TEXT,
-    cancelled_at TIMESTAMP WITH TIME ZONE,
-    sale_id VARCHAR(36),
-    reversal_sale_id VARCHAR(36),
-    recorded_by VARCHAR(36),
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    session VARCHAR(10),
-    collection_day DATE,
-    PRIMARY KEY (id),
-    FOREIGN KEY(farm_id) REFERENCES farms (id),
-    FOREIGN KEY(customer_id) REFERENCES customers (id),
-    FOREIGN KEY(sale_id) REFERENCES sales (id)
-);
-CREATE INDEX ix_milk_sales_farm_sold ON milk_sales (farm_id, sold_at);
 
 CREATE TABLE production_batches (
     id VARCHAR(36) NOT NULL,
@@ -1682,6 +1644,35 @@ CREATE TABLE protocol_trigger_rules (
     FOREIGN KEY(protocol_version_id) REFERENCES emergency_protocol_versions (id)
 );
 
+CREATE TABLE purchase_orders (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    po_no VARCHAR(80) NOT NULL,
+    requisition_id VARCHAR(36),
+    order_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    expected_delivery_date TIMESTAMP WITH TIME ZONE,
+    currency VARCHAR(3) NOT NULL,
+    exchange_rate FLOAT,
+    payment_terms VARCHAR(20) NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    subtotal FLOAT NOT NULL,
+    total_amount FLOAT NOT NULL,
+    notes TEXT,
+    created_by VARCHAR(36) NOT NULL,
+    approved_by VARCHAR(36),
+    approved_at TIMESTAMP WITH TIME ZONE,
+    closed_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_purchase_order_no UNIQUE (farm_id, po_no),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(requisition_id) REFERENCES purchase_requisitions (id),
+    FOREIGN KEY(created_by) REFERENCES users (id)
+);
+CREATE INDEX ix_purchase_orders_status ON purchase_orders (farm_id, status);
+
 CREATE TABLE purchase_requisition_lines (
     id VARCHAR(36) NOT NULL,
     requisition_id VARCHAR(36) NOT NULL,
@@ -1721,6 +1712,93 @@ CREATE TABLE raw_materials (
     FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id)
 );
 
+CREATE TABLE sales (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    customer_id VARCHAR(36),
+    product_type VARCHAR(30) NOT NULL,
+    product_label VARCHAR(100),
+    quantity FLOAT,
+    unit VARCHAR(20),
+    amount FLOAT NOT NULL,
+    currency VARCHAR(10) NOT NULL,
+    payment_status VARCHAR(20) NOT NULL,
+    sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    unit_price FLOAT,
+    buyer_name VARCHAR(200),
+    reference VARCHAR(120),
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    reversal_of_id VARCHAR(36),
+    paid_at TIMESTAMP WITH TIME ZONE,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    activity VARCHAR(20),
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE,
+    payment_id VARCHAR(36),
+    crop_planting_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id),
+    FOREIGN KEY(crop_planting_id) REFERENCES crop_plantings (id)
+);
+CREATE INDEX ix_sales_crop_planting_id ON sales (crop_planting_id);
+
+CREATE TABLE supplier_items (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    supplier_item_code VARCHAR(120) NOT NULL,
+    description VARCHAR(250),
+    purchase_uom VARCHAR(30) NOT NULL,
+    pack_quantity FLOAT,
+    minimum_order_quantity FLOAT,
+    standard_lead_time_days FLOAT,
+    unit_price FLOAT,
+    currency VARCHAR(3) NOT NULL,
+    price_updated_at TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_supplier_item UNIQUE (supplier_id, inventory_item_id, supplier_item_code),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(purchase_uom) REFERENCES units_of_measure (code)
+);
+CREATE INDEX ix_supplier_items_item ON supplier_items (farm_id, inventory_item_id);
+
+CREATE TABLE supplier_payments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    expense_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36),
+    kind VARCHAR(20) NOT NULL,
+    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    amount FLOAT NOT NULL,
+    settles FLOAT NOT NULL,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    status VARCHAR(20) DEFAULT 'recorded' NOT NULL,
+    reversal_of_id VARCHAR(36),
+    reference VARCHAR(120),
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(expense_id) REFERENCES expenses (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id)
+);
+CREATE INDEX ix_supplier_payments_expense_id ON supplier_payments (expense_id);
+CREATE INDEX ix_supplier_payments_farm_paid ON supplier_payments (farm_id, paid_at);
+
 CREATE TABLE visit_activities (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -1759,23 +1837,6 @@ CREATE TABLE visit_incidents (
     FOREIGN KEY(farm_id) REFERENCES farms (id),
     FOREIGN KEY(session_id) REFERENCES visit_sessions (id),
     FOREIGN KEY(booking_id) REFERENCES visit_bookings (id)
-);
-
-CREATE TABLE visit_retail_sales (
-    id VARCHAR(36) NOT NULL,
-    farm_id VARCHAR(36) NOT NULL,
-    booking_id VARCHAR(36),
-    visitor_id VARCHAR(36),
-    sale_id VARCHAR(36) NOT NULL,
-    channel VARCHAR(30) NOT NULL,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    sync_status VARCHAR(20) NOT NULL,
-    PRIMARY KEY (id),
-    FOREIGN KEY(farm_id) REFERENCES farms (id),
-    FOREIGN KEY(booking_id) REFERENCES visit_bookings (id),
-    FOREIGN KEY(visitor_id) REFERENCES visitor_profiles (id),
-    FOREIGN KEY(sale_id) REFERENCES sales (id)
 );
 
 CREATE TABLE visitor_feedback (
@@ -1820,6 +1881,32 @@ CREATE TABLE cost_components (
     FOREIGN KEY(product_id) REFERENCES mouneh_products (id),
     FOREIGN KEY(batch_id) REFERENCES production_batches (id)
 );
+
+CREATE TABLE customer_payments (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    customer_id VARCHAR(36),
+    buyer_name VARCHAR(200),
+    paid_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sales_count INTEGER NOT NULL,
+    amount_due FLOAT NOT NULL,
+    amount_received FLOAT NOT NULL,
+    original_amount FLOAT,
+    original_currency VARCHAR(10),
+    exchange_rate FLOAT,
+    difference_sale_id VARCHAR(36),
+    sale_id VARCHAR(36),
+    reference VARCHAR(120),
+    notes TEXT,
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id),
+    FOREIGN KEY(sale_id) REFERENCES sales (id)
+);
+CREATE INDEX ix_customer_payments_farm_paid ON customer_payments (farm_id, paid_at);
+CREATE INDEX ix_customer_payments_sale_id ON customer_payments (sale_id);
 
 CREATE TABLE diagnoses (
     id VARCHAR(36) NOT NULL,
@@ -1987,6 +2074,25 @@ CREATE TABLE finished_goods_stock (
     FOREIGN KEY(batch_id) REFERENCES production_batches (id)
 );
 
+CREATE TABLE goods_receipts (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    supplier_id VARCHAR(36) NOT NULL,
+    purchase_order_id VARCHAR(36),
+    receipt_no VARCHAR(80) NOT NULL,
+    received_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    received_by VARCHAR(36),
+    delivery_note_no VARCHAR(120),
+    status VARCHAR(30) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_goods_receipt_no UNIQUE (farm_id, receipt_no),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(supplier_id) REFERENCES suppliers (id),
+    FOREIGN KEY(purchase_order_id) REFERENCES purchase_orders (id)
+);
+CREATE INDEX ix_goods_receipts_purchase_order_id ON goods_receipts (purchase_order_id);
+
 CREATE TABLE hatch_events (
     id VARCHAR(36) NOT NULL,
     incubation_batch_id VARCHAR(36) NOT NULL,
@@ -2065,6 +2171,36 @@ CREATE TABLE medicine_product_ingredients (
     FOREIGN KEY(active_ingredient_id) REFERENCES medicine_active_ingredients (id),
     FOREIGN KEY(concentration_uom) REFERENCES units_of_measure (code)
 );
+
+CREATE TABLE milk_sales (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    sold_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    liters FLOAT NOT NULL,
+    price_per_liter FLOAT NOT NULL,
+    amount FLOAT NOT NULL,
+    currency VARCHAR(10) NOT NULL,
+    customer_id VARCHAR(36),
+    buyer_name VARCHAR(200),
+    payment_status VARCHAR(20) NOT NULL,
+    paid_at TIMESTAMP WITH TIME ZONE,
+    reference VARCHAR(120),
+    notes TEXT,
+    status VARCHAR(20) NOT NULL,
+    cancel_reason TEXT,
+    cancelled_at TIMESTAMP WITH TIME ZONE,
+    sale_id VARCHAR(36),
+    reversal_sale_id VARCHAR(36),
+    recorded_by VARCHAR(36),
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    session VARCHAR(10),
+    collection_day DATE,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(customer_id) REFERENCES customers (id),
+    FOREIGN KEY(sale_id) REFERENCES sales (id)
+);
+CREATE INDEX ix_milk_sales_farm_sold ON milk_sales (farm_id, sold_at);
 
 CREATE TABLE mouneh_recipe_items (
     id VARCHAR(36) NOT NULL,
@@ -2206,6 +2342,27 @@ CREATE TABLE protocol_medication_steps (
     FOREIGN KEY(weight_unit) REFERENCES units_of_measure (code)
 );
 
+CREATE TABLE purchase_order_lines (
+    id VARCHAR(36) NOT NULL,
+    purchase_order_id VARCHAR(36) NOT NULL,
+    requisition_line_id VARCHAR(36),
+    line_no INTEGER NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    feed_product_id VARCHAR(36),
+    ordered_quantity FLOAT NOT NULL,
+    uom_code VARCHAR(30) NOT NULL,
+    unit_price FLOAT NOT NULL,
+    line_total FLOAT NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_purchase_order_line_no UNIQUE (purchase_order_id, line_no),
+    FOREIGN KEY(purchase_order_id) REFERENCES purchase_orders (id),
+    FOREIGN KEY(requisition_line_id) REFERENCES purchase_requisition_lines (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(feed_product_id) REFERENCES feed_products (id),
+    FOREIGN KEY(uom_code) REFERENCES units_of_measure (code)
+);
+
 CREATE TABLE supplier_feed_performance (
     id VARCHAR(36) NOT NULL,
     farm_id VARCHAR(36) NOT NULL,
@@ -2262,6 +2419,23 @@ CREATE TABLE visit_booking_activities (
     PRIMARY KEY (id),
     FOREIGN KEY(booking_id) REFERENCES visit_bookings (id),
     FOREIGN KEY(activity_id) REFERENCES visit_activities (id)
+);
+
+CREATE TABLE visit_retail_sales (
+    id VARCHAR(36) NOT NULL,
+    farm_id VARCHAR(36) NOT NULL,
+    booking_id VARCHAR(36),
+    visitor_id VARCHAR(36),
+    sale_id VARCHAR(36) NOT NULL,
+    channel VARCHAR(30) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sync_status VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY(farm_id) REFERENCES farms (id),
+    FOREIGN KEY(booking_id) REFERENCES visit_bookings (id),
+    FOREIGN KEY(visitor_id) REFERENCES visitor_profiles (id),
+    FOREIGN KEY(sale_id) REFERENCES sales (id)
 );
 
 CREATE TABLE birth_events (
@@ -2977,6 +3151,32 @@ CREATE TABLE feeding_event_components (
     FOREIGN KEY(batch_id) REFERENCES feed_batches (id)
 );
 
+CREATE TABLE goods_receipt_lines (
+    id VARCHAR(36) NOT NULL,
+    goods_receipt_id VARCHAR(36) NOT NULL,
+    purchase_order_line_id VARCHAR(36),
+    line_no INTEGER NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    received_quantity FLOAT NOT NULL,
+    accepted_quantity FLOAT NOT NULL,
+    rejected_quantity FLOAT NOT NULL,
+    uom_code VARCHAR(30) NOT NULL,
+    feed_lot_id VARCHAR(36),
+    expense_id VARCHAR(36),
+    quality_grade VARCHAR(20),
+    rejection_reason VARCHAR(200),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_goods_receipt_line_no UNIQUE (goods_receipt_id, line_no),
+    CONSTRAINT ck_goods_receipt_line_quantities CHECK (received_quantity >= 0 AND accepted_quantity >= 0 AND rejected_quantity >= 0 AND accepted_quantity + rejected_quantity <= received_quantity + 0.000001),
+    FOREIGN KEY(goods_receipt_id) REFERENCES goods_receipts (id),
+    FOREIGN KEY(purchase_order_line_id) REFERENCES purchase_order_lines (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(uom_code) REFERENCES units_of_measure (code),
+    FOREIGN KEY(feed_lot_id) REFERENCES feed_lots (id),
+    FOREIGN KEY(expense_id) REFERENCES expenses (id)
+);
+CREATE INDEX ix_goods_receipt_lines_purchase_order_line_id ON goods_receipt_lines (purchase_order_line_id);
+
 CREATE TABLE feed_usage_policy_rules (
     id VARCHAR(36) NOT NULL,
     policy_id VARCHAR(36) NOT NULL,
@@ -3017,3 +3217,19 @@ CREATE TABLE inventory_transactions (
     FOREIGN KEY(location_id) REFERENCES locations (id),
     FOREIGN KEY(stock_exception_id) REFERENCES feed_stock_exceptions (id)
 );
+
+CREATE TABLE field_operation_inputs (
+    id VARCHAR(36) NOT NULL,
+    field_operation_id VARCHAR(36) NOT NULL,
+    inventory_item_id VARCHAR(36) NOT NULL,
+    quantity FLOAT NOT NULL,
+    unit VARCHAR(20) NOT NULL,
+    unit_cost FLOAT,
+    cost FLOAT,
+    inventory_transaction_id VARCHAR(36),
+    PRIMARY KEY (id),
+    FOREIGN KEY(field_operation_id) REFERENCES field_operations (id),
+    FOREIGN KEY(inventory_item_id) REFERENCES inventory_items (id),
+    FOREIGN KEY(inventory_transaction_id) REFERENCES inventory_transactions (id)
+);
+CREATE INDEX ix_field_operation_inputs_field_operation_id ON field_operation_inputs (field_operation_id);

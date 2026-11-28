@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_permission, user_can
 from app.core import permissions as perms
 from app.db.base import get_db
+from app.repositories.base import now
 from app.domain import models
 from app.domain import pharmacy_models as pm
 from app.schemas.pharmacy import (
@@ -129,11 +130,27 @@ def list_lots(inventory_item_id: str | None = None, lot_status: str | None = Que
 
 @router.post("/lots/receive", status_code=status.HTTP_201_CREATED)
 def receive_lot(payload: MedicineLotReceive, db: Session = Depends(get_db), user: models.User = Depends(_stock)) -> dict:
+    from app.services import purchases_service as purchases
+
     product = ph.get_product(db, payload.inventory_item_id, user.farm_id)
-    body = payload.model_dump(exclude={"inventory_item_id"})
+    terms = purchases.check_terms(payload.payment, payload.paid_amount, payload.unit_cost)
+    when = payload.received_at or now()
+    body = payload.model_dump(exclude={"inventory_item_id", "payment", "paid_amount", "due_date", "invoice_reference", "exchange_rate"})
+    # The lot keeps the price in USD (what the pharmacy values stock in); the bill keeps the invoice's currency.
+    body["unit_cost"] = purchases.unit_cost_in_usd(db, user.farm_id, payload.unit_cost, payload.currency, payload.exchange_rate, when)
+    if payload.unit_cost is not None:
+        body["currency"] = "USD"
     lot = ph.receive_lot(db, product, user_id=user.id, **body)
+    bill = None
+    if lot.source_type == "purchased":
+        bill = purchases.bill_delivery(
+            db, farm_id=user.farm_id, user_id=user.id, lot_type="medicine_lot", lot=lot, category="medicine",
+            label=getattr(db.get(models.InventoryItem, payload.inventory_item_id), "name", None) or "Medicine",
+            unit_price=payload.unit_cost, currency=payload.currency, exchange_rate=payload.exchange_rate, payment=terms or "credit",
+            paid_amount=payload.paid_amount, due_date=payload.due_date, invoice_reference=payload.invoice_reference or payload.reference,
+            supplier_id=payload.supplier_id, supplier_name=payload.supplier_label or getattr(lot, "supplier_label", None))
     db.commit()
-    return ph.lot_dict(db, lot)
+    return {**ph.lot_dict(db, lot), "bill": purchases.bill_summary(db, bill)}
 
 
 @router.patch("/lots/{lot_id}/status")

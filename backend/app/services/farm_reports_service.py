@@ -368,8 +368,11 @@ def finance_report(db: Session, farm_id: str, start: date | None, end: date | No
     out = _base(db, farm_id, "finance", start, end)
     sales = db.scalars(select(models.Sale).where(models.Sale.farm_id == farm_id, models.Sale.sold_at >= lo, models.Sale.sold_at < hi)
                        .order_by(models.Sale.sold_at)).all()
+    # A supplier's bill for stock received is stock bought, not an expense (v0.8.9).
     expenses = db.scalars(select(models.Expense).where(models.Expense.farm_id == farm_id, models.Expense.incurred_at >= lo,
-                                                       models.Expense.incurred_at < hi, models.Expense.status == "recorded")
+                                                       models.Expense.incurred_at < hi, models.Expense.status == "recorded",
+                                                       models.Expense.linked_entity_type.is_(None)
+                                                       | models.Expense.linked_entity_type.not_in(("feed_lot", "medicine_lot")))
                           .order_by(models.Expense.incurred_at)).all()
     by_type: dict[str, float] = defaultdict(float)
     by_label: dict[str, dict] = {}

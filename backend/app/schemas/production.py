@@ -182,6 +182,7 @@ class FieldOut(ORMModel):
     irrigation_method: str | None = None
     status: str = "active"
     notes: str | None = None
+    unit_type: str | None = None
 
 
 class MilkSaleCreate(BaseModel):

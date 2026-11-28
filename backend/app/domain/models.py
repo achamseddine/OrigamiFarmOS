@@ -205,7 +205,7 @@ class CropPlanting(Base):
     """
 
     __tablename__ = "crop_plantings"
-    __table_args__ = (Index("ix_crop_plantings_field", "field_id"),)
+    __table_args__ = (Index("ix_crop_plantings_field", "field_id"), UniqueConstraint("farm_id", "cycle_code", name="uq_crop_plantings_cycle_code"))
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -222,6 +222,12 @@ class CropPlanting(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # The crop cycle (CROPS-SCHEMA §4, Package 7): its farm-wide code, what
+    # it is grown for (sale | feed | seed | mixed), and when it was closed
+    # after its last harvest.
+    cycle_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    production_purpose: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Location(Base):
@@ -377,6 +383,8 @@ class Field(Base):
     irrigation_method: Mapped[str | None] = mapped_column(String(60), nullable=True)
     status: Mapped[str] = mapped_column(String(30), default="active")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The growing unit (Package 7): open_field | greenhouse | tunnel | orchard.
+    unit_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
 
 
 class InventoryItem(Base):
@@ -578,6 +586,9 @@ class HarvestRecord(Base):
     waste_qty: Mapped[float] = mapped_column(Float, default=0)
     destination: Mapped[str | None] = mapped_column(String(50), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # The crop cycle it came from (Package 7), and why some was lost.
+    crop_planting_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("crop_plantings.id"), nullable=True, index=True)
+    loss_reason: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class Treatment(Base):
@@ -663,10 +674,18 @@ class Sale(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # v0.8.1 — the payment that settled it (finance_models.CustomerPayment).
     payment_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # The crop cycle whose produce was sold (Package 7).
+    crop_planting_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("crop_plantings.id"), nullable=True, index=True)
 
 
 class Expense(Base):
+    """An expense, or a supplier's bill. A bill for stock received — a feed
+    lot, a medicine lot — is linked to it (`linked_entity_type` /
+    `linked_entity_id`, one bill per delivery) and is an asset bought, not
+    a cost; what settles it is in `supplier_payments` (v0.8.9)."""
+
     __tablename__ = "expenses"
+    __table_args__ = (UniqueConstraint("linked_entity_type", "linked_entity_id", name="uq_expenses_linked_entity"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     farm_id: Mapped[str] = mapped_column(String(36), ForeignKey("farms.id"))
@@ -681,7 +700,7 @@ class Expense(Base):
     # v0.8.0 — expenses and bills recorded in Sales & Finance.
     description: Mapped[str | None] = mapped_column(String(300), nullable=True)
     supplier_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # paid | pending (a bill still to pay)
+    # paid | pending (a bill still to pay) | partial (paid in parts so far)
     payment_status: Mapped[str] = mapped_column(String(20), default="paid", server_default="paid")
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

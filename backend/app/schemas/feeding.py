@@ -127,6 +127,9 @@ class FeedLotOut(BaseModel):
     moisture_pct: float | None = None
     quality_notes: str | None = None
     notes: str | None = None
+    # v0.8.9 — accepted × unit cost (USD); the supplier's bill, on a receipt.
+    accepted_value: float | None = None
+    bill: dict | None = None
 
 
 class FeedAvailabilityOut(BaseModel):
@@ -211,6 +214,27 @@ class LotReceive(BaseModel):
     # a delivery only against one (buying feed is the manager's); naming it
     # closes the request's line.
     requisition_id: str | None = None
+    # v0.8.9 — the supplier's bill for what was accepted (accepted ×
+    # unit_cost): paid on delivery, on credit (owed until paid, by
+    # [due_date]) or partial ([paid_amount] paid now). The price is in
+    # [currency] (USD or LBP at [exchange_rate], else the farm's rate for
+    # the day); the stock is valued in USD. Without a price there is no bill.
+    payment: str | None = None
+    paid_amount: float | None = Field(None, gt=0)
+    due_date: datetime | None = None
+    invoice_reference: str | None = None
+    currency: str = "USD"
+    exchange_rate: float | None = Field(None, gt=0)
+
+
+class LotReturn(BaseModel):
+    """`POST /feed-lots/{id}/return` — goods sent back to the supplier: out
+    of the lot's stock, and credited on its bill."""
+
+    quantity: float = Field(gt=0)
+    unit: str | None = None
+    explanation: str
+    reference: str | None = None
 
 
 class LotStatusUpdate(BaseModel):
