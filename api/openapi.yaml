@@ -12326,6 +12326,75 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/v1/reports/profitability:
+    get:
+      tags:
+      - reports
+      summary: Profitability Report
+      description: 'Each dairy animal''s milk (AM, PM, saleable), its value and attributed
+
+        sales, her feed (own and her share of her group''s) and its cost per
+
+        litre, medicine and vet, known labour and electricity, and the margin —
+
+        by animal, for a group, for a period; unknown costs labelled, never
+
+        zero; the totals reconciled with the canonical records (Package 3).
+
+        Money: Reports or Finance.'
+      operationId: profitability_report_api_v1_reports_profitability_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: start
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: Start
+      - name: end
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+            format: date
+          - type: 'null'
+          title: End
+      - name: animal_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Animal Id
+      - name: group_id
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Group Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                title: Response Profitability Report Api V1 Reports Profitability Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/v1/reports/stock:
     get:
       tags:

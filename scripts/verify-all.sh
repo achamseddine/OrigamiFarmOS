@@ -88,6 +88,9 @@ if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # Packages 11–13: requirements, assessments, least-cost drafts, feed actions and outcomes, and their races.
   step "nutrition, least-cost and feed actions on PostgreSQL" bash -c \
     "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_nutrition_assessment_pg.py tests/test_least_cost_formulation_pg.py tests/test_feed_actions_pg.py"
+  # Package 3: each cow's milk value, costs and margin, reconciled with the records.
+  step "cow profitability on PostgreSQL" bash -c \
+    "cd '$ROOT/backend' && '$PYTHON' -m pytest -q -p no:cacheprovider tests/test_animal_profitability_pg.py"
 fi
 if [[ -n "${FARMOS_TEST_POSTGRES_URL:-}" ]]; then
   # v0.8.8 (I-8): Mouneh sales in the books, paid / owed / part paid,

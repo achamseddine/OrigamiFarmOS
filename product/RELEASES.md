@@ -69,6 +69,24 @@ Master prompt Package 7 (database/CROPS-SCHEMA.md §2, §4–§6, §8; status in
 - Tests: backend +10 (`test_crop_cycles.py`) and the same on PostgreSQL 16 with two-thread races for the last fertiliser and the last produce (`test_crop_cycles_pg.py`, a new step in `scripts/verify-all.sh`); app +13 (`test/records/crop_cycles_test.dart`).
 - Not in this release: seeds and fertiliser are traced to their stock line and its movement, not to a supplier lot (generic stock has no lots yet); planned work; field observations (§7); labour from the employees' time sheets.
 
+## v0.8.13 — Cow profitability: each cow's milk, its value, her costs and her margin
+
+Master prompt Package 3. On the tablet and the web app (Reports → **Cow profitability**, with print, PDF and CSV), worked out by the farm server from the records, for a chosen period, a cow or a group (`GET /reports/profitability?start&end&animal_id&group_id`):
+- **Milk.** Morning (AM) and afternoon/evening (PM) litres, the total, and the saleable litres (not withheld, not held for review).
+  - **Milk value**: saleable litres × the farm's average milk sale price in the period (the last sale before it when the period has none).
+  - **Sales revenue**: the period's milk sales shared by saleable litres.
+- **Feed.** Her own feedings at the cost they were fed at, and her share of her group's feedings: a group feeding's cost ÷ the heads it fed, for each cow in the group at the time. Also feed kg and **feed cost per litre**.
+- **Vet and medicine.** Her doses at the cost of the lot they came from (a group dose ÷ its head count), and expenses linked to her.
+- **Labour and electricity.** Expenses linked to her or her group; the farm's dairy labour and electricity shared by days in milk. Other labour and electricity is **not attributed to cows** and is shown as such.
+- **Margin** and the margin per litre, and a **week-by-week trend**.
+- **Unknown is never zero.** No milk price means the value and margin are *unavailable*. Feed fed without a price and a dose from a lot without a cost are named on the cow's row.
+- **It adds up.** The report states how milk, own feedings and group feedings reconcile with the records, including what group feedings gave to heads not in the report. The rules of each allocation are part of the report.
+- Money: **Reports or Finance** view (refused otherwise). One farm only.
+- Server: **no migration.** Tests:
+  - backend +6 (`test_animal_profitability.py`, a synthetic farm checked by hand), and the same 6 on PostgreSQL 16 (`test_animal_profitability_pg.py`);
+  - app +2 (`test/reports/profitability_test.dart`).
+
+  The demo farm's snapshot carries the report for the demo.
 ## v0.8.12 — Buying feed: suppliers' prices, purchase orders, deliveries against them, and what is still owed
 
 Master prompt Package 2 (database/PROCUREMENT-SCHEMA.md §4, §7, §8). On the tablet and the web app (Feed → **Buying**), enforced by the server. Builds on v0.8.9's supplier bills.

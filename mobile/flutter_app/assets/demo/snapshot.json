@@ -36543,6 +36543,207 @@
   "second_milking": "evening",
   "start": "2026-10-26"
  },
+ "GET /reports/profitability": {
+  "animals": [
+   {
+    "am_l": 258.1,
+    "animal_id": "cow-214",
+    "days_in_milk": 8,
+    "feed_cost": 86.97,
+    "feed_cost_group": 86.97,
+    "feed_cost_own": 0.0,
+    "feed_cost_per_liter": 0.337,
+    "feed_kg": 208.0,
+    "feed_unpriced_kg": 0.0,
+    "known_costs": 86.97,
+    "labour_cost": 0.0,
+    "margin": null,
+    "margin_per_liter": null,
+    "medicine_cost": 0.0,
+    "medicine_unpriced_doses": 0,
+    "milk_value": null,
+    "name": "Luna",
+    "pm_l": 0.0,
+    "power_cost": 0.0,
+    "saleable_l": 258.1,
+    "sales_revenue": null,
+    "species": "cow",
+    "tag": "214",
+    "total_l": 258.1,
+    "trend": [
+     {
+      "feed_cost": 40.14,
+      "liters": 129.2,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-16"
+     },
+     {
+      "feed_cost": 46.83,
+      "liters": 128.9,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-23"
+     }
+    ],
+    "unknown": [
+     "milk_price"
+    ],
+    "vet_expenses": 0.0
+   },
+   {
+    "am_l": 190.1,
+    "animal_id": "cow-clover",
+    "days_in_milk": 8,
+    "feed_cost": 86.97,
+    "feed_cost_group": 86.97,
+    "feed_cost_own": 0.0,
+    "feed_cost_per_liter": 0.457,
+    "feed_kg": 208.0,
+    "feed_unpriced_kg": 0.0,
+    "known_costs": 86.97,
+    "labour_cost": 0.0,
+    "margin": null,
+    "margin_per_liter": null,
+    "medicine_cost": 0.0,
+    "medicine_unpriced_doses": 0,
+    "milk_value": null,
+    "name": "Clover",
+    "pm_l": 0.0,
+    "power_cost": 0.0,
+    "saleable_l": 190.1,
+    "sales_revenue": null,
+    "species": "cow",
+    "tag": "381",
+    "total_l": 190.1,
+    "trend": [
+     {
+      "feed_cost": 40.14,
+      "liters": 95.2,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-16"
+     },
+     {
+      "feed_cost": 46.83,
+      "liters": 94.9,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-23"
+     }
+    ],
+    "unknown": [
+     "milk_price"
+    ],
+    "vet_expenses": 0.0
+   },
+   {
+    "am_l": 169.1,
+    "animal_id": "cow-744",
+    "days_in_milk": 8,
+    "feed_cost": 88.01,
+    "feed_cost_group": 86.97,
+    "feed_cost_own": 1.04,
+    "feed_cost_per_liter": 0.52,
+    "feed_kg": 210.0,
+    "feed_unpriced_kg": 0.0,
+    "known_costs": 88.01,
+    "labour_cost": 0.0,
+    "margin": null,
+    "margin_per_liter": null,
+    "medicine_cost": 0.0,
+    "medicine_unpriced_doses": 0,
+    "milk_value": null,
+    "name": "Bella",
+    "pm_l": 0.0,
+    "power_cost": 0.0,
+    "saleable_l": 169.1,
+    "sales_revenue": null,
+    "species": "cow",
+    "tag": "744",
+    "total_l": 169.1,
+    "trend": [
+     {
+      "feed_cost": 40.14,
+      "liters": 89.0,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-16"
+     },
+     {
+      "feed_cost": 47.87,
+      "liters": 80.1,
+      "margin": null,
+      "medicine_cost": 0.0,
+      "week": "2026-11-23"
+     }
+    ],
+    "unknown": [
+     "milk_price"
+    ],
+    "vet_expenses": 0.0
+   }
+  ],
+  "days": 30,
+  "end": "2026-11-26",
+  "farm_id": "farm-origami",
+  "kind": "profitability",
+  "milk_price": {
+   "basis": "unavailable",
+   "liters_sold": 0.0,
+   "price_per_liter": null,
+   "revenue": 0.0
+  },
+  "reconciliation": {
+   "dairy_overheads": {
+    "labour": 0.0,
+    "power": 0.0,
+    "shared_by": "days_in_milk"
+   },
+   "group_feed_cost": {
+    "attributed_to_these_animals": 260.91,
+    "canonical": 1063.53,
+    "to_other_heads": 802.62
+   },
+   "milk_l": {
+    "attributed": 617.3,
+    "canonical": 617.3
+   },
+   "own_feed_cost": {
+    "attributed": 1.04,
+    "canonical": 1.04
+   }
+  },
+  "rules": {
+   "dairy_overheads": "Dairy labour and electricity (expenses of the dairy activity not linked to an animal or group) shared by days in milk; other labour and electricity is unallocated.",
+   "group_feed": "A group feeding's cost ÷ the heads it fed (its head count, or the members then), to each member at the time.",
+   "group_medicine": "A group dose's cost ÷ its head count, to each member at the time.",
+   "milk_value": "Saleable litres × the farm's average milk sale price in the period (revenue ÷ litres sold); without sales in the period, the last price sold at before it; otherwise unavailable.",
+   "sales_revenue": "The period's milk sales revenue, shared by each animal's saleable litres."
+  },
+  "scope": {
+   "animal_id": null,
+   "group_id": null
+  },
+  "start": "2026-10-28",
+  "totals": {
+   "feed_cost": 261.95,
+   "known_costs": 261.95,
+   "labour_cost": 0.0,
+   "margin": null,
+   "medicine_cost": 0.0,
+   "milk_value": null,
+   "power_cost": 0.0,
+   "saleable_l": 617.3,
+   "sales_revenue": null,
+   "total_l": 617.3,
+   "vet_expenses": 0.0
+  },
+  "unallocated": {
+   "labour": 1150.0,
+   "power": 0.0
+  }
+ },
  "GET /reports/sales": {
   "by_activity": [
    {
