@@ -1,5 +1,9 @@
 # Releases
 
+## Integrated release v0.8.20 (2026-11-28) — Packages 1–7 and 11–13 together
+
+One build carries every package below from v0.8.9 to v0.8.20, merged into `claude/origami-farmos-tablet-mvp-u88i3e` from PRs #34, #35, #36, #37, #38, #39, #40, #41, #42 and #43. Migration `e5a7c9b1d3f6` only joins the two migration chains (no schema change). **Not included:** v0.8.15 corn silage, v0.8.16 equipment maintenance, v0.8.17 animal photos (Packages 8–10, frozen on their branches, never released), so those version numbers are skipped. A pre-release for on-farm testing, **not production-ready**: no physical tablet test, no real farm acceptance and no production deployment have been done.
+
 ## v0.8.20 — Feed performance: from the alert to what the manager did, and what came of it
 
 Master prompt Package 13 (database/FEED-PERFORMANCE-ACTIONS.md). On the tablet and the web app (Feed → **Performance**, on each alert), measured by the server. Built on the existing Feed Performance Intelligence: alerts still wait for enough evidence, lose confidence for every confounder, and never twin.

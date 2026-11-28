@@ -25,7 +25,7 @@
 -- application; demo data uses readable ids), timestamps are
 -- TIMESTAMP WITH TIME ZONE holding UTC, and JSON columns are plain JSON —
 -- the types the models declare and the migrations create.
--- 147 tables, 55 secondary indexes.
+-- 156 tables, 66 secondary indexes.
 
 CREATE TABLE animal_group_type_policies (
     group_type VARCHAR(30) NOT NULL,
