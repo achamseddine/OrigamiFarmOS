@@ -113,7 +113,8 @@ class SnapshotFarm {
   final navigatorKey = GlobalKey<NavigatorState>();
 
   static Future<SnapshotFarm> open() async {
-    final api = SnapshotApi(loadSnapshot());
+    // Signed in with the server: a token, so the outbox is sent (ADR-007).
+    final api = SnapshotApi(loadSnapshot())..token = 'snapshot-session';
     final me = (api.snapshot['GET /auth/me'] as Map).cast<String, dynamic>();
     final session = _SnapshotSession(api)
       ..user = UserProfile.fromJson(me)

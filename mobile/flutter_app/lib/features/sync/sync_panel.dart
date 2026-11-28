@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../auth/session_controller.dart';
 import '../../api/api_client.dart';
 
 import '../../core/i18n/strings.dart';
@@ -170,6 +171,20 @@ class _Header extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               '${sync.otherUsersPending} ${context.t('otherUserQueueNote')}',
+              style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.warning),
+            ),
+          ],
+          // Signed in offline: the records wait for a sign-in the server accepts (I-10).
+          if (context.watch<SessionController>().offlineSession) ...[
+            const SizedBox(height: 8),
+            Text(key: const ValueKey('sync-offline-session'), context.t('offlineSessionNotice'),
+                style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.warning)),
+          ],
+          if (sync.waitingForSignIn && sync.pendingCount > 0) ...[
+            const SizedBox(height: 8),
+            Text(
+              key: const ValueKey('sync-needs-sign-in'),
+              '${sync.pendingCount} ${context.t('syncNeedsSignIn')}',
               style: FarmTypography.textTheme.bodySmall?.copyWith(color: FarmColors.warning),
             ),
           ],

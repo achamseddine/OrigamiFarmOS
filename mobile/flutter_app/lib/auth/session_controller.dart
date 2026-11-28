@@ -8,6 +8,7 @@ import '../app/install_id.dart';
 import '../data/local/demo_mode.dart';
 import '../data/local/local_store.dart';
 import '../domain/entities/user_profile.dart';
+import 'offline_credentials.dart';
 
 enum SessionStatus { checking, loggedOut, loggedIn }
 
@@ -46,12 +47,27 @@ const _baseUrlPrefsKey = 'api_base_url'; // Saved only after explicit user edits
 /// The demo credential is checked here on the device — not a security
 /// boundary, just the way in when there is nothing to ask.
 class SessionController extends ChangeNotifier {
-  SessionController({LocalStore? store, ApiClient? client})
+  SessionController({LocalStore? store, ApiClient? client, OfflineCredentials? offline, bool? allowOffline})
       : _store = store,
-        apiClient = client ?? ApiClient(baseUrl: startupApiBaseUrl(), store: store);
+        apiClient = client ?? ApiClient(baseUrl: startupApiBaseUrl(), store: store),
+        // Offline sign-in is the tablet's (device-private storage); a
+        // browser always signs in with the server (ADR-007).
+        _offline = (allowOffline ?? !kIsWeb) ? (offline ?? OfflineCredentials()) : null;
 
   final ApiClient apiClient;
   final LocalStore? _store;
+  final OfflineCredentials? _offline;
+
+  /// Signed in on this tablet without the server (I-10): the user's cached
+  /// farm and their queued records, no server token. What they record is
+  /// sent after the next sign-in the server accepts.
+  bool offlineSession = false;
+
+  /// When the server last accepted this user's sign-in (offline sessions).
+  DateTime? offlineSince;
+
+  /// Why an offline sign-in was refused (message, sign in online first?).
+  (String, bool)? _offlineRefusal;
   SessionStatus status = SessionStatus.loggedOut;
   UserProfile? user;
   String? error;
@@ -90,6 +106,7 @@ class SessionController extends ChangeNotifier {
   /// outbox or any stored demo edits. This is different from explicit logout,
   /// whose existing farm-data clearing semantics are deliberately unchanged.
   void returnToLoginPreservingData() {
+    offlineSession = false;
     apiClient.token = null;
     apiClient.standalone = false;
     user = null;
@@ -224,7 +241,17 @@ class SessionController extends ChangeNotifier {
       user = signedInUser;
       needsFirstOnlineLogin = false;
       restoredOffline = false;
+      offlineSession = false;
+      offlineSince = null;
       status = SessionStatus.loggedIn;
+      // What lets this user back in on this tablet when the server cannot
+      // be reached (a salted check, never the password or the token).
+      final offline = _offline;
+      if (offline != null) {
+        unawaited(offline
+            .remember(server: apiClient.baseUrl, email: email.trim().toLowerCase(), password: password, profile: profile)
+            .catchError((Object e) => debugPrint('Origami: offline sign-in not kept: $e')));
+      }
       // SharedPreferences and the /auth/me cache are optional. Formerly
       // both were awaited *before* status became loggedIn: the server could
       // accept the password but Android storage could keep the person
@@ -235,6 +262,12 @@ class SessionController extends ChangeNotifier {
       apiClient.token = null;
       user = null;
       final failingPath = phase.contains('/auth/me') ? '/auth/me' : '/auth/login';
+      if (failingPath == '/auth/login' && e.isOffline && await _openOffline(email, password)) return true;
+      if (failingPath == '/auth/login' && !e.isOffline && (e.statusCode == 401 || e.statusCode == 403)) {
+        // Refused by the server (password changed, account revoked): it
+        // no longer opens offline either.
+        await _offline?.forget(server: apiClient.baseUrl, email: email.trim().toLowerCase());
+      }
       // Preserve the HTTP code and exact failing endpoint: 401/403 means
       // rejected credentials; 404/405 means wrong/old API; zero means DNS,
       // TLS, timeout or device connectivity. Never include the password.
@@ -243,6 +276,13 @@ class SessionController extends ChangeNotifier {
               'Use "Check API" below to diagnose the server without sending a password.'
           : 'LOGIN ERROR (HTTP ${e.statusCode}) at ${apiClient.baseUrl}$failingPath: ${e.message}';
       needsFirstOnlineLogin = e.isOffline;
+      final refusal = _offlineRefusal;
+      if (refusal != null) {
+        // The server is out of reach and the offline check said why not.
+        error = refusal.$1;
+        needsFirstOnlineLogin = refusal.$2;
+        _offlineRefusal = null;
+      }
       return false;
     } catch (e) {
       apiClient.token = null;
@@ -256,6 +296,41 @@ class SessionController extends ChangeNotifier {
       busy = false;
       loginProgress = null;
       notifyListeners();
+    }
+  }
+
+  /// The server cannot be reached: open this user's cached farm on this
+  /// tablet if the server accepted the same email and password here within
+  /// the last days (ADR-007). The cache is bound to this user — another
+  /// account's cached farm is wiped, never shown.
+  Future<bool> _openOffline(String email, String password) async {
+    final offline = _offline;
+    final store = _store;
+    if (offline == null || store == null || !store.available) return false;
+    final unlock = await offline.unlock(server: apiClient.baseUrl, email: email.trim().toLowerCase(), password: password);
+    switch (unlock.result) {
+      case OfflineUnlockResult.ok:
+        final profile = UserProfile.fromJson(unlock.profile!);
+        await store.setActiveUser(profile.id).timeout(const Duration(seconds: 8));
+        apiClient.token = null;
+        apiClient.standalone = false;
+        user = profile;
+        offlineSession = true;
+        offlineSince = unlock.verifiedAt;
+        restoredOffline = true;
+        needsFirstOnlineLogin = false;
+        error = null;
+        status = SessionStatus.loggedIn;
+        return true;
+      case OfflineUnlockResult.wrongPassword:
+        _offlineRefusal = ('OFFLINE SIGN-IN: the farm server cannot be reached, and this is not the password last used to sign in on this tablet.', false);
+        return false;
+      case OfflineUnlockResult.expired:
+        _offlineRefusal = ('OFFLINE SIGN-IN EXPIRED: this tablet last checked your sign-in with the farm server more than '
+            '${offline.validity.inDays} days ago. Connect to the farm server and sign in once.', true);
+        return false;
+      case OfflineUnlockResult.unknown:
+        return false;
     }
   }
 
@@ -299,6 +374,11 @@ class SessionController extends ChangeNotifier {
 
   Future<void> logout() async {
     final wasStandalone = standalone;
+    final signedOut = user?.id;
+    offlineSession = false;
+    // Signing out closes offline access too: this user signs in with the
+    // server next time.
+    if (signedOut != null && !wasStandalone) await _offline?.forgetUser(signedOut);
     apiClient.token = null;
     apiClient.standalone = false;
     user = null;
