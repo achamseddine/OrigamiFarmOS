@@ -13,6 +13,7 @@ from app.db.base import get_db
 from app.domain import models
 from app.repositories.base import write_audit_log, write_event
 from app.schemas.auth import BootstrapResponse
+from app.services import farm_time
 
 router = APIRouter(prefix="/farms", tags=["farms"])
 
@@ -43,7 +44,9 @@ def my_farm(db: Session = Depends(get_db), current_user: models.User = Depends(g
     farm = db.get(models.Farm, current_user.farm_id)
     if farm is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Farm not found")
-    return _serialize(farm)
+    # The farm's clock (audit I-16, ADR-008): the tablet suggests the
+    # morning or the afternoon milking from the farm's hour, not its own.
+    return {**_serialize(farm), "clock": farm_time.clock(farm_time.farm_tz(db, farm.id))}
 
 
 class FarmSettingsUpdate(BaseModel):

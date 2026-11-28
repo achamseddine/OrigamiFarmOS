@@ -5,6 +5,7 @@ import '../../core/theme/colors.dart';
 import '../../core/theme/farm_icon_map.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/util/farm_clock.dart';
 import '../../core/util/number_input.dart';
 import '../../core/util/record_dates.dart';
 import '../../core/widgets/app_icon.dart';
@@ -102,7 +103,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
   List<_FeedRow> _feeds = [];
   String? _animalId;
   String? _groupId;
-  String _session = milkSessionForHour(DateTime.now().hour);
+  String _session = FarmClock.current.milkSessionNow();
   bool _secondMilking = false;
   // The day the milk is recorded for: today unless changed. It stays as set
   // from one animal to the next — entering a paper sheet for one day — and
@@ -204,7 +205,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       _error = null;
       _milk.clear();
       _secondMilking = false;
-      if (widget.round?.session == null) _session = milkSessionForHour(DateTime.now().hour);
+      if (widget.round?.session == null) _session = FarmClock.current.milkSessionNow();
     });
     await _loadFeedRows(id);
   }
@@ -377,6 +378,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
       _error = null;
     });
     var milkSaved = false;
+    var milkQueued = false;
     try {
       // Separate authoritative endpoints: clear only what succeeded, so a
       // retry after a feed failure cannot send the milk twice.
@@ -397,6 +399,7 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         _milk.clear();
         _secondMilking = false;
         milkSaved = true;
+        milkQueued = result.queued;
         // The duplicate check and the round read this list.
         await production.load();
         if (!mounted) return;
@@ -428,7 +431,10 @@ class _AnimalQuickEntryScreenState extends State<AnimalQuickEntryScreen> {
         }
       }
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${animal.name} — ${context.t('qrSavedOnDevice')}')));
+      // Milk recorded offline waits for the server's safety check (I-11).
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${animal.name} — ${context.t(milkQueued ? 'qrMilkWaitsForCheck' : 'qrSavedOnDevice')}'),
+          duration: Duration(seconds: milkQueued ? 4 : 2)));
       // Following the queue: straight on to the next animal still to do.
       final next = _following ? nextInQueue(_status()!, after: animal.id) : null;
       setState(() {

@@ -1,6 +1,9 @@
 import '../../domain/entities/animal.dart';
 import '../../domain/entities/livestock.dart';
 
+// The milking of an hour of the day lives with the farm's clock (I-16).
+export '../../core/util/farm_clock.dart' show milkSessionForHour;
+
 /// The QR grammar of the worker workflow (docs/QR-ANIMAL-QUICK-ENTRY.md,
 /// architecture/ADR-003-QR-SCANNING-AND-LABELS.md).
 ///
@@ -122,5 +125,3 @@ ScanTarget resolveScan(String raw, {required Iterable<Animal> animals, required 
   return const NoScanTarget(ScanMiss.unknown);
 }
 
-/// Session is a suggestion based on local farm time, not evidence of milking.
-String milkSessionForHour(int hour) => hour < 13 ? 'morning' : 'evening';

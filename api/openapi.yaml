@@ -11192,7 +11192,18 @@ paths:
 
         destination." This endpoint hard-blocks it, matching RULE-WITHDRAWAL
 
-        in the recommendation engine.'
+        in the recommendation engine.
+
+
+        A milking a tablet entered offline (`X-Offline-Recorded-At`, ADR-008)
+
+        that a recorded withdrawal covers is kept as entered and held — out of
+
+        the tank, the collector''s handover and every sale, never released — and
+
+        the manager and the veterinarian are told: the person never saw the
+
+        refusal, and the milk may already be in the tank.'
       operationId: record_milk_api_v1_production_milk_post
       security:
       - HTTPBearer: []

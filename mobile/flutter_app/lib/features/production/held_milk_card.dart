@@ -83,7 +83,10 @@ class _HeldMilkCardState extends State<HeldMilkCard> {
                 if (canReview)
                   Wrap(spacing: 8, children: [
                     TextButton(key: ValueKey('hm-withhold-${r.id}'), onPressed: () => _decide(r, 'withhold'), child: Text(context.t('hmWithhold'))),
-                    FilledButton.tonal(key: ValueKey('hm-release-${r.id}'), onPressed: () => _decide(r, 'release'), child: Text(context.t('hmRelease'))),
+                    // A recorded withdrawal covers it (milk entered offline
+                    // during one, ADR-008): it can only be withheld.
+                    if (r.withdrawalCheck != 'withdrawal')
+                      FilledButton.tonal(key: ValueKey('hm-release-${r.id}'), onPressed: () => _decide(r, 'release'), child: Text(context.t('hmRelease'))),
                   ]),
               ]),
             ),

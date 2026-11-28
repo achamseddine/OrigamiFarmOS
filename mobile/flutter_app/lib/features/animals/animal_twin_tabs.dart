@@ -100,7 +100,9 @@ class TwinMilkTab extends StatelessWidget {
                 // manager directly, by anyone else for approval.
                 InkWell(
                   key: ValueKey('milk-row-${r.id}'),
-                  onTap: canCorrect ? () => showCorrectMilkDialog(context, r) : null,
+                  // Milk still waiting for the server (recorded offline) has
+                  // nothing on the server to correct yet.
+                  onTap: canCorrect && !r.awaitingCheck ? () => showCorrectMilkDialog(context, r) : null,
                   child: Row(children: [
                     Expanded(
                       child: FactRow(
@@ -109,7 +111,13 @@ class TwinMilkTab extends StatelessWidget {
                         last: r == records.take(14).last,
                       ),
                     ),
-                    if (canCorrect)
+                    // Recorded offline and not yet checked, or held (I-11, v0.8.5).
+                    if (r.awaitingCheck || r.isHeld)
+                      Padding(
+                        padding: const EdgeInsetsDirectional.only(start: 6),
+                        child: StatusPill(label: context.t(r.awaitingCheck ? 'macWaiting' : 'hmHeld'), level: FarmStatusLevel.watch, dense: true),
+                      ),
+                    if (canCorrect && !r.awaitingCheck)
                       Padding(
                         padding: const EdgeInsetsDirectional.only(start: 6),
                         child: Tooltip(message: context.t('crCorrect'), child: const Icon(Icons.edit_outlined, size: 16, color: FarmColors.muted)),

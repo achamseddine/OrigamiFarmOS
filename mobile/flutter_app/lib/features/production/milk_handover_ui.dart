@@ -4,6 +4,7 @@ import '../../core/i18n/strings.dart';
 import '../../core/theme/colors.dart';
 import '../../core/theme/spacing.dart';
 import '../../core/theme/typography.dart';
+import '../../core/util/farm_clock.dart';
 import '../../core/util/number_input.dart';
 import '../../core/util/record_dates.dart';
 import '../../core/widgets/form_dialog.dart';
@@ -200,7 +201,7 @@ class _HandOverDialog extends StatefulWidget {
 
 class _HandOverDialogState extends State<_HandOverDialog> {
   late DateTime _day = widget.day ?? DateTime.now();
-  late String _session = widget.session ?? (DateTime.now().hour < 13 ? 'morning' : 'evening');
+  late String _session = widget.session ?? FarmClock.current.milkSessionNow();
   final _calves = TextEditingController();
   final _collected = TextEditingController();
   final _notes = TextEditingController();

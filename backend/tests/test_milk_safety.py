@@ -327,18 +327,23 @@ def _item(key, animal, at, destination="stored", liters=9):
 
 
 def test_an_offline_replay_is_judged_at_the_milking_time(client, db_session):
+    """Judged at the milking time, never saleable under a withdrawal. Since
+    ADR-008 the replay that says "stored" is kept but held, not rejected:
+    the device recorded it offline and the milk may be in the tank."""
     session, _ = db_session
     _treat(client, session, LUNA, start=_ago(5), until=_ago(1))
     tank = _tank(client)
     t = _ago(2, hour=5)
     out = _push(client, [_item("replay-1", LUNA, t), _item("replay-2", LUNA, t, destination="withheld"), _item("replay-3", CLOVER, t)])
     statuses = [r["status"] for r in out["results"]]
-    assert statuses == ["rejected", "accepted", "accepted"], out
-    assert "under withdrawal when milked" in out["results"][0]["error"]
+    assert statuses == ["accepted", "accepted", "accepted"], out
     rows = session.scalars(select(models.MilkRecord).where(models.MilkRecord.recorded_by.is_not(None))
                            .order_by(models.MilkRecord.recorded_at.desc())).all()
     replayed = [r for r in rows if r.animal_id in (LUNA, CLOVER) and abs((r.recorded_at.replace(tzinfo=timezone.utc) - t).total_seconds()) < 2]
-    assert sorted((r.animal_id, r.release_status) for r in replayed) == sorted([(CLOVER, "saleable"), (LUNA, "not_for_sale")])
+    assert sorted((r.animal_id, r.destination, r.release_status) for r in replayed) == sorted(
+        [(CLOVER, "stored", "saleable"), (LUNA, "stored", "held"), (LUNA, "withheld", "not_for_sale")])
+    held = next(r for r in replayed if r.release_status == "held")
+    assert held.withdrawal_check == "withdrawal" and "under withdrawal when milked" in held.safety_note
     assert _tank(client) == pytest.approx(tank + 9)
 
 

@@ -99,7 +99,7 @@ class MergeNested extends CacheEffect {
 typedef _EffectBuilder = List<CacheEffect> Function(_Match match);
 
 class _Match {
-  const _Match(this.ids, this.body, this.localId);
+  const _Match(this.ids, this.body, this.localId, {this.queued = true});
   final List<String> ids;
   final Map<String, dynamic> body;
 
@@ -107,6 +107,10 @@ class _Match {
   /// caller (and stored on the outbox row) so the sync pass can later
   /// rewrite anything that referred to it.
   final String localId;
+
+  /// Waiting in the outbox for the server (false in standalone mode, where
+  /// the tablet's data is the farm and nothing is sent).
+  final bool queued;
 }
 
 class _Rule {
@@ -225,9 +229,16 @@ final List<_Rule> _rules = [
   ..._livestockRecordRules(),
   _Rule('POST', '/health/treatments', (m) => [AppendRecord('/health/treatments', _newRecord(m))]),
   // A queued milk record must carry its date: the milk list cannot read a
-  // record without one (older builds sent none).
+  // record without one (older builds sent none). Milk recorded offline
+  // waits for the server's safety check (audit I-11, ADR-008): the tablet
+  // may not know of a withdrawal recorded elsewhere, so until the server
+  // has judged it, it is not stored, sellable or handed over milk.
   _Rule('POST', '/production/milk', (m) => [
-        AppendRecord('/production/milk', _newRecord(m, extra: {'recorded_at': m.body['recorded_at'] ?? _now()})),
+        AppendRecord('/production/milk', _newRecord(m, extra: {
+          'recorded_at': m.body['recorded_at'] ?? _now(),
+          if (m.queued) 'release_status': kMilkAwaitingCheck,
+          if (m.queued) 'withdrawal_check': kMilkAwaitingCheck,
+        })),
       ]),
   _Rule('POST', '/production/eggs', (m) => [AppendRecord('/production/eggs', _newRecord(m))]),
   // Milk sold from the tank (v0.7.9): shown at once, flagged as waiting.
@@ -659,17 +670,21 @@ final List<_Rule> _rules = [
 /// this returns nothing and the real answer arrives with the next
 /// refresh; offline, the write still sits safely in the outbox either
 /// way.
-List<CacheEffect> effectsFor(String method, String path, Object? body, {required String localId}) {
+List<CacheEffect> effectsFor(String method, String path, Object? body, {required String localId, bool queued = true}) {
   final map = body is Map<String, dynamic> ? body : const <String, dynamic>{};
   for (final rule in _rules) {
     if (rule.method != method) continue;
     final match = rule.matcher.firstMatch(path);
     if (match == null) continue;
     final ids = [for (var i = 1; i <= match.groupCount; i++) match.group(i) ?? ''];
-    return rule.build(_Match(ids, map, localId));
+    return rule.build(_Match(ids, map, localId, queued: queued));
   }
   return const [];
 }
+
+/// The release status of milk recorded offline until the server has
+/// checked it (never sent: the server sets its own).
+const kMilkAwaitingCheck = 'awaiting_check';
 
 /// Applies effects to every cached response for the affected path —
 /// `/priorities` and `/priorities?module=animals` are separate cache rows

@@ -71,3 +71,39 @@ def complete_days(db: Session, farm_id: str, days: int) -> tuple[date, date, dat
     a daily average that a half-finished today would pull down."""
     end = today(db, farm_id) - timedelta(days=1)
     return last_days(db, farm_id, days, end=end)
+
+
+# The farm's clock on a tablet (audit I-16, ADR-008): a tablet set to
+# another zone, or offline for months, reads the farm's hour from these.
+_CLOCK_DAYS_BACK = 2
+_CLOCK_DAYS_AHEAD = 400
+
+
+def _offset_minutes(tz: ZoneInfo, at: datetime) -> int:
+    off = at.astimezone(tz).utcoffset()
+    return int(off.total_seconds() // 60) if off is not None else 0
+
+
+def clock(tz: ZoneInfo, *, at: datetime | None = None) -> dict:
+    """The farm's time zone and its offset from UTC from two days ago to
+    400 days ahead: the offset then, and one entry for each change
+    (daylight saving), from the UTC minute it takes effect."""
+    start = (ensure_utc(at) if at is not None else datetime.now(timezone.utc)).replace(second=0, microsecond=0) - timedelta(days=_CLOCK_DAYS_BACK)
+    current = _offset_minutes(tz, start)
+    offsets = [{"from": start.isoformat(), "offset_minutes": current}]
+    day = start
+    end = start + timedelta(days=_CLOCK_DAYS_BACK + _CLOCK_DAYS_AHEAD)
+    while day < end:
+        nxt = day + timedelta(days=1)
+        if _offset_minutes(tz, nxt) != current:
+            lo, hi = day, nxt  # lo has the old offset, hi the new: the first minute of the new one
+            while hi - lo > timedelta(minutes=1):
+                mid = lo + timedelta(minutes=((hi - lo) // timedelta(minutes=1)) // 2)
+                if _offset_minutes(tz, mid) == current:
+                    lo = mid
+                else:
+                    hi = mid
+            current = _offset_minutes(tz, hi)
+            offsets.append({"from": hi.isoformat(), "offset_minutes": current})
+        day = nxt
+    return {"timezone": tz.key, "offsets": offsets}

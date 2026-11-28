@@ -49,18 +49,33 @@ class MilkCheck:
     assessment: safety.Assessment
     lactation: rm.LactationEpisode | None
     release_status: str
+    # Entered on a tablet that was offline (ADR-008): when, and the note
+    # that says what the server did with it.
+    recorded_offline_at: datetime | None = None
+    offline_note: str | None = None
 
     @property
     def under_withdrawal(self) -> bool:
         return self.assessment.status != safety.CLEAR
 
+    @property
+    def held_offline_under_withdrawal(self) -> bool:
+        return self.offline_note is not None
 
-def check_milk(db: Session, animal: models.Animal, recorded_at: datetime | None, destination: str) -> MilkCheck:
+
+def check_milk(db: Session, animal: models.Animal, recorded_at: datetime | None, destination: str, *,
+               recorded_offline_at: datetime | None = None) -> MilkCheck:
     """Refuses milk the animal cannot have given, judged at the milking's
     own time (v0.8.5, milk_safety_service): she is on the farm, able to
     give milk, within a lactation that covers that time — active or since
     ended — and, if a recorded withdrawal covers it, the milk is withheld.
-    Milk an uncertain withdrawal covers is kept but held for review."""
+    Milk an uncertain withdrawal covers is kept but held for review.
+
+    Milk entered on a tablet that was offline ([recorded_offline_at],
+    ADR-008) that a recorded withdrawal covers is not refused — the person
+    never saw the refusal and the milk may already be in the tank: it is
+    kept as entered, held (never saleable, never released) and the people
+    who decide are told. Every other answer is a live entry's."""
     livestock_state_service.ensure_on_farm(animal, "milk")
     # Milk is a capability (generic animal model §12): a bull, a hen, a
     # meat ewe or a mare cannot have a milk record, however the form was
@@ -82,11 +97,14 @@ def check_milk(db: Session, animal: models.Animal, recorded_at: datetime | None,
     # and a late entry are judged like a live one.
     assessment = safety.assess(db, animal, at)
     if assessment.status == safety.WITHDRAWAL and destination != "withheld":
+        if recorded_offline_at is not None:
+            return MilkCheck(assessment, lactation.episode, safety.HELD, recorded_offline_at,
+                             offline_note=safety.offline_withdrawal_note(db, animal, assessment, destination, recorded_offline_at))
         raise MilkError(
             f"{assessment.note(animal.name)} Record this milk as withheld; it must not enter stored, sold, processed or consumed stock.",
             422,
         )
-    return MilkCheck(assessment, lactation.episode, safety.release_status_for(assessment.status, destination))
+    return MilkCheck(assessment, lactation.episode, safety.release_status_for(assessment.status, destination), recorded_offline_at)
 
 
 def ensure_milk_allowed(db: Session, animal: models.Animal, recorded_at: datetime | None, destination: str) -> bool:
@@ -99,7 +117,7 @@ def apply_check(record: models.MilkRecord, check: MilkCheck, animal: models.Anim
     """Writes what the server found onto the record (never the client)."""
     record.withdrawal_check = check.assessment.status
     record.release_status = check.release_status
-    note = check.assessment.note(animal.name)
+    note = check.offline_note or check.assessment.note(animal.name)
     record.safety_note = note[:1000] if note else None
     record.checked_at = now()
     record.lactation_episode_id = check.lactation.id if check.lactation is not None else None
